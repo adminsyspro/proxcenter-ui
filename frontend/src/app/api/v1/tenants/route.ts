@@ -1,7 +1,8 @@
 export const dynamic = "force-dynamic"
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { listTenants, createTenant, requireProviderTenant } from "@/lib/tenant"
+import { tenantWriteFailure } from "@/lib/tenant/writeFailure"
 import { parseVmidRangeInput, findVmidRangeConflict } from "@/lib/tenant/vmidRange"
 import { audit } from "@/lib/audit"
 import { syncServiceDeskForNewTenant } from "@/lib/rbac/serviceDesk"
@@ -23,7 +24,7 @@ async function handleGet() {
 export const GET = withPublicApiGuard("tenants-list", handleGet)
 
 // POST /api/v1/tenants — create a new tenant
-async function handlePost(req: NextRequest) {
+async function handlePost(req: Request) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
@@ -90,12 +91,9 @@ async function handlePost(req: NextRequest) {
     })
 
     return NextResponse.json({ data: tenant }, { status: 201 })
-  } catch (e: any) {
-    if (e.message?.includes("UNIQUE constraint")) {
-      return NextResponse.json({ error: "A tenant with this slug already exists" }, { status: 409 })
-    }
-    return NextResponse.json({ error: e.message }, { status: 500 })
+  } catch (e) {
+    return tenantWriteFailure(e, "create")
   }
 }
 
-export const POST = withAudit({ category: "admin", resourceType: "tenant" }, handlePost)
+export const POST = withAudit({ category: "admin", resourceType: "tenant" }, withPublicApiGuard("tenant-create", handlePost))

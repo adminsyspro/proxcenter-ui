@@ -7,8 +7,8 @@
 // catalogue AND end in .view or .content — scopes.test.ts enforces both, so a
 // future read scope cannot quietly hand a token something write-capable.
 // Write scopes (WRITE_SCOPE_DEFINITIONS) list their keys explicitly instead;
-// the tests pin the exact tables and forbid admin.*, automation.*, console and
-// NIC mac/vlan keys in them.
+// the tests pin the exact tables and forbid automation.*, console and NIC
+// mac/vlan keys in them, and admin.* outside ADMIN_WRITE_SCOPE_IDS.
 // `compliance:read` used to violate the read invariant: it mapped to
 // `admin.compliance`, the single permission guarding both the compliance reads
 // and its five mutations. It was inert (no compliance path is in the
@@ -86,6 +86,13 @@ export const WRITE_SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
   // keys, both narrow children of admin.settings that need a global grant,
   // on routes that answer the provider tenant only.
   "vdcs:write": ["admin.settings.view", "admin.settings.vdcs", "vm.view", "sdn.vnet.view"],
+  // Tenants, users and role assignments (issue #1360). Each carries the admin
+  // right of its own domain and nothing else. A token never acts as a super
+  // admin: roles themselves, protected accounts and protected roles stay out
+  // of its reach whatever its scopes.
+  "tenants:write": ["admin.tenants.view", "admin.tenants"],
+  "users:write": ["admin.users.view", "admin.users"],
+  "rbac:write": ["admin.rbac.view", "admin.rbac"],
 }
 
 export const SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
@@ -98,11 +105,19 @@ export const WRITE_SCOPE_IDS = Object.keys(WRITE_SCOPE_DEFINITIONS)
 export const ALL_SCOPE_IDS = Object.keys(SCOPE_DEFINITIONS)
 
 /**
- * Write scopes whose operations reach clusters beyond any one connection
- * (fleet-wide VNI scan, stretched networks, PBS storages): a token restricted
- * to connections cannot carry them (issue #1360).
+ * Write scopes carrying an admin right, which only counts when granted
+ * globally. They read back what they manage.
  */
-export const FLEET_SCOPE_IDS: readonly string[] = ["vdcs:write"]
+export const ADMIN_WRITE_SCOPE_IDS: readonly string[] = ["vdcs:write", "tenants:write", "users:write", "rbac:write"]
+
+/**
+ * Write scopes no connection perimeter can hold: vDC operations reach
+ * clusters beyond any one connection (fleet-wide VNI scan, stretched
+ * networks, PBS storages), and tenants, users and role assignments belong to
+ * no connection at all. A token restricted to connections cannot carry them
+ * (issue #1360).
+ */
+export const FLEET_SCOPE_IDS: readonly string[] = ADMIN_WRITE_SCOPE_IDS
 
 /** Scopes that let a token destroy data; the UI asks for extra confirmation. */
 export const DESTRUCTIVE_SCOPE_IDS: readonly string[] = ["vms:delete", "backups:delete"]
@@ -112,12 +127,12 @@ export function isWriteScope(id: string): boolean {
 }
 
 /**
- * Scopes that read administration data: the admin read scopes and vdcs:write,
- * which reads back what it manages. A read relying on one of them checks the
- * creator's rights again on every call, write scope or not.
+ * Scopes that read administration data: the admin read scopes and the admin
+ * write scopes, which read back what they manage. A read relying on one of
+ * them checks the creator's rights again on every call, write scope or not.
  */
 export function readsAdminData(id: string): boolean {
-  return CREATOR_CHECKED_READ_SCOPE_IDS.includes(id) || id === "vdcs:write"
+  return CREATOR_CHECKED_READ_SCOPE_IDS.includes(id) || ADMIN_WRITE_SCOPE_IDS.includes(id)
 }
 
 /** Scopes the creator must hold: every write scope and the admin read scopes. */

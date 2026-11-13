@@ -49,6 +49,7 @@ vi.mock("@/lib/tenant", () => ({
 }))
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
+    user: { findUnique: async ({ where }: any) => (where.id === "ghost" ? null : { id: where.id }) },
     rbacRole: { findUnique: (...a: any[]) => roleFindUniqueMock(...a) },
     rbacUserRole: { findFirst: (...a: any[]) => grantFindFirstMock(...a), create: (...a: any[]) => grantCreateMock(...a) },
   },

@@ -21,7 +21,7 @@ vi.mock('@/lib/tenant', () => ({
 }))
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
-import { ALL_SCOPE_IDS, isCreatorCheckedScope, READ_SCOPE_IDS } from '@/lib/api-tokens/scopes'
+import { ALL_SCOPE_IDS, FLEET_SCOPE_IDS, isCreatorCheckedScope, READ_SCOPE_IDS } from '@/lib/api-tokens/scopes'
 
 // The read scopes anyone holding admin.apitokens may grant; the admin reads
 // (issue #1360) need their keys held, like a write scope.
@@ -80,13 +80,14 @@ describe('GET /api/v1/settings/api-tokens/grantable-scopes', () => {
     expect(body.data.grantable).toEqual(ALL_SCOPE_IDS)
   })
 
-  it('never offers vdcs:write for a token restricted to connections, super admin included (issue #1360)', async () => {
+  it('never offers a fleet scope for a token restricted to connections, super admin included (issue #1360)', async () => {
     holdsMock.mockResolvedValue(true)
     expect((await readJson<any>(await get({ connectionIds: 'c1' }))).data.grantable).not.toContain('vdcs:write')
     expect((await readJson<any>(await get())).data.grantable).toContain('vdcs:write')
     getRBACContextMock.mockResolvedValue({ userId: 'u1', isAdmin: true, tenantId: 'default' })
     const restricted = await readJson<any>(await get({ connectionIds: 'c1' }))
-    expect(restricted.data.grantable).toEqual(ALL_SCOPE_IDS.filter(id => id !== 'vdcs:write'))
+    expect(restricted.data.grantable).toEqual(ALL_SCOPE_IDS.filter(id => !FLEET_SCOPE_IDS.includes(id)))
+    for (const id of ['tenants:write', 'users:write', 'rbac:write']) expect(restricted.data.grantable).not.toContain(id)
   })
 
   it('refuses a tenant the non-admin cannot access', async () => {

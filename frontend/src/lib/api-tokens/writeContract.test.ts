@@ -59,6 +59,10 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
     'storage-policy-create', 'storage-policy-update', 'storage-policy-delete',
     'evpn-zone-create', 'evpn-zone-update', 'evpn-zone-delete', 'evpn-zone-member-add', 'evpn-zone-member-remove',
   ],
+  // Tenants, users and role assignments (issue #1360, lot 3): one scope per admin right, fleet perimeter.
+  tenants: ['tenant-create', 'tenant-update', 'tenant-delete', 'tenant-user-add', 'tenant-user-remove'],
+  users: ['user-create', 'user-update', 'user-delete'],
+  rbac: ['rbac-assignment-create', 'rbac-assignment-update', 'rbac-assignment-delete'],
   firewall: [
     'fw-alias-create', 'fw-alias-update', 'fw-alias-delete',
     'fw-cluster-options-update', 'fw-cluster-rule-add', 'fw-cluster-rule-create', 'fw-cluster-rule-update', 'fw-cluster-rule-delete',

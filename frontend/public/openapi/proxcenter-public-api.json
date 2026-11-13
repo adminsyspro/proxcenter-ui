@@ -2813,6 +2813,227 @@
           }
         }
       },
+      "TenantCreateRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "slug"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vmidRangeStart": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "With vmidRangeEnd: the VMIDs reserved to the tenant; both or none"
+          },
+          "vmidRangeEnd": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "operatingModel": {
+            "type": "string",
+            "enum": [
+              "iaas",
+              "msp"
+            ],
+            "description": "iaas by default; set once"
+          }
+        }
+      },
+      "TenantUpdateRequest": {
+        "type": "object",
+        "description": "Only the given fields change.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vmidRangeStart": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "With vmidRangeEnd: the VMIDs reserved to the tenant; both or none"
+          },
+          "vmidRangeEnd": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TenantUserAddRequest": {
+        "type": "object",
+        "required": [
+          "userId"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "roleId": {
+            "type": "string",
+            "description": "Granted when the user holds no role in the tenant yet; the viewer role by default"
+          },
+          "isDefault": {
+            "type": "boolean",
+            "description": "Make this tenant the one the user lands in"
+          }
+        }
+      },
+      "UserCreateRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "description": "First password of the local account"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tenantIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Provider tenant only: the tenants of the user, the first being the default"
+          }
+        }
+      },
+      "UserUpdateRequest": {
+        "type": "object",
+        "description": "Only the given fields change. A token cannot send password or localLoginAllowed.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "tenantIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Provider tenant only: the exact tenants of the user after the call"
+          },
+          "roleId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Provider tenant only: replaces the user's roles by this one in each of their tenants; null removes them"
+          },
+          "deleteApiTokens": {
+            "type": "boolean",
+            "description": "true: delete the API tokens this user created"
+          }
+        }
+      },
+      "RbacAssignmentCreateRequest": {
+        "type": "object",
+        "required": [
+          "user_id",
+          "role_id"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "role_id": {
+            "type": "string"
+          },
+          "tenant_id": {
+            "type": "string",
+            "description": "Provider tenant only: the tenant the role is granted in; the token's tenant by default"
+          },
+          "scope_type": {
+            "type": "string",
+            "description": "inherit (the role's default scope, the default), global, connection, node, vm, tag or pool"
+          },
+          "scope_target": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The resource of the scope; none for inherit and global"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "null: never expires"
+          }
+        }
+      },
+      "RbacAssignmentUpdateRequest": {
+        "type": "object",
+        "description": "Only the given fields change.",
+        "properties": {
+          "role_id": {
+            "type": "string"
+          },
+          "scope_type": {
+            "type": "string",
+            "description": "inherit (the role's default scope, the default), global, connection, node, vm, tag or pool"
+          },
+          "scope_target": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The resource of the scope; none for inherit and global"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "null: never expires"
+          }
+        }
+      },
       "AdminVdcCreateRequest": {
         "type": "object",
         "required": [
@@ -8408,6 +8629,176 @@
           }
         }
       },
+      "UserWriteResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "auth_provider": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": [
+                  "boolean",
+                  "integer"
+                ]
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "role": {
+                "type": "string",
+                "description": "Update only"
+              },
+              "local_login_allowed": {
+                "type": "boolean",
+                "description": "Update only"
+              },
+              "last_login_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "Update only"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Update only"
+              },
+              "api_tokens_deleted": {
+                "type": "integer",
+                "description": "Update only: API tokens deleted with deleteApiTokens"
+              }
+            }
+          }
+        }
+      },
+      "UserDeleteResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "api_tokens_deleted": {
+            "type": "integer"
+          }
+        }
+      },
+      "RbacAssignmentWriteResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "scope_type": {
+                "type": "string"
+              },
+              "scope_target": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "expires_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "user_id": {
+                "type": "string"
+              },
+              "role_id": {
+                "type": "string"
+              },
+              "tenant_id": {
+                "type": "string"
+              },
+              "granted_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "RbacAssignmentUpdateResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "scope_type": {
+                "type": "string"
+              },
+              "scope_target": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "expires_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "user": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  }
+                }
+              },
+              "role": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "color": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "VdcWriteResponse": {
         "type": "object",
         "properties": {
@@ -9092,6 +9483,18 @@
         "admin.settings.vdcs",
         "vm.view",
         "sdn.vnet.view"
+      ],
+      "tenants:write": [
+        "admin.tenants.view",
+        "admin.tenants"
+      ],
+      "users:write": [
+        "admin.users.view",
+        "admin.users"
+      ],
+      "rbac:write": [
+        "admin.rbac.view",
+        "admin.rbac"
       ]
     }
   },
@@ -14639,7 +15042,7 @@
       "get": {
         "operationId": "task-status",
         "summary": "Status of a Proxmox task",
-        "description": "Status, progress and log of the task {upid} started on {node}, as returned by every write that answers with a UPID. Poll it until `status` is `stopped`, then read `exitstatus` (`OK` on success) and `failureReason`. Any write scope opens it. A vDC tenant token only reads the tasks of its own guests.\n\nRequired scope: `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete` or `backups:write` or `backups:restore` or `backups:delete` or `storage:write` or `ha:write` or `pools:write` or `network:write` or `firewall:write` or `vdcs:write`",
+        "description": "Status, progress and log of the task {upid} started on {node}, as returned by every write that answers with a UPID. Poll it until `status` is `stopped`, then read `exitstatus` (`OK` on success) and `failureReason`. Any write scope opens it. A vDC tenant token only reads the tasks of its own guests.\n\nRequired scope: `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete` or `backups:write` or `backups:restore` or `backups:delete` or `storage:write` or `ha:write` or `pools:write` or `network:write` or `firewall:write` or `vdcs:write` or `tenants:write` or `users:write` or `rbac:write`",
         "tags": [
           "Tasks"
         ],
@@ -14657,7 +15060,10 @@
           "pools:write",
           "network:write",
           "firewall:write",
-          "vdcs:write"
+          "vdcs:write",
+          "tenants:write",
+          "users:write",
+          "rbac:write"
         ],
         "parameters": [
           {
@@ -34404,12 +34810,13 @@
       "get": {
         "operationId": "tenants-list",
         "summary": "Tenants",
-        "description": "Every tenant with its operating model, VMID range and settings. Needs admin.tenants.view (scope tenants:read). Provider tenant only: another tenant's token gets 403.\n\nRequired scope: `tenants:read`",
+        "description": "Every tenant with its operating model, VMID range and settings. Needs admin.tenants.view (scope tenants:read or tenants:write). Provider tenant only: another tenant's token gets 403.\n\nRequired scope: `tenants:read` or `tenants:write`",
         "tags": [
           "Tenants"
         ],
         "x-required-scopes": [
-          "tenants:read"
+          "tenants:read",
+          "tenants:write"
         ],
         "parameters": [],
         "responses": {
@@ -34540,7 +34947,220 @@
               "application/json": {
                 "example": {
                   "error": "Method not allowed for this API token route",
-                  "method": "POST"
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "tenant-create",
+        "summary": "Create a tenant",
+        "description": "Creates a tenant, with an optional VMID range that must not overlap another tenant's (409). Answers 201; 409 when the slug is taken. Needs admin.tenants (scope tenants:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `tenants:write`",
+        "tags": [
+          "Tenants"
+        ],
+        "x-required-scopes": [
+          "tenants:write"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "slug"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9-]+$"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "vmidRangeStart": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "With vmidRangeEnd: the VMIDs reserved to the tenant; both or none"
+                  },
+                  "vmidRangeEnd": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "operatingModel": {
+                    "type": "string",
+                    "enum": [
+                      "iaas",
+                      "msp"
+                    ],
+                    "description": "iaas by default; set once"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string",
+                          "description": "Lowercase letters, digits and hyphens; unique"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "operatingModel": {
+                          "type": "string",
+                          "enum": [
+                            "iaas",
+                            "msp"
+                          ],
+                          "description": "iaas: vDC tenant; msp: runs its own clusters"
+                        },
+                        "vmidRangeStart": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "vmidRangeEnd": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "settings": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "additionalProperties": true
+                        },
+                        "createdBy": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/tenants"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
                 }
               }
             }
@@ -34563,12 +35183,13 @@
       "get": {
         "operationId": "tenant-get",
         "summary": "Tenant",
-        "description": "The tenant {id}; 404 when it does not exist. Needs admin.tenants.view (scope tenants:read). Provider tenant only: another tenant's token gets 403.\n\nRequired scope: `tenants:read`",
+        "description": "The tenant {id}; 404 when it does not exist. Needs admin.tenants.view (scope tenants:read or tenants:write). Provider tenant only: another tenant's token gets 403.\n\nRequired scope: `tenants:read` or `tenants:write`",
         "tags": [
           "Tenants"
         ],
         "x-required-scopes": [
-          "tenants:read"
+          "tenants:read",
+          "tenants:write"
         ],
         "parameters": [
           {
@@ -34723,18 +35344,345 @@
             }
           }
         }
+      },
+      "put": {
+        "operationId": "tenant-update",
+        "summary": "Update a tenant",
+        "description": "Changes the given fields of the tenant {id}. Disabling a tenant signs its users out; the provider tenant cannot be disabled. Needs admin.tenants (scope tenants:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `tenants:write`",
+        "tags": [
+          "Tenants"
+        ],
+        "x-required-scopes": [
+          "tenants:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Only the given fields change.",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9-]+$"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "vmidRangeStart": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "With vmidRangeEnd: the VMIDs reserved to the tenant; both or none"
+                  },
+                  "vmidRangeEnd": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string",
+                          "description": "Lowercase letters, digits and hyphens; unique"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "operatingModel": {
+                          "type": "string",
+                          "enum": [
+                            "iaas",
+                            "msp"
+                          ],
+                          "description": "iaas: vDC tenant; msp: runs its own clusters"
+                        },
+                        "vmidRangeStart": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "vmidRangeEnd": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "settings": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "additionalProperties": true
+                        },
+                        "createdBy": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/tenants/{id}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "tenant-delete",
+        "summary": "Delete a tenant",
+        "description": "Deletes the tenant {id} with its memberships and role assignments. 409 (TENANT_HAS_VDCS) while it still has vDCs; the provider tenant cannot be deleted. Needs admin.tenants (scope tenants:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `tenants:write`",
+        "tags": [
+          "Tenants"
+        ],
+        "x-required-scopes": [
+          "tenants:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/tenants/{id}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/tenants/{id}/users": {
       "get": {
         "operationId": "tenant-users-list",
         "summary": "Members of a tenant",
-        "description": "The users who belong to the tenant {id}. Needs admin.tenants.view (scope tenants:read). Provider tenant only: another tenant's token gets 403.\n\nRequired scope: `tenants:read`",
+        "description": "The users who belong to the tenant {id}. Needs admin.tenants.view (scope tenants:read or tenants:write). Provider tenant only: another tenant's token gets 403.\n\nRequired scope: `tenants:read` or `tenants:write`",
         "tags": [
           "Tenants"
         ],
         "x-required-scopes": [
-          "tenants:read"
+          "tenants:read",
+          "tenants:write"
         ],
         "parameters": [
           {
@@ -34862,7 +35810,264 @@
               "application/json": {
                 "example": {
                   "error": "Method not allowed for this API token route",
-                  "method": "POST"
+                  "method": "PUT"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "tenant-user-add",
+        "summary": "Add a user to a tenant",
+        "description": "Makes the user `userId` a member of the tenant {id} and, when they hold no role there yet, grants `roleId` (the viewer role by default) under the rules of every role assignment. Needs admin.tenants (scope tenants:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `tenants:write`",
+        "tags": [
+          "Tenants"
+        ],
+        "x-required-scopes": [
+          "tenants:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "userId"
+                ],
+                "properties": {
+                  "userId": {
+                    "type": "string"
+                  },
+                  "roleId": {
+                    "type": "string",
+                    "description": "Granted when the user holds no role in the tenant yet; the viewer role by default"
+                  },
+                  "isDefault": {
+                    "type": "boolean",
+                    "description": "Make this tenant the one the user lands in"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/tenants/{id}/users"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PUT"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "tenant-user-remove",
+        "summary": "Remove a user from a tenant",
+        "description": "Removes the user `userId` from the tenant {id}. 409 (LAST_TENANT) when it is their only tenant, 404 when they are not a member. Needs admin.tenants (scope tenants:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `tenants:write`",
+        "tags": [
+          "Tenants"
+        ],
+        "x-required-scopes": [
+          "tenants:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The member to remove"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/tenants/{id}/users"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PUT"
                 }
               }
             }
@@ -39128,12 +40333,13 @@
       "get": {
         "operationId": "rbac-roles-list",
         "summary": "Roles",
-        "description": "The system roles, the tenant's custom roles and, outside the provider tenant, the catalogue roles published to it, each with its permissions and audience. Needs admin.rbac.view (scope rbac:read). Scoped to the token's tenant; provider-level roles and their holders stay hidden from a token.\n\nRequired scope: `rbac:read`",
+        "description": "The system roles, the tenant's custom roles and, outside the provider tenant, the catalogue roles published to it, each with its permissions and audience. Needs admin.rbac.view (scope rbac:read or rbac:write). Scoped to the token's tenant; provider-level roles and their holders stay hidden from a token.\n\nRequired scope: `rbac:read` or `rbac:write`",
         "tags": [
           "RBAC"
         ],
         "x-required-scopes": [
-          "rbac:read"
+          "rbac:read",
+          "rbac:write"
         ],
         "parameters": [],
         "responses": {
@@ -39339,12 +40545,13 @@
       "get": {
         "operationId": "rbac-role-get",
         "summary": "Role",
-        "description": "The role {id} with its permissions; 404 when the token's tenant cannot see it. Needs admin.rbac.view (scope rbac:read). Scoped to the token's tenant; provider-level roles and their holders stay hidden from a token.\n\nRequired scope: `rbac:read`",
+        "description": "The role {id} with its permissions; 404 when the token's tenant cannot see it. Needs admin.rbac.view (scope rbac:read or rbac:write). Scoped to the token's tenant; provider-level roles and their holders stay hidden from a token.\n\nRequired scope: `rbac:read` or `rbac:write`",
         "tags": [
           "RBAC"
         ],
         "x-required-scopes": [
-          "rbac:read"
+          "rbac:read",
+          "rbac:write"
         ],
         "parameters": [
           {
@@ -39553,12 +40760,13 @@
       "get": {
         "operationId": "rbac-permissions-list",
         "summary": "Permissions",
-        "description": "Every permission a role can carry, flat and grouped by category. Needs admin.rbac.view (scope rbac:read).\n\nRequired scope: `rbac:read`",
+        "description": "Every permission a role can carry, flat and grouped by category. Needs admin.rbac.view (scope rbac:read or rbac:write).\n\nRequired scope: `rbac:read` or `rbac:write`",
         "tags": [
           "RBAC"
         ],
         "x-required-scopes": [
-          "rbac:read"
+          "rbac:read",
+          "rbac:write"
         ],
         "parameters": [],
         "responses": {
@@ -39718,12 +40926,13 @@
       "get": {
         "operationId": "rbac-assignments-list",
         "summary": "Role assignments",
-        "description": "Who holds which role, on which scope, until when. Needs admin.rbac.view (scope rbac:read). Scoped to the token's tenant; provider-level roles and their holders stay hidden from a token.\n\nRequired scope: `rbac:read`",
+        "description": "Who holds which role, on which scope, until when. Needs admin.rbac.view (scope rbac:read or rbac:write). Scoped to the token's tenant; provider-level roles and their holders stay hidden from a token.\n\nRequired scope: `rbac:read` or `rbac:write`",
         "tags": [
           "RBAC"
         ],
         "x-required-scopes": [
-          "rbac:read"
+          "rbac:read",
+          "rbac:write"
         ],
         "parameters": [],
         "responses": {
@@ -39885,7 +41094,187 @@
               "application/json": {
                 "example": {
                   "error": "Method not allowed for this API token route",
-                  "method": "POST"
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "rbac-assignment-create",
+        "summary": "Assign a role",
+        "description": "Grants the role `role_id` to the user `user_id`, who must be a member of the target tenant, on the role's default scope unless one is given. Answers 201; 400 when the same grant exists. Needs admin.rbac (scope rbac:write). Scoped to the token's tenant (the provider tenant may name another one). Protected roles, their holders, NIC identity rights and the token's creator are out of reach; roles themselves are not managed through the API. A token restricted to some connections gets 403.\n\nRequired scope: `rbac:write`",
+        "tags": [
+          "RBAC"
+        ],
+        "x-required-scopes": [
+          "rbac:write"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user_id",
+                  "role_id"
+                ],
+                "properties": {
+                  "user_id": {
+                    "type": "string"
+                  },
+                  "role_id": {
+                    "type": "string"
+                  },
+                  "tenant_id": {
+                    "type": "string",
+                    "description": "Provider tenant only: the tenant the role is granted in; the token's tenant by default"
+                  },
+                  "scope_type": {
+                    "type": "string",
+                    "description": "inherit (the role's default scope, the default), global, connection, node, vm, tag or pool"
+                  },
+                  "scope_target": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "The resource of the scope; none for inherit and global"
+                  },
+                  "expires_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time",
+                    "description": "null: never expires"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "scope_type": {
+                          "type": "string"
+                        },
+                        "scope_target": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "expires_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "user_id": {
+                          "type": "string"
+                        },
+                        "role_id": {
+                          "type": "string"
+                        },
+                        "tenant_id": {
+                          "type": "string"
+                        },
+                        "granted_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/rbac/assignments"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
                 }
               }
             }
@@ -39908,12 +41297,13 @@
       "get": {
         "operationId": "rbac-assignment-get",
         "summary": "Role assignment",
-        "description": "The assignment {id}; 404 when the token's tenant cannot see it. Needs admin.rbac.view (scope rbac:read). Scoped to the token's tenant; provider-level roles and their holders stay hidden from a token.\n\nRequired scope: `rbac:read`",
+        "description": "The assignment {id}; 404 when the token's tenant cannot see it. Needs admin.rbac.view (scope rbac:read or rbac:write). Scoped to the token's tenant; provider-level roles and their holders stay hidden from a token.\n\nRequired scope: `rbac:read` or `rbac:write`",
         "tags": [
           "RBAC"
         ],
         "x-required-scopes": [
-          "rbac:read"
+          "rbac:read",
+          "rbac:write"
         ],
         "parameters": [
           {
@@ -40070,18 +41460,322 @@
             }
           }
         }
+      },
+      "patch": {
+        "operationId": "rbac-assignment-update",
+        "summary": "Update a role assignment",
+        "description": "Changes the role, the scope or the expiry of the assignment {id}; 404 when the token's tenant cannot see it. Needs admin.rbac (scope rbac:write). Scoped to the token's tenant (the provider tenant may name another one). Protected roles, their holders, NIC identity rights and the token's creator are out of reach; roles themselves are not managed through the API. A token restricted to some connections gets 403.\n\nRequired scope: `rbac:write`",
+        "tags": [
+          "RBAC"
+        ],
+        "x-required-scopes": [
+          "rbac:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Only the given fields change.",
+                "properties": {
+                  "role_id": {
+                    "type": "string"
+                  },
+                  "scope_type": {
+                    "type": "string",
+                    "description": "inherit (the role's default scope, the default), global, connection, node, vm, tag or pool"
+                  },
+                  "scope_target": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "The resource of the scope; none for inherit and global"
+                  },
+                  "expires_at": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time",
+                    "description": "null: never expires"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "scope_type": {
+                          "type": "string"
+                        },
+                        "scope_target": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "expires_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "email": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "role": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "color": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/rbac/assignments/{id}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "rbac-assignment-delete",
+        "summary": "Revoke a role assignment",
+        "description": "Revokes the assignment {id}; 409 (SERVICE_DESK_MANAGED) for one that follows a service desk assignment. Needs admin.rbac (scope rbac:write). Scoped to the token's tenant (the provider tenant may name another one). Protected roles, their holders, NIC identity rights and the token's creator are out of reach; roles themselves are not managed through the API. A token restricted to some connections gets 403.\n\nRequired scope: `rbac:write`",
+        "tags": [
+          "RBAC"
+        ],
+        "x-required-scopes": [
+          "rbac:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/rbac/assignments/{id}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/users": {
       "get": {
         "operationId": "users-list",
         "summary": "Users",
-        "description": "The users with their authentication source, state and tenant memberships. Needs admin.users.view (scope users:read). The provider tenant lists every user, another tenant its own members; provider operators stay hidden from a token.\n\nRequired scope: `users:read`",
+        "description": "The users with their authentication source, state and tenant memberships. Needs admin.users.view (scope users:read or users:write). The provider tenant lists every user, another tenant its own members; provider operators stay hidden from a token.\n\nRequired scope: `users:read` or `users:write`",
         "tags": [
           "Users"
         ],
         "x-required-scopes": [
-          "users:read"
+          "users:read",
+          "users:write"
         ],
         "parameters": [],
         "responses": {
@@ -40234,7 +41928,198 @@
               "application/json": {
                 "example": {
                   "error": "Method not allowed for this API token route",
-                  "method": "POST"
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "user-create",
+        "summary": "Create a user",
+        "description": "Creates a local account with its first password. From the provider tenant, `tenantIds` lists its tenants (the first is its default); otherwise the account joins the token's tenant. It holds no role until one is assigned. Needs admin.users (scope users:write). The provider tenant reaches every user, another tenant its own members; provider operators and the token's creator are out of reach. A token restricted to some connections gets 403.\n\nRequired scope: `users:write`",
+        "tags": [
+          "Users"
+        ],
+        "x-required-scopes": [
+          "users:write"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "description": "First password of the local account"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "tenantIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Provider tenant only: the tenants of the user, the first being the default"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "auth_provider": {
+                          "type": "string"
+                        },
+                        "enabled": {
+                          "type": [
+                            "boolean",
+                            "integer"
+                          ]
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "role": {
+                          "type": "string",
+                          "description": "Update only"
+                        },
+                        "local_login_allowed": {
+                          "type": "boolean",
+                          "description": "Update only"
+                        },
+                        "last_login_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time",
+                          "description": "Update only"
+                        },
+                        "updated_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "Update only"
+                        },
+                        "api_tokens_deleted": {
+                          "type": "integer",
+                          "description": "Update only: API tokens deleted with deleteApiTokens"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/users"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
                 }
               }
             }
@@ -40257,12 +42142,13 @@
       "get": {
         "operationId": "user-get",
         "summary": "User",
-        "description": "The user {id}; 404 when the token's tenant cannot see it. Needs admin.users.view (scope users:read). The provider tenant lists every user, another tenant its own members; provider operators stay hidden from a token.\n\nRequired scope: `users:read`",
+        "description": "The user {id}; 404 when the token's tenant cannot see it. Needs admin.users.view (scope users:read or users:write). The provider tenant lists every user, another tenant its own members; provider operators stay hidden from a token.\n\nRequired scope: `users:read` or `users:write`",
         "tags": [
           "Users"
         ],
         "x-required-scopes": [
-          "users:read"
+          "users:read",
+          "users:write"
         ],
         "parameters": [
           {
@@ -40371,6 +42257,332 @@
                 "example": {
                   "error": "Route not available to API tokens",
                   "route": "/api/v1/users/{id}"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "user-update",
+        "summary": "Update a user",
+        "description": "Changes the name or the enabled state of the user {id}; from the provider tenant also their tenants (`tenantIds`) and one role applied in each of them (`roleId`). Disabling signs the user out. A token cannot set a password or emergency access (403). Needs admin.users (scope users:write). The provider tenant reaches every user, another tenant its own members; provider operators and the token's creator are out of reach. A token restricted to some connections gets 403.\n\nRequired scope: `users:write`",
+        "tags": [
+          "Users"
+        ],
+        "x-required-scopes": [
+          "users:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Only the given fields change. A token cannot send password or localLoginAllowed.",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "tenantIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Provider tenant only: the exact tenants of the user after the call"
+                  },
+                  "roleId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Provider tenant only: replaces the user's roles by this one in each of their tenants; null removes them"
+                  },
+                  "deleteApiTokens": {
+                    "type": "boolean",
+                    "description": "true: delete the API tokens this user created"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "auth_provider": {
+                          "type": "string"
+                        },
+                        "enabled": {
+                          "type": [
+                            "boolean",
+                            "integer"
+                          ]
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "role": {
+                          "type": "string",
+                          "description": "Update only"
+                        },
+                        "local_login_allowed": {
+                          "type": "boolean",
+                          "description": "Update only"
+                        },
+                        "last_login_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time",
+                          "description": "Update only"
+                        },
+                        "updated_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "Update only"
+                        },
+                        "api_tokens_deleted": {
+                          "type": "integer",
+                          "description": "Update only: API tokens deleted with deleteApiTokens"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/users/{id}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "user-delete",
+        "summary": "Delete a user",
+        "description": "From the provider tenant, deletes the account everywhere; from another tenant, removes its membership and deletes the account once it has no tenant left. `deleteApiTokens=true` also deletes the API tokens the user created, which otherwise keep working. Needs admin.users (scope users:write). The provider tenant reaches every user, another tenant its own members; provider operators and the token's creator are out of reach. A token restricted to some connections gets 403.\n\nRequired scope: `users:write`",
+        "tags": [
+          "Users"
+        ],
+        "x-required-scopes": [
+          "users:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "deleteApiTokens",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "true to delete the API tokens this user created"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "api_tokens_deleted": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/users/{id}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
                 }
               }
             }

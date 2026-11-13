@@ -12,23 +12,26 @@ const ADMIN_NOTE = "Needs admin.settings.vdcs (scope vdcs:write). Provider tenan
 /** [id, method, file under src/app/api/v1, summary, request schema, response schema, description, extra]. */
 type WriteRow = [string, HttpMethod, string, string, string | null, string, string, Partial<AllowlistEntry>?]
 
-/** vdcs:write entries sharing `extra`; the pattern follows the file (`[id]` becomes `{id}`). */
-function vdcWriteEntries(extra: Partial<AllowlistEntry>, rows: WriteRow[]): AllowlistEntry[] {
+/** Entries sharing `shared` (scope, tag, perimeter); the pattern follows the file (`[id]` becomes `{id}`). */
+function writeEntries(shared: Pick<AllowlistEntry, "requiredScopes" | "tag"> & Partial<AllowlistEntry>, rows: WriteRow[]): AllowlistEntry[] {
   return rows.map(([id, method, file, summary, requestSchemaRef, responseSchemaRef, description, own]) => ({
     id,
     method,
     pattern: `/api/v1/${file.replaceAll(/\[(\w+)\]/g, "{$1}")}`,
-    requiredScopes: ["vdcs:write"],
     perimeter: "fleet",
-    tag: "vDCs",
     routeFile: `src/app/api/v1/${file}/route.ts`,
     summary,
     description,
     ...(requestSchemaRef ? { requestSchemaRef } : {}),
     responseSchemaRef,
-    ...extra,
+    ...shared,
     ...own,
   }))
+}
+
+/** vdcs:write entries sharing `extra`. */
+function vdcWriteEntries(extra: Partial<AllowlistEntry>, rows: WriteRow[]): AllowlistEntry[] {
+  return writeEntries({ requiredScopes: ["vdcs:write"], tag: "vDCs", ...extra }, rows)
 }
 
 export const VDC_WRITE_ENTRIES: AllowlistEntry[] = [
@@ -92,4 +95,47 @@ export const VDC_WRITE_READ_ENTRIES: AllowlistEntry[] = [
     requestSchemaRef: "VdcEvpnNetworkUpdateRequest",
     responseSchemaRef: "VdcEvpnNetworkPresenceResponse",
   },
+]
+
+// ── Tenants, users and role assignments, writes (issue #1360, lot 3) ─────────
+// One scope per admin right (admin.tenants, admin.users, admin.rbac), each
+// needing a global grant and a token not restricted to connections. A token is
+// never a super admin: roles themselves, provider operators and protected
+// roles stay out of reach, and it never acts on its own creator.
+const UNRESTRICTED = "A token restricted to some connections gets 403."
+const TENANTS_NOTE = `Needs admin.tenants (scope tenants:write). Provider tenant only: another tenant's token gets 403. ${UNRESTRICTED}`
+const USERS_WRITE_NOTE = `Needs admin.users (scope users:write). The provider tenant reaches every user, another tenant its own members; provider operators and the token's creator are out of reach. ${UNRESTRICTED}`
+const RBAC_WRITE_NOTE = `Needs admin.rbac (scope rbac:write). Scoped to the token's tenant (the provider tenant may name another one). Protected roles, their holders, NIC identity rights and the token's creator are out of reach; roles themselves are not managed through the API. ${UNRESTRICTED}`
+
+export const ACCESS_WRITE_ENTRIES: AllowlistEntry[] = [
+  ...writeEntries({ requiredScopes: ["tenants:write"], tag: "Tenants" }, [
+    ["tenant-create", "POST", "tenants", "Create a tenant", "TenantCreateRequest", "TenantResponse",
+      `Creates a tenant, with an optional VMID range that must not overlap another tenant's (409). Answers 201; 409 when the slug is taken. ${TENANTS_NOTE}`],
+    ["tenant-update", "PUT", "tenants/[id]", "Update a tenant", "TenantUpdateRequest", "TenantResponse",
+      `Changes the given fields of the tenant {id}. Disabling a tenant signs its users out; the provider tenant cannot be disabled. ${TENANTS_NOTE}`],
+    ["tenant-delete", "DELETE", "tenants/[id]", "Delete a tenant", null, "SuccessResponse",
+      `Deletes the tenant {id} with its memberships and role assignments. 409 (TENANT_HAS_VDCS) while it still has vDCs; the provider tenant cannot be deleted. ${TENANTS_NOTE}`],
+    ["tenant-user-add", "POST", "tenants/[id]/users", "Add a user to a tenant", "TenantUserAddRequest", "SuccessResponse",
+      `Makes the user \`userId\` a member of the tenant {id} and, when they hold no role there yet, grants \`roleId\` (the viewer role by default) under the rules of every role assignment. ${TENANTS_NOTE}`],
+    ["tenant-user-remove", "DELETE", "tenants/[id]/users", "Remove a user from a tenant", null, "SuccessResponse",
+      `Removes the user \`userId\` from the tenant {id}. 409 (LAST_TENANT) when it is their only tenant, 404 when they are not a member. ${TENANTS_NOTE}`,
+      { queryParams: [{ name: "userId", description: "The member to remove", required: true }] }],
+  ]),
+  ...writeEntries({ requiredScopes: ["users:write"], tag: "Users" }, [
+    ["user-create", "POST", "users", "Create a user", "UserCreateRequest", "UserWriteResponse",
+      `Creates a local account with its first password. From the provider tenant, \`tenantIds\` lists its tenants (the first is its default); otherwise the account joins the token's tenant. It holds no role until one is assigned. ${USERS_WRITE_NOTE}`],
+    ["user-update", "PATCH", "users/[id]", "Update a user", "UserUpdateRequest", "UserWriteResponse",
+      `Changes the name or the enabled state of the user {id}; from the provider tenant also their tenants (\`tenantIds\`) and one role applied in each of them (\`roleId\`). Disabling signs the user out. A token cannot set a password or emergency access (403). ${USERS_WRITE_NOTE}`],
+    ["user-delete", "DELETE", "users/[id]", "Delete a user", null, "UserDeleteResponse",
+      `From the provider tenant, deletes the account everywhere; from another tenant, removes its membership and deletes the account once it has no tenant left. \`deleteApiTokens=true\` also deletes the API tokens the user created, which otherwise keep working. ${USERS_WRITE_NOTE}`,
+      { queryParams: [{ name: "deleteApiTokens", description: "true to delete the API tokens this user created", required: false }] }],
+  ]),
+  ...writeEntries({ requiredScopes: ["rbac:write"], tag: "RBAC" }, [
+    ["rbac-assignment-create", "POST", "rbac/assignments", "Assign a role", "RbacAssignmentCreateRequest", "RbacAssignmentWriteResponse",
+      `Grants the role \`role_id\` to the user \`user_id\`, who must be a member of the target tenant, on the role's default scope unless one is given. Answers 201; 400 when the same grant exists. ${RBAC_WRITE_NOTE}`],
+    ["rbac-assignment-update", "PATCH", "rbac/assignments/[id]", "Update a role assignment", "RbacAssignmentUpdateRequest", "RbacAssignmentUpdateResponse",
+      `Changes the role, the scope or the expiry of the assignment {id}; 404 when the token's tenant cannot see it. ${RBAC_WRITE_NOTE}`],
+    ["rbac-assignment-delete", "DELETE", "rbac/assignments/[id]", "Revoke a role assignment", null, "SuccessResponse",
+      `Revokes the assignment {id}; 409 (SERVICE_DESK_MANAGED) for one that follows a service desk assignment. ${RBAC_WRITE_NOTE}`],
+  ]),
 ]

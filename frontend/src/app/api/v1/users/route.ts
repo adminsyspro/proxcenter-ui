@@ -325,4 +325,4 @@ async function handlePost(req: Request) {
   }
 }
 
-export const POST = withAudit({ category: "users", resourceType: "user" }, handlePost)
+export const POST = withAudit({ category: "users", resourceType: "user" }, withPublicApiGuard("user-create", handlePost))

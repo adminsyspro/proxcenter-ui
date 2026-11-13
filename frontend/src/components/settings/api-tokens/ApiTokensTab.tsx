@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 
 import CreateTokenDialog from './CreateTokenDialog'
+import TokenSecretReveal from './TokenSecretReveal'
 import FeatureGuard from '@/components/guards/FeatureGuard'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 import { DESTRUCTIVE_SCOPE_IDS, isWriteScope } from '@/lib/api-tokens/scopes'
@@ -85,6 +86,9 @@ function ApiTokensPanel() {
   const [success, setSuccess] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [deletingToken, setDeletingToken] = useState<ApiTokenView | null>(null)
+  const [rotatingToken, setRotatingToken] = useState<ApiTokenView | null>(null)
+  const [rotating, setRotating] = useState(false)
+  const [rotatedSecret, setRotatedSecret] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -116,6 +120,34 @@ function ApiTokensPanel() {
     } finally {
       setDeletingToken(null)
     }
+  }
+
+  // The old secret dies with the request: the dialog stays open on the new
+  // one, shown once, and the list reloads behind it (prefix and creator).
+  async function confirmRotate() {
+    if (!rotatingToken) return
+    setRotating(true)
+    try {
+      const res = await fetch(`/api/v1/settings/api-tokens/${rotatingToken.id}/rotate`, { method: 'POST' })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) {
+        setError(res.status === 403 ? t('rotateForbidden') : t('rotateError'))
+        setRotatingToken(null)
+        return
+      }
+      setRotatedSecret(json.data.secret)
+      await load()
+    } catch {
+      setError(t('rotateError'))
+      setRotatingToken(null)
+    } finally {
+      setRotating(false)
+    }
+  }
+
+  function closeRotate() {
+    setRotatingToken(null)
+    setRotatedSecret('')
   }
 
   const columns: GridColDef[] = [
@@ -198,6 +230,13 @@ function ApiTokensPanel() {
         return (
           <Stack direction='row' spacing={1} sx={{ alignItems: 'center' }}>
             {row.revokedAt && <Chip label={t('revoked')} size='small' color='warning' variant='outlined' />}
+            {!row.revokedAt && (
+              <Tooltip title={t('rotate')} slotProps={tooltipSlotProps}>
+                <IconButton size='small' aria-label={t('rotate')} onClick={() => setRotatingToken(row)}>
+                  <i className='ri-refresh-line' />
+                </IconButton>
+              </Tooltip>
+            )}
             <Tooltip title={t('delete')} slotProps={tooltipSlotProps}>
               <IconButton size='small' aria-label={t('delete')} onClick={() => setDeletingToken(row)}>
                 <i className='ri-delete-bin-line' />
@@ -256,6 +295,25 @@ function ApiTokensPanel() {
       </Card>
 
       <CreateTokenDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreated={load} />
+
+      <Dialog open={!!rotatingToken} onClose={rotatedSecret || rotating ? undefined : closeRotate} fullWidth maxWidth='sm'>
+        <DialogTitle>{rotatedSecret ? t('reveal.title') : t('rotateTitle', { name: rotatingToken?.name ?? '' })}</DialogTitle>
+        <DialogContent>
+          {rotatedSecret
+            ? <TokenSecretReveal secret={rotatedSecret} />
+            : <Typography variant='body2'>{t('rotateConfirm')}</Typography>}
+        </DialogContent>
+        <DialogActions>
+          {rotatedSecret ? (
+            <Button variant='contained' onClick={closeRotate}>{t('reveal.done')}</Button>
+          ) : (
+            <>
+              <Button onClick={closeRotate} disabled={rotating}>{t('dialog.cancel')}</Button>
+              <Button color='warning' variant='contained' onClick={confirmRotate} disabled={rotating}>{t('rotate')}</Button>
+            </>
+          )}
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={!!deletingToken} onClose={() => setDeletingToken(null)}>
         <DialogTitle>{t('delete')}</DialogTitle>

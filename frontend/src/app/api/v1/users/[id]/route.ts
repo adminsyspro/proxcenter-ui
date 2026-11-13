@@ -1,7 +1,7 @@
 // src/app/api/v1/users/[id]/route.ts
 import { NextResponse } from "next/server"
 
-import { getActingSession } from "@/lib/auth/actingUser"
+import { getActingSession, getTokenCaller } from "@/lib/auth/actingUser"
 import { prisma } from "@/lib/db/prisma"
 import { hashPassword } from "@/lib/auth/password"
 import { safeLog } from "@/lib/log/sanitize"
@@ -16,6 +16,8 @@ import { withAudit } from "@/lib/audit/withAudit"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
+
+const TOKEN_ON_CREATOR = "An API token cannot change or delete the account of its creator"
 
 // GET /api/v1/users/[id] - Récupérer un utilisateur
 async function handleGet(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -74,6 +76,22 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     const { id } = await params
     const body = await req.json()
     const { name, enabled, password, tenantIds, roleId, deleteApiTokens, localLoginAllowed } = body
+
+    // An API token (users:write) never touches the account of its creator,
+    // and never sets a credential on an existing account: a leaked token must
+    // not turn into a sign-in.
+    const tokenCaller = await getTokenCaller()
+    if (tokenCaller) {
+      if (tokenCaller.creatorUserId === id) {
+        return NextResponse.json({ error: TOKEN_ON_CREATOR }, { status: 403 })
+      }
+      if (password !== undefined || localLoginAllowed !== undefined) {
+        return NextResponse.json(
+          { error: "An API token cannot set the password or the emergency access of an existing account" },
+          { status: 403 }
+        )
+      }
+    }
 
     const isSelf = session?.user?.id === id
     const selfServiceFields = new Set(["name", "password"])
@@ -489,6 +507,9 @@ async function handleDelete(req: Request, { params }: { params: Promise<{ id: st
 
     const session = await getActingSession()
     const { id } = await params
+    if ((await getTokenCaller())?.creatorUserId === id) {
+      return NextResponse.json({ error: TOKEN_ON_CREATOR }, { status: 403 })
+    }
     const superAdminBlock = await denyIfTargetIsProtectedAndCallerIsNot(id, session?.user?.id)
     if (superAdminBlock) return superAdminBlock
 
@@ -597,5 +618,5 @@ async function handleDelete(req: Request, { params }: { params: Promise<{ id: st
   }
 }
 
-export const PATCH = withAudit({ category: "users", resourceType: "user", resourceParam: "id" }, handlePatch)
-export const DELETE = withAudit({ category: "users", resourceType: "user", resourceParam: "id" }, handleDelete)
+export const PATCH = withAudit({ category: "users", resourceType: "user", resourceParam: "id" }, withPublicApiGuard("user-update", handlePatch))
+export const DELETE = withAudit({ category: "users", resourceType: "user", resourceParam: "id" }, withPublicApiGuard("user-delete", handleDelete))

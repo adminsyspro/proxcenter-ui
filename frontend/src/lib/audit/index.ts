@@ -125,6 +125,7 @@ export type AuditAction =
   // because journal entries written before that change still carry it, and an
   // audit vocabulary may never lose a term it has already published.
   | "apitoken.delete"
+  | "apitoken.rotate"
   | "apitoken.revoke"
   | "apitoken.denied"
   | "apitoken.write"

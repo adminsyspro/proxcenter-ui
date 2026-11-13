@@ -1,7 +1,8 @@
 export const dynamic = "force-dynamic"
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { updateTenant, deleteTenant, DEFAULT_TENANT_ID, requireProviderTenant } from "@/lib/tenant"
+import { tenantWriteFailure } from "@/lib/tenant/writeFailure"
 import { parseVmidRangeInput, findVmidRangeConflict } from "@/lib/tenant/vmidRange"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
@@ -47,7 +48,7 @@ async function handleGet(_req: Request, ctx: Ctx) {
 export const GET = withPublicApiGuard("tenant-get", handleGet)
 
 // PUT /api/v1/tenants/:id
-async function handlePut(req: NextRequest, ctx: Ctx) {
+async function handlePut(req: Request, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
@@ -104,13 +105,13 @@ async function handlePut(req: NextRequest, ctx: Ctx) {
     })
 
     return NextResponse.json({ data: tenant })
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+  } catch (e) {
+    return tenantWriteFailure(e, "update")
   }
 }
 
 // DELETE /api/v1/tenants/:id
-async function handleDelete(_req: NextRequest, ctx: Ctx) {
+async function handleDelete(_req: Request, ctx: Ctx) {
   const providerGate = await requireProviderTenant()
   if (providerGate) return providerGate
   const denied = await checkPermission(PERMISSIONS.ADMIN_TENANTS)
@@ -121,6 +122,16 @@ async function handleDelete(_req: NextRequest, ctx: Ctx) {
 
   if (id === DEFAULT_TENANT_ID) {
     return NextResponse.json({ error: "Cannot delete the default tenant" }, { status: 400 })
+  }
+
+  // The vDCs keep their tenant (foreign key): refused before anything is
+  // revoked, instead of failing half-way through the delete.
+  const vdcCount = await prisma.vdc.count({ where: { tenantId: id } })
+  if (vdcCount > 0) {
+    return NextResponse.json(
+      { error: `This tenant still has ${vdcCount} vDC(s). Delete them first.`, code: "TENANT_HAS_VDCS" },
+      { status: 409 }
+    )
   }
 
   const ok = await deleteTenant(id)
@@ -139,5 +150,5 @@ async function handleDelete(_req: NextRequest, ctx: Ctx) {
   return NextResponse.json({ success: true })
 }
 
-export const PUT = withAudit({ category: "admin", resourceType: "tenant", resourceParam: "id" }, handlePut)
-export const DELETE = withAudit({ category: "admin", resourceType: "tenant", resourceParam: "id" }, handleDelete)
+export const PUT = withAudit({ category: "admin", resourceType: "tenant", resourceParam: "id" }, withPublicApiGuard("tenant-update", handlePut))
+export const DELETE = withAudit({ category: "admin", resourceType: "tenant", resourceParam: "id" }, withPublicApiGuard("tenant-delete", handleDelete))

@@ -1,5 +1,6 @@
-// Request and response schemas of the multi-tenant write entries (issue #1360,
-// lot 2): vDC lifecycle, GPU quota, storage policies and shared EVPN zones.
+// Request and response schemas of the multi-tenant write entries (issue #1360):
+// vDC lifecycle, GPU quota, storage policies and shared EVPN zones, then
+// tenants, users and role assignments.
 // The vDC body stays open where the UI sends richer objects than a client
 // needs (transport, compute policy): the server validates them.
 import { STRINGS } from "./shared"
@@ -68,7 +69,75 @@ const STORAGE_POLICY_INPUT = {
   mbpsWr: NULLABLE_INT,
 }
 
+const TENANT_INPUT = {
+  name: { type: "string" },
+  slug: { type: "string", pattern: "^[a-z0-9-]+$" },
+  description: { type: ["string", "null"] },
+  vmidRangeStart: { ...NULLABLE_INT, description: "With vmidRangeEnd: the VMIDs reserved to the tenant; both or none" },
+  vmidRangeEnd: NULLABLE_INT,
+}
+const ASSIGNMENT_SCOPE = {
+  scope_type: { type: "string", description: "inherit (the role's default scope, the default), global, connection, node, vm, tag or pool" },
+  scope_target: { type: ["string", "null"], description: "The resource of the scope; none for inherit and global" },
+  expires_at: { type: ["string", "null"], format: "date-time", description: "null: never expires" },
+}
+
 export const TENANCY_WRITE_REQUEST_SCHEMAS: Record<string, Record<string, unknown>> = {
+  TenantCreateRequest: {
+    type: "object",
+    required: ["name", "slug"],
+    properties: { ...TENANT_INPUT, operatingModel: { type: "string", enum: ["iaas", "msp"], description: "iaas by default; set once" } },
+  },
+  TenantUpdateRequest: {
+    type: "object",
+    description: "Only the given fields change.",
+    properties: { ...TENANT_INPUT, enabled: { type: "boolean" } },
+  },
+  TenantUserAddRequest: {
+    type: "object",
+    required: ["userId"],
+    properties: {
+      userId: { type: "string" },
+      roleId: { type: "string", description: "Granted when the user holds no role in the tenant yet; the viewer role by default" },
+      isDefault: { type: "boolean", description: "Make this tenant the one the user lands in" },
+    },
+  },
+  UserCreateRequest: {
+    type: "object",
+    required: ["email", "password"],
+    properties: {
+      email: { type: "string", format: "email" },
+      password: { type: "string", minLength: 8, description: "First password of the local account" },
+      name: { type: "string" },
+      tenantIds: { ...STRINGS, description: "Provider tenant only: the tenants of the user, the first being the default" },
+    },
+  },
+  UserUpdateRequest: {
+    type: "object",
+    description: "Only the given fields change. A token cannot send password or localLoginAllowed.",
+    properties: {
+      name: { type: "string" },
+      enabled: { type: "boolean" },
+      tenantIds: { ...STRINGS, description: "Provider tenant only: the exact tenants of the user after the call" },
+      roleId: { type: ["string", "null"], description: "Provider tenant only: replaces the user's roles by this one in each of their tenants; null removes them" },
+      deleteApiTokens: { type: "boolean", description: "true: delete the API tokens this user created" },
+    },
+  },
+  RbacAssignmentCreateRequest: {
+    type: "object",
+    required: ["user_id", "role_id"],
+    properties: {
+      user_id: { type: "string" },
+      role_id: { type: "string" },
+      tenant_id: { type: "string", description: "Provider tenant only: the tenant the role is granted in; the token's tenant by default" },
+      ...ASSIGNMENT_SCOPE,
+    },
+  },
+  RbacAssignmentUpdateRequest: {
+    type: "object",
+    description: "Only the given fields change.",
+    properties: { role_id: { type: "string" }, ...ASSIGNMENT_SCOPE },
+  },
   AdminVdcCreateRequest: {
     type: "object",
     required: ["tenantId", "connectionId", "name", "slug", "nodes", "primaryStorage"],
@@ -131,7 +200,71 @@ export const TENANCY_WRITE_REQUEST_SCHEMAS: Record<string, Record<string, unknow
   },
 }
 
+const USER_WRITTEN = {
+  id: { type: "string" },
+  email: { type: "string" },
+  name: { type: ["string", "null"] },
+  auth_provider: { type: "string" },
+  enabled: { type: ["boolean", "integer"] },
+  created_at: { type: "string", format: "date-time" },
+}
+const ASSIGNMENT_WRITTEN = {
+  id: { type: "string" },
+  scope_type: { type: "string" },
+  scope_target: { type: ["string", "null"] },
+  expires_at: { type: ["string", "null"], format: "date-time" },
+}
+
 export const TENANCY_WRITE_RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
+  UserWriteResponse: {
+    type: "object",
+    properties: {
+      success: { type: "boolean" },
+      data: {
+        type: "object",
+        properties: {
+          ...USER_WRITTEN,
+          role: { type: "string", description: "Update only" },
+          local_login_allowed: { type: "boolean", description: "Update only" },
+          last_login_at: { type: ["string", "null"], format: "date-time", description: "Update only" },
+          updated_at: { type: "string", format: "date-time", description: "Update only" },
+          api_tokens_deleted: { type: "integer", description: "Update only: API tokens deleted with deleteApiTokens" },
+        },
+      },
+    },
+  },
+  UserDeleteResponse: {
+    type: "object",
+    properties: { success: { type: "boolean" }, api_tokens_deleted: { type: "integer" } },
+  },
+  RbacAssignmentWriteResponse: {
+    type: "object",
+    properties: {
+      data: {
+        type: "object",
+        properties: {
+          ...ASSIGNMENT_WRITTEN,
+          user_id: { type: "string" },
+          role_id: { type: "string" },
+          tenant_id: { type: "string" },
+          granted_at: { type: "string", format: "date-time" },
+        },
+      },
+    },
+  },
+  RbacAssignmentUpdateResponse: {
+    type: "object",
+    properties: {
+      data: {
+        type: "object",
+        properties: {
+          ...ASSIGNMENT_WRITTEN,
+          user: { type: "object", properties: { id: { type: "string" }, email: { type: "string" } } },
+          role: { type: "object", properties: { id: { type: "string" }, name: { type: "string" }, color: { type: "string" } } },
+        },
+      },
+    },
+  },
   VdcWriteResponse: { type: "object", properties: { data: VDC } },
   VdcDeleteResponse: { type: "object", properties: { data: { type: "object", properties: { success: { type: "boolean" } } } } },
   VdcGpuQuotaResponse: {

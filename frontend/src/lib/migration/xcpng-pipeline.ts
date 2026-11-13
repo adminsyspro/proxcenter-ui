@@ -39,6 +39,7 @@ import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } fro
 import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { convertDisksToQcow2 } from "./qcow2-convert"
+import { startMigratedVm } from "./start-migrated-vm"
 import { startJobHeartbeat } from "./job-heartbeat"
 import { interpretPollExit, MAX_CONSECUTIVE_POLL_FAILURES } from "./poll-exit"
 import { startSessionKeepAlive } from "./warm/session-keepalive"
@@ -712,12 +713,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     // ── STEP 5: Optionally start ──
     if (config.startAfterMigration) {
       await appendLog(jobId, "Starting VM on Proxmox...")
-      await pveFetch<any>(
-        pveConn,
-        `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/status/start`,
-        { method: "POST" }
-      )
-      await appendLog(jobId, "VM started", "success")
+      await startMigratedVm({ conn: pveConn, node: config.targetNode, vmid: targetVmid!, log: (m, l) => appendLog(jobId, m, l), startedMessage: "VM started" })
     }
 
     // ── STEP 6: Optional qcow2 conversion (#595) ──

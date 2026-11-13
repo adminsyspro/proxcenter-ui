@@ -109,3 +109,23 @@ describe("attachDisksAndBoot NICs after a guest conversion (#1000)", () => {
     expect(body.get("boot")).toBe("order=scsi0")
   })
 })
+
+describe("attachDisksAndBoot start after migration (discussion #1363)", () => {
+  it("completes with a warning when the final start fails after the disks are attached", async () => {
+    const { pveSetVmConfig } = await import("../pve-vm-config")
+    const { pveFetch } = await import("@/lib/proxmox/client")
+    const { attachDisksAndBoot } = await import("./finish")
+    vi.mocked(pveSetVmConfig).mockResolvedValue(undefined as any)
+    vi.mocked(pveFetch).mockRejectedValueOnce(new Error("getaddrinfo EAI_AGAIN fr6-pve-lb.example.com"))
+    const volumes: AllocatedVolume[] = [{ volumeId: "c:vm-147-disk-1", devicePath: "/dev/vg/vm-147-disk-1" }]
+
+    await expect(attachDisksAndBoot({
+      jobId: "j", pveConn: conn, node: "pve2", vmid: 147, diskCount: 1, diskSlots: ["sata0"], bootDiskSlot: "sata0",
+      allocatedVolumes: volumes, startAfterMigration: true, convertDisksToQcow2: false, targetStorage: "c",
+    })).resolves.toBeUndefined()
+
+    expect(volumes[0].attached).toBe(true)
+    expect(logs()).toContainEqual([expect.stringContaining("VM 147 could not be started: getaddrinfo EAI_AGAIN"), "warn"])
+    expect(logs().some(([m]) => m === "Target VM started")).toBe(false)
+  })
+})

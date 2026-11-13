@@ -15,8 +15,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { callRoute } from "@/__tests__/setup/route-test"
 
-const { checkPermissionMock, getCurrentTenantIdMock, tenantConnectionIdsMock, clearAllMock, clearVisibleMock } = vi.hoisted(() => ({
+const { checkPermissionMock, rbacScopeMock, getCurrentTenantIdMock, tenantConnectionIdsMock, clearAllMock, clearVisibleMock } = vi.hoisted(() => ({
   checkPermissionMock: vi.fn(),
+  rbacScopeMock: vi.fn(),
   getCurrentTenantIdMock: vi.fn(),
   tenantConnectionIdsMock: vi.fn(),
   clearAllMock: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock("@/lib/demo/demo-api", () => ({ demoResponse: () => null }))
 
 vi.mock("@/lib/rbac", () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
+  getCurrentRbacInfraScope: (...a: any[]) => rbacScopeMock(...a),
   PERMISSIONS: { ALERTS_MANAGE: "alerts.manage", CONNECTION_VIEW: "connection.view" },
 }))
 
@@ -56,6 +58,7 @@ vi.mock("@/lib/alerts/orchestratorFingerprint", () => ({ buildOrchestratorFinger
 beforeEach(() => {
   vi.clearAllMocks()
   checkPermissionMock.mockResolvedValue(null)
+  rbacScopeMock.mockResolvedValue(null)
   clearAllMock.mockResolvedValue({ data: { status: "ok" } })
   clearVisibleMock.mockResolvedValue(2)
 })
@@ -99,5 +102,19 @@ describe("DELETE /api/v1/orchestrator/alerts — clear-all scoping", () => {
     const res = await callRoute(DELETE as any, { method: "DELETE" })
     expect(res.status).toBe(200)
     expect(clearAllMock).toHaveBeenCalledWith(undefined)
+  })
+
+  // roadmap#223: alerts.manage scoped to a node or a VM is not a fleet-wide right.
+  it("clears only what a provider caller with a scoped alerts.manage sees", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    rbacScopeMock.mockResolvedValue({ connectionIds: new Set(["c1"]) })
+
+    const { DELETE } = await import("./route")
+    const res = await callRoute(DELETE as any, { method: "DELETE" })
+    expect(res.status).toBe(200)
+    expect(rbacScopeMock).toHaveBeenCalledWith("alerts.manage")
+    expect(clearVisibleMock).toHaveBeenCalledWith(undefined, "resolve")
+    expect(clearAllMock).not.toHaveBeenCalled()
+    expect(await res.json()).toEqual({ cleared: 2 })
   })
 })

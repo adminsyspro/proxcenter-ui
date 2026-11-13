@@ -213,11 +213,18 @@ export const createAlertSchema = z.object({
 })
 
 /** PATCH /api/v1/alerts — batch update alert statuses */
+/** Alert ids sent by a client: strings, at most 500 per request (roadmap#223). */
+const alertIdsField = z.array(z.string().min(1)).min(1, 'ids array is required').max(500, 'at most 500 ids')
+
 export const patchAlertsSchema = z.object({
-  ids: z.array(z.string()).min(1, 'ids array is required'),
+  ids: alertIdsField,
   action: z.enum(['acknowledge', 'resolve', 'reopen']),
+  /** Ignored unless it is the session's own name or e-mail: the acknowledger is the session's. */
   userId: z.string().optional(),
 })
+
+/** DELETE /api/v1/alerts/batch */
+export const deleteAlertsBatchSchema = z.object({ ids: alertIdsField })
 
 /** POST /api/v1/alerts/silence — mute an alert */
 export const silenceAlertSchema = z.object({

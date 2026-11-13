@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { hasPermission, isUserSuperAdmin, isUserProtected, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
+import { canReadRoleAssignments } from "@/lib/rbac/assignmentReadAccess"
 import { isServiceDeskManaged } from "@/lib/rbac/serviceDesk"
 import { roleHasSensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
 import { scopeIncludes, validateAssignmentScope } from "@/lib/rbac/scope-validation"
@@ -72,7 +73,11 @@ async function handleGet(req: Request, context: RouteContext) {
       },
     })
 
-    if (!assignment) {
+    // Without admin.users or admin.rbac (or their .view), the caller's own
+    // assignments only (roadmap#223); a token reached this line through
+    // admin.rbac.view.
+    const selfId = reader.userId
+    if (!assignment || (selfId && assignment.userId !== selfId && !(await canReadRoleAssignments(selfId, tenantId)))) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 })
     }
 

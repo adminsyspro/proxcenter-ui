@@ -22,6 +22,8 @@ vi.mock('@/lib/tenant', () => ({ DEFAULT_TENANT_ID: 'default', getCurrentTenantI
 vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { ALERTS_VIEW: 'alerts.view', ALERTS_MANAGE: 'alerts.manage', ADMIN_SETTINGS: 'admin.settings' },
   checkPermission: (...a: unknown[]) => m.checkPermission(...a),
+  // Scoped: the incident's visibility is tested (roadmap#223).
+  getCurrentRbacInfraScope: async () => ({ connectionIds: new Set(['c1']) }),
 }))
 vi.mock('@/lib/orchestrator/client', async orig => ({
   ...(await orig<typeof import('@/lib/orchestrator/client')>()),
@@ -51,6 +53,8 @@ const forbidden = () => NextResponse.json({ error: 'Permission denied' }, { stat
 const call = (handler: unknown, opts: Record<string, unknown> = {}) =>
   callRoute(handler as any, { params: { id: 'i1', aid: 'a1' }, ...opts } as any)
 const lastCall = () => m.orchestrator.mock.calls.at(-1) as [string, { method?: string; body?: unknown }?]
+// The write routes read the incident first (its visibility, roadmap#223): a refusal writes nothing.
+const writeCalls = () => m.orchestrator.mock.calls.filter(c => (c[1] as { method?: string } | undefined)?.method)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -79,10 +83,10 @@ describe('/incidents/[id]', () => {
     expect(lastCall()).toEqual(['/incidents/i1', expect.objectContaining({ method: 'DELETE' })])
   })
 
-  it('400 for a malformed patch, before the orchestrator', async () => {
+  it('400 for a malformed patch, nothing written', async () => {
     const res = await call(incident.PATCH, { method: 'PATCH', body: { title: '' } })
     expect(res.status).toBe(400)
-    expect(m.orchestrator).not.toHaveBeenCalled()
+    expect(writeCalls()).toEqual([])
   })
 
   it('delete needs admin.settings', async () => {
@@ -112,7 +116,7 @@ describe('/incidents/[id]/actions', () => {
   it('400 for an empty action or a malformed patch', async () => {
     expect((await call(actions.POST, { method: 'POST', body: { text: '' } })).status).toBe(400)
     expect((await call(action.PATCH, { method: 'PATCH', body: { done: 'yes' } })).status).toBe(400)
-    expect(m.orchestrator).not.toHaveBeenCalled()
+    expect(writeCalls()).toEqual([])
   })
 
   it('403 without alerts.manage', async () => {
@@ -134,7 +138,7 @@ describe('/incidents/[id]/comments', () => {
 
   it('400 for an empty comment', async () => {
     expect((await call(comments.POST, { method: 'POST', body: { body: '' } })).status).toBe(400)
-    expect(m.orchestrator).not.toHaveBeenCalled()
+    expect(writeCalls()).toEqual([])
   })
 })
 
@@ -148,7 +152,7 @@ describe('/incidents/[id]/alerts', () => {
     m.refuseAlert.mockResolvedValue(NextResponse.json({ error: 'not_found' }, { status: 404 }))
     expect((await call(attach.POST, { method: 'POST', body: { alert_id: 'al9' } })).status).toBe(404)
     expect((await call(attach.POST, { method: 'POST', body: {} })).status).toBe(400)
-    expect(m.orchestrator).not.toHaveBeenCalled()
+    expect(writeCalls()).toEqual([])
   })
 })
 

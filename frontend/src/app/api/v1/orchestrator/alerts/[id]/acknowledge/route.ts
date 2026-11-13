@@ -7,6 +7,7 @@ import { getTenantInfrastructureScope, maskingScope } from '@/lib/tenant/infraSc
 import { checkPermission, PERMISSIONS, getCurrentRbacInfraScope } from '@/lib/rbac'
 import { isAlertVisibleToTenant } from '@/lib/alerts/visibility'
 import { getVdcVmidsByConnection } from '@/lib/alerts/vdcVmids'
+import { sessionAcknowledger } from '@/lib/alerts/acknowledgedBy'
 import { withAudit } from '@/lib/audit/withAudit'
 
 export const runtime = 'nodejs'
@@ -29,7 +30,8 @@ async function handlePost(
 
     const { id } = await params
     const body = await req.json().catch(() => ({}))
-    const acknowledgedBy = body.acknowledged_by || 'unknown'
+    // The session's user, whatever the body names (roadmap#223).
+    const acknowledgedBy = await sessionAcknowledger(body?.acknowledged_by)
 
     // Full tenant scope check (connection + node + pool).
     const alertRes = await alertsApi.getAlert(id)

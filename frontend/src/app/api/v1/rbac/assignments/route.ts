@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { hasPermission, isUserSuperAdmin, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
+import { canReadRoleAssignments } from "@/lib/rbac/assignmentReadAccess"
 import { isServiceDeskManaged } from "@/lib/rbac/serviceDesk"
 import { validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
@@ -29,6 +30,16 @@ async function handleGet(req: Request) {
     const url = new URL(req.url)
     const userIdFilter = url.searchParams.get("user_id")
     const roleIdFilter = url.searchParams.get("role_id")
+
+    // Without admin.users or admin.rbac (or their .view), the caller's own
+    // assignments only (roadmap#223). A token reached this line through
+    // admin.rbac.view, a session through its sign-in only.
+    const selfId = reader.userId
+    const readsAll = !selfId || (await canReadRoleAssignments(selfId, tenantId))
+    if (!readsAll && userIdFilter && userIdFilter !== selfId) {
+      return NextResponse.json({ data: [], meta: { total: 0 } })
+    }
+    const userIdScope = readsAll ? userIdFilter : selfId
 
     const callerIsSuperAdmin = reader.isSuperAdmin
     const now = new Date()
@@ -57,7 +68,7 @@ async function handleGet(req: Request) {
     // provider screen even though the user is listed there.
     const isProviderView = tenantId === DEFAULT_TENANT_ID
     const where: any = isProviderView ? {} : { tenantId }
-    if (userIdFilter) where.userId = userIdFilter
+    if (userIdScope) where.userId = userIdScope
     if (roleIdFilter) where.roleId = roleIdFilter
     if (!callerIsSuperAdmin) {
       where.roleId = { ...(where.roleId ? { equals: where.roleId } : {}), notIn: [...PROTECTED_ROLE_IDS] }
@@ -127,7 +138,7 @@ async function handleGet(req: Request) {
           user: {
             tenants: { some: { tenantId } },
           },
-          ...(userIdFilter ? { userId: userIdFilter } : {}),
+          ...(userIdScope ? { userId: userIdScope } : {}),
         },
         include: {
           user: { select: { id: true, email: true, name: true } },

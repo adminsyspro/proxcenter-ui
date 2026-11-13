@@ -13,10 +13,12 @@ import { authOptions } from '@/lib/auth/config'
 import { hasServerFeature } from '@/lib/auth/requireEnterprise'
 import { codeResponse } from '@/lib/availability/orchestrator'
 import { Features } from '@/lib/license/features'
-import { PERMISSIONS, checkPermission } from '@/lib/rbac'
+import { PERMISSIONS, checkPermission, getCurrentRbacInfraScope } from '@/lib/rbac'
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from '@/lib/tenant'
 
-import { featureRequired } from './orchestrator'
+import { visibleIncident } from './alertVisibility'
+import { featureRequired, getIncident } from './orchestrator'
+import type { IncidentView } from './types'
 
 export type IncidentLevel = 'read' | 'write' | 'admin'
 
@@ -51,4 +53,30 @@ export async function requireIncidentAccess(level: IncidentLevel): Promise<Incid
   if (permDenied) return { denied: permDenied }
 
   return { denied: null, userId: user.id, userName: user.name || user.email || user.id }
+}
+
+/**
+ * The gate of the routes that write to one incident: requireIncidentAccess,
+ * then the incident itself must be visible to the caller, as GET shows it
+ * (at least one of its alerts in the caller's perimeter). Otherwise a 404
+ * not_found and nothing is written: the visibility test used to run on the
+ * answer only, after the orchestrator had applied the change (roadmap#223).
+ */
+export type IncidentWriteAccess =
+  | { denied: Response; userId?: undefined; userName?: undefined; view?: undefined }
+  | { denied: null; userId: string; userName: string; view: IncidentView }
+
+export async function requireIncidentWrite(id: string, level: 'write' | 'admin' = 'write'): Promise<IncidentWriteAccess> {
+  const access = await requireIncidentAccess(level)
+  if (access.denied) return { denied: access.denied }
+
+  // admin (delete) is judged on what the caller reads, write on what it manages.
+  // A caller nothing restricts writes as before, an incident whose alerts sit
+  // on a removed connection included (it could not be deleted otherwise).
+  const permission = level === 'admin' ? PERMISSIONS.ALERTS_VIEW : PERMISSIONS.ALERTS_MANAGE
+  const full = await getIncident(id)
+  const view = (await getCurrentRbacInfraScope(permission)) === null ? full : await visibleIncident(full, permission)
+  if (!view) return { denied: codeResponse('not_found', 404) }
+
+  return { denied: null, userId: access.userId as string, userName: access.userName as string, view }
 }

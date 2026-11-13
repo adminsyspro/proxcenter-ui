@@ -55,6 +55,10 @@ export async function GET(_req: Request, ctx: RouteContext) {
       if (!isVmConfigNotFoundError(err)) throw err
       const located = await locateVmInCluster(conn, vmid, type as GuestType)
       if (!located || located.node === node) throw err
+      // vm.view was checked on the URL node: the node the guest moved to
+      // must be covered too, as the config route does (roadmap#223).
+      const destinationDenied = await checkPermission(PERMISSIONS.VM_VIEW, "vm", buildVmResourceId(id, located.node, type, vmid))
+      if (destinationDenied) return destinationDenied
       resolvedNode = located.node
       movedTo = located.node
       statusData = await pveFetch<any>(

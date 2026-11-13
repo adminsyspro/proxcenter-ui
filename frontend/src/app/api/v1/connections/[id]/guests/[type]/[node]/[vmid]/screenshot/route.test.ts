@@ -251,3 +251,70 @@ describe('GET .../screenshot: failures keep the SSH detail server-side (roadmap#
     expect(body).toEqual({ data: null, reason: 'error' })
   })
 })
+
+// roadmap#223: vm.console on the URL node does not cover the VM's real node.
+describe('GET .../screenshot — permission on the node the VM really runs on', () => {
+  const denied = () => NextResponse.json({ error: 'Permission denied: vm.console' }, { status: 403 })
+
+  it('re-checks vm.console on the located node before the retry', async () => {
+    pveFetchMock.mockResolvedValueOnce({ vga: 'std' })
+    executeSSHMock.mockResolvedValueOnce({ success: false, error: 'no such vm' })
+    locateVmInClusterMock.mockResolvedValueOnce({ node: 'pve3' })
+    executeSSHMock.mockResolvedValueOnce({ success: true, output: PPM_B64 })
+
+    const res = await GET(new Request('http://localhost'), makeCtx({ id: 'perm-ok', node: 'pve1', vmid: '501' }))
+
+    expect(res.headers.get('content-type')).toContain('image/jpeg')
+    expect(checkPermissionMock.mock.calls).toEqual([
+      ['vm.console', 'vm', 'perm-ok/pve1/qemu/501'],
+      ['vm.console', 'vm', 'perm-ok/pve3/qemu/501'],
+    ])
+  })
+
+  it('answers like a failed capture, without naming the real node, when that right is missing', async () => {
+    pveFetchMock.mockResolvedValueOnce({ vga: 'std' })
+    executeSSHMock.mockResolvedValueOnce({ success: false, error: 'no such vm' })
+    locateVmInClusterMock.mockResolvedValueOnce({ node: 'pve3' })
+    checkPermissionMock.mockResolvedValueOnce(null).mockResolvedValueOnce(denied())
+
+    const res = await GET(new Request('http://localhost'), makeCtx({ id: 'perm-no', node: 'pve1', vmid: '502' }))
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ data: null, reason: 'ssh_failed', movedTo: null })
+    expect(res.headers.get('x-screenshot-moved-to')).toBeNull()
+    expect(executeSSHMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not serve a frame cached through a stale URL to a caller without the right on the real node', async () => {
+    const ctxArgs = { id: 'perm-cache', node: 'pve1', vmid: '503' }
+    pveFetchMock.mockResolvedValue({ vga: 'std' })
+    executeSSHMock.mockResolvedValueOnce({ success: false, error: 'no such vm' })
+    locateVmInClusterMock.mockResolvedValueOnce({ node: 'pve3' })
+    executeSSHMock.mockResolvedValueOnce({ success: true, output: PPM_B64 })
+    const first = await GET(new Request('http://localhost'), makeCtx(ctxArgs))
+    expect(first.headers.get('content-type')).toContain('image/jpeg')
+
+    checkPermissionMock.mockReset()
+    checkPermissionMock.mockImplementation(async (_p: string, _t: string, id: string) => (id.includes('/pve3/') ? denied() : null))
+    const second = await GET(new Request('http://localhost'), makeCtx(ctxArgs))
+
+    expect(second.headers.get('content-type')).toContain('application/json')
+    expect(await second.json()).toEqual({ data: null, reason: 'ssh_failed', movedTo: null })
+    expect(executeSSHMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('still serves that cached frame to a caller holding the right on the real node', async () => {
+    const ctxArgs = { id: 'perm-cache-ok', node: 'pve1', vmid: '504' }
+    pveFetchMock.mockResolvedValue({ vga: 'std' })
+    executeSSHMock.mockResolvedValueOnce({ success: false, error: 'no such vm' })
+    locateVmInClusterMock.mockResolvedValueOnce({ node: 'pve3' })
+    executeSSHMock.mockResolvedValueOnce({ success: true, output: PPM_B64 })
+    await GET(new Request('http://localhost'), makeCtx(ctxArgs))
+
+    const second = await GET(new Request('http://localhost'), makeCtx(ctxArgs))
+
+    expect(second.headers.get('content-type')).toContain('image/jpeg')
+    expect(second.headers.get('x-screenshot-cache')).toBe('hit')
+    expect(checkPermissionMock).toHaveBeenLastCalledWith('vm.console', 'vm', 'perm-cache-ok/pve3/qemu/504')
+  })
+})

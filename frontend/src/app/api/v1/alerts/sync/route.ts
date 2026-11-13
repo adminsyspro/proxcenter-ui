@@ -4,6 +4,7 @@ import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { generateFingerprint } from '@/lib/alerts/fingerprint'
 import { syncAlertsSchema } from '@/lib/schemas'
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { refuseRestrictedAlertWrite } from "@/lib/alerts/localAlertScope"
 
 export const runtime = 'nodejs'
 
@@ -18,6 +19,10 @@ export async function POST(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (denied) return denied
+    // A sync resolves every row it does not name: a caller nothing restricts
+    // only, like the dashboard's own sync (roadmap#223).
+    const restricted = await refuseRestrictedAlertWrite()
+    if (restricted) return restricted
 
     const prisma = await getSessionPrisma()
     const rawBody = await req.json()

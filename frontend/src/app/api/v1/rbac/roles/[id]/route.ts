@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
 import { isUserSuperAdmin, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { validateRoleDefaultScopes } from "@/lib/rbac/scope-validation"
+import { canReadRoleAssignments } from "@/lib/rbac/assignmentReadAccess"
 import { findUnknownTenant, refuseOverCeiling } from "@/lib/rbac/catalogueGuards"
 import {
   isRoleAssignableInTenant,
@@ -104,6 +105,10 @@ async function handleGet(req: Request, context: RouteContext) {
       return NextResponse.json({ error: "Role not found" }, { status: 404 })
     }
 
+    // The role's holders only with admin.users or admin.rbac (or their
+    // .view), roadmap#223; a token reached this line through admin.rbac.view.
+    const holders = !reader.userId || (await canReadRoleAssignments(reader.userId, tenantId)) ? role.userRoles : []
+
     return NextResponse.json({
       data: {
         id: role.id,
@@ -124,7 +129,7 @@ async function handleGet(req: Request, context: RouteContext) {
           description: rp.permission.description,
           is_dangerous: rp.permission.isDangerous,
         })),
-        users: role.userRoles.map(ur => ({
+        users: holders.map(ur => ({
           assignment_id: ur.id,
           scope_type: ur.scopeType,
           scope_target: ur.scopeTarget,

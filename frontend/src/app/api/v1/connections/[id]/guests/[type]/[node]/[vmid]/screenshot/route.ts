@@ -14,10 +14,11 @@ import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 
 export const runtime = "nodejs"
 
-// In-memory screenshot cache: key = "connId:node:vmid", value = { jpeg, timestamp }.
+// In-memory screenshot cache: key = "connId:node:vmid", value = { jpeg, timestamp, node }.
 // We cache the already-encoded JPEG (not the raw PPM) so cache hits are served
-// without re-running the PPM->JPEG conversion.
-const screenshotCache = new Map<string, { jpeg: Buffer; timestamp: number }>()
+// without re-running the PPM->JPEG conversion. `node` is the node the frame was
+// captured on, which differs from the key's when the VM had moved.
+const screenshotCache = new Map<string, { jpeg: Buffer; timestamp: number; node: string }>()
 const CACHE_TTL = 5_000 // 5 seconds
 
 // Whether a VM has a graphical framebuffer (vga != serial/none), cached so the
@@ -40,6 +41,34 @@ export function pruneScreenshotCaches(now: number = Date.now()): void {
 
 // Cleanup old cache entries periodically
 setInterval(() => pruneScreenshotCaches(), 30_000)
+
+// The answer of a capture that did not happen. A VM found on a node the
+// caller holds no vm.console on gets it too, so the reply does not tell the
+// caller where the VM runs (roadmap#223).
+const NOT_CAPTURED = { data: null, reason: 'ssh_failed', movedTo: null }
+
+/** Whether the caller holds vm.console on `node`, the node a frame was or will be captured on. */
+async function consoleCovers(id: string, node: string, type: string, vmid: string): Promise<boolean> {
+  return !(await checkPermission(PERMISSIONS.VM_CONSOLE, "vm", buildVmResourceId(id, node, type, vmid)))
+}
+
+type Connection = NonNullable<Awaited<ReturnType<typeof getConnectionById>>>
+type Capture = { ssh: Awaited<ReturnType<typeof executeSSH>>; node: string; movedTo: string | null }
+
+/**
+ * The monitor call fails when the VM is not on the URL node — most common
+ * cause: an intra-cluster migration moved the VM and the caller still holds
+ * the stale source node. Re-resolve it via /cluster/resources and retry once
+ * there. vm.console was checked on the URL node: the node the VM runs on must
+ * be covered too, as the config route does; null when it is not (roadmap#223).
+ */
+async function captureOnLocatedNode(conn: Connection, id: string, type: string, vmid: string, cmd: string, first: Capture): Promise<Capture | null> {
+  const located = await locateVmInCluster(conn, vmid, "qemu")
+  if (!located || located.node === first.node) return first
+  if (!(await consoleCovers(id, located.node, type, vmid))) return null
+  const nodeIp = await resolveNodeSshEndpoint(conn, located.node)
+  return { ssh: await executeSSH(conn.id, nodeIp, cmd, undefined, { readOnly: true }), node: located.node, movedTo: located.node }
+}
 
 // Serve an encoded frame as a binary image/jpeg response. Returning a real
 // image (rather than a base64 PPM wrapped in JSON) is what keeps each poll at
@@ -108,6 +137,11 @@ export async function GET(
   const cached = screenshotCache.get(cacheKey)
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    // A frame captured on another node than the URL's: vm.console must cover
+    // that node too, as on the capture itself (roadmap#223).
+    if (cached.node !== node && !(await consoleCovers(id, cached.node, type, vmid))) {
+      return NextResponse.json(NOT_CAPTURED)
+    }
     return jpegResponse(cached.jpeg, { "X-Screenshot-Cache": "hit" })
   }
 
@@ -153,31 +187,17 @@ export async function GET(
     // visible, pictures included (roadmap#58).
     const readOnly = { readOnly: true }
 
-    // Try the originally-requested node first.
-    let resolvedNode = node
-    let movedTo: string | null = null
-    let nodeIp = await resolveNodeSshEndpoint(conn, resolvedNode)
-    let sshResult = await executeSSH(conn.id, nodeIp, cmd, undefined, readOnly)
-
-    // The monitor call fails when the VM is not on this node — most
-    // common cause: an intra-cluster migration moved the VM and our caller
-    // is still holding the stale source node. Re-resolve via /cluster/resources
-    // and retry once before surfacing the failure.
-    if (!sshResult.success) {
-      const located = await locateVmInCluster(conn, safeVmid, "qemu")
-      if (located && located.node !== resolvedNode) {
-        resolvedNode = located.node
-        movedTo = located.node
-        nodeIp = await resolveNodeSshEndpoint(conn, resolvedNode)
-        sshResult = await executeSSH(conn.id, nodeIp, cmd, undefined, readOnly)
-      }
-    }
+    // Try the originally-requested node first, then the node the VM runs on.
+    let capture: Capture | null = { ssh: await executeSSH(conn.id, await resolveNodeSshEndpoint(conn, node), cmd, undefined, readOnly), node, movedTo: null }
+    if (!capture.ssh.success) capture = await captureOnLocatedNode(conn, id, type, safeVmid, cmd, capture)
+    if (!capture) return NextResponse.json(NOT_CAPTURED)
+    const { ssh: sshResult, node: resolvedNode, movedTo } = capture
 
     if (!sshResult.success || !sshResult.output) {
       // The SSH error names the host and port the connection reaches: it
       // stays in the server log, the caller gets the reason code (roadmap#99).
       if (sshResult.error) console.error(`[screenshot] SSH failed on ${safeLog(resolvedNode)}:`, safeLog(sshResult.error))
-      return NextResponse.json({ data: null, reason: 'ssh_failed', movedTo })
+      return NextResponse.json({ ...NOT_CAPTURED, movedTo })
     }
 
     // The node returns the framebuffer as a base64-encoded PPM (raw RGB bitmap).
@@ -193,9 +213,9 @@ export async function GET(
     // Cache the encoded frame under the resolved node so subsequent calls coming
     // through the stale node URL still hit the cache.
     const now = Date.now()
-    screenshotCache.set(`${id}:${resolvedNode}:${vmid}`, { jpeg, timestamp: now })
+    screenshotCache.set(`${id}:${resolvedNode}:${vmid}`, { jpeg, timestamp: now, node: resolvedNode })
     if (resolvedNode !== node) {
-      screenshotCache.set(cacheKey, { jpeg, timestamp: now })
+      screenshotCache.set(cacheKey, { jpeg, timestamp: now, node: resolvedNode })
     }
 
     return jpegResponse(jpeg, movedTo ? { "X-Screenshot-Moved-To": movedTo } : undefined)

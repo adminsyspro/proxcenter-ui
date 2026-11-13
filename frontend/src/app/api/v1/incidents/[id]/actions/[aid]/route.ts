@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 
 import { withAudit } from '@/lib/audit/withAudit'
 import { codeResponse } from '@/lib/availability/orchestrator'
-import { requireIncidentAccess } from '@/lib/incidents/guard'
+import { requireIncidentWrite } from '@/lib/incidents/guard'
 import { deleteAction, incidentErrorResponse, updateAction } from '@/lib/incidents/orchestrator'
 import { parseActionPatch, readJson } from '@/lib/incidents/validate'
 
@@ -16,13 +16,13 @@ type Ctx = { params: Promise<{ id: string; aid: string }> }
 
 async function handlePatch(request: Request, ctx: Ctx) {
   try {
-    const access = await requireIncidentAccess('write')
+    const { id, aid } = await ctx.params
+    const access = await requireIncidentWrite(id)
     if (access.denied) return access.denied
 
     const parsed = parseActionPatch(await readJson(request))
     if (parsed.ok === false) return codeResponse(parsed.code, 400)
 
-    const { id, aid } = await ctx.params
     return NextResponse.json(await updateAction(id, aid, { ...parsed.value, by: access.userName }))
   } catch (e) {
     return incidentErrorResponse(e, 'update action')
@@ -31,10 +31,10 @@ async function handlePatch(request: Request, ctx: Ctx) {
 
 async function handleDelete(_request: Request, ctx: Ctx) {
   try {
-    const access = await requireIncidentAccess('write')
+    const { id, aid } = await ctx.params
+    const access = await requireIncidentWrite(id)
     if (access.denied) return access.denied
 
-    const { id, aid } = await ctx.params
     return NextResponse.json(await deleteAction(id, aid))
   } catch (e) {
     return incidentErrorResponse(e, 'delete action')

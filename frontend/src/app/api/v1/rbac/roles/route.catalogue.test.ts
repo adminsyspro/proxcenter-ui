@@ -40,6 +40,7 @@ vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 vi.mock('@/lib/demo/demo-api', () => ({ demoResponse: () => null }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: m.tenantId }))
 vi.mock('@/lib/audit', () => ({ audit: m.audit }))
+vi.mock('@/lib/rbac/assignmentReadAccess', () => ({ canReadRoleAssignments: async () => true }))
 vi.mock('@/lib/rbac', () => ({ PERMISSIONS: { ADMIN_RBAC_VIEW: 'admin.rbac.view' }, isUserSuperAdmin: m.isSuperAdmin, PROTECTED_ROLE_IDS: [] }))
 vi.mock('@/lib/rbac/catalogueGuards', () => ({ refuseOverCeiling: m.refuse, findUnknownTenant: m.unknownTenant }))
 vi.mock('@/lib/rbac/serviceDesk', async importOriginal => ({

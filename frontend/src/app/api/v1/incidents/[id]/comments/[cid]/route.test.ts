@@ -19,11 +19,15 @@ vi.mock('@/lib/tenant', () => ({ DEFAULT_TENANT_ID: 'default', getCurrentTenantI
 vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { ALERTS_VIEW: 'alerts.view', ALERTS_MANAGE: 'alerts.manage', ADMIN_SETTINGS: 'admin.settings' },
   checkPermission: (...a: unknown[]) => m.checkPermission(...a),
+  // Scoped: the incident's visibility is tested (roadmap#223).
+  getCurrentRbacInfraScope: async () => ({ connectionIds: new Set(['c1']) }),
 }))
 vi.mock('@/lib/orchestrator/client', async orig => ({
   ...(await orig<typeof import('@/lib/orchestrator/client')>()),
   orchestratorFetch: (...a: unknown[]) => m.orchestrator(...a),
 }))
+// The incident's own visibility (roadmap#223) has its tests in ../../writeVisibility.test.ts.
+vi.mock('@/lib/incidents/alertVisibility', () => ({ visibleIncident: async (v: unknown) => v }))
 vi.mock('@/lib/audit', async () => {
   const { markAuditExplicit } = await vi.importActual<typeof import('@/lib/audit/scope')>('@/lib/audit/scope')
   return { audit: (...a: unknown[]) => { markAuditExplicit(); return m.audit(...a) } }
@@ -87,6 +91,6 @@ describe('PATCH /incidents/[id]/comments/[cid]', () => {
   it('400 invalid_body above 4000 characters', async () => {
     const res = await callRoute(PATCH as any, { method: 'PATCH', params, body: { body: 'x'.repeat(4001) } })
     expect(res.status).toBe(400)
-    expect(m.orchestrator).not.toHaveBeenCalled()
+    expect(m.orchestrator.mock.calls.filter(c => (c[1] as { method?: string } | undefined)?.method)).toEqual([])
   })
 })

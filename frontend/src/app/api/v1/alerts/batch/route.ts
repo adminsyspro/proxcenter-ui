@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withAudit } from '@/lib/audit/withAudit'
+import { LOCAL_ALERT_ENTITY_SELECT, visibleLocalAlertIds } from '@/lib/alerts/localAlertScope'
+import { deleteAlertsBatchSchema } from '@/lib/schemas'
 
 export const runtime = 'nodejs'
 
@@ -16,21 +18,20 @@ async function handleDelete(req: Request) {
     const permError = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (permError) return permError
 
-    const body = await req.json()
-    const { ids } = body
-
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    // Strings only, at most 500, and only the rows the caller sees (roadmap#223).
+    const parsed = deleteAlertsBatchSchema.safeParse(await req.json().catch(() => null))
+    if (!parsed.success) {
       return NextResponse.json({ error: 'ids array is required' }, { status: 400 })
     }
 
-    const result = await prisma.alert.deleteMany({
-      where: { id: { in: ids } }
-    })
+    const ids = await visibleLocalAlertIds(parsed.data.ids, PERMISSIONS.ALERTS_MANAGE,
+      list => prisma.alert.findMany({ where: { id: { in: list } }, select: LOCAL_ALERT_ENTITY_SELECT }))
+    const deleted = ids.length === 0 ? 0 : (await prisma.alert.deleteMany({ where: { id: { in: ids } } })).count
 
     return NextResponse.json({
       data: {
-        deleted: result.count,
-        message: `${result.count} alert(s) deleted`
+        deleted,
+        message: `${deleted} alert(s) deleted`
       }
     })
   } catch (error: any) {

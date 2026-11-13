@@ -8,6 +8,9 @@ vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: vi.fn<() => Promise<string>>(),
 }))
 
+// The restricted-caller refusal has its tests in scope.test.ts (roadmap#223).
+vi.mock('@/lib/alerts/localAlertScope', () => ({ refuseRestrictedAlertWrite: async () => null }))
+
 vi.mock('@/lib/rbac', () => ({
   checkPermission: vi.fn<(...args: any[]) => Promise<Response | null>>(),
   PERMISSIONS: {

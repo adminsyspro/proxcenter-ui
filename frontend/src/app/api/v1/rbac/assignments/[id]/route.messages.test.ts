@@ -31,6 +31,7 @@ vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 vi.mock('@/lib/demo/demo-api', () => ({ demoResponse: () => null }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'default', DEFAULT_TENANT_ID: 'default' }))
 vi.mock('@/lib/audit', () => ({ audit: vi.fn() }))
+vi.mock('@/lib/rbac/assignmentReadAccess', () => ({ canReadRoleAssignments: async () => true }))
 vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { ADMIN_RBAC_VIEW: 'admin.rbac.view' },
   hasPermission: hasPermissionMock,

@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 
-import { orchestratorFetch } from '@/lib/orchestrator/client'
+import { alertsApi } from '@/lib/orchestrator/client'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { DEFAULT_TENANT_ID, getCurrentTenantId, getTenantConnectionIds } from '@/lib/tenant'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { checkPermission, getCurrentRbacInfraScope, PERMISSIONS } from '@/lib/rbac'
 import { clearVisibleTenantAlerts } from '@/lib/alerts/clearVisible'
 import { withAudit } from '@/lib/audit/withAudit'
 
@@ -31,30 +31,37 @@ async function handleDelete(req: Request) {
       return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
     }
 
-    // Non-provider: the orchestrator's /alerts/clear is connection-wide and
-    // has no tenant concept — on a shared cluster it would wipe the
-    // neighbours' alerts too. Clear only the alerts this caller can
-    // actually see (vDC-context view, mirrors the GET list), one by one.
+    // Non-provider: the orchestrator's clear is connection-wide and has no
+    // tenant concept — on a shared cluster it would wipe the neighbours'
+    // alerts too. Clear only the alerts this caller can actually see
+    // (vDC-context view, mirrors the GET list), one by one. A provider caller
+    // whose alerts.manage is scoped to a node or a VM resolves the alerts it
+    // sees, one by one (roadmap#223).
     const tenantId = await getCurrentTenantId()
     if (tenantId !== DEFAULT_TENANT_ID) {
       const cleared = await clearVisibleTenantAlerts(connectionId || undefined)
 
       return NextResponse.json({ cleared })
     }
+    if ((await getCurrentRbacInfraScope(PERMISSIONS.ALERTS_MANAGE)) !== null) {
+      const cleared = await clearVisibleTenantAlerts(connectionId || undefined, 'resolve')
 
-    // Provider: orchestrator-native per-connection clears.
-    if (!connectionId) {
-      const results = []
-      for (const connId of tenantConnectionIds) {
-        const result = await orchestratorFetch(`/alerts/clear?${new URLSearchParams({ connection_id: connId })}`, { method: 'DELETE' })
-        results.push(result)
-      }
-      return NextResponse.json({ cleared: results.length })
+      return NextResponse.json({ cleared })
     }
 
-    const result = await orchestratorFetch(`/alerts/clear?${new URLSearchParams({ connection_id: connectionId })}`, { method: 'DELETE' })
+    // Provider: the orchestrator resolves the active alerts of a connection
+    // (DELETE /alerts?connection_id=). It has no /alerts/clear route: that
+    // path deleted an alert whose id is "clear" and left every alert open.
+    if (!connectionId) {
+      for (const connId of tenantConnectionIds) {
+        await alertsApi.clearAll(connId)
+      }
+      return NextResponse.json({ cleared: tenantConnectionIds.size })
+    }
 
-    return NextResponse.json(result)
+    const result = await alertsApi.clearAll(connectionId)
+
+    return NextResponse.json(result.data)
   } catch (error: any) {
     if ((error as any)?.code !== 'ORCHESTRATOR_UNAVAILABLE') {
       console.error('[orchestrator/alerts/clear] DELETE error:', error)

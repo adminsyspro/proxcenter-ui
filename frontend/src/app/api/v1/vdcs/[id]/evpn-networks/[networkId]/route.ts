@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import type { Principal } from "@/lib/auth/principal"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { evpnContextForVdc, setEvpnNetworkPresence } from "@/lib/vdc/evpnNetworks"
@@ -18,7 +19,8 @@ type RouteContext = {
 // PUT /api/v1/vdcs/{id}/evpn-networks/{networkId}
 // Body: { vdcIds: string[] }. Sets the vDCs of the tenant that carry the
 // network (#1334): created where newly listed, removed where left out.
-// Session only: the route is not part of the public token API.
+// Open to API tokens (scope network:write, issue #1360): every vDC added or
+// removed is judged like the one in the URL, tenant and connection perimeter.
 async function putHandler(req: Request, ctx: RouteContext) {
   try {
     const params = await Promise.resolve(ctx.params)
@@ -70,4 +72,4 @@ async function putHandler(req: Request, ctx: RouteContext) {
   }
 }
 
-export const PUT = withAudit({ category: "sdn", resourceType: "vnet", resourceParam: "networkId" }, putHandler)
+export const PUT = withAudit({ category: "sdn", resourceType: "vnet", resourceParam: "networkId" }, withPublicApiGuard("vdc-evpn-network-update", putHandler))

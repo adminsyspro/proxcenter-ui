@@ -104,6 +104,28 @@ describe('runTokenEntryGuards', () => {
     expect(auditMock).not.toHaveBeenCalled()
   })
 
+  describe('(1c) fleet-wide operations (issue #1360, lot 2)', () => {
+    const fleet = () => entry({ connectionSegment: undefined, perimeter: 'fleet', requiredScopes: ['vdcs:write'] })
+
+    it('403 for a token restricted to connections, journaled, before any perimeter lookup', async () => {
+      const res = await runTokenEntryGuards(fleet(), principal, post({}), {})
+      expect(res?.status).toBe(403)
+      expect(await res?.json()).toEqual({ error: 'This operation reaches every connection: it needs a token not restricted to connections' })
+      expect(deniedAudit()).toMatchObject({ action: 'apitoken.denied' })
+      expect(resolveVisibleMock).not.toHaveBeenCalled()
+    })
+
+    it('403 for an empty connection list too: only null means every connection', async () => {
+      const res = await runTokenEntryGuards(fleet(), { ...principal, connectionIds: [] }, post({}), {})
+      expect(res?.status).toBe(403)
+    })
+
+    it('passes for a token over every connection, then runs the creator check', async () => {
+      expect(await runTokenEntryGuards(fleet(), { ...principal, connectionIds: null }, post({}), {})).toBeNull()
+      expect(creatorMock).toHaveBeenCalledWith(expect.anything(), 'vdcs:write')
+    })
+  })
+
   describe('(1) forwarded method', () => {
     it('401 when x-pxc-method differs from the request method', async () => {
       setForwarded('GET')
@@ -503,6 +525,15 @@ describe('runTokenEntryGuards', () => {
         const [e, p] = adminRead(['nodes:read', 'network:write'], ['nodes:read', 'network:write', 'vdcs:read', 'ipam:read'])
         expect(await runTokenEntryGuards(e, p, new Request('http://t/api/v1/x'), {})).toBeNull()
         expect(creatorMock).not.toHaveBeenCalled()
+      })
+
+      it('checks vdcs:write on a read entry too: it reads back administration data (lot 2)', async () => {
+        setForwarded('GET')
+        creatorMock.mockResolvedValue(false)
+        const [e, p] = adminRead(['vdcs:write'], ['vdcs:read', 'vdcs:write'])
+        const res = await runTokenEntryGuards(e, p, new Request('http://t/api/v1/x'), {})
+        expect(res?.status).toBe(403)
+        expect(await res?.json()).toEqual({ error: 'Token creator no longer holds this right', scope: 'vdcs:write' })
       })
     })
 

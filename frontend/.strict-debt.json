@@ -44,7 +44,6 @@
     "src/app/api/v1/admin/users/[id]/2fa/disable/route.ts": 4,
     "src/app/api/v1/admin/users/[id]/sessions/route.test.ts": 10,
     "src/app/api/v1/admin/vdcs/[id]/pbs-bindings/[bindingId]/retry-pve-storage/route.ts": 1,
-    "src/app/api/v1/admin/vdcs/adminVdcsRoute.test.ts": 20,
     "src/app/api/v1/ai/test/route.ts": 4,
     "src/app/api/v1/alerts/route.ts": 3,
     "src/app/api/v1/alerts/sync/route.ts": 3,

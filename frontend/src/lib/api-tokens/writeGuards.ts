@@ -14,7 +14,7 @@ import { checkTenantGuestsScope } from "@/lib/vdc/guestScope"
 import { isWriteEntry, type AllowlistEntry, type BodyOrQueryField, type GuestScopeSpec } from "./allowlist"
 import { creatorStillHolds, creatorStillHoldsPermission } from "./creatorCheck"
 import { resolveVisibleConnectionIds } from "./scope"
-import { isCreatorCheckedScope, isWriteScope } from "./scopes"
+import { readsAdminData } from "./scopes"
 import { extractTokenPrefix } from "./tokenCrypto"
 
 const NOT_IN_SCOPE = "Connection not in token scope"
@@ -22,6 +22,7 @@ const CLUSTER_OBJECT = "Cluster-level object not available to a vDC tenant token
 const GUEST_OUTSIDE = "Guest outside your vDC scope"
 const CREATOR_LOST = "Token creator no longer holds this right"
 const SCOPE_UNVERIFIABLE = "Unable to verify token scope"
+export const FLEET_ONLY = "This operation reaches every connection: it needs a token not restricted to connections"
 
 type FieldReader = (field: BodyOrQueryField) => Promise<unknown[]>
 
@@ -138,7 +139,8 @@ type Deny = (rejection?: PrincipalRejection) => Promise<Response>
 
 /**
  * Token-only guards, in the spec order: (1) forwarded method, (1b) no path
- * param still escaped once decoded, (2) primary connection, (3) secondary
+ * param still escaped once decoded, (1c) fleet-wide operations need an
+ * unrestricted token, (2) primary connection, (3) secondary
  * connections, (4) cluster objects vs vDC tenant, (5) guest vDC scope,
  * (6) live creator check on writes. Null = proceed; otherwise the refusal to
  * send, already journaled as apitoken.denied. A lookup that throws (perimeter,
@@ -181,6 +183,12 @@ async function evaluateGuards(
   // (1b) Path params are decoded exactly once: a value still escaped after
   //      that decode is refused like a malformed escape.
   if (hasResidualEscape(params)) return deny()
+
+  // (1c) An operation that reaches the whole fleet is refused to a token
+  //      restricted to some connections: its perimeter could not hold.
+  if (entry.perimeter === "fleet" && principal.connectionIds !== null) {
+    return deny({ status: 403, body: { error: FLEET_ONLY } })
+  }
 
   const readField = fieldReader(req)
   let visible: Set<string> | null = null
@@ -283,15 +291,15 @@ async function evaluateGuards(
  * The scopes whose creator rights the call relies on. A write entry names
  * exactly one scope. A read entry accepts any of its scopes, and the token
  * may carry several of them, each bringing permissions the handler checks:
- * every admin read scope (CREATOR_CHECKED_READ_SCOPE_IDS) the token carries
- * among them is checked, so a scope that only opens the route (nodes:read)
- * never shields another that supplies the right (ipam:read). Write scopes on
- * a read entry keep their historical rule (task-status polls with any).
+ * every scope reading administration data (readsAdminData: the admin read
+ * scopes and vdcs:write) the token carries among them is checked, so a scope
+ * that only opens the route (nodes:read) never shields another that supplies
+ * the right (ipam:read). Other write scopes on a read entry keep their
+ * historical rule (task-status polls with any).
  */
 function creatorCheckedScopesOf(entry: AllowlistEntry, principal: Principal): string[] {
   if (isWriteEntry(entry)) return entry.requiredScopes.slice(0, 1)
-  return entry.requiredScopes.filter(scope =>
-    principal.scopes?.includes(scope) && isCreatorCheckedScope(scope) && !isWriteScope(scope))
+  return entry.requiredScopes.filter(scope => principal.scopes?.includes(scope) && readsAdminData(scope))
 }
 
 const isUpid = (value: unknown): value is string => typeof value === "string" && value.startsWith("UPID:")

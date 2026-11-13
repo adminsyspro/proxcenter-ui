@@ -82,6 +82,10 @@ export const WRITE_SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
     "sdn.vnet.delete",
   ],
   "firewall:write": ["node.view", "connection.view", "node.manage"],
+  // Provider administration (issue #1360): the only write scope with admin
+  // keys, both narrow children of admin.settings that need a global grant,
+  // on routes that answer the provider tenant only.
+  "vdcs:write": ["admin.settings.view", "admin.settings.vdcs", "vm.view", "sdn.vnet.view"],
 }
 
 export const SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
@@ -93,11 +97,27 @@ export const READ_SCOPE_IDS = Object.keys(READ_SCOPE_DEFINITIONS)
 export const WRITE_SCOPE_IDS = Object.keys(WRITE_SCOPE_DEFINITIONS)
 export const ALL_SCOPE_IDS = Object.keys(SCOPE_DEFINITIONS)
 
+/**
+ * Write scopes whose operations reach clusters beyond any one connection
+ * (fleet-wide VNI scan, stretched networks, PBS storages): a token restricted
+ * to connections cannot carry them (issue #1360).
+ */
+export const FLEET_SCOPE_IDS: readonly string[] = ["vdcs:write"]
+
 /** Scopes that let a token destroy data; the UI asks for extra confirmation. */
 export const DESTRUCTIVE_SCOPE_IDS: readonly string[] = ["vms:delete", "backups:delete"]
 
 export function isWriteScope(id: string): boolean {
   return Object.hasOwn(WRITE_SCOPE_DEFINITIONS, id)
+}
+
+/**
+ * Scopes that read administration data: the admin read scopes and vdcs:write,
+ * which reads back what it manages. A read relying on one of them checks the
+ * creator's rights again on every call, write scope or not.
+ */
+export function readsAdminData(id: string): boolean {
+  return CREATOR_CHECKED_READ_SCOPE_IDS.includes(id) || id === "vdcs:write"
 }
 
 /** Scopes the creator must hold: every write scope and the admin read scopes. */

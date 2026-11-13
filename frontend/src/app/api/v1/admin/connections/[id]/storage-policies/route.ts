@@ -70,4 +70,4 @@ async function handlePost(req: Request, ctx: RouteContext) {
   }
 }
 
-export const POST = withAudit({ category: "storage", resourceType: "storage_policy", resourceParam: "id" }, handlePost)
+export const POST = withAudit({ category: "storage", resourceType: "storage_policy", resourceParam: "id" }, withPublicApiGuard("storage-policy-create", handlePost))

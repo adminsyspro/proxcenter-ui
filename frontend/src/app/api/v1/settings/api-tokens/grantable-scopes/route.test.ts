@@ -80,6 +80,15 @@ describe('GET /api/v1/settings/api-tokens/grantable-scopes', () => {
     expect(body.data.grantable).toEqual(ALL_SCOPE_IDS)
   })
 
+  it('never offers vdcs:write for a token restricted to connections, super admin included (issue #1360)', async () => {
+    holdsMock.mockResolvedValue(true)
+    expect((await readJson<any>(await get({ connectionIds: 'c1' }))).data.grantable).not.toContain('vdcs:write')
+    expect((await readJson<any>(await get())).data.grantable).toContain('vdcs:write')
+    getRBACContextMock.mockResolvedValue({ userId: 'u1', isAdmin: true, tenantId: 'default' })
+    const restricted = await readJson<any>(await get({ connectionIds: 'c1' }))
+    expect(restricted.data.grantable).toEqual(ALL_SCOPE_IDS.filter(id => id !== 'vdcs:write'))
+  })
+
   it('refuses a tenant the non-admin cannot access', async () => {
     userHasAccessToTenantMock.mockResolvedValue(false)
     const res = await get({ tenantId: 'other' })

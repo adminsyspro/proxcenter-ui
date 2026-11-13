@@ -11,7 +11,7 @@ import { useTranslations } from 'next-intl'
 
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 import NumericTextField from '@/components/ui/NumericTextField'
-import { ALL_SCOPE_IDS, DESTRUCTIVE_SCOPE_IDS, isCreatorCheckedScope, isWriteScope } from '@/lib/api-tokens/scopes'
+import { ALL_SCOPE_IDS, DESTRUCTIVE_SCOPE_IDS, FLEET_SCOPE_IDS, isCreatorCheckedScope, isWriteScope } from '@/lib/api-tokens/scopes'
 import { copyToClipboard } from '@/lib/clipboard'
 import { selectableTenants, sortTenantsProviderFirst } from '@/lib/storage/tenantFacets'
 
@@ -68,7 +68,7 @@ export const SCOPE_DOMAINS: readonly ScopeDomain[] = [
   { id: 'reports', icon: 'ri-file-list-3-line', read: 'reports:read', write: [] },
   // Multi-tenant layer (issue #1360), read only for now.
   { id: 'tenants', icon: 'ri-building-line', read: 'tenants:read', write: [] },
-  { id: 'vdcs', icon: 'ri-cloud-line', read: 'vdcs:read', write: [] },
+  { id: 'vdcs', icon: 'ri-cloud-line', read: 'vdcs:read', write: ['vdcs:write'] },
   { id: 'ipam', icon: 'ri-router-line', read: 'ipam:read', write: [] },
   { id: 'rbac', icon: 'ri-lock-2-line', read: 'rbac:read', write: [] },
   { id: 'users', icon: 'ri-user-line', read: 'users:read', write: [] },
@@ -280,7 +280,8 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
         // Network failure: list stays null, the write scopes stay disabled.
       }
       if (!active) return
-      const allowed = list ?? []
+      // A perimeter never carries a fleet-wide scope, whatever the answer says.
+      const allowed = (list ?? []).filter(scope => !perimeterKey || !FLEET_SCOPE_IDS.includes(scope))
       setGrantableResult({ key: grantableKey, list })
       setScopes(prev => prev.filter(scope => !isCreatorCheckedScope(scope) || allowed.includes(scope)))
     })()
@@ -294,6 +295,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   // write scope disabled: the UI fails closed, the creation route stays the
   // judge either way.
   function writeScopeBlocker(scope: string): string {
+    if (perimeterKey && FLEET_SCOPE_IDS.includes(scope)) return t('dialog.fleetOnlyScope')
     if (grantableResult?.key !== grantableKey) return t('dialog.scopesLoading')
     if (!grantableResult.list) return t('dialog.grantableError')
     return grantableResult.list.includes(scope) ? '' : t('dialog.scopeNotGrantable')
@@ -311,6 +313,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   // scopes is grantable.
   function domainWriteBlocker(domain: ScopeDomain): string {
     if (domain.write.length === 0) return t('dialog.readOnlyDomain')
+    if (perimeterKey && domain.write.every(scope => FLEET_SCOPE_IDS.includes(scope))) return t('dialog.fleetOnlyScope')
     if (grantableResult?.key !== grantableKey) return t('dialog.scopesLoading')
     if (!grantableResult.list) return t('dialog.grantableError')
     return domain.write.some(scope => grantableResult.list.includes(scope)) ? '' : t('dialog.domainNotGrantable')

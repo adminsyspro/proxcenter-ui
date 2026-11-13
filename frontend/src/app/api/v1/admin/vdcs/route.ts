@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { getActingSession } from "@/lib/auth/actingUser"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { listVdcs, createVdc } from "@/lib/vdc"
@@ -33,11 +33,11 @@ async function handleGet(req: Request, ctx: { principal?: Principal }) {
 export const GET = withPublicApiGuard("admin-vdcs-list", handleGet)
 
 // POST /api/v1/admin/vdcs — create a vDC
-async function handlePost(req: NextRequest) {
+async function handlePost(req: Request) {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS_VDCS)
     if (denied) return denied
 
     const session = await getActingSession()
@@ -125,4 +125,4 @@ async function handlePost(req: NextRequest) {
   }
 }
 
-export const POST = withAudit({ category: "admin", resourceType: "vdc" }, handlePost)
+export const POST = withAudit({ category: "admin", resourceType: "vdc" }, withPublicApiGuard("admin-vdc-create", handlePost))

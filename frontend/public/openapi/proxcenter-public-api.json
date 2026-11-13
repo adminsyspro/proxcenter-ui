@@ -2813,6 +2813,636 @@
           }
         }
       },
+      "AdminVdcCreateRequest": {
+        "type": "object",
+        "required": [
+          "tenantId",
+          "connectionId",
+          "name",
+          "slug",
+          "nodes",
+          "primaryStorage"
+        ],
+        "properties": {
+          "tenantId": {
+            "type": "string"
+          },
+          "connectionId": {
+            "type": "string",
+            "description": "The provider cluster the vDC lives on"
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Proxmox nodes the vDC may run guests on; not empty"
+          },
+          "primaryStorage": {
+            "type": "string",
+            "description": "A shared storage of the cluster advertising content=images"
+          },
+          "sharedBridges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "description": "Uplink bridges the vDC may attach guests to"
+          },
+          "vlanPools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "description": "VLAN ranges a VLAN network of the vDC is taken from"
+          },
+          "storagePolicies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "description": "Storage policies of the vDC connection, by policyId"
+          },
+          "computePolicy": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "CPU types and limits offered to the vDC"
+          },
+          "allowBlankVms": {
+            "type": "boolean"
+          },
+          "isoLibraries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "description": "ISO storages the vDC may mount"
+          },
+          "catalogGrants": {
+            "type": "object",
+            "properties": {
+              "imageIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "blueprintIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "transport": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "VNet transport: cluster, VLAN or VXLAN peers"
+          },
+          "edgeModel": {
+            "type": "string"
+          },
+          "quota": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Null: no quota. A null limit is unlimited.",
+            "properties": {
+              "maxVcpus": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxRamMb": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxStorageMb": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxVms": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxSnapshots": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxBackups": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxVnets": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "sdnZoneName": {
+            "type": "string"
+          },
+          "evpnZoneId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Shared EVPN zone to attach the vDC to"
+          },
+          "ownVxlanZone": {
+            "type": "boolean",
+            "description": "false with evpnZoneId: no zone of its own"
+          }
+        }
+      },
+      "AdminVdcUpdateRequest": {
+        "type": "object",
+        "description": "Only the given fields change.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Proxmox nodes the vDC may run guests on; not empty"
+          },
+          "primaryStorage": {
+            "type": "string",
+            "description": "A shared storage of the cluster advertising content=images"
+          },
+          "sharedBridges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "description": "Uplink bridges the vDC may attach guests to"
+          },
+          "vlanPools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "description": "VLAN ranges a VLAN network of the vDC is taken from"
+          },
+          "storagePolicies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "description": "Storage policies of the vDC connection, by policyId"
+          },
+          "computePolicy": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "CPU types and limits offered to the vDC"
+          },
+          "allowBlankVms": {
+            "type": "boolean"
+          },
+          "isoLibraries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "description": "ISO storages the vDC may mount"
+          },
+          "catalogGrants": {
+            "type": "object",
+            "properties": {
+              "imageIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "blueprintIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "transport": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "VNet transport: cluster, VLAN or VXLAN peers"
+          },
+          "edgeModel": {
+            "type": "string"
+          },
+          "quota": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Null: no quota. A null limit is unlimited.",
+            "properties": {
+              "maxVcpus": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxRamMb": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxStorageMb": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxVms": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxSnapshots": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxBackups": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxVnets": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "evpnZoneId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An id attaches, null or empty detaches"
+          }
+        }
+      },
+      "VdcGpuQuotaUpdateRequest": {
+        "type": "object",
+        "required": [
+          "entries"
+        ],
+        "description": "Replaces the whole GPU contingent; a line under what the vDC holds is kept and flagged overCommitted",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "kind",
+                "modelKey",
+                "modelName",
+                "profileName",
+                "count"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "vgpu",
+                    "whole"
+                  ]
+                },
+                "modelKey": {
+                  "type": "string"
+                },
+                "modelName": {
+                  "type": "string"
+                },
+                "profileName": {
+                  "type": "string",
+                  "description": "The vGPU profile without the vendor prefix; empty for a whole card"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          }
+        }
+      },
+      "StoragePolicyCreateRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "storageId"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "storageId": {
+            "type": "string",
+            "description": "A shared storage of the connection"
+          },
+          "iopsRd": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "iopsWr": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "mbpsRd": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "mbpsWr": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "StoragePolicyUpdateRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "storageId"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "storageId": {
+            "type": "string",
+            "description": "A shared storage of the connection"
+          },
+          "iopsRd": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "iopsWr": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "mbpsRd": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "mbpsWr": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "EvpnZoneCreateRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "zoneName",
+          "vrfVxlan",
+          "vniStart",
+          "vniEnd",
+          "members"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zoneName": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]{1,7}$",
+            "description": "Name of the zone in Proxmox"
+          },
+          "vrfVxlan": {
+            "type": "integer"
+          },
+          "mtu": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "vniStart": {
+            "type": "integer"
+          },
+          "vniEnd": {
+            "type": "integer"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "connectionId",
+                "controller"
+              ],
+              "properties": {
+                "connectionId": {
+                  "type": "string"
+                },
+                "controller": {
+                  "type": "object",
+                  "required": [
+                    "mode",
+                    "name"
+                  ],
+                  "description": "An EVPN controller of the cluster, or one to create",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "existing",
+                        "create"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "asn": {
+                      "type": "integer",
+                      "description": "create only"
+                    },
+                    "peers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "create only: the BGP peers"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "EvpnZoneUpdateRequest": {
+        "type": "object",
+        "description": "Only the given fields change; the VNI range is checked against every cluster only when it moves.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vniStart": {
+            "type": "integer"
+          },
+          "vniEnd": {
+            "type": "integer"
+          }
+        }
+      },
+      "EvpnZoneMemberAddRequest": {
+        "type": "object",
+        "required": [
+          "connectionId",
+          "controller"
+        ],
+        "properties": {
+          "connectionId": {
+            "type": "string"
+          },
+          "controller": {
+            "type": "object",
+            "required": [
+              "mode",
+              "name"
+            ],
+            "description": "An EVPN controller of the cluster, or one to create",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "existing",
+                  "create"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "asn": {
+                "type": "integer",
+                "description": "create only"
+              },
+              "peers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "create only: the BGP peers"
+              }
+            }
+          }
+        }
+      },
+      "VdcEvpnNetworkUpdateRequest": {
+        "type": "object",
+        "required": [
+          "vdcIds"
+        ],
+        "properties": {
+          "vdcIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every vDC of the tenant that must carry the network; at least one"
+          }
+        }
+      },
       "VmsResponse": {
         "type": "object",
         "properties": {
@@ -7777,6 +8407,556 @@
             }
           }
         }
+      },
+      "VdcWriteResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "tenantId": {
+                "type": "string"
+              },
+              "tenantName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "connectionId": {
+                "type": "string",
+                "description": "The provider cluster the vDC lives on"
+              },
+              "name": {
+                "type": "string"
+              },
+              "slug": {
+                "type": "string"
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "pvePoolName": {
+                "type": "string",
+                "description": "Proxmox resource pool of the vDC"
+              },
+              "sdnZoneName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "evpnZoneId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Shared EVPN zone the vDC is attached to"
+              },
+              "edgeModel": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "primaryStorage": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "allowBlankVms": {
+                "type": "boolean"
+              },
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "storages": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "computePolicy": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "transport": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "VNet transport: cluster, VLAN or VXLAN peers"
+              },
+              "quota": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Null: no quota. A null limit is unlimited.",
+                "properties": {
+                  "maxVcpus": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "maxRamMb": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "maxStorageMb": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "maxVms": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "maxSnapshots": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "maxBackups": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "maxVnets": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "usage": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Server computed from Proxmox, refreshed in the background",
+                "properties": {
+                  "usedVcpus": {
+                    "type": "integer"
+                  },
+                  "usedRamMb": {
+                    "type": "integer"
+                  },
+                  "usedStorageMb": {
+                    "type": "integer"
+                  },
+                  "usedVms": {
+                    "type": "integer"
+                  },
+                  "usedSnapshots": {
+                    "type": "integer"
+                  },
+                  "usedBackups": {
+                    "type": "integer"
+                  },
+                  "usedStorageByStorage": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": {
+                      "type": "integer"
+                    }
+                  },
+                  "lastSyncedAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  }
+                }
+              },
+              "vnets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "description": "As GET /api/v1/vdcs/{id}/vnets returns them"
+              },
+              "sharedBridges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "vlanPools": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "storagePolicies": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "pbsBindings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "isoLibraries": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "catalogGrants": {
+                "type": "object",
+                "properties": {
+                  "imageIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "blueprintIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "createdBy": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "VdcDeleteResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "success": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "VdcGpuQuotaResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "entries": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "vgpu",
+                        "whole"
+                      ]
+                    },
+                    "modelKey": {
+                      "type": "string"
+                    },
+                    "modelName": {
+                      "type": "string"
+                    },
+                    "profileName": {
+                      "type": "string",
+                      "description": "The vGPU profile without the vendor prefix; empty for a whole card"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "held": {
+                      "type": "integer",
+                      "description": "Server computed: what the vDC guests hold"
+                    },
+                    "overCommitted": {
+                      "type": "boolean",
+                      "description": "Server computed: held above count"
+                    }
+                  }
+                }
+              },
+              "offers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "description": "What the vDC cluster can offer, per card model and profile"
+              },
+              "capacity": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "description": "What each card model of the cluster adds up to"
+              },
+              "readable": {
+                "type": "boolean",
+                "description": "False when the cluster could not be read: offers, capacity and held are then unknown"
+              }
+            }
+          }
+        }
+      },
+      "StoragePolicyResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "connectionId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "storageId": {
+                "type": "string"
+              },
+              "iopsRd": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "iopsWr": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "mbpsRd": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "mbpsWr": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "vdcCount": {
+                "type": "integer",
+                "description": "Server computed"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "EvpnZoneWriteResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "zoneName": {
+                "type": "string",
+                "description": "Name of the zone in Proxmox"
+              },
+              "vrfVxlan": {
+                "type": "integer"
+              },
+              "mtu": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "vniStart": {
+                "type": "integer"
+              },
+              "vniEnd": {
+                "type": "integer"
+              },
+              "members": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "connectionId": {
+                      "type": "string"
+                    },
+                    "connectionName": {
+                      "type": "string"
+                    },
+                    "controller": {
+                      "type": "string"
+                    },
+                    "controllerCreated": {
+                      "type": "boolean",
+                      "description": "ProxCenter created the EVPN controller"
+                    },
+                    "adopted": {
+                      "type": "boolean",
+                      "description": "The zone already ran on the cluster when it was declared"
+                    }
+                  }
+                }
+              },
+              "vdcCount": {
+                "type": "integer",
+                "description": "Server computed"
+              },
+              "networkCount": {
+                "type": "integer",
+                "description": "Server computed"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "applyErrors": {
+            "type": "array",
+            "description": "Clusters where the SDN configuration could not be applied; the declaration is kept",
+            "items": {
+              "type": "object",
+              "properties": {
+                "connectionName": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "EvpnZoneDeleteResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "success": {
+                "type": "boolean"
+              }
+            }
+          },
+          "applyErrors": {
+            "type": "array",
+            "description": "Clusters where the SDN configuration could not be applied; the declaration is kept",
+            "items": {
+              "type": "object",
+              "properties": {
+                "connectionName": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "VdcEvpnNetworkPresenceResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "vdcIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "x-scopes": {
@@ -7906,6 +9086,12 @@
         "node.view",
         "connection.view",
         "node.manage"
+      ],
+      "vdcs:write": [
+        "admin.settings.view",
+        "admin.settings.vdcs",
+        "vm.view",
+        "sdn.vnet.view"
       ]
     }
   },
@@ -13453,7 +14639,7 @@
       "get": {
         "operationId": "task-status",
         "summary": "Status of a Proxmox task",
-        "description": "Status, progress and log of the task {upid} started on {node}, as returned by every write that answers with a UPID. Poll it until `status` is `stopped`, then read `exitstatus` (`OK` on success) and `failureReason`. Any write scope opens it. A vDC tenant token only reads the tasks of its own guests.\n\nRequired scope: `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete` or `backups:write` or `backups:restore` or `backups:delete` or `storage:write` or `ha:write` or `pools:write` or `network:write` or `firewall:write`",
+        "description": "Status, progress and log of the task {upid} started on {node}, as returned by every write that answers with a UPID. Poll it until `status` is `stopped`, then read `exitstatus` (`OK` on success) and `failureReason`. Any write scope opens it. A vDC tenant token only reads the tasks of its own guests.\n\nRequired scope: `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete` or `backups:write` or `backups:restore` or `backups:delete` or `storage:write` or `ha:write` or `pools:write` or `network:write` or `firewall:write` or `vdcs:write`",
         "tags": [
           "Tasks"
         ],
@@ -13470,7 +14656,8 @@
           "ha:write",
           "pools:write",
           "network:write",
-          "firewall:write"
+          "firewall:write",
+          "vdcs:write"
         ],
         "parameters": [
           {
@@ -34051,12 +35238,13 @@
       "get": {
         "operationId": "admin-vdcs-list",
         "summary": "Every vDC",
-        "description": "The vDCs of every tenant, or of one with `tenantId`: pool, nodes, storages, bridges, quotas and usage. Needs admin.settings.view (scope vdcs:read). Provider tenant only: another tenant's token gets 403. A token restricted to some connections only sees the vDCs on those connections (404 for another one).\n\nRequired scope: `vdcs:read`",
+        "description": "The vDCs of every tenant, or of one with `tenantId`: pool, nodes, storages, bridges, quotas and usage. Needs admin.settings.view (scope vdcs:read or vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections only sees the vDCs on those connections (404 for another one).\n\nRequired scope: `vdcs:read` or `vdcs:write`",
         "tags": [
           "vDCs"
         ],
         "x-required-scopes": [
-          "vdcs:read"
+          "vdcs:read",
+          "vdcs:write"
         ],
         "parameters": [
           {
@@ -34390,7 +35578,544 @@
               "application/json": {
                 "example": {
                   "error": "Method not allowed for this API token route",
-                  "method": "POST"
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "admin-vdc-create",
+        "summary": "Create a vDC",
+        "description": "Creates the vDC of a tenant on a provider cluster: its Proxmox pool, its own VXLAN zone unless it joins a shared EVPN zone (`evpnZoneId` with `ownVxlanZone: false`), and applies the SDN configuration. Synchronous; answers 201. Needs admin.settings.vdcs (scope vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `vdcs:write`",
+        "tags": [
+          "vDCs"
+        ],
+        "x-required-scopes": [
+          "vdcs:write"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "tenantId",
+                  "connectionId",
+                  "name",
+                  "slug",
+                  "nodes",
+                  "primaryStorage"
+                ],
+                "properties": {
+                  "tenantId": {
+                    "type": "string"
+                  },
+                  "connectionId": {
+                    "type": "string",
+                    "description": "The provider cluster the vDC lives on"
+                  },
+                  "slug": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9-]+$"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "nodes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Proxmox nodes the vDC may run guests on; not empty"
+                  },
+                  "primaryStorage": {
+                    "type": "string",
+                    "description": "A shared storage of the cluster advertising content=images"
+                  },
+                  "sharedBridges": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "description": "Uplink bridges the vDC may attach guests to"
+                  },
+                  "vlanPools": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "description": "VLAN ranges a VLAN network of the vDC is taken from"
+                  },
+                  "storagePolicies": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "description": "Storage policies of the vDC connection, by policyId"
+                  },
+                  "computePolicy": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "CPU types and limits offered to the vDC"
+                  },
+                  "allowBlankVms": {
+                    "type": "boolean"
+                  },
+                  "isoLibraries": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "description": "ISO storages the vDC may mount"
+                  },
+                  "catalogGrants": {
+                    "type": "object",
+                    "properties": {
+                      "imageIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "blueprintIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "transport": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "VNet transport: cluster, VLAN or VXLAN peers"
+                  },
+                  "edgeModel": {
+                    "type": "string"
+                  },
+                  "quota": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "description": "Null: no quota. A null limit is unlimited.",
+                    "properties": {
+                      "maxVcpus": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "maxRamMb": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "maxStorageMb": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "maxVms": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "maxSnapshots": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "maxBackups": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "maxVnets": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "sdnZoneName": {
+                    "type": "string"
+                  },
+                  "evpnZoneId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Shared EVPN zone to attach the vDC to"
+                  },
+                  "ownVxlanZone": {
+                    "type": "boolean",
+                    "description": "false with evpnZoneId: no zone of its own"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "tenantId": {
+                          "type": "string"
+                        },
+                        "tenantName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "connectionId": {
+                          "type": "string",
+                          "description": "The provider cluster the vDC lives on"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "pvePoolName": {
+                          "type": "string",
+                          "description": "Proxmox resource pool of the vDC"
+                        },
+                        "sdnZoneName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "evpnZoneId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "Shared EVPN zone the vDC is attached to"
+                        },
+                        "edgeModel": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "primaryStorage": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "allowBlankVms": {
+                          "type": "boolean"
+                        },
+                        "nodes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "storages": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "computePolicy": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "transport": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "description": "VNet transport: cluster, VLAN or VXLAN peers"
+                        },
+                        "quota": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "description": "Null: no quota. A null limit is unlimited.",
+                          "properties": {
+                            "maxVcpus": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "maxRamMb": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "maxStorageMb": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "maxVms": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "maxSnapshots": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "maxBackups": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "maxVnets": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            }
+                          }
+                        },
+                        "usage": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "description": "Server computed from Proxmox, refreshed in the background",
+                          "properties": {
+                            "usedVcpus": {
+                              "type": "integer"
+                            },
+                            "usedRamMb": {
+                              "type": "integer"
+                            },
+                            "usedStorageMb": {
+                              "type": "integer"
+                            },
+                            "usedVms": {
+                              "type": "integer"
+                            },
+                            "usedSnapshots": {
+                              "type": "integer"
+                            },
+                            "usedBackups": {
+                              "type": "integer"
+                            },
+                            "usedStorageByStorage": {
+                              "type": [
+                                "object",
+                                "null"
+                              ],
+                              "additionalProperties": {
+                                "type": "integer"
+                              }
+                            },
+                            "lastSyncedAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "date-time"
+                            }
+                          }
+                        },
+                        "vnets": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "description": "As GET /api/v1/vdcs/{id}/vnets returns them"
+                        },
+                        "sharedBridges": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "vlanPools": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "storagePolicies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "pbsBindings": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "isoLibraries": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "catalogGrants": {
+                          "type": "object",
+                          "properties": {
+                            "imageIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "blueprintIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "createdBy": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/admin/vdcs"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
                 }
               }
             }
@@ -34413,12 +36138,13 @@
       "get": {
         "operationId": "admin-vdc-get",
         "summary": "vDC",
-        "description": "The vDC {id}; 404 when it does not exist. Needs admin.settings.view (scope vdcs:read). Provider tenant only: another tenant's token gets 403. A token restricted to some connections only sees the vDCs on those connections (404 for another one).\n\nRequired scope: `vdcs:read`",
+        "description": "The vDC {id}; 404 when it does not exist. Needs admin.settings.view (scope vdcs:read or vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections only sees the vDCs on those connections (404 for another one).\n\nRequired scope: `vdcs:read` or `vdcs:write`",
         "tags": [
           "vDCs"
         ],
         "x-required-scopes": [
-          "vdcs:read"
+          "vdcs:read",
+          "vdcs:write"
         ],
         "parameters": [
           {
@@ -34766,6 +36492,647 @@
             }
           }
         }
+      },
+      "put": {
+        "operationId": "admin-vdc-update",
+        "summary": "Update a vDC",
+        "description": "Changes the given fields of the vDC {id}: nodes, storages, bridges, quotas, transport, EVPN zone. A transport change re-applies the SDN configuration and re-syncs the networks the vDC stretches to other clusters. 404 when it does not exist. Needs admin.settings.vdcs (scope vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `vdcs:write`",
+        "tags": [
+          "vDCs"
+        ],
+        "x-required-scopes": [
+          "vdcs:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Only the given fields change.",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "nodes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Proxmox nodes the vDC may run guests on; not empty"
+                  },
+                  "primaryStorage": {
+                    "type": "string",
+                    "description": "A shared storage of the cluster advertising content=images"
+                  },
+                  "sharedBridges": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "description": "Uplink bridges the vDC may attach guests to"
+                  },
+                  "vlanPools": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "description": "VLAN ranges a VLAN network of the vDC is taken from"
+                  },
+                  "storagePolicies": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "description": "Storage policies of the vDC connection, by policyId"
+                  },
+                  "computePolicy": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "CPU types and limits offered to the vDC"
+                  },
+                  "allowBlankVms": {
+                    "type": "boolean"
+                  },
+                  "isoLibraries": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "description": "ISO storages the vDC may mount"
+                  },
+                  "catalogGrants": {
+                    "type": "object",
+                    "properties": {
+                      "imageIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "blueprintIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "transport": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "VNet transport: cluster, VLAN or VXLAN peers"
+                  },
+                  "edgeModel": {
+                    "type": "string"
+                  },
+                  "quota": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "description": "Null: no quota. A null limit is unlimited.",
+                    "properties": {
+                      "maxVcpus": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "maxRamMb": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "maxStorageMb": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "maxVms": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "maxSnapshots": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "maxBackups": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "maxVnets": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "evpnZoneId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "An id attaches, null or empty detaches"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "tenantId": {
+                          "type": "string"
+                        },
+                        "tenantName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "connectionId": {
+                          "type": "string",
+                          "description": "The provider cluster the vDC lives on"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "pvePoolName": {
+                          "type": "string",
+                          "description": "Proxmox resource pool of the vDC"
+                        },
+                        "sdnZoneName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "evpnZoneId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "Shared EVPN zone the vDC is attached to"
+                        },
+                        "edgeModel": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "primaryStorage": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "allowBlankVms": {
+                          "type": "boolean"
+                        },
+                        "nodes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "storages": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "computePolicy": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "transport": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "description": "VNet transport: cluster, VLAN or VXLAN peers"
+                        },
+                        "quota": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "description": "Null: no quota. A null limit is unlimited.",
+                          "properties": {
+                            "maxVcpus": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "maxRamMb": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "maxStorageMb": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "maxVms": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "maxSnapshots": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "maxBackups": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            },
+                            "maxVnets": {
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            }
+                          }
+                        },
+                        "usage": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "description": "Server computed from Proxmox, refreshed in the background",
+                          "properties": {
+                            "usedVcpus": {
+                              "type": "integer"
+                            },
+                            "usedRamMb": {
+                              "type": "integer"
+                            },
+                            "usedStorageMb": {
+                              "type": "integer"
+                            },
+                            "usedVms": {
+                              "type": "integer"
+                            },
+                            "usedSnapshots": {
+                              "type": "integer"
+                            },
+                            "usedBackups": {
+                              "type": "integer"
+                            },
+                            "usedStorageByStorage": {
+                              "type": [
+                                "object",
+                                "null"
+                              ],
+                              "additionalProperties": {
+                                "type": "integer"
+                              }
+                            },
+                            "lastSyncedAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "date-time"
+                            }
+                          }
+                        },
+                        "vnets": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "description": "As GET /api/v1/vdcs/{id}/vnets returns them"
+                        },
+                        "sharedBridges": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "vlanPools": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "storagePolicies": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "pbsBindings": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "isoLibraries": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "catalogGrants": {
+                          "type": "object",
+                          "properties": {
+                            "imageIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "blueprintIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "createdBy": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/admin/vdcs/{id}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "admin-vdc-delete",
+        "summary": "Delete a vDC",
+        "description": "Deletes the vDC {id}: its VNets, its zone and its Proxmox pool, after unbinding its PBS storages (the PBS namespace and its backups are kept). 409 while the pool still holds guests. Needs admin.settings.vdcs (scope vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `vdcs:write`",
+        "tags": [
+          "vDCs"
+        ],
+        "x-required-scopes": [
+          "vdcs:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/admin/vdcs/{id}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/vdcs/{id}/evpn-networks": {
@@ -34921,12 +37288,13 @@
       "get": {
         "operationId": "evpn-zones-list",
         "summary": "Shared EVPN zones",
-        "description": "The EVPN zones shared between clusters, with their member clusters. Needs admin.settings.view (scope vdcs:read). Provider tenant only: another tenant's token gets 403. A token restricted to some connections only sees the zones whose every member cluster is inside its perimeter.\n\nRequired scope: `vdcs:read`",
+        "description": "The EVPN zones shared between clusters, with their member clusters. Needs admin.settings.view (scope vdcs:read or vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections only sees the zones whose every member cluster is inside its perimeter.\n\nRequired scope: `vdcs:read` or `vdcs:write`",
         "tags": [
           "vDCs"
         ],
         "x-required-scopes": [
-          "vdcs:read"
+          "vdcs:read",
+          "vdcs:write"
         ],
         "parameters": [],
         "responses": {
@@ -35068,7 +37436,291 @@
               "application/json": {
                 "example": {
                   "error": "Method not allowed for this API token route",
-                  "method": "POST"
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "evpn-zone-create",
+        "summary": "Create a shared EVPN zone",
+        "description": "Declares an EVPN zone on its member clusters: created, or adopted where Proxmox already runs it, with an EVPN controller chosen or created per cluster, then applies the SDN configuration on each. The VNI range is checked against every cluster. `applyErrors` lists the clusters where the apply failed. Answers 201. Needs admin.settings.vdcs (scope vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `vdcs:write`",
+        "tags": [
+          "vDCs"
+        ],
+        "x-required-scopes": [
+          "vdcs:write"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "zoneName",
+                  "vrfVxlan",
+                  "vniStart",
+                  "vniEnd",
+                  "members"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "zoneName": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]{1,7}$",
+                    "description": "Name of the zone in Proxmox"
+                  },
+                  "vrfVxlan": {
+                    "type": "integer"
+                  },
+                  "mtu": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "vniStart": {
+                    "type": "integer"
+                  },
+                  "vniEnd": {
+                    "type": "integer"
+                  },
+                  "members": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "connectionId",
+                        "controller"
+                      ],
+                      "properties": {
+                        "connectionId": {
+                          "type": "string"
+                        },
+                        "controller": {
+                          "type": "object",
+                          "required": [
+                            "mode",
+                            "name"
+                          ],
+                          "description": "An EVPN controller of the cluster, or one to create",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "existing",
+                                "create"
+                              ]
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "asn": {
+                              "type": "integer",
+                              "description": "create only"
+                            },
+                            "peers": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "description": "create only: the BGP peers"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "zoneName": {
+                          "type": "string",
+                          "description": "Name of the zone in Proxmox"
+                        },
+                        "vrfVxlan": {
+                          "type": "integer"
+                        },
+                        "mtu": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "vniStart": {
+                          "type": "integer"
+                        },
+                        "vniEnd": {
+                          "type": "integer"
+                        },
+                        "members": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "connectionId": {
+                                "type": "string"
+                              },
+                              "connectionName": {
+                                "type": "string"
+                              },
+                              "controller": {
+                                "type": "string"
+                              },
+                              "controllerCreated": {
+                                "type": "boolean",
+                                "description": "ProxCenter created the EVPN controller"
+                              },
+                              "adopted": {
+                                "type": "boolean",
+                                "description": "The zone already ran on the cluster when it was declared"
+                              }
+                            }
+                          }
+                        },
+                        "vdcCount": {
+                          "type": "integer",
+                          "description": "Server computed"
+                        },
+                        "networkCount": {
+                          "type": "integer",
+                          "description": "Server computed"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    },
+                    "applyErrors": {
+                      "type": "array",
+                      "description": "Clusters where the SDN configuration could not be applied; the declaration is kept",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "connectionName": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/admin/evpn-zones"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
                 }
               }
             }
@@ -35091,12 +37743,13 @@
       "get": {
         "operationId": "evpn-zone-get",
         "summary": "Shared EVPN zone",
-        "description": "The EVPN zone {id} and how each member cluster runs it (read from Proxmox, three reads per member cluster). Needs admin.settings.view (scope vdcs:read). Provider tenant only: another tenant's token gets 403. A zone with a member cluster outside the token perimeter answers 404.\n\nRequired scope: `vdcs:read`",
+        "description": "The EVPN zone {id} and how each member cluster runs it (read from Proxmox, three reads per member cluster). Needs admin.settings.view (scope vdcs:read or vdcs:write). Provider tenant only: another tenant's token gets 403. A zone with a member cluster outside the token perimeter answers 404.\n\nRequired scope: `vdcs:read` or `vdcs:write`",
         "tags": [
           "vDCs"
         ],
         "x-required-scopes": [
-          "vdcs:read"
+          "vdcs:read",
+          "vdcs:write"
         ],
         "parameters": [
           {
@@ -35298,18 +37951,377 @@
             }
           }
         }
+      },
+      "put": {
+        "operationId": "evpn-zone-update",
+        "summary": "Update a shared EVPN zone",
+        "description": "Changes the name, description or VNI range of the zone {id}. A VNI range that moves is checked against every cluster; an unchanged one is not. Needs admin.settings.vdcs (scope vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `vdcs:write`",
+        "tags": [
+          "vDCs"
+        ],
+        "x-required-scopes": [
+          "vdcs:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter, sent unencoded: a percent-encoded character in it is refused (401)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Only the given fields change; the VNI range is checked against every cluster only when it moves.",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "vniStart": {
+                    "type": "integer"
+                  },
+                  "vniEnd": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "zoneName": {
+                          "type": "string",
+                          "description": "Name of the zone in Proxmox"
+                        },
+                        "vrfVxlan": {
+                          "type": "integer"
+                        },
+                        "mtu": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "vniStart": {
+                          "type": "integer"
+                        },
+                        "vniEnd": {
+                          "type": "integer"
+                        },
+                        "members": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "connectionId": {
+                                "type": "string"
+                              },
+                              "connectionName": {
+                                "type": "string"
+                              },
+                              "controller": {
+                                "type": "string"
+                              },
+                              "controllerCreated": {
+                                "type": "boolean",
+                                "description": "ProxCenter created the EVPN controller"
+                              },
+                              "adopted": {
+                                "type": "boolean",
+                                "description": "The zone already ran on the cluster when it was declared"
+                              }
+                            }
+                          }
+                        },
+                        "vdcCount": {
+                          "type": "integer",
+                          "description": "Server computed"
+                        },
+                        "networkCount": {
+                          "type": "integer",
+                          "description": "Server computed"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    },
+                    "applyErrors": {
+                      "type": "array",
+                      "description": "Clusters where the SDN configuration could not be applied; the declaration is kept",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "connectionName": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/admin/evpn-zones/{id}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "evpn-zone-delete",
+        "summary": "Delete a shared EVPN zone",
+        "description": "Removes the zone {id} from every cluster where ProxCenter created it, then applies the SDN configuration there. Needs admin.settings.vdcs (scope vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `vdcs:write`",
+        "tags": [
+          "vDCs"
+        ],
+        "x-required-scopes": [
+          "vdcs:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter, sent unencoded: a percent-encoded character in it is refused (401)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "success": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "applyErrors": {
+                      "type": "array",
+                      "description": "Clusters where the SDN configuration could not be applied; the declaration is kept",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "connectionName": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/admin/evpn-zones/{id}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/admin/connections/{id}/storage-policies": {
       "get": {
         "operationId": "storage-policies-list",
         "summary": "Storage policies of a connection",
-        "description": "The storage policies the vDCs of the connection {id} can be given. Needs admin.settings.view (scope vdcs:read). Provider tenant only: another tenant's token gets 403.\n\nRequired scope: `vdcs:read`",
+        "description": "The storage policies the vDCs of the connection {id} can be given. Needs admin.settings.view (scope vdcs:read or vdcs:write). Provider tenant only: another tenant's token gets 403.\n\nRequired scope: `vdcs:read` or `vdcs:write`",
         "tags": [
           "vDCs"
         ],
         "x-required-scopes": [
-          "vdcs:read"
+          "vdcs:read",
+          "vdcs:write"
         ],
         "parameters": [
           {
@@ -35459,7 +38471,238 @@
               "application/json": {
                 "example": {
                   "error": "Method not allowed for this API token route",
-                  "method": "POST"
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "storage-policy-create",
+        "summary": "Create a storage policy",
+        "description": "Creates a storage policy on the connection {id}: a shared storage and optional IOPS and bandwidth limits the vDCs of that cluster can be given. Answers 201. Needs admin.settings.vdcs (scope vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `vdcs:write`",
+        "tags": [
+          "vDCs"
+        ],
+        "x-required-scopes": [
+          "vdcs:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "storageId"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "storageId": {
+                    "type": "string",
+                    "description": "A shared storage of the connection"
+                  },
+                  "iopsRd": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "iopsWr": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "mbpsRd": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "mbpsWr": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "connectionId": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "storageId": {
+                          "type": "string"
+                        },
+                        "iopsRd": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "iopsWr": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "mbpsRd": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "mbpsWr": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "vdcCount": {
+                          "type": "integer",
+                          "description": "Server computed"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/admin/connections/{id}/storage-policies"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
                 }
               }
             }
@@ -37128,6 +40371,1373 @@
                 "example": {
                   "error": "Route not available to API tokens",
                   "route": "/api/v1/users/{id}"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vdcs/{id}/gpu/quota": {
+      "put": {
+        "operationId": "vdc-gpu-quota-update",
+        "summary": "Replace the GPU quota of a vDC",
+        "description": "Replaces the whole GPU contingent of the vDC {id}, per card model and vGPU profile. A line lowered under what the vDC holds is kept and flagged overCommitted: nothing is detached. Needs the GPU management feature (Enterprise). Needs admin.settings.vdcs (scope vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `vdcs:write`",
+        "tags": [
+          "vDCs"
+        ],
+        "x-required-scopes": [
+          "vdcs:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "entries"
+                ],
+                "description": "Replaces the whole GPU contingent; a line under what the vDC holds is kept and flagged overCommitted",
+                "properties": {
+                  "entries": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "modelKey",
+                        "modelName",
+                        "profileName",
+                        "count"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "vgpu",
+                            "whole"
+                          ]
+                        },
+                        "modelKey": {
+                          "type": "string"
+                        },
+                        "modelName": {
+                          "type": "string"
+                        },
+                        "profileName": {
+                          "type": "string",
+                          "description": "The vGPU profile without the vendor prefix; empty for a whole card"
+                        },
+                        "count": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "entries": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "vgpu",
+                                  "whole"
+                                ]
+                              },
+                              "modelKey": {
+                                "type": "string"
+                              },
+                              "modelName": {
+                                "type": "string"
+                              },
+                              "profileName": {
+                                "type": "string",
+                                "description": "The vGPU profile without the vendor prefix; empty for a whole card"
+                              },
+                              "count": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "held": {
+                                "type": "integer",
+                                "description": "Server computed: what the vDC guests hold"
+                              },
+                              "overCommitted": {
+                                "type": "boolean",
+                                "description": "Server computed: held above count"
+                              }
+                            }
+                          }
+                        },
+                        "offers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "description": "What the vDC cluster can offer, per card model and profile"
+                        },
+                        "capacity": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "description": "What each card model of the cluster adds up to"
+                        },
+                        "readable": {
+                          "type": "boolean",
+                          "description": "False when the cluster could not be read: offers, capacity and held are then unknown"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/vdcs/{id}/gpu/quota"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "vdc-gpu-quota-get",
+        "summary": "GPU quota of a vDC",
+        "description": "The GPU contingent of the vDC {id}, per card model and vGPU profile, with what its guests hold and what the cluster can offer (from a 60-second snapshot of the cluster). Needs admin.settings.view (scope vdcs:read or vdcs:write) and the GPU management feature (Enterprise). Provider tenant only: another tenant's token gets 404. A vDC on a connection outside the token perimeter answers 404.\n\nRequired scope: `vdcs:read` or `vdcs:write`",
+        "tags": [
+          "vDCs"
+        ],
+        "x-required-scopes": [
+          "vdcs:read",
+          "vdcs:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "entries": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "vgpu",
+                                  "whole"
+                                ]
+                              },
+                              "modelKey": {
+                                "type": "string"
+                              },
+                              "modelName": {
+                                "type": "string"
+                              },
+                              "profileName": {
+                                "type": "string",
+                                "description": "The vGPU profile without the vendor prefix; empty for a whole card"
+                              },
+                              "count": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "held": {
+                                "type": "integer",
+                                "description": "Server computed: what the vDC guests hold"
+                              },
+                              "overCommitted": {
+                                "type": "boolean",
+                                "description": "Server computed: held above count"
+                              }
+                            }
+                          }
+                        },
+                        "offers": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "description": "What the vDC cluster can offer, per card model and profile"
+                        },
+                        "capacity": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "description": "What each card model of the cluster adds up to"
+                        },
+                        "readable": {
+                          "type": "boolean",
+                          "description": "False when the cluster could not be read: offers, capacity and held are then unknown"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/vdcs/{id}/gpu/quota"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/connections/{id}/storage-policies/{policyId}": {
+      "put": {
+        "operationId": "storage-policy-update",
+        "summary": "Update a storage policy",
+        "description": "Replaces the storage policy {policyId} of the connection {id}; 404 when it belongs to another connection. Disks already placed are not moved. Needs admin.settings.vdcs (scope vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `vdcs:write`",
+        "tags": [
+          "vDCs"
+        ],
+        "x-required-scopes": [
+          "vdcs:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "policyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "storageId"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "storageId": {
+                    "type": "string",
+                    "description": "A shared storage of the connection"
+                  },
+                  "iopsRd": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "iopsWr": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "mbpsRd": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "mbpsWr": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "connectionId": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "storageId": {
+                          "type": "string"
+                        },
+                        "iopsRd": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "iopsWr": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "mbpsRd": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "mbpsWr": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "vdcCount": {
+                          "type": "integer",
+                          "description": "Server computed"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/admin/connections/{id}/storage-policies/{policyId}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "storage-policy-delete",
+        "summary": "Delete a storage policy",
+        "description": "Deletes the storage policy {policyId} of the connection {id}; 404 when it belongs to another connection. Needs admin.settings.vdcs (scope vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `vdcs:write`",
+        "tags": [
+          "vDCs"
+        ],
+        "x-required-scopes": [
+          "vdcs:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "policyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/admin/connections/{id}/storage-policies/{policyId}"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/evpn-zones/{id}/members": {
+      "post": {
+        "operationId": "evpn-zone-member-add",
+        "summary": "Extend a shared EVPN zone to a cluster",
+        "description": "Adds the cluster `connectionId` to the zone {id}, with its EVPN controller, and applies the SDN configuration there. Answers 201. Needs admin.settings.vdcs (scope vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `vdcs:write`",
+        "tags": [
+          "vDCs"
+        ],
+        "x-required-scopes": [
+          "vdcs:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter, sent unencoded: a percent-encoded character in it is refused (401)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "connectionId",
+                  "controller"
+                ],
+                "properties": {
+                  "connectionId": {
+                    "type": "string"
+                  },
+                  "controller": {
+                    "type": "object",
+                    "required": [
+                      "mode",
+                      "name"
+                    ],
+                    "description": "An EVPN controller of the cluster, or one to create",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "existing",
+                          "create"
+                        ]
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "asn": {
+                        "type": "integer",
+                        "description": "create only"
+                      },
+                      "peers": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "create only: the BGP peers"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "zoneName": {
+                          "type": "string",
+                          "description": "Name of the zone in Proxmox"
+                        },
+                        "vrfVxlan": {
+                          "type": "integer"
+                        },
+                        "mtu": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "vniStart": {
+                          "type": "integer"
+                        },
+                        "vniEnd": {
+                          "type": "integer"
+                        },
+                        "members": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "connectionId": {
+                                "type": "string"
+                              },
+                              "connectionName": {
+                                "type": "string"
+                              },
+                              "controller": {
+                                "type": "string"
+                              },
+                              "controllerCreated": {
+                                "type": "boolean",
+                                "description": "ProxCenter created the EVPN controller"
+                              },
+                              "adopted": {
+                                "type": "boolean",
+                                "description": "The zone already ran on the cluster when it was declared"
+                              }
+                            }
+                          }
+                        },
+                        "vdcCount": {
+                          "type": "integer",
+                          "description": "Server computed"
+                        },
+                        "networkCount": {
+                          "type": "integer",
+                          "description": "Server computed"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    },
+                    "applyErrors": {
+                      "type": "array",
+                      "description": "Clusters where the SDN configuration could not be applied; the declaration is kept",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "connectionName": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/admin/evpn-zones/{id}/members"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PUT"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "evpn-zone-member-remove",
+        "summary": "Detach a cluster from a shared EVPN zone",
+        "description": "Removes the cluster `connectionId` from the zone {id}; refused while the zone still holds networks there. Needs admin.settings.vdcs (scope vdcs:write). Provider tenant only: another tenant's token gets 403. A token restricted to some connections gets 403.\n\nRequired scope: `vdcs:write`",
+        "tags": [
+          "vDCs"
+        ],
+        "x-required-scopes": [
+          "vdcs:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter, sent unencoded: a percent-encoded character in it is refused (401)."
+          },
+          {
+            "name": "connectionId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The member cluster to detach"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "zoneName": {
+                          "type": "string",
+                          "description": "Name of the zone in Proxmox"
+                        },
+                        "vrfVxlan": {
+                          "type": "integer"
+                        },
+                        "mtu": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "vniStart": {
+                          "type": "integer"
+                        },
+                        "vniEnd": {
+                          "type": "integer"
+                        },
+                        "members": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "connectionId": {
+                                "type": "string"
+                              },
+                              "connectionName": {
+                                "type": "string"
+                              },
+                              "controller": {
+                                "type": "string"
+                              },
+                              "controllerCreated": {
+                                "type": "boolean",
+                                "description": "ProxCenter created the EVPN controller"
+                              },
+                              "adopted": {
+                                "type": "boolean",
+                                "description": "The zone already ran on the cluster when it was declared"
+                              }
+                            }
+                          }
+                        },
+                        "vdcCount": {
+                          "type": "integer",
+                          "description": "Server computed"
+                        },
+                        "networkCount": {
+                          "type": "integer",
+                          "description": "Server computed"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    },
+                    "applyErrors": {
+                      "type": "array",
+                      "description": "Clusters where the SDN configuration could not be applied; the declaration is kept",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "connectionName": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/admin/evpn-zones/{id}/members"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "PUT"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vdcs/{id}/evpn-networks/{networkId}": {
+      "put": {
+        "operationId": "vdc-evpn-network-update",
+        "summary": "Set the vDCs carrying an EVPN network",
+        "description": "Sets the vDCs of the tenant that carry the EVPN network {networkId}: created where newly listed (SDN apply on that cluster), removed where left out. Needs sdn.vnet.edit on the vDC {id}, sdn.vnet.create on each vDC added and sdn.vnet.delete on each vDC removed (scope network:write). Every vDC must belong to the token's tenant (404 otherwise) and sit on a connection inside the token perimeter.\n\nRequired scope: `network:write`",
+        "tags": [
+          "vDCs"
+        ],
+        "x-required-scopes": [
+          "network:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "networkId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vdcIds"
+                ],
+                "properties": {
+                  "vdcIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Every vDC of the tenant that must carry the network; at least one"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "vdcIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/vdcs/{id}/evpn-networks/{networkId}"
                 }
               }
             }

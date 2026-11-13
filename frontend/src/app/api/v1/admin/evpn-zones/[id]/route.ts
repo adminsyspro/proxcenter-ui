@@ -93,5 +93,5 @@ async function handleDelete(_req: Request, ctx: RouteContext) {
   }
 }
 
-export const PUT = withAudit({ category: "sdn", resourceType: "evpn_zone", resourceParam: "id" }, handlePut)
-export const DELETE = withAudit({ category: "sdn", resourceType: "evpn_zone", resourceParam: "id" }, handleDelete)
+export const PUT = withAudit({ category: "sdn", resourceType: "evpn_zone", resourceParam: "id" }, withPublicApiGuard("evpn-zone-update", handlePut))
+export const DELETE = withAudit({ category: "sdn", resourceType: "evpn_zone", resourceParam: "id" }, withPublicApiGuard("evpn-zone-delete", handleDelete))

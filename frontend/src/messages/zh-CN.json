@@ -4363,6 +4363,7 @@
         "subScopesLabel": "{domain}的写入范围",
         "readOnlyDomain": "此领域仅支持读取",
         "domainNotGrantable": "您自身的权限不允许为所选租户和连接授予此领域的任何写入范围。",
+        "fleetOnlyScope": "vDC 管理会涉及所有集群：需要不限于特定连接的令牌。",
         "tenant": "租户",
         "connections": "连接",
         "connectionsAll": "该租户的所有连接",

@@ -7,7 +7,7 @@ import { getCurrentTenantId, userHasAccessToTenant } from "@/lib/tenant"
 import { requireFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
 import { generateApiToken } from "@/lib/api-tokens/tokenCrypto"
-import { ALL_SCOPE_IDS, isCreatorCheckedScope } from "@/lib/api-tokens/scopes"
+import { ALL_SCOPE_IDS, FLEET_SCOPE_IDS, isCreatorCheckedScope } from "@/lib/api-tokens/scopes"
 import { firstUngrantableScope } from "@/lib/api-tokens/grantable"
 import { audit } from "@/lib/audit"
 
@@ -70,6 +70,13 @@ async function handlePost(req: Request) {
       return NextResponse.json({ error: "connectionIds must be null or an array of connection ids" }, { status: 400 })
     }
     connectionIds = body.connectionIds
+  }
+  const fleetScope = connectionIds === null ? undefined : (scopes as string[]).find(s => FLEET_SCOPE_IDS.includes(s))
+  if (fleetScope) {
+    return NextResponse.json(
+      { error: `${fleetScope} reaches every connection: it needs a token not restricted to connections`, scope: fleetScope },
+      { status: 400 },
+    )
   }
 
   const tenantId = typeof body?.tenantId === "string" && body.tenantId ? body.tenantId : await getCurrentTenantId()

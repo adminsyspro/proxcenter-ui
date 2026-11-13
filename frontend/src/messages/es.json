@@ -4363,6 +4363,7 @@
         "subScopesLabel": "Scopes de escritura: {domain}",
         "readOnlyDomain": "Dominio de solo lectura",
         "domainNotGrantable": "Sus propios permisos no permiten conceder ningún scope de escritura de este dominio para el tenant y las conexiones seleccionados.",
+        "fleetOnlyScope": "La gestión de los vDC alcanza todos los clústeres: requiere un token no restringido a conexiones.",
         "tenant": "Tenant",
         "connections": "Conexiones",
         "connectionsAll": "Todas las conexiones del tenant",

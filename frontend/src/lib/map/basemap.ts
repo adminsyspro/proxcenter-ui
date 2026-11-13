@@ -15,6 +15,8 @@
 // who own a key, or who run their own tile server on an air-gapped site, pick
 // 'custom' and give their own URL templates.
 
+import { sanitizeAttribution } from './attribution'
+
 export type BasemapProvider = 'osm' | 'custom'
 
 export interface BasemapSettings {
@@ -23,7 +25,7 @@ export interface BasemapSettings {
   lightUrl: string
   /** Optional dedicated dark tile URL template. Empty = invert the light one. */
   darkUrl: string
-  /** Attribution HTML shown in the map corner. Required by most tile providers. */
+  /** Attribution shown in the map corner: text, entities and http(s) links only (see sanitizeAttribution). */
   attribution: string
 }
 
@@ -89,7 +91,7 @@ export function normalizeBasemapSettings(raw: unknown): BasemapSettings {
     provider: row.provider === 'custom' ? 'custom' : 'osm',
     lightUrl: str('lightUrl'),
     darkUrl: str('darkUrl'),
-    attribution: str('attribution'),
+    attribution: sanitizeAttribution(str('attribution')),
   }
 }
 

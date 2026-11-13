@@ -82,6 +82,14 @@ describe('GET /api/v1/settings/map', () => {
     })
   })
 
+  it('shows the markup of a row stored before roadmap#229 as text, links kept', async () => {
+    getSettingMock.mockResolvedValue({ provider: 'osm', attribution: '<b>Tiles</b> <a href="https://t.lan">T</a>' })
+
+    const res = await callRoute(GET as any)
+
+    expect(((await readJson(res)) as any).data.attribution).toBe('&lt;b>Tiles&lt;/b> <a href="https://t.lan">T</a>')
+  })
+
   it('answers 500 when the store breaks', async () => {
     getSettingMock.mockRejectedValue(new Error('db down'))
 
@@ -149,6 +157,23 @@ describe('PUT /api/v1/settings/map', () => {
       darkUrl: 'https://tiles.lan/dark/{z}/{x}/{y}.png',
       attribution: 'Internal tiles',
     })
+  })
+
+  it('stores the attribution with its links and any other markup as text (roadmap#229)', async () => {
+    const res = await callRoute(PUT as any, {
+      method: 'PUT',
+      body: { provider: 'osm', attribution: '&copy; <a href="https://t.lan">T</a> <img src="x">' },
+    })
+
+    expect(res.status).toBe(200)
+    expect(setSettingMock).toHaveBeenCalledWith('map', 'default', { ...OSM, attribution: '&copy; <a href="https://t.lan">T</a> &lt;img src="x">' })
+  })
+
+  it('refuses an attribution longer than a credit line', async () => {
+    const res = await callRoute(PUT as any, { method: 'PUT', body: { provider: 'osm', attribution: 'x'.repeat(2001) } })
+
+    expect(res.status).toBe(400)
+    expect(setSettingMock).not.toHaveBeenCalled()
   })
 
   it('stores the OSM default without asking for a template', async () => {

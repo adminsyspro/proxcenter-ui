@@ -1,7 +1,7 @@
-import { pveFetch } from "@/lib/proxmox/client"
 import { keepTargetVm, type AllocatedVolume } from "../pvesm-alloc"
 import { destroyPveVm, pveSetVmConfig } from "../pve-vm-config"
 import { convertDisksToQcow2 } from "../qcow2-convert"
+import { startMigratedVm } from "../start-migrated-vm"
 import { verifyDiskIntegrity, type FaultInjection, type IntegritySettings } from "../integrity"
 import { scanBlockChecksums } from "./checksum-detector"
 import { updateJob, appendLog } from "./job-control"
@@ -11,7 +11,7 @@ import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 /**
  * Attach the copied volumes to the target VM, optionally start it, then run the
  * opt-in qcow2 conversion. The attach is fatal (never boot a VM with unattached
- * disks); the conversion never fails the migration.
+ * disks); neither the start nor the conversion fails the migration.
  */
 export async function attachDisksAndBoot(a: {
   jobId: string; pveConn: any; node: string; vmid: number; diskCount: number
@@ -45,8 +45,7 @@ export async function attachDisksAndBoot(a: {
   await appendLog(jobId, `Attached ${diskCount} disk(s) as ${slots.join(", ")}; boot order ${bootDiskSlot}`, "success")
 
   if (startAfterMigration) {
-    await pveFetch<any>(pveConn, `/nodes/${encodeURIComponent(node)}/qemu/${vmid}/status/start`, { method: "POST" })
-    await appendLog(jobId, "Target VM started", "success")
+    await startMigratedVm({ conn: pveConn, node, vmid, log: (m, l) => appendLog(jobId, m, l), startedMessage: "Target VM started" })
   }
 
   // Post-cutover qcow2 conversion (#595): runs after the disks are attached

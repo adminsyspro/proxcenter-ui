@@ -132,7 +132,14 @@ function gb(bytes?: number, digits = 1): number {
  * Mirrors that route step for step on purpose: the two must not be allowed to
  * disagree about what a scoped user may see.
  */
-export async function collectInventorySnapshot(): Promise<InventorySnapshot> {
+export async function collectInventorySnapshot(opts: {
+  /**
+   * Narrow to where this permission was granted (hosts by its RBAC scope,
+   * guests by it); default: every grant of the caller, guests by vm.view.
+   * The local alert routes judge a write on alerts.manage (roadmap#223).
+   */
+  permission?: string
+} = {}): Promise<InventorySnapshot> {
   const tenantId = await getCurrentTenantId()
 
   // Resolve the principal before the scope: an API token must never depend on
@@ -147,7 +154,7 @@ export async function collectInventorySnapshot(): Promise<InventorySnapshot> {
 
   const rbacPrincipal = rbacCtx?.principal ?? (rbacCtx?.userId as string | undefined)
   const rbacScope = rbacCtx && !rbacCtx.isAdmin && rbacPrincipal
-    ? await getRbacInfraScope(rbacPrincipal, rbacCtx.tenantId)
+    ? await (opts.permission ? getRbacInfraScope(rbacPrincipal, rbacCtx.tenantId, opts.permission) : getRbacInfraScope(rbacPrincipal, rbacCtx.tenantId))
     : null
 
   let visibleRaw = mask ? raw.clusters.filter(c => mask.connectionIds.has(c.id)) : raw.clusters
@@ -176,7 +183,7 @@ export async function collectInventorySnapshot(): Promise<InventorySnapshot> {
               node: node.node,
               vmid: String(g.vmid),
             })),
-            PERMISSIONS.VM_VIEW,
+            opts.permission ?? PERMISSIONS.VM_VIEW,
             rbacCtx.tenantId
           ),
         }))

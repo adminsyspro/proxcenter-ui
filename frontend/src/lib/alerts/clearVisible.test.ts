@@ -6,13 +6,14 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { getAlertsMock, deleteAlertMock, isVisibleMock, getInfraMock, vdcVmidsMock, rbacScopeMock } = vi.hoisted(() => ({
+const { resolveMock, getAlertsMock, deleteAlertMock, isVisibleMock, getInfraMock, vdcVmidsMock, rbacScopeMock } = vi.hoisted(() => ({
   getAlertsMock: vi.fn(),
   deleteAlertMock: vi.fn(),
   isVisibleMock: vi.fn(),
   getInfraMock: vi.fn(),
   vdcVmidsMock: vi.fn(),
   rbacScopeMock: vi.fn(),
+  resolveMock: vi.fn(),
 }))
 
 import { FAKE_RBAC_SCOPE } from "@/__tests__/setup/rbacScope"
@@ -21,6 +22,7 @@ vi.mock("@/lib/orchestrator/client", () => ({
   alertsApi: {
     getAlerts: (...a: any[]) => getAlertsMock(...a),
     deleteAlert: (...a: any[]) => deleteAlertMock(...a),
+    resolve: (...a: any[]) => resolveMock(...a),
   },
 }))
 
@@ -62,6 +64,7 @@ beforeEach(() => {
   vdcVmidsMock.mockResolvedValue(new Map([["c1", new Set(["100", "101"])]]))
   getAlertsMock.mockResolvedValue({ data: { data: ALERTS } })
   deleteAlertMock.mockResolvedValue({ data: { status: "ok" } })
+  resolveMock.mockResolvedValue({ data: { status: "ok" } })
   rbacScopeMock.mockReset().mockResolvedValue(null)
 })
 
@@ -94,6 +97,31 @@ describe("clearVisibleTenantAlerts", () => {
 
     expect(cleared).toBe(0)
     expect(deleteAlertMock).not.toHaveBeenCalled()
+  })
+})
+
+// roadmap#223: a provider caller with a scoped alerts.manage resolves, as the
+// provider's own clear does; it never deletes, so an alert held by an incident
+// (which the orchestrator refuses to delete) is resolved like the others.
+describe("resolve mode", () => {
+  it("resolves the visible alerts instead of deleting them", async () => {
+    isVisibleMock.mockImplementation(async (a: any) => a.vmid !== "999")
+
+    const cleared = await clearVisibleTenantAlerts(undefined, "resolve")
+
+    expect(cleared).toBe(2)
+    expect(resolveMock.mock.calls).toEqual([["1"], ["3"]])
+    expect(deleteAlertMock).not.toHaveBeenCalled()
+  })
+
+  it("keeps going past an alert it cannot clear and counts the cleared ones only", async () => {
+    isVisibleMock.mockResolvedValue(true)
+    resolveMock.mockRejectedValueOnce(Object.assign(new Error("conflict"), { status: 409 }))
+
+    const cleared = await clearVisibleTenantAlerts(undefined, "resolve")
+
+    expect(resolveMock).toHaveBeenCalledTimes(ALERTS.length)
+    expect(cleared).toBe(ALERTS.length - 1)
   })
 })
 

@@ -24,6 +24,8 @@ vi.mock('@/lib/orchestrator/client', () => ({
 }))
 
 vi.mock('@/lib/demo/demo-api', () => ({ demoResponse: () => null }))
+vi.mock('next-auth', () => ({ getServerSession: async () => ({ user: { id: 'u1', name: 'Ops', email: 'ops@corp' } }) }))
+vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 
 vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: vi.fn().mockResolvedValue('tenant-a'),
@@ -76,14 +78,26 @@ describe('POST /api/v1/orchestrator/alerts/[id]/acknowledge', () => {
     expect(vdcVmidsMock).toHaveBeenCalledWith('tenant-a', { ignoreVdcContext: true })
   })
 
-  it('defaults acknowledged_by to "unknown" when the body is empty', async () => {
+  it("names the session's user when the body is empty", async () => {
     const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
       method: 'POST',
       params: { id: 'alert-abc' },
     })
 
     expect(res.status).toBe(200)
-    expect(acknowledgeMock).toHaveBeenCalledWith('alert-abc', 'unknown')
+    expect(acknowledgeMock).toHaveBeenCalledWith('alert-abc', 'Ops')
+  })
+
+  // roadmap#223: the author is the session's, never someone named in the body.
+  it("names the session's user when the body names someone else", async () => {
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
+      method: 'POST',
+      params: { id: 'alert-abc' },
+      body: { acknowledged_by: 'ceo@corp' },
+    })
+
+    expect(res.status).toBe(200)
+    expect(acknowledgeMock).toHaveBeenCalledWith('alert-abc', 'Ops')
   })
 
   it('404s an alert that is not visible to the tenant, without acknowledging it', async () => {

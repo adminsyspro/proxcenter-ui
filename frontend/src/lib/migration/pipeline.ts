@@ -41,6 +41,7 @@ import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { waitForPveTask, getNodeSshEndpointForMigration } from "./pve-tasks"
 import { convertDisksToQcow2 } from "./qcow2-convert"
+import { startMigratedVm } from "./start-migrated-vm"
 import { buildUefiInjectScript } from "./uefi-inject"
 import { startJobHeartbeat } from "./job-heartbeat"
 import { capturePipelineStatus, writePipelineExit } from "./pipe-exit"
@@ -3058,12 +3059,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // ── STEP 5: Optionally start ──
       if (config.startAfterMigration) {
         await appendLog(jobId, "Starting VM on Proxmox...")
-        await pveFetch<any>(
-          pveConn,
-          `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/status/start`,
-          { method: "POST" }
-        )
-        await appendLog(jobId, "VM started", "success")
+        await startMigratedVm({ conn: pveConn, node: config.targetNode, vmid: targetVmid!, log: (m, l) => appendLog(jobId, m, l), startedMessage: "VM started" })
       }
     }
 

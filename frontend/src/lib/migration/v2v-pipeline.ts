@@ -41,6 +41,7 @@ import type { V2vVmConfig } from "./v2vConfigMapper"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
 import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { convertDisksToQcow2 } from "./qcow2-convert"
+import { startMigratedVm } from "./start-migrated-vm"
 import { runVcenterNfcExport } from "./nfc-export"
 import { resolveNfcConcurrency, serializeByKey } from "./nfc-progress"
 // SOAP session, inventory, snapshot and power calls for the vCenter path. The
@@ -3011,12 +3012,7 @@ export async function runV2vMigrationPipeline(
 
     if (config.startAfterMigration) {
       await appendLog(jobId, "Starting VM on Proxmox...")
-      await pveFetch<any>(
-        pveConn,
-        `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/status/start`,
-        { method: "POST" }
-      )
-      await appendLog(jobId, "VM started", "success")
+      await startMigratedVm({ conn: pveConn, node: config.targetNode, vmid: targetVmid!, log: (m, l) => appendLog(jobId, m, l), startedMessage: "VM started" })
     }
 
     // Optional qcow2 conversion (#595): after the disks are attached and after

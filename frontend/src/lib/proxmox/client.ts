@@ -127,6 +127,38 @@ function isCallerAbortError(err: unknown): boolean {
   return err.name === "AbortError" || cause?.name === "AbortError"
 }
 
+/**
+ * getaddrinfo answered "try again": the name server did not answer in time, so
+ * no connection was opened and the request never left this host. Retrying it
+ * is safe even for a write (discussion #1363: a warm migration lost its final
+ * VM start to one such blip). Only the error's own codes are read, never its
+ * message: a PVE answer quoting a DNS failure of its own is not ours.
+ */
+export function isTransientDnsError(err: unknown): boolean {
+  if (!(err instanceof Error) || err instanceof PveApplicationError) return false
+  const e = err as any
+  return e.code === "EAI_AGAIN" || e.cause?.code === "EAI_AGAIN"
+}
+
+/** Waits before each retry of a request whose host name did not resolve. */
+const DNS_RETRY_DELAYS_MS = [1_000, 3_000]
+
+/** Resolves after `ms`, or rejects with the signal's reason once it fires. */
+function waitUnlessAborted(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason)
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(signal!.reason)
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener("abort", onAbort, { once: true })
+  })
+}
+
 export type PveErrorClass =
   | "hard-network"
   | "connect-timeout"
@@ -364,18 +396,32 @@ export async function pveFetch<T>(
     // During failover, ignoreCallerSignal=true to avoid the caller's already-aborted
     // signal from instantly killing failover candidates.
     const callerSignal = (!ignoreCallerSignal && init.signal) ? init.signal : undefined
-    const timeoutSignal = AbortSignal.timeout(timeoutMs)
-    const signal = callerSignal
-      ? AbortSignal.any([callerSignal, timeoutSignal])
-      : timeoutSignal
 
-    const res = await request(url, {
-      method: probe ? 'GET' : method,
-      headers,
-      body: probe ? undefined : body,
-      dispatcher,
-      signal,
-    })
+    // A host name that did not resolve is retried in place, each attempt on a
+    // budget of its own: nothing was sent, so even a write cannot apply twice.
+    let res: Awaited<ReturnType<typeof request>>
+    for (let attempt = 0; ; attempt++) {
+      const timeoutSignal = AbortSignal.timeout(timeoutMs)
+      const signal = callerSignal
+        ? AbortSignal.any([callerSignal, timeoutSignal])
+        : timeoutSignal
+      try {
+        res = await request(url, {
+          method: probe ? 'GET' : method,
+          headers,
+          body: probe ? undefined : body,
+          dispatcher,
+          signal,
+        })
+        break
+      } catch (err) {
+        const delay = DNS_RETRY_DELAYS_MS[attempt]
+        if (delay === undefined || !isTransientDnsError(err)) throw err
+        // No host or path in this line (log injection, CodeQL).
+        console.warn(`[pve] Host name lookup failed (EAI_AGAIN), retry ${attempt + 1}/${DNS_RETRY_DELAYS_MS.length} in ${delay} ms`)
+        await waitUnlessAborted(delay, callerSignal)
+      }
+    }
 
     const text = await res.body.text()
 

@@ -9321,6 +9321,7 @@
     "dashboard": {
       "stopHeldTitle": "Cortafuegos del clúster apagado por la parada de emergencia",
       "coverageDefinition": "Protegido: cortafuegos activado en las opciones del invitado y en una de sus interfaces de red, lo que aplica Proxmox",
+      "coverageSampled": "Por encima de {max, number} invitados, solo se mide una muestra uniforme.",
       "todoTitle": "Por hacer",
       "todoNothing": "Nada que hacer",
       "todoUnavailable": "No disponible mientras no se puedan leer los datos del cortafuegos",
@@ -9348,6 +9349,7 @@
       "postureChipZones": "Zonas en bloqueo {enforced, number} / {total, number}",
       "postureChipZonesUnknown": "Zonas en bloqueo -",
       "postureChipGuests": "Invitados protegidos {protected, number} / {running, number} en ejecución",
+      "postureChipGuestsSampled": "Invitados protegidos {protected, number} / {running, number} medidos · {total, number} en ejecución",
       "postureChipGuestsUnknown": "Invitados protegidos -",
       "postureChipLastCheck": "Última comprobación {time}",
       "postureChipNoCheck": "Ninguna comprobación aún",

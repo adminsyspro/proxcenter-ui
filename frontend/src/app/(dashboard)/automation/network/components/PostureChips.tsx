@@ -7,6 +7,7 @@ import type { FirewallMode } from '@/lib/api/firewall'
 
 import { STATE_AMBER, STATE_GREEN, STATE_GREY, STATE_RED } from './dashboardColors'
 import type { BlockPhase } from './dashboardModel'
+import type { ProtectedRunning } from './dashboardPosture'
 import { deniesInbound } from './dashboardModel'
 import { NOW_REFRESH_MS, useNow } from './microseg/useNow'
 
@@ -23,8 +24,8 @@ type Props = {
   stopHoldsFirewall: boolean
   /** undefined while the status is read, null when it could not be. */
   zones: { enforced: number; total: number } | null | undefined
-  /** null until the coverage route measured the guests. */
-  guests: { protected: number; running: number } | null
+  /** null until the coverage route measured the guests; `total` above `running` when it asked a sample only. */
+  guests: ProtectedRunning | null
   /** undefined while the status is read. */
   lastCheck: Date | null | undefined
   /** When the coverage route computed the guest figures (ISO), absent before. */
@@ -123,7 +124,10 @@ export default function PostureChips(props: Props) {
 
   let guestsColor = STATE_GREY
   if (guests && guests.running > 0) guestsColor = guests.protected === guests.running ? STATE_GREEN : STATE_BLUE
-  const guestsLabel = guests ? t('postureChipGuests', guests) : t('postureChipGuestsUnknown')
+  const sampled = !!guests && guests.total > guests.running
+  let guestsLabel = t('postureChipGuestsUnknown')
+  if (guests) guestsLabel = sampled ? t('postureChipGuestsSampled', guests) : t('postureChipGuests', guests)
+  const guestsTip = sampled ? `${t('coverageDefinition')} ${t('coverageSampled', { max: guests.asked })}` : t('coverageDefinition')
 
   let checkChip = <ChipSkeleton testId='chip-check-loading' />
   if (lastCheck !== undefined) {
@@ -136,7 +140,7 @@ export default function PostureChips(props: Props) {
       <ClusterChip {...props} />
       {zonesChip}
       <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}>
-        <PostureChip testId='chip-guests' color={guestsColor} label={guestsLabel} tip={t('coverageDefinition')} onClick={props.onOpenGuests} />
+        <PostureChip testId='chip-guests' color={guestsColor} label={guestsLabel} tip={guestsTip} onClick={props.onOpenGuests} />
         <CoverageRefresh coverageAt={props.coverageAt} busy={props.coverageBusy} onRefresh={props.onRefreshCoverage} />
       </Box>
       {checkChip}

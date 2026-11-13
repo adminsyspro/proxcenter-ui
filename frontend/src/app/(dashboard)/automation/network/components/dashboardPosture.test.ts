@@ -217,9 +217,17 @@ describe('header figures', () => {
   })
 
   it('counts the running guests Proxmox filters, of the running guests, once measured', () => {
-    expect(protectedRunning({ computedAt: '2026-11-03T08:00:00Z', guests: ROWS })).toEqual({ protected: 3, running: 3 })
-    expect(protectedRunning({ computedAt: '2026-11-03T08:00:00Z', guests: [row(1, 'pve1', [], [], 'running', null), row(2, 'pve1', [], [])] })).toEqual({ protected: 1, running: 2 })
+    expect(protectedRunning({ computedAt: '2026-11-03T08:00:00Z', guests: ROWS })).toEqual({ protected: 3, running: 3, total: 3, asked: 4 })
+    expect(protectedRunning({ computedAt: '2026-11-03T08:00:00Z', guests: [row(1, 'pve1', [], [], 'running', null), row(2, 'pve1', [], [])] })).toEqual({ protected: 1, running: 2, total: 2, asked: 2 })
     expect(protectedRunning({ computedAt: '', guests: ROWS })).toBeNull()
     expect(protectedRunning(null)).toBeNull()
+  })
+
+  it('counts the protected guests over the guests asked only, above the guest cap of the coverage route', () => {
+    // 2 running guests asked (1 protected), 2 running guests the cap left out, 1 stopped guest left out.
+    const left = (vmid: number, status = 'running') => ({ ...row(vmid, 'pve1', [], [], status, null), sampledOut: true })
+    const guests = [row(1, 'pve1', [], []), row(2, 'pve1', [], [], 'running', false), left(3), left(4), left(5, 'stopped')]
+
+    expect(protectedRunning({ computedAt: '2026-11-03T08:00:00Z', guests })).toEqual({ protected: 1, running: 2, total: 4, asked: 2 })
   })
 })

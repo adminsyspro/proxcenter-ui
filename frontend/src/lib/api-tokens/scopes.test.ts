@@ -9,7 +9,11 @@ import {
   WRITE_SCOPE_IDS,
   DESTRUCTIVE_SCOPE_IDS,
   isWriteScope,
+  isCreatorCheckedScope,
+  CREATOR_CHECKED_READ_SCOPE_IDS,
   expandScopes,
+  ADMIN_WRITE_SCOPE_IDS, FLEET_SCOPE_IDS,
+  readsAdminData,
 } from './scopes'
 import { ALL_PERMISSIONS } from '../../../prisma/roleCatalogue'
 
@@ -22,15 +26,35 @@ describe('scope to permission resolver (spec section 7)', () => {
     expect(SCOPE_DEFINITIONS['automation:read']).toEqual(['automation.view'])
     expect(SCOPE_DEFINITIONS['alerts:read']).toEqual(['alerts.view', 'events.view'])
     expect(SCOPE_DEFINITIONS['reports:read']).toEqual(['reports.view'])
-    expect(READ_SCOPE_IDS).toHaveLength(7)
+    expect(SCOPE_DEFINITIONS['tenants:read']).toEqual(['admin.tenants.view'])
+    expect(SCOPE_DEFINITIONS['vdcs:read']).toEqual(['admin.settings.view', 'vm.view', 'sdn.vnet.view'])
+    expect(SCOPE_DEFINITIONS['ipam:read']).toEqual(['sdn.vnet.view'])
+    expect(SCOPE_DEFINITIONS['rbac:read']).toEqual(['admin.rbac.view'])
+    expect(SCOPE_DEFINITIONS['users:read']).toEqual(['admin.users.view'])
+    expect(READ_SCOPE_IDS).toHaveLength(12)
     expect(Object.keys(READ_SCOPE_DEFINITIONS)).toEqual(READ_SCOPE_IDS)
   })
 
-  it('offers 20 scopes: 7 read and 13 write', () => {
-    expect(ALL_SCOPE_IDS).toHaveLength(20)
-    expect(WRITE_SCOPE_IDS).toHaveLength(13)
+  it('offers 29 scopes: 12 read and 17 write', () => {
+    expect(ALL_SCOPE_IDS).toHaveLength(29)
+    expect(WRITE_SCOPE_IDS).toHaveLength(17)
     expect(ALL_SCOPE_IDS).toEqual([...READ_SCOPE_IDS, ...WRITE_SCOPE_IDS])
     expect(Object.keys(SCOPE_DEFINITIONS)).toEqual(ALL_SCOPE_IDS)
+  })
+
+  // Issue #1360: the admin reads are creator-checked like a write scope, and
+  // map only the read-only children of the admin rights.
+  it('checks the creator of exactly the admin read scopes, and of every write scope', () => {
+    expect(CREATOR_CHECKED_READ_SCOPE_IDS).toEqual(['tenants:read', 'vdcs:read', 'ipam:read', 'rbac:read', 'users:read'])
+    for (const id of CREATOR_CHECKED_READ_SCOPE_IDS) expect(isCreatorCheckedScope(id), id).toBe(true)
+    for (const id of WRITE_SCOPE_IDS) expect(isCreatorCheckedScope(id), id).toBe(true)
+    for (const id of ['vms:read', 'nodes:read', 'reports:read']) expect(isCreatorCheckedScope(id), id).toBe(false)
+    expect(isCreatorCheckedScope('nope:read')).toBe(false)
+    for (const id of CREATOR_CHECKED_READ_SCOPE_IDS) {
+      for (const key of SCOPE_DEFINITIONS[id]) {
+        if (key.startsWith('admin.')) expect(key, `${id} maps ${key}`).toMatch(/^admin\.[a-z]+\.view$/)
+      }
+    }
   })
 
   it('does not offer compliance:read (#632)', () => {
@@ -110,10 +134,25 @@ describe('scope to permission resolver (spec section 7)', () => {
         'sdn.vnet.view', 'sdn.vnet.create', 'sdn.vnet.edit', 'sdn.vnet.delete',
       ],
       'firewall:write': ['node.view', 'connection.view', 'node.manage'],
+      'vdcs:write': ['admin.settings.view', 'admin.settings.vdcs', 'vm.view', 'sdn.vnet.view'],
+      'tenants:write': ['admin.tenants.view', 'admin.tenants'],
+      'users:write': ['admin.users.view', 'admin.users'],
+      'rbac:write': ['admin.rbac.view', 'admin.rbac'],
     })
   })
 
-  it('write scopes never bundle admin, automation, console or NIC mac/vlan keys', () => {
+  it('write scopes never bundle automation, console or NIC mac/vlan keys, and admin keys only in the admin write scopes', () => {
+    // The admin write scopes carry the admin right of their own domain and
+    // its read-only child, nothing else: each needs a global grant and a
+    // token not restricted to connections (issue #1360).
+    const ADMIN_KEYS: Record<string, string[]> = {
+      'vdcs:write': ['admin.settings.view', 'admin.settings.vdcs'],
+      'tenants:write': ['admin.tenants.view', 'admin.tenants'],
+      'users:write': ['admin.users.view', 'admin.users'],
+      'rbac:write': ['admin.rbac.view', 'admin.rbac'],
+    }
+    expect(Object.keys(ADMIN_KEYS)).toEqual([...ADMIN_WRITE_SCOPE_IDS])
+    const allowedAdmin = (scope: string, key: string) => (ADMIN_KEYS[scope] ?? []).includes(key)
     const forbidden = (key: string) =>
       key.startsWith('admin.') ||
       key.startsWith('automation.') ||
@@ -124,7 +163,7 @@ describe('scope to permission resolver (spec section 7)', () => {
 
     for (const [scope, keys] of Object.entries(WRITE_SCOPE_DEFINITIONS)) {
       for (const key of keys) {
-        expect(forbidden(key), `write scope ${scope} bundles forbidden key ${key}`).toBe(false)
+        expect(forbidden(key) && !allowedAdmin(scope, key), `write scope ${scope} bundles forbidden key ${key}`).toBe(false)
       }
     }
   })
@@ -144,5 +183,17 @@ describe('scope to permission resolver (spec section 7)', () => {
 
   it('expandScopes resolves write scopes', () => {
     expect(expandScopes(['vms:snapshot'])).toEqual(new Set(['vm.view', 'connection.view', 'vm.snapshot']))
+  })
+
+  it('the admin write scopes are the fleet scopes, and readsAdminData covers them with the admin read scopes', () => {
+    expect([...ADMIN_WRITE_SCOPE_IDS]).toEqual(['vdcs:write', 'tenants:write', 'users:write', 'rbac:write'])
+    expect([...FLEET_SCOPE_IDS]).toEqual([...ADMIN_WRITE_SCOPE_IDS])
+    for (const id of ADMIN_WRITE_SCOPE_IDS) {
+      expect(isWriteScope(id), id).toBe(true)
+      expect(readsAdminData(id), id).toBe(true)
+    }
+    for (const id of CREATOR_CHECKED_READ_SCOPE_IDS) expect(readsAdminData(id)).toBe(true)
+    expect(readsAdminData('network:write')).toBe(false)
+    expect(readsAdminData('vms:read')).toBe(false)
   })
 })

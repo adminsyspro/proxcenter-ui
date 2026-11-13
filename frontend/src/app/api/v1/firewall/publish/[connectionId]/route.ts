@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic"
 // without one could overwrite a change made meanwhile.
 import { NextRequest, NextResponse } from 'next/server'
 
-import { getCurrentTenantId, verifyConnectionOwnership } from '@/lib/tenant'
-import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
+import { verifyConnectionOwnership } from '@/lib/tenant'
+import { denyIaasTenant } from '@/lib/tenant/iaasGuard'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
@@ -59,18 +59,18 @@ function pveIO(conn: Awaited<ReturnType<typeof getConnectionById>>, connectionId
 }
 
 async function postHandler(req: NextRequest, ctx: RouteContext) {
+  // The connection's firewall is the provider's: a vDC tenant never writes it,
+  // and gets the 404 of every provider infrastructure route (lib/tenant/iaasGuard)
+  // before any ownership or permission lookup.
+  const iaasDenied = await denyIaasTenant()
+  if (iaasDenied) return iaasDenied
+
   const { connectionId } = await ctx.params
   const ownershipDenied = await verifyConnectionOwnership(connectionId)
   if (ownershipDenied) return ownershipDenied
 
   const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, 'connection', connectionId)
   if (denied) return denied
-
-  // The connection's firewall is the provider's: a vDC tenant never writes it.
-  const infra = await getTenantInfrastructureScope(await getCurrentTenantId(), { ignoreVdcContext: true })
-  if (infra.kind === 'iaas') {
-    return NextResponse.json({ error: 'The firewall of a connection is not available to a vDC tenant' }, { status: 403 })
-  }
 
   const parsed = parsePublishBody(await readBody(req))
   if (isFail(parsed)) return NextResponse.json({ error: parsed.error, code: 'INVALID' }, { status: 400 })

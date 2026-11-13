@@ -6,6 +6,7 @@ import { checkPermission, buildNodeResourceId, buildStorageResourceId, PERMISSIO
 import { getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { getTenantInfrastructureScope } from "@/lib/tenant/infraScope"
 import { writableStoragesFor, readOnlyLibraryError } from "@/lib/vdc/scope"
+import { checkTenantGuestsScope } from "@/lib/vdc/guestScope"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -44,6 +45,8 @@ async function handler(
 
     if (storageDenied) return storageDenied
 
+    const conn = await getConnectionById(id)
+
     const tenantId = await getCurrentTenantId()
     if (tenantId && tenantId !== DEFAULT_TENANT_ID) {
       const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
@@ -58,11 +61,19 @@ async function handler(
             { status: 403 },
           )
         }
+        // Ownership: the storage permission above covers the DESTINATION, not
+        // the guests. Without this a tenant could back up a neighbour's VM on a
+        // shared node (then read its disk via restore). Every named vmid must
+        // sit inside the tenant's vDC, and "all" is never a tenant request.
+        if (body.all !== undefined && String(body.all) !== '0') {
+          return NextResponse.json({ error: 'A tenant backup must name its own guests, not "all".' }, { status: 403 })
+        }
+        const vmids = String(vmid).split(',').map(s => s.trim()).filter(Boolean)
+        const guestDenied = await checkTenantGuestsScope(tenantId, conn, id, null, null, vmids, true, infra)
+        if (guestDenied) return guestDenied
       }
     }
 
-    const conn = await getConnectionById(id)
-    
     // Construire les paramètres pour vzdump
     const vzdumpParams: Record<string, any> = {
       vmid: vmid,

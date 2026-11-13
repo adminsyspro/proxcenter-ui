@@ -32,12 +32,16 @@ vi.mock("ssh2", () => ({ Client: h.Client }))
 // Prisma in here). What matters on this side is the callback executeSSHDirect
 // hands it: ssh2 turns a rejected host key into a bare handshake error, so
 // without that callback the caller never learns the real reason (#979).
-const hk = vi.hoisted(() => ({ onMismatch: undefined as undefined | ((message: string) => void) }))
+const hk = vi.hoisted(() => ({
+  onRefusal: undefined as undefined | ((refusal: any, message: string) => void),
+  algorithms: ["ssh-ed25519"] as string[],
+}))
 vi.mock("@/lib/ssh/host-key-store", () => ({
-  makeHostVerifier: (_host: string, _port: number, onMismatch?: (message: string) => void) => {
-    hk.onMismatch = onMismatch
+  makeHostVerifier: (_host: string, _port: number, onRefusal?: (refusal: any, message: string) => void) => {
+    hk.onRefusal = onRefusal
     return () => {}
   },
+  hostKeyAlgorithms: async () => hk.algorithms,
 }))
 
 // executeSSH reads the connection's SSH settings; a password connection with
@@ -185,13 +189,24 @@ describe("executeSSHDirect (ssh2 wiring)", () => {
     expect(r.error).toMatch(/inactivity/i)
   })
 
-  it("replaces ssh2's opaque handshake error with the host-key mismatch reason (#979)", async () => {
+  it("replaces ssh2's opaque handshake error with the host-key refusal and hands the key over", async () => {
     const p = executeSSHDirect({ host: "h", port: 22, user: "root", key: "KEY", command: "x" })
     await flush()
-    const mismatch = 'SSH host-key mismatch for h: pinned ssh-ed25519, presented ssh-rsa. Refusing to connect.'
-    hk.onMismatch!(mismatch)
+    const refusal = { endpoint: "h:22", keyType: "ssh-ed25519", fingerprint: "SHA256:abc", state: "unconfirmed" }
+    const message = "SSH host key of h:22 is not confirmed: it presented ssh-ed25519 SHA256:abc."
+    hk.onRefusal!(refusal, message)
     h.clients.at(-1)!.emit("error", new Error("Handshake failed"))
-    await expect(p).resolves.toEqual({ success: false, error: mismatch })
+    await expect(p).resolves.toEqual({ success: false, error: message, hostKey: refusal })
+  })
+
+  it("offers only the host key algorithms of the trusted keys", async () => {
+    hk.algorithms = ["ecdsa-sha2-nistp256"]
+    const p = executeSSHDirect({ host: "h", port: 22, user: "root", key: "KEY", command: "x" })
+    await flush()
+    expect((h.clients.at(-1)!._cfg.algorithms as any).serverHostKey).toEqual(["ecdsa-sha2-nistp256"])
+    h.clients.at(-1)!.emit("error", new Error("x"))
+    await p
+    hk.algorithms = ["ssh-ed25519"]
   })
 
   it("resolves with the error when ssh2 emits a connection error", async () => {

@@ -87,6 +87,8 @@ const CommandPalette = ({ open, onClose }) => {
   const { currentTenant, loading: tenantLoading } = useTenant()
   const { hasVdc, loading: vdcLoading } = useMyVdcs()
   const isProviderTenant = currentTenant?.id === 'default'
+  // A vDC tenant: neither the provider nor an MSP running its own clusters.
+  const isVdcTenant = !!currentTenant && !isProviderTenant && currentTenant.operatingModel !== 'msp'
   const infraScoped = hasInfraScope(scopeTypes, isAdmin)
 
   const [query, setQuery] = useState('')
@@ -221,6 +223,7 @@ const CommandPalette = ({ open, onClose }) => {
       if (entry.requires?.hasVdc === true && !hasVdc) return false
       if (entry.requires?.hasVdc === false && hasVdc) return false
       if (entry.requires?.isProviderTenant === true && !isProviderTenant) return false
+      if (entry.requires?.notVdcTenant === true && isVdcTenant) return false
       if (entry.requires?.infraScope === true && !infraScoped) return false
       if (entry.permissions && entry.permissions.length > 0 && !hasAnyPermission(entry.permissions)) return false
       if (entry.requiredFeature && !hasFeature(entry.requiredFeature)) return false
@@ -263,7 +266,7 @@ const CommandPalette = ({ open, onClose }) => {
     }
 
     return items
-  }, [t, hasAnyPermission, hasFeature, hasVdc, isProviderTenant, infraScoped, rbacLoading, licenseLoading, tenantLoading, vdcLoading])
+  }, [t, hasAnyPermission, hasFeature, hasVdc, isProviderTenant, isVdcTenant, infraScoped, rbacLoading, licenseLoading, tenantLoading, vdcLoading])
 
   // -----------------------------------------------------------------------
   // 2. Actions — static list filtered by RBAC/License

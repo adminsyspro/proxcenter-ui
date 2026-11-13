@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 
 import {
   Alert,
@@ -40,9 +40,13 @@ import { useTranslations } from 'next-intl'
 
 import StoragePoliciesSection from './StoragePoliciesSection'
 import VdcPbsBindingsSection from './VdcPbsBindingsSection'
+import EvpnZonesSection from './EvpnZonesSection'
 import TenantNetworksSection from './TenantNetworksSection'
 import VdcHelpSection from './VdcHelpSection'
+import VdcGpuQuotaEditor, { type VdcGpuQuotaHandle } from './VdcGpuQuotaEditor'
+import { QUOTA_INPUT_SX, QUOTA_ROW_SX, QUOTA_TRAIL_SX, QuotaRowLead, SMALL_SELECT_SX } from './VdcQuotaRow'
 import VdcUsageHistorySettings from './VdcUsageHistorySettings'
+import VdcMoveSettings from './VdcMoveSettings'
 import DeletedVdcUsageHistory from './DeletedVdcUsageHistory'
 import TransportModeDiagram, { TRANSPORT_MODE_KEYS } from './TransportModeDiagram'
 import QuotaDonut from '@/components/mydc/QuotaDonut'
@@ -170,8 +174,6 @@ const EDGE_MODEL_KEYS: Record<VdcEdgeModel, { label: string; hint: string }> = {
   tenant: { label: 'vdc.edgeModelTenant', hint: 'vdc.edgeModelTenantHint' },
   platform: { label: 'vdc.edgeModelPlatform', hint: 'vdc.edgeModelPlatformHint' },
 }
-
-const SMALL_SELECT_SX = { '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' } } as const
 
 interface ZoneStatus {
   zoneName: string | null
@@ -330,6 +332,9 @@ const emptyForm: VdcFormState = {
 // using the existing time.* keys, so we don't ship a new dependency.
 // Dialog tab panel. Inactive panels stay MOUNTED (display: none) so the
 // per-section effects keep running and unsaved edits survive a tab switch.
+// Index of the Quotas tab of the vDC dialog.
+const QUOTAS_TAB = 4
+
 function TabPanel({ value, index, children }: { value: number; index: number; children: ReactNode }) {
   return (
     <Box role="tabpanel" hidden={value !== index} sx={{ display: value === index ? 'flex' : 'none', flexDirection: 'column', gap: 2 }}>
@@ -366,9 +371,12 @@ export default function VdcTab() {
   const [dialogTab, setDialogTab] = useState(0)
   // Sub-tabs: the vDC list and the connection-level storage policies are
   // separate concerns; showing both stacked made the page too long.
-  const [activeSection, setActiveSection] = useState<'vdcs' | 'policies' | 'networks' | 'usage-history' | 'help'>('vdcs')
+  const [activeSection, setActiveSection] = useState<'vdcs' | 'policies' | 'networks' | 'evpn' | 'usage-history' | 'moves' | 'help'>('vdcs')
   const [editingVdc, setEditingVdc] = useState<any>(null)
   const [saving, setSaving] = useState(false)
+  // GPU contingent row of the Quotas tab (#672): written by the dialog's save.
+  const gpuQuotaRef = useRef<VdcGpuQuotaHandle>(null)
+  const [gpuQuotaInvalid, setGpuQuotaInvalid] = useState(false)
 
   // Form
   const [form, setForm] = useState<VdcFormState>(emptyForm)
@@ -467,6 +475,11 @@ export default function VdcTab() {
   const [transport, setTransport] = useState<TransportForm>(emptyTransport)
   // L3 edge model (#904): who provides gateway, DHCP and NAT on the vDC networks.
   const [edgeModel, setEdgeModel] = useState<VdcEdgeModel>('tenant')
+  // Shared EVPN zone (#1334): the declared zones, the one this vDC is attached
+  // to, and whether the vDC also keeps a VXLAN zone of its own (creation only).
+  const [evpnZones, setEvpnZones] = useState<Array<{ id: string; name: string; members: Array<{ connectionId: string }> }>>([])
+  const [evpnZoneId, setEvpnZoneId] = useState('')
+  const [ownVxlanZone, setOwnVxlanZone] = useState(true)
   const [nodeAddressInfo, setNodeAddressInfo] = useState<{ nodes: NodeAddressEntry[]; devices: string[] }>({ nodes: [], devices: [] })
   const [zoneStatus, setZoneStatus] = useState<ZoneStatus | null>(null)
   // Stretched tenant networks (#901) this vDC carries, read-only here: the
@@ -535,10 +548,13 @@ export default function VdcTab() {
 
   const fetchDropdowns = useCallback(async () => {
     try {
-      const [tenantsRes, connectionsRes] = await Promise.all([
+      const [tenantsRes, connectionsRes, evpnRes] = await Promise.all([
         fetch('/api/v1/tenants'),
         fetch('/api/v1/admin/connections?type=pve'),
+        fetch('/api/v1/admin/evpn-zones').catch(() => null),
       ])
+      const evpnData = evpnRes?.ok ? await evpnRes.json().catch(() => ({})) : {}
+      setEvpnZones(Array.isArray(evpnData?.data) ? evpnData.data : [])
 
       const tenantsData = await tenantsRes.json()
       const connectionsData = await connectionsRes.json()
@@ -997,6 +1013,8 @@ export default function VdcTab() {
     setCatalogGrants({ imageIds: [], blueprintIds: [] })
     setTransport(emptyTransport)
     setEdgeModel('tenant')
+    setEvpnZoneId('')
+    setOwnVxlanZone(true)
     setZoneStatus(null)
     setZoneMessage(null)
     setProvisionResults(null)
@@ -1078,6 +1096,8 @@ export default function VdcTab() {
     })
     setTransport(transportFormFrom(vdc.transport))
     setEdgeModel(EDGE_MODELS.includes(vdc.edgeModel) ? vdc.edgeModel : 'tenant')
+    setEvpnZoneId(vdc.evpnZoneId ?? '')
+    setOwnVxlanZone(!!vdc.sdnZoneName)
     setZoneStatus(null)
     setZoneMessage(null)
     setProvisionResults(null)
@@ -1188,6 +1208,7 @@ export default function VdcTab() {
           catalogGrants,
           transport: transportPayload,
           edgeModel,
+          evpnZoneId: evpnZoneId || null,
           quota,
         }
 
@@ -1200,6 +1221,15 @@ export default function VdcTab() {
         if (!res.ok) {
           const err = await res.json().catch(() => ({}))
           throw new Error(err.error || t('vdc.failedSave'))
+        }
+
+        // The vDC is saved; a refused GPU contingent keeps the dialog open on
+        // the Quotas tab, where the row shows the error.
+        const gpuSaved = (await gpuQuotaRef.current?.save(editingVdc.id)) ?? true
+        if (!gpuSaved) {
+          setDialogTab(QUOTAS_TAB)
+          void fetchVdcs()
+          return
         }
       } else {
         // POST - create. An empty Name field falls back to the derived
@@ -1225,6 +1255,8 @@ export default function VdcTab() {
           catalogGrants,
           transport: transportPayload,
           edgeModel,
+          evpnZoneId: evpnZoneId || null,
+          ownVxlanZone: evpnZoneId && !ownVxlanZone ? false : undefined,
           quota: Object.keys(quota).some((k) => quota[k] !== null) ? quota : undefined,
         }
 
@@ -1239,6 +1271,9 @@ export default function VdcTab() {
           throw new Error(err.error || t('vdc.failedSave'))
         }
 
+        const created = await res.json().catch(() => ({}))
+        const newVdcId: string | undefined = created?.data?.id
+
         // Optional second step: bind a PBS datastore right after the
         // vDC is created. The vDC stays even if this fails — the admin
         // can retry from the edit dialog. We surface a partial-success
@@ -1250,8 +1285,6 @@ export default function VdcTab() {
           pbsDraft.datastore &&
           pbsDraft.namespace
         ) {
-          const created = await res.json().catch(() => ({}))
-          const newVdcId = created?.data?.id
           if (newVdcId) {
             try {
               const bindRes = await fetch(
@@ -1281,6 +1314,11 @@ export default function VdcTab() {
               setError(t('vdc.pbsBindCreatedVdcFailedBind', { error: e?.message || String(e) }))
             }
           }
+        }
+
+        // Same for the GPU contingent: the vDC stays, the edit dialog can retry.
+        if (newVdcId && !((await gpuQuotaRef.current?.save(newVdcId)) ?? true)) {
+          setError(t('vdc.gpuQuota.errors.save'))
         }
       }
 
@@ -1782,29 +1820,18 @@ export default function VdcTab() {
     const barColor = overCap || pct >= 90 ? 'error' : pct >= 70 ? 'warning' : 'success'
 
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Typography variant="body2" sx={{ minWidth: 130 }}>
-          {label}
-        </Typography>
-        <FormControlLabel
-          control={
-            <Switch
-              size="small"
-              checked={unlimited}
-              onChange={(e) => {
-                const v = e.target.checked
-                setForm((f) => ({
-                  ...f,
-                  [unlimitedKey]: v,
-                  ...(v ? { [valueKey]: '' } : {}),
-                }))
-              }}
-            />
-          }
-          label={
-            <Typography variant="caption">{t('vdc.quotaUnlimited')}</Typography>
-          }
-          sx={{ minWidth: 120 }}
+      <Box sx={QUOTA_ROW_SX}>
+        <QuotaRowLead
+          label={label}
+          checked={unlimited}
+          caption={t('vdc.quotaUnlimited')}
+          onChange={(v) => {
+            setForm((f) => ({
+              ...f,
+              [unlimitedKey]: v,
+              ...(v ? { [valueKey]: '' } : {}),
+            }))
+          }}
         />
         <TextField
           type="number"
@@ -1828,11 +1855,11 @@ export default function VdcTab() {
           disabled={unlimited}
           error={overCap}
           helperText={overCap ? t('vdc.quotaExceedsCluster', { total: cluster!.total, unit: cluster!.unit }) : undefined}
-          sx={{ width: 120 }}
+          sx={QUOTA_INPUT_SX}
           slotProps={{ htmlInput: { min: 0, max: cluster?.total } }}
         />
         {cluster && cluster.total > 0 && (
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ ml: 'auto', minWidth: 220 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={QUOTA_TRAIL_SX}>
             <LinearProgress
               variant="determinate"
               value={pct}
@@ -2070,11 +2097,29 @@ export default function VdcTab() {
           }
         />
         <Tab
+          value="evpn"
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-share-line" style={{ fontSize: 18 }} />
+              {t('vdc.evpn.title')}
+            </Box>
+          }
+        />
+        <Tab
           value="usage-history"
           label={
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <i className="ri-line-chart-line" style={{ fontSize: 18 }} />
               {t('vdcUsageHistory.title')}
+            </Box>
+          }
+        />
+        <Tab
+          value="moves"
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-arrow-left-right-line" style={{ fontSize: 18 }} />
+              {t('moveVdc.settings.title')}
             </Box>
           }
         />
@@ -2091,12 +2136,14 @@ export default function VdcTab() {
 
       {activeSection === 'policies' && <StoragePoliciesSection connections={connections} />}
       {activeSection === 'networks' && <TenantNetworksSection tenants={tenants} vdcs={vdcs} connections={connections} />}
+      {activeSection === 'evpn' && <EvpnZonesSection connections={connections} />}
       {activeSection === 'usage-history' && (
         <>
           <VdcUsageHistorySettings />
           <DeletedVdcUsageHistory />
         </>
       )}
+      {activeSection === 'moves' && <VdcMoveSettings />}
       {activeSection === 'help' && <VdcHelpSection />}
 
       {activeSection === 'vdcs' && (
@@ -2940,6 +2987,46 @@ export default function VdcTab() {
                     </Stack>
                   </Box>
 
+                  {/* Shared EVPN zone (#1334): the tenant creates networks there
+                      that reach its other vDCs attached to the same zone. */}
+                  {(() => {
+                    const clusterId = editingVdc?.connectionId ?? form.connectionId
+                    const offered = evpnZones.filter(z => z.members.some(m => m.connectionId === clusterId))
+                    if (offered.length === 0 && !evpnZoneId) return null
+                    return (
+                      <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                        <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <i className="ri-share-line" />
+                          {t('vdc.evpn.vdcTitle')}
+                          {hintIcon(t('vdc.evpn.vdcHint'), false, true)}
+                        </Typography>
+                        <Stack spacing={1.5} sx={{ mt: 2 }}>
+                          <TextField
+                            select
+                            size="small"
+                            fullWidth
+                            sx={SMALL_SELECT_SX}
+                            label={t('vdc.evpn.vdcZone')}
+                            value={evpnZoneId}
+                            onChange={(e) => { setEvpnZoneId(e.target.value); if (!e.target.value) setOwnVxlanZone(true) }}
+                          >
+                            <MenuItem value="">{t('vdc.evpn.vdcZoneNone')}</MenuItem>
+                            {offered.map((z) => (<MenuItem key={z.id} value={z.id}>{z.name}</MenuItem>))}
+                          </TextField>
+                          {!editingVdc && evpnZoneId && (
+                            <FormControlLabel
+                              control={<Switch checked={ownVxlanZone} onChange={(e) => setOwnVxlanZone(e.target.checked)} />}
+                              label={t('vdc.evpn.vdcOwnZone')}
+                            />
+                          )}
+                          {editingVdc && !editingVdc.sdnZoneName && (
+                            <Alert severity="info" sx={{ py: 0 }}>{t('vdc.evpn.vdcNoOwnZone')}</Alert>
+                          )}
+                        </Stack>
+                      </Box>
+                    )
+                  })()}
+
                   {/* VXLAN transport (#899): how the tenant zone reaches its peers */}
                   <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
                     <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" useFlexGap spacing={1.5}>
@@ -3499,7 +3586,7 @@ export default function VdcTab() {
           </TabPanel>
 
           {/* Quotas */}
-          <TabPanel value={dialogTab} index={4}>
+          <TabPanel value={dialogTab} index={QUOTAS_TAB}>
               <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <i className="ri-bar-chart-box-line" />
                 {t('vdc.quotas')}
@@ -3519,6 +3606,8 @@ export default function VdcTab() {
               {renderQuotaField(t('vdc.maxBackups'), 'maxBackups', 'unlimitedBackups')}
 
               {renderQuotaField(t('vdc.maxVnets'), 'maxVnets', 'unlimitedVnets')}
+
+              <VdcGpuQuotaEditor ref={gpuQuotaRef} vdcId={editingVdc?.id ?? null} onInvalidChange={setGpuQuotaInvalid} />
           </TabPanel>
         </DialogContent>
         <DialogActions>
@@ -3549,7 +3638,9 @@ export default function VdcTab() {
               )) ||
               // One vDC per (tenant, connection): unreachable through the
               // filtered picker — defense-in-depth only.
-              occupiedConnectionIds.has(form.connectionId)
+              occupiedConnectionIds.has(form.connectionId) ||
+              // A GPU contingent count out of range.
+              gpuQuotaInvalid
             }
           >
             {saving ? t('vdc.saving') : editingVdc ? t('common.update') : t('common.create')}

@@ -60,6 +60,21 @@ describe('sign-in path (user present) — MUST NEVER THROW', () => {
     })
   })
 
+  it('treats a tenant IdP sign-in as OIDC and keeps its id_token for the IdP logout (issue #1289)', async () => {
+    createSessionMock.mockResolvedValue('tenant-sid')
+    loadJwtContextMock.mockResolvedValue({ tenantId: 't-acme', tenantEnabled: true, mustEnroll2fa: false })
+    const token = await jwtCb({
+      token: {},
+      user: { id: 'u2', email: 'a@acme', name: 'A', role: 'tenant_viewer' },
+      account: { provider: 'oidc-t-acme', id_token: 'tenant.id.token' },
+    })
+
+    expect(token.authProvider).toBe('oidc')
+    expect(createSessionMock).toHaveBeenCalledExactlyOnceWith({
+      userId: 'u2', ipAddress: '10.0.0.9', userAgent: 'UA/1', idToken: 'tenant.id.token',
+    })
+  })
+
   it('mints a sid and authAt, records the origin and passes a null idToken for credentials', async () => {
     createSessionMock.mockResolvedValue('new-sid')
     const token = await jwtCb({

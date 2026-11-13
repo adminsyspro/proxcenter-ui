@@ -10,6 +10,20 @@
 import { NextResponse } from "next/server"
 
 import { SENSITIVE_NIC_PERMISSIONS } from './nicPermissions'
+import { PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS } from './roleIds'
+import { isRoleAvailableInTenant } from './rolePublication'
+
+/**
+ * Prisma `select` fragment carrying what isRoleAvailableInTenant reads, with
+ * the publications pre-filtered to the one tenant being resolved.
+ */
+export const ROLE_AVAILABILITY_SELECT = (tenantId: string) => ({
+  isSystem: true,
+  tenantId: true,
+  audience: true,
+  publishAll: true,
+  publications: { where: { tenantId }, select: { tenantId: true } },
+})
 
 import { prisma } from "@/lib/db/prisma"
 import { getPrincipal, rejectionToResponse, type Principal } from "@/lib/auth/principal"
@@ -30,6 +44,7 @@ import {
   isStorageVisible,
   filterStorageDataForRbac,
   tokenInfraScope,
+  emptyDenyInfraScope,
   type RbacInfraScope,
   type ScopePermissionFilter,
 } from './infraScope'
@@ -149,6 +164,7 @@ async function loadUserGrants(userId: string, tenantId: string): Promise<LoadedG
           select: {
             defaultScopes: true,
             permissions: { select: { permission: { select: { name: true } } } },
+            ...ROLE_AVAILABILITY_SELECT(tenantId),
           },
         },
       },
@@ -179,6 +195,9 @@ async function loadUserGrants(userId: string, tenantId: string): Promise<LoadedG
   }
 
   for (const r of roleGrants) {
+    // A row whose role is not (or no longer) published to this tenant grants
+    // nothing (ui#1336): unpublishing takes effect at the next request.
+    if (!isRoleAvailableInTenant(r.role, tenantId)) continue
     // "inherit" assignments expand into the role's default scopes (issue #383);
     // every other scope passes through unchanged. The role's permissions are
     // attached to each resolved scope entry.
@@ -218,11 +237,44 @@ export function grantsPermission(grantedSet: Set<string>, requested: string): bo
 }
 
 /**
+ * Permissions that are inherently tenant/platform-wide: managing users, roles,
+ * settings, tenants, API tokens, audit and compliance. A resource-less check of
+ * one of these is an administrative verdict over the WHOLE tenant, so it must be
+ * satisfied only by a `global` grant — never by a narrow node/vm/pool/tag/
+ * storage grant. Without this, `scopeMatches` returns true for ANY scope when no
+ * resource is named (the "no resource filter → include all" branch), so a role
+ * scoped to a single node or vDC pool (the exact shape the SSO group mapping
+ * produces) would pass `admin.users` / `admin.rbac` / `admin.settings` and take
+ * over the whole tenant, or every tenant from the provider view.
+ */
+const GLOBAL_SCOPE_PERMISSIONS: ReadonlySet<string> = new Set([
+  "admin.users",
+  "admin.rbac",
+  "admin.settings",
+  "admin.audit",
+  "admin.compliance",
+  "admin.tenants",
+  "admin.apitokens",
+  "admin.identity",
+])
+
+/**
+ * Whether a resource-less check of `permission` needs a `global` grant: the
+ * tenant-wide admin permissions above and their read-only children
+ * (`admin.users.view`, ...), which are no less tenant-wide for being reads.
+ */
+export function isGlobalScopePermission(permission: string): boolean {
+  if (GLOBAL_SCOPE_PERMISSIONS.has(permission)) return true
+  const parent = permission.split(".").slice(0, 2).join(".")
+  return parent !== permission && GLOBAL_SCOPE_PERMISSIONS.has(parent)
+}
+
+/**
  * Sync predicate over preloaded grants. Equivalent to one `hasPermission`
  * check but with zero DB calls — meant to be invoked in a tight loop after
  * a single `loadUserGrants` call.
  */
-function checkGrants(
+export function checkGrants(
   grants: LoadedGrants,
   permission: string,
   resourceType?: string,
@@ -230,8 +282,16 @@ function checkGrants(
   resourceMeta?: { tags?: string[]; pool?: string },
 ): boolean {
   if (grants.superAdmin) return true
+  // A resource-less check of a tenant-wide admin permission demands a global
+  // grant: a narrow scope must never stand in for "across the whole tenant".
+  const requireGlobalGrant =
+    !resourceType && !resourceId && isGlobalScopePermission(permission)
   for (const g of grants.byScope) {
     if (!grantsPermission(g.permissions, permission)) continue
+    if (requireGlobalGrant) {
+      if (g.scopeType === "global") return true
+      continue
+    }
     if (scopeMatches(g.scopeType, g.scopeTarget, resourceType, resourceId, resourceMeta)) {
       return true
     }
@@ -252,38 +312,7 @@ export async function isUserSuperAdmin(userId: string): Promise<boolean> {
   return !!row
 }
 
-/**
- * Role IDs that must stay hidden from non-super-admin callers and may not be
- * assigned by anyone other than a super admin. Both grant wildcard permissions
- * (see seed in prisma/seed.ts); exposing either to a tenant admin lets them
- * escalate to full cluster access.
- */
-export const PROTECTED_ROLE_IDS = ["role_super_admin", "role_provider_admin"] as const
-
-/**
- * Roles meant for the provider tenant (or single-tenant Community installs)
- * and that grant `automation.view` (DRS / Site Recovery / Network Security /
- * Flows / Resources). Assigning them inside a non-default tenant unlocks
- * orchestration pages that Tenant Admin explicitly omits — see seed.ts where
- * role_tenant_admin's permission list comments why `automation.*` is dropped.
- *
- * Enforcement is twofold:
- *  - server-side: POST/PATCH /api/v1/rbac/assignments refuse to bind any of
- *    these to a tenantId other than `default` (see DEFAULT_TENANT_ID).
- *  - client-side: /security/rbac filters them out of the role dropdown when
- *    the target tenant isn't `default`.
- *
- * role_vm_user has no automation perms but stays here because it belongs to
- * the same legacy "global" role family — tenant operators should use the
- * tenant_* taxonomy (role_tenant_admin / role_tenant_operator /
- * role_tenant_viewer) which is the supported surface for vDC tenants.
- */
-export const PROVIDER_ONLY_ROLE_IDS = [
-  "role_operator",
-  "role_vm_admin",
-  "role_viewer",
-  "role_vm_user",
-] as const
+export { PROTECTED_ROLE_IDS, PROVIDER_ONLY_ROLE_IDS }
 
 /**
  * Check if a user holds any protected role (super_admin or provider_admin).
@@ -509,6 +538,7 @@ export const PERMISSIONS = {
   VM_BACKUP: "vm.backup",
   VM_CLONE: "vm.clone",
   VM_MIGRATE: "vm.migrate",
+  VM_MOVE_VDC: "vm.move_vdc",
   VM_CONFIG: "vm.config",
   VM_CONFIG_MEDIA: "vm.config.media",
   VM_CONFIG_NIC_LINK: "vm.config.nic.link",
@@ -568,10 +598,21 @@ export const PERMISSIONS = {
   ADMIN_USERS: "admin.users",
   ADMIN_RBAC: "admin.rbac",
   ADMIN_SETTINGS: "admin.settings",
+  // Read-only children of the admin rights (issue #1360): implied by their
+  // parent, grantable on their own, and the only keys an API read scope maps.
+  ADMIN_USERS_VIEW: "admin.users.view",
+  ADMIN_RBAC_VIEW: "admin.rbac.view",
+  ADMIN_SETTINGS_VIEW: "admin.settings.view",
+  ADMIN_TENANTS_VIEW: "admin.tenants.view",
+  // Child of admin.settings that the vdcs:write API scope maps (issue #1360):
+  // the vDC lifecycle, GPU quota, storage policies and shared EVPN zones.
+  ADMIN_SETTINGS_VDCS: "admin.settings.vdcs",
   ADMIN_AUDIT: "admin.audit",
   ADMIN_COMPLIANCE: "admin.compliance",
   ADMIN_TENANTS: "admin.tenants",
   ADMIN_APITOKENS: "admin.apitokens",
+  // A tenant manages its own identity provider (issue #1289).
+  ADMIN_IDENTITY: "admin.identity",
 
   // SDN / VNet
   SDN_VNET_VIEW: "sdn.vnet.view",
@@ -725,6 +766,9 @@ export async function holdsBroadPermission(
   if (grants.superAdmin) return true
   const holding = grants.byScope.filter(g => grantsPermission(g.permissions, permission))
   if (holding.some(g => g.scopeType === "global")) return true
+  // A tenant-wide admin right is never made broad by connection grants: a
+  // token perimeter does not narrow a list of users, roles or tenants.
+  if (isGlobalScopePermission(permission)) return false
   if (!connectionIds || connectionIds.length === 0) return false
   return connectionIds.every(id =>
     holding.some(g => g.scopeType === "connection" && g.scopeTarget === id),
@@ -1007,9 +1051,14 @@ export async function getRbacInfraScope(
  */
 export async function getCurrentRbacInfraScope(permission?: ScopePermissionFilter): Promise<RbacInfraScope | null> {
   const ctx = await getRBACContext()
-  if (!ctx || ctx.isAdmin) return null
+  // No principal resolved (e.g. a rejected `Bearer pxc_` sent alongside a
+  // session cookie): deny everything. Returning null here would mean
+  // "unrestricted" and silently lift the aggregate-route RBAC mask — only a
+  // genuine super admin or global grant is unrestricted.
+  if (!ctx) return emptyDenyInfraScope()
+  if (ctx.isAdmin) return null
   const principal = ctx.principal ?? ctx.userId
-  if (!principal) return null
+  if (!principal) return emptyDenyInfraScope()
   return getRbacInfraScope(principal, ctx.tenantId, permission)
 }
 

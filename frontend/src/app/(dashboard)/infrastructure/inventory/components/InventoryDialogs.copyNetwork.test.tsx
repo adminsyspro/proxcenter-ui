@@ -7,6 +7,7 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { cleanup } from '@testing-library/react'
+import { SWRConfig } from 'swr'
 import { renderWithProviders, screen, waitFor, fireEvent, within } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 import { connections, nodes, pools, networkChoices, vmStorage, vdcs } from '@/__tests__/fixtures/pveProvisioning'
@@ -454,6 +455,15 @@ describe('bulk concurrency (roadmap#53)', () => {
     // Every VM starts queued: the server starts them two at a time.
     const jobs = setBulkMigJobs.mock.calls.at(-1)?.[0]
     expect(jobs.map((j: any) => j.status)).toEqual(['queued', 'queued', 'queued'])
+  })
+
+  it('goes up to the limit of the target cluster and says how many run per node (ui#1332)', async () => {
+    server.use(http.get(`*/api/v1/connections/${CONN_ID}`, () => HttpResponse.json({ data: { id: CONN_ID, migrationMaxParallel: 12, migrationMaxPerNode: 3 } })))
+    // The shared test SWRConfig skips the fetch on mount: this test needs the target connection read.
+    renderWithProviders(<SWRConfig value={{ revalidateOnMount: true }}><Harness bulk overrides={{ bulkMigHostInfo: HOST, bulkMigSelected: new Set(['1', '2', '3']) }} /></SWRConfig>)
+    const slider = (await screen.findByTestId('bulk-concurrency-slider')).querySelector('input[type="range"]') as HTMLInputElement
+    await waitFor(() => expect(slider.max).toBe('12'))
+    expect(screen.getByTestId('bulk-concurrency-limits').textContent).toBe('At most 3 per target node and 12 into this cluster, all bulk and single migrations included. Change these limits in Settings > Connections.')
   })
 
   it('sizes the temporary storage need to the N biggest VMs running at once', async () => {

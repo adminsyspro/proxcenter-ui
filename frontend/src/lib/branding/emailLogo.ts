@@ -9,8 +9,6 @@
 // cannot decode, or a corrupt file), the slot is emptied rather than left
 // holding the previous logo, and the emails show the brand name as text.
 
-import sharp from 'sharp'
-
 import { prisma } from '@/lib/db/prisma'
 
 import { deleteAsset, getAsset, putAsset } from './assetStore'
@@ -26,8 +24,36 @@ const EMAIL_LOGO_MAX_WIDTH = 400
 // Rasterises an SVG at a resolution that survives the resize to 80 px.
 const SVG_DENSITY = 300
 
+type Sharp = typeof import('sharp').default
+
+let sharpLoad: Promise<Sharp | null> | undefined
+
+// sharp is loaded on first use, never when this module is imported: its
+// prebuilt Linux x64 binaries refuse a CPU without x86-64-v2 (a Proxmox VM
+// left on the kvm64 CPU type), and a static import took the whole server
+// boot down with it. Without sharp no copy is made and the emails show the
+// brand name.
+function loadSharp(): Promise<Sharp | null> {
+  sharpLoad ??= import('sharp').then(
+    mod => mod.default,
+    err => {
+      const reason = err instanceof Error ? err.message.split('\n').slice(0, 2).join(' ') : String(err)
+
+      console.warn(`[branding] email logo copies disabled, sharp cannot be loaded: ${reason}`)
+
+      return null
+    },
+  )
+
+  return sharpLoad
+}
+
 /** Renders `source` as a PNG fitting the email header, or null when it cannot be decoded. */
 export async function renderEmailLogo(source: Buffer): Promise<Buffer | null> {
+  const sharp = await loadSharp()
+
+  if (!sharp) return null
+
   try {
     return await sharp(source, { density: SVG_DENSITY })
       .resize({ width: EMAIL_LOGO_MAX_WIDTH, height: EMAIL_LOGO_HEIGHT, fit: 'inside' })
@@ -63,6 +89,9 @@ export async function syncEmailLogo(tenantId: string, source: Buffer | null): Pr
  * nothing. Returns how many copies were created.
  */
 export async function backfillEmailLogos(): Promise<number> {
+  // Nothing can be rendered: leave the existing copies alone.
+  if (!(await loadSharp())) return 0
+
   const rows = await prisma.uploadedAsset.findMany({
     where: { kind: 'branding', slot: { in: [LOGO_SLOT, EMAIL_LOGO_SLOT] } },
     select: { tenantId: true, slot: true },

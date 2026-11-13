@@ -15,7 +15,8 @@ import { sanitizeV2vRoot } from "@/lib/migration/v2v-root-select"
 import { persistedV2vInputs } from "@/lib/migration/retry-dispatch"
 import { parseNfcConcurrency, NFC_CONCURRENCY_MIN, NFC_CONCURRENCY_MAX } from "@/lib/migration/nfc-progress"
 import { MIGRATION_CPU_TYPES, resolveMigrationCpuType } from "@/lib/migration/cpu-type"
-import { parseHardwareOverrides, parseNicMappings, parseDiskMappings, isAcceptableCpuType } from "@/lib/migration/target-overrides"
+import { findTargetMacConflicts } from "@/lib/migration/mac-conflicts"
+import { parseHardwareOverrides, parseNicMappings, parseDiskMappings, parseMacPolicy, parseDiskOptions, parseNetworkMap, customMacs, isAcceptableCpuType } from "@/lib/migration/target-overrides"
 import { parseZeroRateLimit, ZERO_RATE_LIMIT_MIN_MBPS, ZERO_RATE_LIMIT_MAX_MBPS } from "@/lib/migration/warm/zero-rate"
 import { hasServerFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
@@ -154,9 +155,21 @@ export async function validateMigrationRequest(
   const disksParsed = parseDiskMappings(body.disks)
   if (disksParsed.ok === false) return bad(disksParsed.error)
   const disks = disksParsed.value
+  // MAC policy, disk profile and bulk network table (ui#1330, #1331, #1333).
+  const macPolicyParsed = parseMacPolicy(body.macPolicy)
+  if (macPolicyParsed.ok === false) return bad(macPolicyParsed.error)
+  const macPolicy = macPolicyParsed.value
+  const diskOptionsParsed = parseDiskOptions(body.diskOptions)
+  if (diskOptionsParsed.ok === false) return bad(diskOptionsParsed.error)
+  const diskOptions = diskOptionsParsed.value
+  const networkMapParsed = parseNetworkMap(body.networkMap)
+  if (networkMapParsed.ok === false) return bad(networkMapParsed.error)
+  const networkMap = networkMapParsed.value
+  const macs = customMacs(nics)
+  if (new Set(macs).size !== macs.length) return bad("nics[].mac lists the same MAC address on two adapters")
 
   const unauthorized = await authorizeMigrationTarget({
-    tenantId, sourceConnectionId, targetConnectionId, targetNode, targetVmid, networkBridge, vlanTag, nics,
+    tenantId, sourceConnectionId, targetConnectionId, targetNode, targetVmid, networkBridge, vlanTag, nics, networkMap,
     copyVmk: typeof body.copyVmk === "string" && body.copyVmk !== "" ? body.copyVmk : undefined,
   })
   if (unauthorized) return { ok: false, response: unauthorized }
@@ -239,7 +252,7 @@ export async function validateMigrationRequest(
   // Verify connections exist
   const [sourceConn, pveConn] = await Promise.all([
     prisma.connection.findUnique({ where: { id: sourceConnectionId }, select: { id: true, type: true, subType: true, name: true, baseUrl: true } }),
-    prisma.connection.findUnique({ where: { id: targetConnectionId }, select: { id: true, type: true, name: true } }),
+    prisma.connection.findUnique({ where: { id: targetConnectionId }, select: { id: true, type: true, name: true, baseUrl: true } }),
   ])
 
   const validSourceTypes = ["vmware", "xcpng", "hyperv", "nutanix"]
@@ -255,8 +268,8 @@ export async function validateMigrationRequest(
   if (sourceConn.type === "vmware" && sourceConn.subType === "vcenter") {
     effectiveSourceType = "vcenter"
   }
-  if ((hardware || nics || disks) && effectiveSourceType !== "vmware" && effectiveSourceType !== "vcenter") {
-    return bad("hardware, nics and disks overrides are only supported for VMware sources (ESXi and vCenter)")
+  if ((hardware || nics || disks || networkMap) && effectiveSourceType !== "vmware" && effectiveSourceType !== "vcenter") {
+    return bad("hardware, nics, disks and networkMap overrides are only supported for VMware sources (ESXi and vCenter)")
   }
 
   // Warm migration (CBT) is available for VMware sources (ESXi-direct and
@@ -295,6 +308,17 @@ export async function validateMigrationRequest(
   // Absent means on, the product default; persisted explicitly so the
   // "Cutover now" dialog shows it and a retry replays it.
   const convertGuest = warm ? body.convertGuest !== false : undefined
+
+  // A custom MAC must not already be on a guest of the target cluster
+  // (ui#1330): two guests with one MAC on a bridge break both. One grep on
+  // the target node reads every guest config of the cluster.
+  if (macs.length > 0) {
+    const check = await findTargetMacConflicts(prisma, { connectionId: targetConnectionId, node: targetNode, baseUrl: pveConn.baseUrl }, macs)
+    if (check.ok === false) return bad(`Could not check the custom MAC addresses against the target cluster: ${check.error}`, 502)
+    if (check.conflicts.length > 0) {
+      return bad(`MAC address already used on the target cluster: ${check.conflicts.map(c => `${c.mac} (VM ${c.vmid})`).join(", ")}`, 409)
+    }
+  }
 
   // One migration per source VM at a time (roadmap#23). The warm engine already
   // refuses a second run through its in-memory lock, but only after the job row
@@ -336,6 +360,8 @@ export async function validateMigrationRequest(
         // Review-step overrides (#317), persisted so a retry keeps the same
         // hardware, NIC layout and disk placement.
         ...(hardware && { hardware }), ...(nics && { nics }), ...(disks && { disks }),
+        // MAC policy, disk profile and network table (ui#1330, #1331, #1333).
+        ...(macPolicy && { macPolicy }), ...(diskOptions && { diskOptions }), ...(networkMap && { networkMap }),
         // Source type and virt-v2v inputs (disk paths, vCenter placement, temp
         // storage, root override): persisted so a retry rebuilds the same job.
         sourceType: effectiveSourceType,

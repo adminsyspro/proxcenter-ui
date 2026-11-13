@@ -13,6 +13,8 @@ export function mapCreateVdcError(e: any): { status: number; message: string } {
       message: 'A vDC already exists for this tenant on this cluster (or its slug is already taken).',
     }
   }
+  // Attachment to a shared EVPN zone (#1334).
+  if (msg.startsWith('EVPN zone:')) return mapEvpnZoneError(e)
   if (msg.includes('Cannot shrink VLAN pools')) return { status: 409, message: msg }
   if (msg.startsWith('VLAN pool')) return { status: 400, message: msg }
   if (msg.includes('already has a vDC')) return { status: 409, message: msg }
@@ -59,5 +61,27 @@ export function mapTenantNetworkError(e: any): { status: number; message: string
   if (/^Failed to (create|update|delete) SDN/.test(msg)) return { status: 502, message: msg }
   if (msg.startsWith('vDC not found')) return { status: 404, message: msg }
   if (msg.startsWith('Tenant network:') || msg.startsWith('Tenant not found')) return { status: 400, message: msg }
+  return { status: 500, message: msg }
+}
+
+// EVPN zones (#1334): the module prefixes every business message with
+// "EVPN zone:", the collision audit with "VNI collision:". A lost race on the
+// name, the zone id or the VRF VNI lands as P2002 with no message.
+export function mapEvpnZoneError(e: any): { status: number; message: string } {
+  const msg = e?.message || String(e)
+  if (e?.code === 'P2002') {
+    return { status: 409, message: 'An EVPN zone with this name, Proxmox zone id or VRF VNI already exists.' }
+  }
+  if (msg.startsWith('EVPN zone: not found') || msg.startsWith('VNI collision: network not found')) {
+    return { status: 404, message: msg }
+  }
+  if (msg.startsWith('EVPN zone:') && (msg.includes('already') || msg.includes('still holds') || msg.includes('overlaps') || msg.includes('differs') || msg.includes('still carries') || msg.includes('still attached'))) {
+    return { status: 409, message: msg }
+  }
+  // A Proxmox refusal while staging a controller, a zone or a VNet.
+  if (/^Failed to (create|update|delete) SDN/.test(msg)) return { status: 502, message: msg }
+  if (msg.startsWith('EVPN zone:') || msg.startsWith('VNI collision:')) return { status: 400, message: msg }
+  // The VNI picker of a renumbering answers with its own status.
+  if (e?.name === 'VniError' && typeof e?.status === 'number') return { status: e.status, message: msg }
   return { status: 500, message: msg }
 }

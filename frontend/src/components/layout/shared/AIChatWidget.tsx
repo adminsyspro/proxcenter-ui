@@ -98,7 +98,8 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
   get_ha_status: 'ai.tools.getHaStatus',
   get_host_maintenance: 'ai.tools.getHostMaintenance',
   forecast_capacity: 'ai.tools.forecastCapacity',
-  get_cve_exposure: 'ai.tools.getCveExposure'
+  get_cve_exposure: 'ai.tools.getCveExposure',
+  get_gpus: 'ai.tools.getGpus'
 }
 
 const toolLabel = (t: Translate, name: string) => (TOOL_LABEL_KEYS[name] ? t(TOOL_LABEL_KEYS[name]) : name)

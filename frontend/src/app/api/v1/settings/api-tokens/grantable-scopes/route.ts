@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { getCurrentTenantId, userHasAccessToTenant } from "@/lib/tenant"
 import { holdsWriteScope } from "@/lib/api-tokens/grantable"
-import { ALL_SCOPE_IDS, READ_SCOPE_IDS, WRITE_SCOPE_IDS } from "@/lib/api-tokens/scopes"
+import { ALL_SCOPE_IDS, FLEET_SCOPE_IDS, isCreatorCheckedScope } from "@/lib/api-tokens/scopes"
 
 import { requireApiTokenAdmin } from "../_shared"
 
@@ -23,16 +23,18 @@ export async function GET(req: Request) {
     .map(c => c.trim())
     .filter(Boolean)
 
-  if (ctx.isAdmin) return NextResponse.json({ data: { grantable: [...ALL_SCOPE_IDS] } })
+  // A token restricted to connections never carries a fleet-wide scope.
+  const candidates = connectionIds.length > 0 ? ALL_SCOPE_IDS.filter(s => !FLEET_SCOPE_IDS.includes(s)) : ALL_SCOPE_IDS
+  if (ctx.isAdmin) return NextResponse.json({ data: { grantable: [...candidates] } })
 
   if (!ctx.userId || !(await userHasAccessToTenant(ctx.userId, tenantId))) {
     return NextResponse.json({ error: "Tenant not accessible" }, { status: 403 })
   }
 
   const perimeter = connectionIds.length > 0 ? connectionIds : null
-  const grantable: string[] = [...READ_SCOPE_IDS]
-  for (const scope of WRITE_SCOPE_IDS) {
-    if (await holdsWriteScope(ctx.userId, tenantId, scope, perimeter)) grantable.push(scope)
+  const grantable: string[] = []
+  for (const scope of candidates) {
+    if (!isCreatorCheckedScope(scope) || await holdsWriteScope(ctx.userId, tenantId, scope, perimeter)) grantable.push(scope)
   }
   return NextResponse.json({ data: { grantable } })
 }

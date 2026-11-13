@@ -15,6 +15,7 @@ import { backfillEmailLogos } from '@/lib/branding/emailLogo'
 import { importDiskAssets } from '@/lib/branding/importDiskAssets'
 import { prisma } from '@/lib/db/prisma'
 import { startBatchPump } from '@/lib/migration/batch-scheduler'
+import { startVdcMoveReconciler } from '@/lib/vdc/move/runner'
 import { resolveInstanceId, sweepOrphanedMigrationJobs } from '@/lib/migration/orphan-sweep'
 import { cleanupOrphanedWarmSources } from '@/lib/migration/warm/orphan-cleanup'
 import { startSFlowReconciler } from '@/lib/sflow/reconciler'
@@ -22,6 +23,7 @@ import { startOrchestratorAuditRelay } from '@/lib/syslog/orchestratorRelay'
 import { startCatalogRefresher } from '@/lib/templates/catalogRefresher'
 import { isCatalogAutoUpdateEnabled } from '@/lib/templates/catalogStore'
 import { startVdcUsageSampler } from '@/lib/vdc/usageHistory/sampler'
+import { startGpuUsageSampler } from '@/lib/gpu/billing/sampler'
 import { startTlsListener } from '@/lib/tls/bootstrap'
 import { startTlsReconciler } from '@/lib/tls/reconciler'
 
@@ -117,6 +119,14 @@ export async function registerNode(): Promise<void> {
   }
 
   try {
+    // GPU chargeback (#672): GPU-hours per VM and owner, Enterprise
+    // (gpu_management) only. A database lease lets one replica count.
+    startGpuUsageSampler()
+  } catch (err) {
+    console.error('[startup] GPU usage sampler failed to start (non-fatal):', err)
+  }
+
+  try {
     // Bulk migrations (roadmap#53): starts the queued jobs of every running
     // batch, so a batch carries on after this restart and without the
     // browser that launched it. Every replica starts it; a database lease
@@ -126,6 +136,17 @@ export async function registerNode(): Promise<void> {
     // Boot must never depend on this: the batches stay queued and the next
     // job end, resume or boot pumps them.
     console.error('[startup] migration batch pump failed to start (non-fatal):', err)
+  }
+
+  try {
+    // Moves between vDCs (#1335): resumes the moves whose follower died
+    // (restart, lost replica) so the guest still joins its target vDC. Every
+    // replica starts it; a database lease lets exactly one reconcile.
+    startVdcMoveReconciler()
+  } catch (err) {
+    // Boot must never depend on this: the moves stay in the database and the
+    // next boot resumes them.
+    console.error('[startup] vDC move reconciler failed to start (non-fatal):', err)
   }
 
   try {

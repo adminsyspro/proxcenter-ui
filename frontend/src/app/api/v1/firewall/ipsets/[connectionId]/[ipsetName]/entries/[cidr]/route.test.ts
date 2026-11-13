@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// The IaaS tenant gate is covered by src/lib/tenant/iaasGuard.firewallRoutes.test.ts;
+// the caller here is the provider.
+vi.mock("@/lib/tenant/iaasGuard", () => ({
+  denyIaasTenant: async () => null,
+  resolveCallerInfraScope: async () => ({ ok: true, tenantId: "default", infra: { kind: "provider" } }),
+}))
+
 // The API token guard is covered by routeGuard.test.ts and writeContract.test.ts:
 // pass-through so this file keeps testing the handler, as for a session caller.
 vi.mock('@/lib/api-tokens/routeGuard', () => ({
@@ -37,7 +44,7 @@ describe('DELETE /api/v1/firewall/ipsets/[connectionId]/[ipsetName]/entries/[cid
 
     expect(res.status).toBe(200)
     expect(await readJson<any>(res)).toEqual({ success: true })
-    expect(orchestrator.delete).toHaveBeenCalledWith('/firewall/ipsets/conn-1/blacklist/entries/10.0.0.0%2F8')
+    expect(orchestrator.delete).toHaveBeenCalledWith('/firewall/ipsets/conn-1/blacklist/entries/10.0.0.0%2F8', { encodedSlash: true })
     expect(deleteIPSetEntryMock).not.toHaveBeenCalled()
     expect(getConnectionByIdMock).not.toHaveBeenCalled()
   })

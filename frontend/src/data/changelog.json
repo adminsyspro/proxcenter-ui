@@ -1,5 +1,35 @@
 [
   {
+    "version": "1.4.14",
+    "date": "2026-11-04",
+    "title": "A Ceph cockpit, bulk power actions, multi-node maintenance",
+    "summary": [
+      "The Ceph page becomes a Ceph cockpit: a host map, an OSD table with latency, IOPS and throughput, pools, CRUSH, services and history, at a fraction of the former Proxmox calls. Power actions apply to any selection of guests, across nodes and clusters, and several nodes of a cluster go into maintenance as one drain.",
+      "Requests made with a valid API token answer again after hanging since 1.4.13, and scheduled reports now actually run. Every notification email carries your brand name and logo, pending Proxmox VE updates can be notified, and Inventory > Network lists the guests behind each VNet, bridge and VLAN.",
+      "IaaS tenants no longer reach the provider's cluster and node routes, the AI assistant is off for them, and a guest's backups stay within the tenant's PBS namespaces. A deleted guest no longer comes back after a reload, and a clone sent to another node joins HA."
+    ],
+    "items": [
+      { "type": "new", "text": "Ceph cockpit: host map, OSD table with latency, IOPS and throughput, pools, CRUSH, services and history" },
+      { "type": "new", "text": "Power actions on a selection of guests, across nodes and clusters" },
+      { "type": "new", "text": "Several nodes of a cluster in maintenance as one drain" },
+      { "type": "new", "text": "Notification of the package updates pending on the Proxmox VE nodes" },
+      { "type": "new", "text": "Brand name and logo in every notification email" },
+      { "type": "new", "text": "Inventory > Network lists the guests behind each VNet, bridge and VLAN" },
+      { "type": "improved", "text": "One searchable bridge and VLAN picker in every NIC, create and migration dialog" },
+      { "type": "improved", "text": "Running disk moves show their progress, speed and ETA" },
+      { "type": "improved", "text": "IaaS tenants are kept out of the provider's cluster and node routes, and have no AI assistant" },
+      { "type": "improved", "text": "A guest's backups stay within the tenant's PBS namespaces" },
+      { "type": "fix", "text": "Requests authenticated with a valid API token no longer hang" },
+      { "type": "fix", "text": "Scheduled reports run, with no restart after an edit" },
+      { "type": "fix", "text": "A deleted guest no longer comes back after a reload" },
+      { "type": "fix", "text": "HA is registered on a clone that lands on another node" },
+      { "type": "fix", "text": "PBS backups keep their name from the group notes" },
+      { "type": "fix", "text": "VMware adapters of every model keep their source MAC" },
+      { "type": "fix", "text": "A fresh install sends plain HTTP to HTTPS so sign-in works" },
+      { "type": "fix", "text": "Drains and rolling updates never move a container on local storage" }
+    ]
+  },
+  {
     "version": "1.4.13",
     "date": "2026-11-01",
     "title": "Built-in HTTPS, an AI assistant, Availability & SLA, a capacity cockpit and configuration backup",

@@ -1,4 +1,5 @@
 import { executeSSH } from "@/lib/ssh/exec"
+import { resolveSudo } from "@/lib/ssh/sudo"
 import { safeLog } from "@/lib/log/sanitize"
 import { formatSshEndpoint, resolveNodeSshEndpoint } from "@/lib/ssh/node-endpoint"
 
@@ -31,7 +32,7 @@ export async function runOkToStop(
   const command = okToStopCommand(osdIds)
   try {
     const endpoint = await resolveNodeSshEndpoint(conn, viaNode)
-    console.log(`[${label}] ok-to-stop via SSH on ${safeLog(formatSshEndpoint(endpoint))}: ${safeLog(command)}`)
+    console.log(`[${label}] ok-to-stop via SSH on ${safeLog(formatSshEndpoint(endpoint))}: ${safeLog(resolveSudo(command, false))}`)
     const result = await executeSSH(connId, endpoint, command, 30_000, { readOnly: true })
     if (!result.success) return { verdict: null, error: result.error || "ceph osd ok-to-stop failed" }
     const verdict = parseOkToStop(result.output)

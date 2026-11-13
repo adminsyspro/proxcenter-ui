@@ -27,6 +27,7 @@ vi.mock("@/lib/ssh/node-endpoint", async () => ({
 import { GET, PUT, DELETE } from "./route"
 import { callRoute, readJson } from "@/__tests__/setup/route-test"
 import { PveLicenseExcludedError } from "@/lib/license/exclusions"
+import { asRoot } from "@/lib/ssh/sudo"
 
 const CLUSTER_STATUS = [
   { type: "cluster", name: "lab" },
@@ -83,14 +84,14 @@ describe("Per-host flag set/unset (ui#1164)", () => {
     expect(res.status).toBe(200)
     expect(await readJson(res)).toEqual({ success: true, flag: "noout", host: "pve3", value: false })
     // pve3 is offline in the cluster status: the command goes through pve1.
-    expect(executeSSH).toHaveBeenCalledWith("c1", expect.objectContaining({ host: "ip-of-pve1" }), "ceph osd unset-group noout pve3")
+    expect(executeSSH).toHaveBeenCalledWith("c1", expect.objectContaining({ host: "ip-of-pve1" }), asRoot("ceph osd unset-group noout pve3"))
     expect(pveFetch.mock.calls.map(c => c[1])).toEqual(["/cluster/status"])
   })
 
   it("PUT with a host runs set-group", async () => {
     const res = await callRoute(PUT, { params: { id: "c1" }, method: "PUT", body: { flag: "noin", host: "pve1" } })
     expect(res.status).toBe(200)
-    expect(executeSSH).toHaveBeenCalledWith("c1", expect.objectContaining({ host: "ip-of-pve1" }), "ceph osd set-group noin pve1")
+    expect(executeSSH).toHaveBeenCalledWith("c1", expect.objectContaining({ host: "ip-of-pve1" }), asRoot("ceph osd set-group noin pve1"))
   })
 
   it("400 for a flag set-group does not know, or a host outside the hostname grammar, without SSH", async () => {

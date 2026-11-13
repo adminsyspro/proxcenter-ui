@@ -98,12 +98,14 @@ const LEGACY_REVOKED_TOKEN_ROW = {
 // in beforeEach).
 let tenantsFetchOk = true
 let connectionsFetchOk = true
+let rotateStatus = 200
 let tokensFixture: any[] = []
 let tenantsFixture: any[] = []
 let vdcsFixture: any[] = []
 let connectionsFixture: any[] = []
 
 function resetFixtures() {
+  rotateStatus = 200
   tenantsFetchOk = true
   connectionsFetchOk = true
   tokensFixture = [TOKEN_ROW]
@@ -133,6 +135,11 @@ beforeEach(() => {
         JSON.stringify({ data: { token: { ...TOKEN_ROW, id: 'tok-2' }, secret: 'pxc_SECRETVALUE' } }),
         { status: 201 },
       )
+    }
+    if (url.endsWith('/rotate') && init?.method === 'POST') {
+      if (rotateStatus !== 200) return new Response(JSON.stringify({ error: 'refused' }), { status: rotateStatus })
+      tokensFixture = [{ ...TOKEN_ROW, tokenPrefix: 'pxc_Nn99Ww00' }]
+      return new Response(JSON.stringify({ data: { token: tokensFixture[0], secret: 'pxc_ROTATEDSECRET' } }), { status: 200 })
     }
     if (url.startsWith('/api/v1/settings/api-tokens/') && init?.method === 'DELETE') {
       // The route no longer answers with a revocation stamp: the row is gone.
@@ -430,7 +437,7 @@ describe('ApiTokensTab', () => {
     await waitFor(() => {
       expect(within(dialog).getAllByRole('combobox').length).toBe(1)
     })
-    expect(within(dialog).queryByLabelText(/tenant/i)).not.toBeInTheDocument()
+    expect(within(dialog).queryByLabelText(/^tenant$/i)).not.toBeInTheDocument()
 
     await userEvent.type(within(dialog).getByLabelText(/name/i), 'ci-fallback')
     await userEvent.click(vmsReadButton(dialog))
@@ -535,5 +542,49 @@ describe('ApiTokensTab', () => {
         expect.objectContaining({ method: 'DELETE' }),
       )
     })
+  })
+
+  it('rotates a token after confirmation, shows the new secret once and reloads the list', async () => {
+    renderWithProviders(<ApiTokensTab />)
+    await screen.findByText('pxc_Ab12Cd34')
+    await userEvent.click(screen.getByRole('button', { name: enTokens.rotate }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(enTokens.rotateConfirm)).toBeInTheDocument()
+    expect(vi.mocked(fetch)).not.toHaveBeenCalledWith('/api/v1/settings/api-tokens/tok-1/rotate', expect.anything())
+
+    await userEvent.click(within(dialog).getByRole('button', { name: enTokens.rotate }))
+    expect(await screen.findByText('pxc_ROTATEDSECRET')).toBeInTheDocument()
+    expect(screen.getByText(/never be shown again/i)).toBeInTheDocument()
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith('/api/v1/settings/api-tokens/tok-1/rotate', expect.objectContaining({ method: 'POST' }))
+    expect(await screen.findByText('pxc_Nn99Ww00')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /done/i }))
+    await waitFor(() => expect(screen.queryByText('pxc_ROTATEDSECRET')).not.toBeInTheDocument())
+  })
+
+  it('cancelling the rotation calls nothing', async () => {
+    renderWithProviders(<ApiTokensTab />)
+    await screen.findByText('pxc_Ab12Cd34')
+    await userEvent.click(screen.getByRole('button', { name: enTokens.rotate }))
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: enTokens.dialog.cancel }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(vi.mocked(fetch)).not.toHaveBeenCalledWith('/api/v1/settings/api-tokens/tok-1/rotate', expect.anything())
+  })
+
+  it.each([[403, 'rotateForbidden'], [500, 'rotateError']] as const)('explains a refused rotation (%i) and shows no secret', async (status, key) => {
+    rotateStatus = status
+    renderWithProviders(<ApiTokensTab />)
+    await screen.findByText('pxc_Ab12Cd34')
+    await userEvent.click(screen.getByRole('button', { name: enTokens.rotate }))
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: enTokens.rotate }))
+    expect(await screen.findByText(enTokens[key])).toBeInTheDocument()
+    expect(screen.queryByText('pxc_ROTATEDSECRET')).not.toBeInTheDocument()
+  })
+
+  it('offers no rotation on a legacy revoked row', async () => {
+    tokensFixture = [LEGACY_REVOKED_TOKEN_ROW]
+    renderWithProviders(<ApiTokensTab />)
+    await screen.findByText('pxc_Rr77Vv66')
+    expect(screen.queryByRole('button', { name: enTokens.rotate })).not.toBeInTheDocument()
   })
 })

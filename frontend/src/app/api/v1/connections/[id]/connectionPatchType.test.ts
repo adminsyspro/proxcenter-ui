@@ -83,6 +83,36 @@ describe('PATCH /api/v1/connections/[id] warm zeroing cap (roadmap#45)', () => {
   })
 })
 
+describe('PATCH /api/v1/connections/[id] migration limits (ui#1332)', () => {
+  const patch = async (id: string, body: any) => {
+    const { PATCH } = await import('./route')
+    return callRoute(PATCH, { method: 'PATCH', params: { id }, body })
+  }
+  const limits = { migrationMaxParallel: 12, migrationMaxPerNode: 3, migrationMaxPerSourceHost: 6 }
+
+  it('stores the cluster and per-node limits on a PVE connection, the per-host limit on a VMware one', async () => {
+    findUniqueMock.mockResolvedValue({ type: 'pve' })
+    expect((await patch('pve-1', limits)).status).toBe(200)
+    expect(updateMock.mock.calls[0][0].data).toMatchObject({ migrationMaxParallel: 12, migrationMaxPerNode: 3 })
+    expect(updateMock.mock.calls[0][0].data).not.toHaveProperty('migrationMaxPerSourceHost')
+
+    findUniqueMock.mockResolvedValue({ type: 'vmware' })
+    expect((await patch('vc-1', limits)).status).toBe(200)
+    expect(updateMock.mock.calls[1][0].data).toMatchObject({ migrationMaxPerSourceHost: 6 })
+    expect(updateMock.mock.calls[1][0].data).not.toHaveProperty('migrationMaxParallel')
+  })
+
+  it('puts a limit back to its default with null, and ignores the limits on Community', async () => {
+    findUniqueMock.mockResolvedValue({ type: 'pve' })
+    await patch('pve-1', { migrationMaxPerNode: null })
+    expect(updateMock.mock.calls[0][0].data.migrationMaxPerNode).toBeNull()
+
+    hasServerFeatureMock.mockResolvedValue(false)
+    await patch('pve-1', { ...limits, name: 'x' })
+    expect(updateMock.mock.calls[1][0].data).not.toHaveProperty('migrationMaxParallel')
+  })
+})
+
 describe('PATCH /api/v1/connections/[id] integrity settings (roadmap#1)', () => {
   it('stores the post-copy integrity settings of a PVE connection on Enterprise only', async () => {
     const { PATCH } = await import('./route')

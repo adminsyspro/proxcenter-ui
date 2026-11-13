@@ -35,6 +35,8 @@ import { useTranslations } from 'next-intl'
 
 import type { HaConfig, HaImageSource, HaImageSourceMode } from './useHaConfig'
 import { resolveCompletionTarget } from './haRedirect'
+import HaHostKeyConfirm from './HaHostKeyConfirm'
+import type { SshHostKeyRefusal } from '../hostKeyRefusal'
 
 interface DeployStepEvent {
   step: number
@@ -66,6 +68,8 @@ interface ValidationResult {
   ping: Record<string, boolean>
   // Optional: older orchestrators do not send structured checks.
   checks?: CheckResult[]
+  // Set when the node's SSH host key was refused (never confirmed, or changed).
+  hostKey?: SshHostKeyRefusal
 }
 
 interface ValidationResponse {
@@ -852,6 +856,11 @@ export default function HaDeployWizard({
                 ))}
               </Box>
             )}
+            <HaHostKeyConfirm
+              keys={results.flatMap((r, i) => (r.hostKey ? [{ node: nodes[i]?.name || r.ip, hostKey: r.hostKey }] : []))}
+              onTrusted={handleValidate}
+              disabled={validating}
+            />
             {(['error', 'warning', 'info'] as const).filter(sev => issues[sev].length > 0).map(sev => (
               <Alert key={sev} severity={sev} sx={{ mt: 1.5 }}>
                 {issueTitles[sev] && <Typography variant="body2" sx={{ fontWeight: 600 }}>{issueTitles[sev]}</Typography>}

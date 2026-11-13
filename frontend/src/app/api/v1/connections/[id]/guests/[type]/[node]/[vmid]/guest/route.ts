@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { callGuestAgent } from "@/lib/proxmox/guestAgentCall"
 import { getOsType } from "@/lib/proxmox/guestOs"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
@@ -17,6 +18,34 @@ type OsInfo = {
   name: string | null
   version: string | null
   kernel: string | null
+}
+
+/**
+ * A guest that started less than this many seconds ago may simply not have
+ * its agent up yet: its silence does not start the mute.
+ */
+const AGENT_BOOT_GRACE_S = 120
+
+type AgentConn = Parameters<typeof callGuestAgent>[0]
+
+/**
+ * The network interfaces the guest agent reports, or null when the agent is
+ * not there. It is the first thing asked, alone, and it goes through the
+ * node's pvedaemon slots: PVE waits about three seconds for an agent that is
+ * not running, with a pvedaemon worker held meanwhile, and a node has three
+ * of them. Asking three things at once to a silent agent stalled every other
+ * protected read of the node at each selection of the guest. An agent that
+ * did not answer is then left alone for a while (guestAgentCall.ts).
+ */
+async function agentInterfaces(conn: AgentConn, node: string, vmid: string, uptime: number | undefined): Promise<{ answer: any } | null> {
+  const booting = typeof uptime === "number" && uptime < AGENT_BOOT_GRACE_S
+
+  try {
+    return { answer: await callGuestAgent<any>(conn, node, vmid, "network-get-interfaces", { mute: !booting }) }
+  } catch {
+    // Not running, left alone, or not allowed: no agent data either way.
+    return null
+  }
 }
 
 /**
@@ -68,16 +97,17 @@ export async function GET(_req: Request, ctx: RouteContext) {
     let osInfo: OsInfo | undefined
     let diskUsage: { used: number; total: number } | undefined
     
-    if (type === 'qemu' && status === 'running') {
-      // Récupérer IP et OS info en parallèle
+    const agentConn = { ...conn, id }
+    const interfaces = type === 'qemu' && status === 'running' ? await agentInterfaces(agentConn, node, vmid, uptime) : null
+
+    if (interfaces) {
+      // The agent answered: OS and filesystems in parallel. A command it
+      // lacks or refuses does not start the mute.
       const [ipResult, osInfoResult, fsInfoResult] = await Promise.allSettled([
         // IP
         (async () => {
           try {
-            const agentData = await pveFetch<any>(
-              conn,
-              `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/agent/network-get-interfaces`
-            )
+            const agentData = interfaces.answer
             
             // Chercher la première IP IPv4 non-loopback
             if (agentData?.result) {
@@ -93,16 +123,8 @@ export async function GET(_req: Request, ctx: RouteContext) {
                 }
               }
             }
-          } catch (e: any) {
-            // Distinguer les erreurs de permission (403) des autres erreurs
-            const msg = e?.message || ''
-
-            if (msg.includes('403') || msg.includes('Permission')) {
-              // Permission manquante sur Proxmox (VM.Monitor requis)
-              // Ne pas logger en erreur, c'est une configuration Proxmox
-            } else if (msg.includes('500') && msg.includes('QEMU guest agent is not running')) {
-              // Guest agent non démarré - normal
-            }
+          } catch {
+            // An answer that does not have the expected shape: no address.
           }
 
 
@@ -112,10 +134,7 @@ return undefined
         // OS Info
         (async (): Promise<OsInfo | undefined> => {
           try {
-            const osData = await pveFetch<any>(
-              conn,
-              `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/agent/get-osinfo`
-            )
+            const osData = await callGuestAgent<any>(agentConn, node, vmid, 'get-osinfo', { mute: false })
             
             const result = osData?.result || osData
 
@@ -138,10 +157,7 @@ return undefined
         // Filesystem info
         (async () => {
           try {
-            const fsData = await pveFetch<any>(
-              conn,
-              `/nodes/${encodeURIComponent(node)}/${encodeURIComponent(type)}/${encodeURIComponent(vmid)}/agent/get-fsinfo`
-            )
+            const fsData = await callGuestAgent<any>(agentConn, node, vmid, 'get-fsinfo', { mute: false })
             const filesystems = fsData?.result || []
 
             // Virtual/network filesystem types to exclude -- these are not

@@ -40,6 +40,8 @@ vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: async () => 'default',
   getTenantConnectionIds: async () => new Set(['c1', 'c2']),
   verifyConnectionOwnership: async () => null,
+  // The IaaS gate (lib/tenant/iaasGuard) checks a session still belongs to its tenant.
+  userHasAccessToTenant: async () => true,
   DEFAULT_TENANT_ID: 'default',
 }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: async (id: string) => ({ id, baseUrl: 'https://pve', apiToken: 't' }) }))
@@ -174,7 +176,7 @@ describe('firewall routes with an API token', () => {
     )
 
     expect(res.status).toBe(200)
-    expect(h.orchDelete).toHaveBeenCalledWith('/firewall/ipsets/c1/blocklist/entries/10.0.0.0%2F24')
+    expect(h.orchDelete).toHaveBeenCalledWith('/firewall/ipsets/c1/blocklist/entries/10.0.0.0%2F24', { encodedSlash: true })
   })
 
   it('a double-encoded rule position or alias name is refused 401 before the handler', async () => {

@@ -12,6 +12,8 @@ import { MONITORING_ENTRIES } from "./monitoring"
 import { NETWORK_ENTRIES } from "./network"
 import { POOLS_ENTRIES } from "./pools"
 import { STORAGE_ENTRIES } from "./storage"
+import { ACCESS_ENTRIES, TENANT_ENTRIES, VDC_ENTRIES } from "./tenancy"
+import { ACCESS_WRITE_ENTRIES, VDC_WRITE_ENTRIES, VDC_WRITE_READ_ENTRIES } from "./tenancyWrite"
 import type { AllowlistEntry, HttpMethod } from "./types"
 import { VM_ENTRIES } from "./vms"
 
@@ -24,7 +26,8 @@ export {
 
 export const PUBLIC_API_ALLOWLIST: AllowlistEntry[] = [
   ...MONITORING_ENTRIES, ...VM_ENTRIES, ...BACKUP_ENTRIES, ...STORAGE_ENTRIES, ...HA_ENTRIES, ...POOLS_ENTRIES,
-  ...NETWORK_ENTRIES, ...FIREWALL_ENTRIES,
+  ...NETWORK_ENTRIES, ...FIREWALL_ENTRIES, ...TENANT_ENTRIES, ...VDC_ENTRIES, ...ACCESS_ENTRIES,
+  ...VDC_WRITE_ENTRIES, ...VDC_WRITE_READ_ENTRIES, ...ACCESS_WRITE_ENTRIES,
 ]
 
 const ENTRIES_BY_ID = new Map(PUBLIC_API_ALLOWLIST.map(e => [e.id, e]))

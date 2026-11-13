@@ -157,4 +157,38 @@ describe('RollingUpdateWizard pre-flight findings', () => {
     // Two votes out of the three corosync still expects.
     expect(screen.getByText('2/3')).toBeInTheDocument()
   })
+
+  // #1366: an unreadable repository file used to come with the enterprise
+  // explanation, which sent the operator after the wrong problem.
+  it('explains an unreadable repository file as such, not as an enterprise problem', async () => {
+    const message =
+      'Repository file cannot be read by Proxmox VE: /etc/apt/sources.list.d/proxcenter-nonfree.list: Permission denied (os error 13). The API reads it as www-data: make it world-readable (chmod 644 /etc/apt/sources.list.d/proxcenter-nonfree.list).'
+
+    await runPreflight({
+      can_proceed: false,
+      errors: [`Node nsk-pve101: ${message}`],
+      repo_issues: [{ node: 'nsk-pve101', kind: 'unreadable', message }],
+      cluster_health: { healthy: true, quorum_ok: true, total_nodes: 2, online_nodes: 2, issues: [] },
+    })
+
+    await waitFor(() => expect(screen.getByText(/Its API reads them as the www-data user/)).toBeInTheDocument())
+    expect(screen.queryByText(/Enterprise repositories are enabled without a no-subscription alternative/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the enterprise explanation for an enterprise problem, beside a parse error', async () => {
+    await runPreflight({
+      can_proceed: false,
+      repo_issues: [
+        { node: 'nsk-pve101', kind: 'enterprise', message: 'PVE Enterprise repository is enabled without a no-subscription alternative' },
+        { node: 'nsk-pve102', kind: 'parse', message: 'Repository error: /etc/apt/sources.list.d/pve.sources.BAK: invalid extension' },
+      ],
+      cluster_health: { healthy: true, quorum_ok: true, total_nodes: 2, online_nodes: 2, issues: [] },
+    })
+
+    await waitFor(() =>
+      expect(screen.getByText(/Enterprise repositories are enabled without a no-subscription alternative/)).toBeInTheDocument(),
+    )
+    expect(screen.getByText(/renamed backup such as pve-enterprise.sources.BAK/)).toBeInTheDocument()
+    expect(screen.queryByText(/Its API reads them as the www-data user/)).not.toBeInTheDocument()
+  })
 })

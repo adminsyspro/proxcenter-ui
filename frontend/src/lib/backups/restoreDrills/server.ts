@@ -42,7 +42,7 @@ export async function resolvePbsStorage(match: {
 }): Promise<ResolvedPbsStorage> {
   const pbs = await prisma.connection.findUnique({
     where: { id: match.pbsId },
-    select: { name: true, baseUrl: true, type: true },
+    select: { name: true, baseUrl: true, type: true, fingerprint: true },
   })
   if (pbs?.type !== 'pbs' || !pbs.baseUrl) return fail(404, 'PBS connection not found')
 
@@ -58,6 +58,7 @@ export async function resolvePbsStorage(match: {
 
   const pbsStorage = pickPbsStorage(storages, {
     baseUrl: pbs.baseUrl,
+    fingerprint: pbs.fingerprint,
     datastore: match.datastore,
     namespace: match.namespace,
     node: match.node,

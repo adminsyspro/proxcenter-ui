@@ -38,6 +38,7 @@ import { executeSSH } from '@/lib/ssh/exec'
 import { orchestratorFetch } from '@/lib/orchestrator'
 import { audit } from '@/lib/audit'
 import { saveDesiredSFlowConfig } from '@/lib/sflow/reconciler'
+import { resolveSudo } from '@/lib/ssh/sudo'
 
 const getCurrentTenantIdMock = getCurrentTenantId as any
 const getSessionPrismaMock = getSessionPrisma as any
@@ -245,6 +246,8 @@ describe('POST /sflow/agents — input validation (command injection)', () => {
     { samplingRate: '10; reboot' },
     { samplingRate: 0 },
     { samplingRate: 1.5 },
+    { samplingRate: 1 },
+    { samplingRate: 63 },
     { pollingInterval: '$(id)' },
     { pollingInterval: 0 },
     { pollingInterval: 999999 },
@@ -268,7 +271,9 @@ describe('GET /sflow/agents: node probing and port map push', () => {
 
   // Dispatch on the command so one mock serves the whole probe sequence.
   function sshByCommand(opts: { macsFrom: string | null; ovsOn: string[]; sflowOn: string[] }) {
-    return async (_conn: string, target: { host: string }, cmd: string) => {
+    return async (_conn: string, target: { host: string }, marked: string) => {
+      // The command as a root account runs it: sudo marks dropped.
+      const cmd = resolveSudo(marked, false)
       const ip = target.host
       if (cmd.includes('/etc/pve/nodes/')) {
         if (opts.macsFrom === null || ip !== opts.macsFrom) return { success: false, output: '', error: 'ssh: unreachable' }
@@ -337,7 +342,7 @@ describe('GET /sflow/agents: node probing and port map push', () => {
 
     // Every probe only reads, so a cluster outside the license is still listed (roadmap#58).
     expect(executeSSHMock.mock.calls.length).toBeGreaterThan(0)
-    for (const call of executeSSHMock.mock.calls) expect(call[4]).toEqual({ readOnly: true })
+    for (const call of executeSSHMock.mock.calls) expect(call[4]).toMatchObject({ readOnly: true })
 
     // One port map push, for the OVS node only, carrying the cluster-wide MAC table.
     const portmapCalls = orchestratorFetchMock.mock.calls.filter((c: any[]) => c[0] === '/sflow/portmap')

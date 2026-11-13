@@ -33,14 +33,20 @@ import { formatSshEndpoint, resolveSshTargetPort, sshTargetHost, type SshTarget 
 import { getNodeSshEndpointForMigration } from "./pve-tasks"
 import { openXcpngSource, type XcpngSource } from "@/lib/xcpng/source"
 import { mapXoToPveConfig, isWindowsXoVm } from "./xcpngConfigMapper"
+import { diskDriveOptions, type MigrationDiskOptions } from "./target-overrides"
 import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
 import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { convertDisksToQcow2 } from "./qcow2-convert"
+import { startMigratedVm } from "./start-migrated-vm"
 import { startJobHeartbeat } from "./job-heartbeat"
 import { interpretPollExit, MAX_CONSECUTIVE_POLL_FAILURES } from "./poll-exit"
 import { startSessionKeepAlive } from "./warm/session-keepalive"
+import { xapiProductName } from "@/lib/xcpng/xapi-client"
+import { neutralizeXenPvDrivers, xenPvLogLine } from "./xen-pv-drivers"
+import { tempDirFilledUp, tempDirFullError, tempSpaceWarning, xcpngTempSpaceFits } from "./xcpng-temp-space"
+import { vtpmCreatedLine, vtpmPreflightWarning } from "./vtpm"
 
 type MigrationStatus = "pending" | "preflight" | "creating_vm" | "transferring" | "configuring" | "converting_disks" | "completed" | "failed" | "cancelled"
 
@@ -50,6 +56,10 @@ interface MigrationConfig {
   targetConnectionId: string
   targetNode: string
   targetStorage: string
+  /** "regenerate": Proxmox assigns every NIC a new MAC (ui#1330). */
+  macPolicy?: "regenerate"
+  /** Profile of the target disks (ui#1331); absent options take the defaults. */
+  diskOptions?: MigrationDiskOptions
   networkBridge: string
   /**
    * Optional 802.1Q VLAN tag (1-4094) appended to net0 as `tag=N`. Empty/undefined
@@ -200,7 +210,9 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     // An XAPI session idles out while curl streams for hours on the PVE node and the
     // export URL dies with it: ping the pool every 5 minutes. XO needs nothing.
     if (src.kind === "xapi") stopSourceKeepAlive = startSessionKeepAlive(() => src.keepAlive(), 5 * 60_000)
-    await appendLog(jobId, `Connecting to ${src.kind === "xapi" ? "XCP-ng pool" : "Xen Orchestra"} at ${src.displayUrl}...`)
+    // XenServer and XCP-ng share XAPI: the log names the product the pool reports.
+    const poolName = src.kind === "xapi" ? `${xapiProductName((await src.listHosts().catch(() => []))[0]?.brand)} pool` : "Xen Orchestra"
+    await appendLog(jobId, `Connecting to ${poolName} at ${src.displayUrl}...`)
 
     // Get XO connection name
     const xoConn = await prisma.connection.findUnique({
@@ -210,7 +222,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
     // Get PVE connection
     const pveConn = await getConnectionById(config.targetConnectionId)
-    await appendLog(jobId, `${src.kind === "xapi" ? "XCP-ng pool" : "XO"} and PVE connections verified`, "success")
+    await appendLog(jobId, `${src.kind === "xapi" ? poolName : "XO"} and PVE connections verified`, "success")
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
@@ -239,6 +251,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         "Offline migration requires the VM to be shut down."
       )
     }
+
+    if (vmConfig.hasVtpm) await appendLog(jobId, vtpmPreflightWarning("xapi"), "warn")
 
     // Check snapshots
     if (vmConfig.snapshotCount > 0) {
@@ -285,7 +299,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     }
     await updateJob(jobId, "creating_vm", { targetVmid })
 
-    const pveParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType)
+    const pveParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, { macPolicy: config.macPolicy })
     await appendLog(jobId, `Creating VM: ${pveParams.name} (${pveParams.ostype}, ${pveParams.bios}, ${pveParams.scsihw})...`)
 
     const createBody = new URLSearchParams({
@@ -306,6 +320,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     if (pveParams.efidisk0) {
       createBody.set("efidisk0", pveParams.efidisk0)
     }
+    if (pveParams.tpmstate0) createBody.set("tpmstate0", pveParams.tpmstate0)
 
     const createResult = await pveFetch<any>(
       pveConn,
@@ -319,6 +334,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       await waitForPveTask(pveConn, config.targetNode, String(createResult))
     }
     await appendLog(jobId, `VM ${targetVmid} created on ${config.targetNode}`, "success")
+    if (pveParams.tpmstate0) await appendLog(jobId, vtpmCreatedLine(config.targetStorage), "info")
 
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
@@ -330,6 +346,9 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     const storageType = storageConfig?.type || "dir"
     const isFileBased = isFileBasedStorage(storageType)
     const importFormat = isFileBased ? "qcow2" : "raw"
+    // Drive options of a disk on `slot` (ui#1331): the job profile, else
+    // discard on a thin storage and iothread on SCSI.
+    const diskDriveOpts = (slot: string): string => diskDriveOptions({ slot, storageType, scsihw: pveParams.scsihw, profile: config.diskOptions })
 
     // Resolve temp directory for VHD downloads.
     // Priority: user-selected tempStorage from the migration dialog.
@@ -350,6 +369,27 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     }
     await executeSSH(config.targetConnectionId, nodeIp, `mkdir -p ${shellEscape(storageTempDir)}`)
     await appendLog(jobId, `Temp directory: ${storageTempDir}`)
+    // Free space of the temp directory, read once: a download that stops after
+    // writing about all of it is reported as the full directory it is
+    // (xcpng-temp-space.ts), and a disk that would not fit fully allocated warns now.
+    const df = await executeSSH(config.targetConnectionId, nodeIp, `df -Pk ${shellEscape(storageTempDir)} | awk 'NR==2{print $4}'`).catch(() => null)
+    const availKB = Number.parseInt((df?.output || "").trim(), 10)
+    const tempAvailBytes = Number.isFinite(availKB) ? availKB * 1024 : null
+    if (tempAvailBytes !== null && !xcpngTempSpaceFits(tempAvailBytes, vmConfig.disks)) {
+      await appendLog(jobId, tempSpaceWarning(storageTempDir, tempAvailBytes, vmConfig.disks), "warn")
+    }
+
+    // A Windows guest from a XAPI pool keeps its Xen PV drivers, which stop it
+    // with 0x0000DEAD (xen.sys) off Xen: they are disabled on the copied boot
+    // disk before the VM can start (xen-pv-drivers.ts).
+    const isWindowsGuest = isWindowsXoVm(vmConfig)
+    async function neutralizeBootDisk(i: number, disk: string, format: "raw" | "qcow2") {
+      if (i !== 0 || !isWindowsGuest) return
+      await appendLog(jobId, "Windows guest: disabling the Xen PV drivers of the VM Tools on the boot disk...")
+      const r = await neutralizeXenPvDrivers({ connectionId: config.targetConnectionId, nodeIp, disk, format })
+      const line = xenPvLogLine(r)
+      await appendLog(jobId, line.msg, line.level)
+    }
 
     // The storage's own volume directory, where a converted image must sit to
     // be adopted by rename (#292). NOT storageTempDir: the operator may have
@@ -384,7 +424,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     async function attachBlockDisk(i: number, volumeId: string) {
       // sata0 for Windows/EFI boot disks (#653), SCSI for data disks.
       const scsiSlot = pveParams.diskSlots[i] ?? (i === 0 ? pveParams.bootDiskSlot : `scsi${i}`)
-      const attachBody = new URLSearchParams({ [scsiSlot]: volumeId })
+      const attachBody = new URLSearchParams({ [scsiSlot]: `${volumeId}${diskDriveOpts(scsiSlot)}` })
       try {
         await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
         await appendLog(jobId, `Disk ${i + 1} attached as ${scsiSlot} (${volumeId})`, "success")
@@ -411,6 +451,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         throw new Error(`Conversion to block device failed: ${convertResult.error || convertResult.output}`)
       }
       await appendLog(jobId, `Conversion to block device complete`, "success")
+      await neutralizeBootDisk(i, devicePath, "raw")
 
       // Unmap RBD if needed
       const allocVol = allocatedVolumes.find(v => v.devicePath === devicePath)
@@ -442,6 +483,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         let downloadSpeed = ""
         let downloadTime = 0
         let pollFailures = 0
+        let lastSize = 0
         const startTime = Date.now()
 
         while (true) {
@@ -460,6 +502,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
             if (pollFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
               await executeSSH(config.targetConnectionId, nodeIp, `pkill -P ${curlPid} 2>/dev/null; kill ${curlPid} 2>/dev/null`).catch(() => {})
               await cleanup()
+              // A full temp directory starves the node's SSH sessions too: say what it is.
+              if (tempDirFilledUp(tempAvailBytes, lastSize)) throw new Error(tempDirFullError(storageTempDir, tempAvailBytes ?? 0, lastSize))
               throw new Error(`Lost contact with the Proxmox node while monitoring the download (${pollFailures} consecutive SSH failures, last: ${poll.reason})`)
             }
             if (pollFailures === 1) {
@@ -474,6 +518,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
 
           const sizeResult = await executeSSH(config.targetConnectionId, nodeIp, `stat -c %s ${shellEscape(`${tmpFile}.vhd`)} 2>/dev/null || echo 0`)
           const currentSize = Number.parseInt(sizeResult.output?.trim() || "0", 10) || 0
+          lastSize = Math.max(lastSize, currentSize)
 
           const elapsed = (Date.now() - startTime) / 1000
           const speedBps = elapsed > 0 ? currentSize / elapsed : 0
@@ -508,6 +553,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
           const httpInfo = httpCode ? ` (HTTP ${httpCode})` : ""
 
           if (exitCode !== 0) {
+            // Retrying into the same full directory only fills it again.
+            if (tempDirFilledUp(tempAvailBytes, lastSize)) { await cleanup(); throw new Error(tempDirFullError(storageTempDir, tempAvailBytes ?? 0, lastSize)) }
             // curl runs with -sS, so its own diagnostic sits in the stats file just
             // before the -w JSON: surface its last lines instead of a bare code.
             const statsTail = (statsContent.output || "").replace(/\{[^{}]*\}/g, "").trim().split("\n").slice(-3).join(" | ").slice(0, 300)
@@ -596,6 +643,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
       }
       await appendLog(jobId, `Conversion to ${importFormat} complete`, "success")
       await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(`${tmpFile}.vhd`)}`)
+      await neutralizeBootDisk(i, `${tmpFile}.${importFormat}`, importFormat)
 
       if (isCancelled(jobId)) throw new Error("Migration cancelled")
 
@@ -619,7 +667,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
         targetVmid: targetVmid!,
         format: importFormat,
         slot: scsiSlot,
-        driveOpts: isFileBased ? ",discard=on" : "",
+        driveOpts: diskDriveOpts(scsiSlot),
         diskLabel: `Disk ${i + 1}`,
         taken: adoptedVolumes,
         onLog: (m, level) => appendLog(jobId, m, level),
@@ -665,12 +713,7 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     // ── STEP 5: Optionally start ──
     if (config.startAfterMigration) {
       await appendLog(jobId, "Starting VM on Proxmox...")
-      await pveFetch<any>(
-        pveConn,
-        `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/status/start`,
-        { method: "POST" }
-      )
-      await appendLog(jobId, "VM started", "success")
+      await startMigratedVm({ conn: pveConn, node: config.targetNode, vmid: targetVmid!, log: (m, l) => appendLog(jobId, m, l), startedMessage: "VM started" })
     }
 
     // ── STEP 6: Optional qcow2 conversion (#595) ──

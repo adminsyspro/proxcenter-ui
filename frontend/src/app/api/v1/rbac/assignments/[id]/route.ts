@@ -1,19 +1,20 @@
 export const dynamic = "force-dynamic"
 // src/app/api/v1/rbac/assignments/[id]/route.ts
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 
-import { getServerSession } from "next-auth"
-
-import { authOptions } from "@/lib/auth/config"
+import { authorizeAdminRead, authorizeAdminWrite, ownRolesError } from "@/lib/auth/actingUser"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { hasPermission, isUserSuperAdmin, isUserProtected, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { isUserSuperAdmin, isUserProtected, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
 import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
+import { canReadRoleAssignments } from "@/lib/rbac/assignmentReadAccess"
+import { isServiceDeskManaged } from "@/lib/rbac/serviceDesk"
 import { roleHasSensitiveNicPermissions } from "@/lib/rbac/nicPermissions"
-import { scopeBreadth, validateAssignmentScope } from "@/lib/rbac/scope-validation"
+import { scopeIncludes, validateAssignmentScope } from "@/lib/rbac/scope-validation"
 import { DEFAULT_TENANT_ID, getCurrentTenantId } from "@/lib/tenant"
 import { demoResponse } from "@/lib/demo/demo-api"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 /**
  * Build the `where` clause for a single-assignment lookup. Provider-tenant
@@ -38,10 +39,10 @@ interface RouteContext {
  */
 async function denyIfAssignmentTouchesProtected(
   assignment: { roleId: string; userId: string } | null,
-  callerUserId: string
+  callerUserId: string | undefined
 ): Promise<NextResponse | null> {
   if (!assignment) return null
-  if (await isUserSuperAdmin(callerUserId)) return null
+  if (callerUserId && (await isUserSuperAdmin(callerUserId))) return null
   if (
     (PROTECTED_ROLE_IDS as readonly string[]).includes(assignment.roleId) ||
     (await isUserProtected(assignment.userId))
@@ -52,16 +53,13 @@ async function denyIfAssignmentTouchesProtected(
 }
 
 // GET /api/v1/rbac/assignments/[id] - Détails d'une assignation
-export async function GET(req: NextRequest, context: RouteContext) {
+async function handleGet(req: Request, context: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const reader = await authorizeAdminRead(PERMISSIONS.ADMIN_RBAC_VIEW)
+    if (reader.denied) return reader.denied
 
     const { id } = await context.params
     const tenantId = await getCurrentTenantId()
@@ -75,13 +73,17 @@ export async function GET(req: NextRequest, context: RouteContext) {
       },
     })
 
-    if (!assignment) {
+    // Without admin.users or admin.rbac (or their .view), the caller's own
+    // assignments only (roadmap#223); a token reached this line through
+    // admin.rbac.view.
+    const selfId = reader.userId
+    if (!assignment || (selfId && assignment.userId !== selfId && !(await canReadRoleAssignments(selfId, tenantId)))) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 })
     }
 
     const superAdminBlock = await denyIfAssignmentTouchesProtected(
       { roleId: assignment.roleId, userId: assignment.userId },
-      session.user.id,
+      reader.userId,
     )
     if (superAdminBlock) return superAdminBlock
 
@@ -114,23 +116,20 @@ return NextResponse.json(
   }
 }
 
+export const GET = withPublicApiGuard("rbac-assignment-get", handleGet)
+
 // DELETE /api/v1/rbac/assignments/[id] - Supprimer une assignation
-async function handleDelete(req: NextRequest, context: RouteContext) {
+async function handleDelete(req: Request, context: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    // A session needs admin.rbac in its tenant; a token needs it from its
+    // rbac:write scope and never acts as a super admin.
+    const writer = await authorizeAdminWrite("admin.rbac")
+    if (writer.denied) return writer.denied
 
     const tenantId = await getCurrentTenantId()
-
-    if (!(await hasPermission({ userId: session.user.id, permission: "admin.rbac", tenantId }))) {
-      return NextResponse.json({ error: "Admin rights required" }, { status: 403 })
-    }
 
     const { id } = await context.params
 
@@ -139,7 +138,7 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
       where: buildAssignmentWhere(id, tenantId),
       include: {
         user: { select: { email: true } },
-        role: { select: { name: true } },
+        role: { select: { name: true, audience: true } },
       },
     })
 
@@ -147,18 +146,24 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 })
     }
 
+    // A provider service-desk row (ui#1336) is changed or revoked by the
+    // provider: from its service desk assignment, or from its SSO mapping.
+    if (isServiceDeskManaged(assignment, tenantId)) {
+      return NextResponse.json(
+        { error: "This assignment is managed by the provider service desk", code: "SERVICE_DESK_MANAGED" },
+        { status: 409 },
+      )
+    }
+
     const superAdminBlock = await denyIfAssignmentTouchesProtected(
       { roleId: assignment.roleId, userId: assignment.userId },
-      session.user.id,
+      writer.userId,
     )
     if (superAdminBlock) return superAdminBlock
 
     // Prevent self-lockout: nobody may revoke their own role.
-    if (assignment.userId === session.user.id) {
-      return NextResponse.json(
-        { error: "You cannot revoke your own roles" },
-        { status: 400 }
-      )
+    if (assignment.userId === writer.selfUserId) {
+      return NextResponse.json({ error: ownRolesError(writer, "revoke") }, { status: 400 })
     }
 
     // Supprimer l'assignation
@@ -168,8 +173,8 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
     await audit({
       action: "rbac_role_revoked",
       category: "security",
-      userId: session.user.id,
-      userEmail: session.user.email,
+      userId: writer.userId,
+      userEmail: writer.userEmail,
       resourceType: "user",
       resourceId: assignment.userId,
       resourceName: assignment.user.email,
@@ -195,22 +200,17 @@ return NextResponse.json(
 }
 
 // PATCH /api/v1/rbac/assignments/[id] - Modifier une assignation
-async function handlePatch(req: NextRequest, context: RouteContext) {
+async function handlePatch(req: Request, context: RouteContext) {
   const demo = demoResponse(req)
   if (demo) return demo
 
   try {
-    const session = await getServerSession(authOptions)
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    // A session needs admin.rbac in its tenant; a token needs it from its
+    // rbac:write scope and never acts as a super admin.
+    const writer = await authorizeAdminWrite("admin.rbac")
+    if (writer.denied) return writer.denied
 
     const tenantId = await getCurrentTenantId()
-
-    if (!(await hasPermission({ userId: session.user.id, permission: "admin.rbac", tenantId }))) {
-      return NextResponse.json({ error: "Admin rights required" }, { status: 403 })
-    }
 
     const { id } = await context.params
     const body = await req.json()
@@ -221,7 +221,7 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
       where: buildAssignmentWhere(id, tenantId),
       include: {
         user: { select: { email: true } },
-        role: { select: { name: true, permissions: { select: { permissionId: true } } } },
+        role: { select: { name: true, audience: true, permissions: { select: { permissionId: true } } } },
       },
     })
 
@@ -229,39 +229,63 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Assignment not found" }, { status: 404 })
     }
 
+    // A provider service-desk row (ui#1336) is changed or revoked by the
+    // provider: from its service desk assignment, or from its SSO mapping.
+    if (isServiceDeskManaged(assignment, tenantId)) {
+      return NextResponse.json(
+        { error: "This assignment is managed by the provider service desk", code: "SERVICE_DESK_MANAGED" },
+        { status: 409 },
+      )
+    }
+
     const superAdminBlock = await denyIfAssignmentTouchesProtected(
       { roleId: assignment.roleId, userId: assignment.userId },
-      session.user.id,
+      writer.userId,
     )
     if (superAdminBlock) return superAdminBlock
 
     // Prevent self-escalation: nobody may change their own role assignment.
-    if (assignment.userId === session.user.id) {
-      return NextResponse.json(
-        { error: "You cannot change your own roles" },
-        { status: 400 }
-      )
+    if (assignment.userId === writer.selfUserId) {
+      return NextResponse.json({ error: ownRolesError(writer, "change") }, { status: 400 })
     }
 
     // A new role obeys the rules of every grant (lib/rbac/assignmentGuards.ts),
     // evaluated in the tenant of the assignment being changed.
-    const callerIsSuperAdmin = await isUserSuperAdmin(session.user.id)
+    const callerIsSuperAdmin = writer.userId ? await isUserSuperAdmin(writer.userId) : false
     if (role_id !== undefined) {
       const guard = await guardRoleAssignment({
-        callerUserId: session.user.id,
+        callerUserId: writer.userId ?? "",
         roleId: role_id,
         targetTenantId: assignment.tenantId,
       })
       if (!guard.ok) return guard.response!
     }
 
-    // A provider admin may still narrow or expire an existing NIC identity
-    // grant; widening or moving it stays reserved to a super admin.
-    const scopeMoves = scope_type !== undefined
-      && (scope_type !== assignment.scopeType || (scope_target ?? null) !== (assignment.scopeTarget ?? null))
+    // The scope this request results in, whatever fields it names: a target
+    // sent alone keeps the type, a type sent alone keeps the target
+    // ("inherit"/"global" drop it). Validated as a whole, so a partial body
+    // obeys the same rules as a full one.
+    const current = { scopeType: assignment.scopeType, scopeTarget: assignment.scopeTarget ?? null }
+    let nextScope: { scopeType: string; scopeTarget: string | null } | null = null
+    if (scope_type !== undefined || scope_target !== undefined) {
+      const check = validateAssignmentScope(
+        scope_type ?? current.scopeType,
+        scope_target !== undefined ? scope_target : current.scopeTarget,
+      )
+      if (!check.ok) {
+        return NextResponse.json({ error: check.error }, { status: 400 })
+      }
+      nextScope = { scopeType: check.scopeType!, scopeTarget: check.scopeTarget ?? null }
+    }
+    const scopeMoves = nextScope !== null
+      && (nextScope.scopeType !== current.scopeType || nextScope.scopeTarget !== current.scopeTarget)
+
+    // A provider admin may still narrow an existing NIC identity grant inside
+    // its current scope, or expire it; widening it or moving it to another
+    // resource stays reserved to a super admin.
     if (!callerIsSuperAdmin && roleHasSensitiveNicPermissions(assignment.role) && scopeMoves
-      && scopeBreadth(scope_type) >= scopeBreadth(assignment.scopeType)) {
-      return NextResponse.json({ error: 'Only a super admin may widen a NIC identity grant' }, { status: 403 })
+      && !scopeIncludes(current, nextScope!)) {
+      return NextResponse.json({ error: 'Only a super admin may widen or move a NIC identity grant' }, { status: 403 })
     }
 
     // Construire le payload Prisma en ne touchant que les champs fournis
@@ -271,18 +295,9 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
       data.roleId = role_id
     }
 
-    if (scope_type !== undefined) {
-      // Validate against the effective target (incoming, else the existing one)
-      // so the shared rule applies; "inherit"/"global" normalize to no target.
-      const targetForCheck = scope_target !== undefined ? scope_target : assignment.scopeTarget
-      const check = validateAssignmentScope(scope_type, targetForCheck)
-      if (!check.ok) {
-        return NextResponse.json({ error: check.error }, { status: 400 })
-      }
-      data.scopeType = check.scopeType
-      data.scopeTarget = check.scopeTarget
-    } else if (scope_target !== undefined) {
-      data.scopeTarget = scope_target || null
+    if (nextScope) {
+      data.scopeType = nextScope.scopeType
+      data.scopeTarget = nextScope.scopeTarget
     }
 
     if (expires_at !== undefined) {
@@ -312,8 +327,8 @@ async function handlePatch(req: NextRequest, context: RouteContext) {
     await audit({
       action: "rbac_assignment_updated",
       category: "security",
-      userId: session.user.id,
-      userEmail: session.user.email,
+      userId: writer.userId,
+      userEmail: writer.userEmail,
       resourceType: "user",
       resourceId: assignment.userId,
       resourceName: assignment.user.email,
@@ -356,5 +371,5 @@ return NextResponse.json(
   }
 }
 
-export const DELETE = withAudit({ category: "security", resourceType: "assignment", resourceParam: "id" }, handleDelete)
-export const PATCH = withAudit({ category: "security", resourceType: "assignment", resourceParam: "id" }, handlePatch)
+export const DELETE = withAudit({ category: "security", resourceType: "assignment", resourceParam: "id" }, withPublicApiGuard("rbac-assignment-delete", handleDelete))
+export const PATCH = withAudit({ category: "security", resourceType: "assignment", resourceParam: "id" }, withPublicApiGuard("rbac-assignment-update", handlePatch))

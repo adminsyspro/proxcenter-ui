@@ -65,6 +65,13 @@ model Connection {
   integrityCheckEnabled  Boolean?
   integrityRegionCount   Int?
   integrityRegionSizeMiB Int?
+  // Bulk migration limits (ui#1332, lib/migration/migration-limits): null =
+  // the default. On a PVE target, migrations running into the cluster at once
+  // and into one of its nodes; on a VMware source, migrations reading from one
+  // of its ESXi hosts. Enterprise.
+  migrationMaxParallel      Int?
+  migrationMaxPerNode       Int?
+  migrationMaxPerSourceHost Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -80,6 +87,7 @@ model Connection {
   providerConnection ProviderConnection?
   licenseMapping     LicenseMapping?
   sdnVlanZones       SdnVlanZone[]
+  sdnEvpnZoneMembers SdnEvpnZoneMember[]
 }
 
 model ManagedHost {
@@ -423,6 +431,13 @@ model User {
   authProvider String    @default("credentials") @map("auth_provider")
   ldapDn       String?   @map("ldap_dn")
   oidcSub      String?   @map("oidc_sub")
+  // Connection the OIDC identity was issued by: "default" for the provider
+  // IdP, the tenant id for a tenant's own IdP (issue #1289). An identity is the
+  // pair (connection, sub), never the subject alone.
+  oidcConnectionId String? @map("oidc_connection_id")
+  // Emergency access: a local password still signs in once the account is
+  // OIDC or LDAP. Set by a super admin, or kept for the last super admin.
+  localLoginAllowed Boolean @default(false) @map("local_login_allowed")
   enabled      Boolean   @default(true)
   lastLoginAt  DateTime? @map("last_login_at")
   createdAt    DateTime  @map("created_at")
@@ -442,7 +457,10 @@ model User {
   permissionsAssigned RbacUserPermission[] @relation("RbacUserPermissionUser")
   permissionsGranted  RbacUserPermission[] @relation("RbacUserPermissionGrantedBy")
   apiTokens           ApiToken[]
+  serviceDeskAssignments        RbacServiceDeskAssignment[] @relation("RbacServiceDeskAssignmentUser")
+  serviceDeskAssignmentsGranted RbacServiceDeskAssignment[] @relation("RbacServiceDeskAssignmentGrantedBy")
 
+  @@unique([oidcConnectionId, oidcSub])
   @@index([tenantId])
   @@map("users")
 }
@@ -612,9 +630,12 @@ model LdapConfig {
   @@map("ldap_config")
 }
 
+// One row per tenant (issue #1289): the row id IS the tenant id, "default"
+// being the provider IdP. A tenant row signs in that tenant's users only.
 model OidcConfig {
   id               String   @id @default("default")
-  tenantId         String   @default("default") @map("tenant_id")
+  tenantId         String   @unique @default("default") @map("tenant_id")
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   enabled          Boolean  @default(false)
   providerName     String   @default("SSO") @map("provider_name")
   issuerUrl        String   @default("") @map("issuer_url")
@@ -635,12 +656,23 @@ model OidcConfig {
   // forceSsoRedirect=true sends /login straight to the IdP.
   showLocalLogin   Boolean  @default(true)  @map("show_local_login")
   forceSsoRedirect Boolean  @default(false) @map("force_sso_redirect")
+  // Linking an existing account found by e-mail. requireVerifiedEmail refuses
+  // an address the IdP does not vouch for (email_verified); off, the link is
+  // made and audited, except for provider-level accounts. idpVerifiesEmail
+  // reads a missing claim as verified, for IdPs that never send it.
+  requireVerifiedEmail Boolean @default(true)  @map("require_verified_email")
+  idpVerifiesEmail     Boolean @default(false) @map("idp_verifies_email")
   // Ordered JSON array of grants: [{ group, tenant, vdc, role }, ...], read top
   // to bottom at login time. Legacy flat objects still read back as entries.
   groupRoleMapping Json     @default("[]") @map("group_role_mapping")
   // How several matching rows combine: "first_match" keeps the topmost row per
   // tenant/vDC, "cumulative" grants every matching role (issue #992).
   groupMappingStrategy String @default("first_match") @map("group_mapping_strategy")
+  // Tenant connections (issue #1289): the provider vouches for the addresses
+  // of this IdP (one it hosts, possibly on its internal network). Off, every
+  // address the server calls must be public HTTPS, checked at each sign-in,
+  // with no outbound proxy. Ignored while the tenant manages its own IdP.
+  trustedEndpoints Boolean @default(false) @map("trusted_endpoints")
   // Outbound HTTP proxy for the server-side calls to the IdP (roadmap#78).
   // Empty: HTTPS_PROXY / HTTP_PROXY from the environment, else direct.
   proxyUrl         String?  @map("proxy_url")
@@ -648,10 +680,12 @@ model OidcConfig {
   proxyPasswordEnc String?  @map("proxy_password_enc")
   // Hosts reached directly, NO_PROXY syntax; NO_PROXY is added to it.
   proxyBypass      String?  @map("proxy_bypass")
+  // Tenant connections only: e-mail domains allowed to sign in. Empty, any
+  // domain is accepted. JSON array of lowercase domains.
+  allowedDomains   Json     @default("[]") @map("allowed_domains")
   createdAt        DateTime @map("created_at")
   updatedAt        DateTime @map("updated_at")
 
-  @@index([tenantId])
   @@map("oidc_config")
 }
 
@@ -674,6 +708,9 @@ model Tenant {
   // left alone. Both set or both NULL (validated in the routes).
   vmidRangeStart Int? @map("vmid_range_start")
   vmidRangeEnd   Int? @map("vmid_range_end")
+  // The provider lets this tenant's admins manage the tenant's own OIDC
+  // connection (issue #1289). Off by default.
+  oidcSelfService Boolean @default(false) @map("oidc_self_service")
   createdBy   String?  @map("created_by")
   createdAt   DateTime @map("created_at")
   updatedAt   DateTime @map("updated_at")
@@ -683,6 +720,8 @@ model Tenant {
   apiTokens ApiToken[]
   tenantNetworks TenantNetwork[]
   catalogGrants  CatalogGrant[]
+  rolePublications RbacRolePublication[]
+  oidcConnection OidcConfig?
 
   @@index([slug])
   @@map("tenants")
@@ -791,14 +830,62 @@ model RbacRole {
   createdAt       DateTime @map("created_at")
   updatedAt       DateTime @map("updated_at")
 
-  permissions RbacRolePermission[]
-  userRoles   RbacUserRole[]
+  // Provider role catalogue (ui#1336). NULL = a role owned by `tenantId` only
+  // (system roles and every custom role created before the catalogue).
+  // "provider": provider tenant only. "service_desk": provider staff working
+  // inside the customer tenants it is published to, assigned by the provider
+  // only. "tenant": published to customer tenants, assignable by their Tenant
+  // Admin. Catalogue roles are owned by the provider tenant (tenantId
+  // "default"); publishAll covers every customer tenant, future ones included,
+  // otherwise `publications` lists them.
+  audience     String?  @map("audience")
+  publishAll   Boolean  @default(false) @map("publish_all")
+
+  permissions  RbacRolePermission[]
+  userRoles    RbacUserRole[]
+  publications RbacRolePublication[]
+  serviceDeskAssignments RbacServiceDeskAssignment[]
 
   @@unique([tenantId, name])
   @@index([name])
   @@index([isSystem])
   @@index([tenantId])
   @@map("rbac_roles")
+}
+
+model RbacRolePublication {
+  roleId   String   @map("role_id")
+  role     RbacRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  tenantId String   @map("tenant_id")
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, tenantId])
+  @@index([tenantId])
+  @@map("rbac_role_publications")
+}
+
+// One service-desk role held by a provider user across several customer
+// tenants (ui#1336). The grant itself is materialised as one RbacUserRole row
+// (id "sd_<assignment id>_<tenant id>") plus a membership per target tenant,
+// kept in step by lib/rbac/serviceDesk.ts whenever the assignment, the role's
+// publication or the tenant list changes. allTenants follows the publication;
+// otherwise tenantIds narrows it.
+model RbacServiceDeskAssignment {
+  id          String    @id
+  userId      String    @map("user_id")
+  user        User      @relation("RbacServiceDeskAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  roleId      String    @map("role_id")
+  role        RbacRole  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  allTenants  Boolean   @default(true) @map("all_tenants")
+  tenantIds   String[]  @default([]) @map("tenant_ids")
+  grantedById String?   @map("granted_by")
+  grantedBy   User?     @relation("RbacServiceDeskAssignmentGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+  grantedAt   DateTime  @map("granted_at")
+  expiresAt   DateTime? @map("expires_at")
+
+  @@unique([userId, roleId])
+  @@index([roleId])
+  @@map("rbac_service_desk_assignments")
 }
 
 model RbacPermission {
@@ -916,6 +1003,10 @@ model Vdc {
   // `platform`: the provider operates the edge, so every network declares
   // its subnet.
   edgeModel              String   @default("tenant") @map("edge_model")
+  // Shared EVPN zone the vDC is attached to (#1334): its tenant creates
+  // networks there that reach its other vDCs attached to the same zone.
+  evpnZoneId             String?  @map("evpn_zone_id")
+  evpnZone               SdnEvpnZone? @relation(fields: [evpnZoneId], references: [id], onDelete: Restrict)
   createdBy      String?  @map("created_by")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @map("updated_at")
@@ -923,6 +1014,7 @@ model Vdc {
   nodes              VdcNode[]
   storages           VdcStorage[]
   quota              VdcQuota?
+  gpuQuotas          VdcGpuQuota[]
   usageCache         VdcUsageCache?
   sharedBridges      VdcSharedBridge[]
   vnets              VdcVnet[]
@@ -940,6 +1032,7 @@ model Vdc {
   @@unique([connectionId, sdnZoneName], map: "idx_vdcs_sdn_zone_name")
   @@index([tenantId])
   @@index([connectionId])
+  @@index([evpnZoneId])
   @@map("vdcs")
 }
 
@@ -1000,6 +1093,22 @@ model VdcQuota {
   updatedAt    DateTime @default(now()) @map("updated_at")
 
   @@map("vdc_quotas")
+}
+
+// Per-profile GPU contingent of a vDC (#672): vGPU profiles or whole cards of a model.
+model VdcGpuQuota {
+  id          String   @id @default(cuid())
+  vdcId       String   @map("vdc_id")
+  vdc         Vdc      @relation(fields: [vdcId], references: [id], onDelete: Cascade)
+  kind        String
+  modelKey    String   @map("model_key")
+  modelName   String   @map("model_name")
+  profileName String   @default("") @map("profile_name")
+  count       Int
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([vdcId, kind, modelKey, profileName])
+  @@map("vdc_gpu_quotas")
 }
 
 model VdcUsageCache {
@@ -1117,6 +1226,11 @@ model TenantNetwork {
   vni         Int      @unique
   // Zone MTU as PVE defines it (#899); every member zone must agree.
   mtu         Int?
+  // Set for a network the tenant created in a shared EVPN zone (#1334): its
+  // members live in that zone, with a VNI of the zone range, and the tenant
+  // manages on which of its vDCs it is present.
+  evpnZoneId  String?      @map("evpn_zone_id")
+  evpnZone    SdnEvpnZone? @relation(fields: [evpnZoneId], references: [id], onDelete: Restrict)
   createdBy   String?  @map("created_by")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @map("updated_at")
@@ -1126,6 +1240,7 @@ model TenantNetwork {
 
   @@unique([tenantId, name])
   @@index([tenantId])
+  @@index([evpnZoneId])
   @@map("tenant_networks")
 }
 
@@ -1197,6 +1312,54 @@ model VdcIpamAllocation {
   @@index([subnetId])
   @@index([connectionId, vmid])
   @@map("vdc_ipam_allocations")
+}
+
+/// A guest moved from one vDC of a tenant to another of its vDCs on another
+/// cluster (#1335). The row outlives the request: the process that started
+/// the copy renews `heartbeat_at` while it watches the Proxmox task, and when
+/// that process dies another replica picks the move up and finishes it
+/// (pool, storage-policy caps, IPAM). vDC ids are kept without a foreign key
+/// on purpose: the history must survive a vDC that is deleted later.
+model VdcMove {
+  id                 String    @id
+  tenantId           String    @map("tenant_id")
+  guestName          String?   @map("guest_name")
+  vmid               Int
+  targetVmid         Int       @map("target_vmid")
+  sourceConnectionId String    @map("source_connection_id")
+  sourceNode         String    @map("source_node")
+  sourceVdcId        String    @map("source_vdc_id")
+  targetConnectionId String    @map("target_connection_id")
+  targetNode         String    @map("target_node")
+  targetVdcId        String    @map("target_vdc_id")
+  // { "<source storage>": "<target storage>" } and { "<source bridge>": "<target bridge>" }
+  storageMap         Json      @map("storage_map")
+  bridgeMap          Json      @map("bridge_map")
+  online             Boolean   @default(false)
+  // Remove the source guest once the copy completed. Always true for a move
+  // between vDCs; the provider's cross-cluster migration may keep the source.
+  deleteSource       Boolean   @default(true) @map("delete_source")
+  // `tenant`: the move action; `provider`: a cross-cluster migration the
+  // provider ran on a guest of a vDC, linked to the tenant's target vDC.
+  origin             String    @default("tenant")
+  // queued -> copying -> finalizing -> done | failed
+  status             String    @default("queued")
+  upid               String?
+  error              String?
+  // Non-blocking findings of the finalisation (an address left to reconfigure, ...).
+  warnings           Json?
+  requestedBy        String?   @map("requested_by")
+  // Replica watching the move and its last sign of life; a stale heartbeat
+  // hands the move to the reconciler of any replica.
+  holder             String?
+  heartbeatAt        DateTime? @map("heartbeat_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
+  finishedAt         DateTime? @map("finished_at")
+
+  @@index([tenantId, status])
+  @@index([status, heartbeatAt])
+  @@map("vdc_moves")
 }
 
 model VdcPbsNamespace {
@@ -1291,6 +1454,52 @@ model SdnVlanZone {
   @@unique([connectionId, bridge])
   @@unique([connectionId, zoneName])
   @@map("sdn_vlan_zones")
+}
+
+// Provider EVPN zone shared between clusters (#1334). One row per zone, one
+// member per cluster carrying it under the same PVE zone id. The BGP side
+// stays in Proxmox: a member only references the EVPN controller it uses.
+model SdnEvpnZone {
+  id          String   @id
+  name        String   @unique
+  description String?
+  // PVE zone id (8 chars at most), identical on every member cluster.
+  zoneName    String   @unique @map("zone_name")
+  // VNI of the zone VRF; never handed to a VNet, on any cluster.
+  vrfVxlan    Int      @unique @map("vrf_vxlan")
+  mtu         Int?
+  // VNIs the VNets of the zone are taken from, reserved on every cluster.
+  vniStart    Int      @map("vni_start")
+  vniEnd      Int      @map("vni_end")
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  members        SdnEvpnZoneMember[]
+  vdcs           Vdc[]
+  tenantNetworks TenantNetwork[]
+
+  @@map("sdn_evpn_zones")
+}
+
+model SdnEvpnZoneMember {
+  id                String      @id
+  zoneId            String      @map("zone_id")
+  zone              SdnEvpnZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  connectionId      String      @map("connection_id")
+  connection        Connection  @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  // EVPN controller of the cluster the zone is bound to.
+  controller        String
+  // True when ProxCenter created the controller, false when it referenced one.
+  controllerCreated Boolean     @default(false) @map("controller_created")
+  // True when the zone already existed on the cluster and was adopted: it is
+  // then left in place when the member is removed.
+  adopted           Boolean     @default(false)
+  createdAt         DateTime    @default(now()) @map("created_at")
+
+  @@unique([zoneId, connectionId])
+  @@index([connectionId])
+  @@map("sdn_evpn_zone_members")
 }
 
 // ─────────────── §1.5 Alerts (legacy frontend system) ───────────────
@@ -1529,22 +1738,31 @@ model NodeGreenConfig {
   @@map("node_green_config")
 }
 
-// TOFU host-key store for the frontend ssh2 path. Mirrors the backend
-// orchestrator's ssh_known_hosts table, which pins the same hosts for the
-// Go paths (and keys them WITHOUT the port, unlike this one). Keyed by
-// "host:port", so two SSH endpoints behind one hostname (NAT, a bastion
-// port-forward) pin separately. The first successful connection pins the
-// key; every subsequent connection verifies it matches. Clearing a pin is
-// the "re-trust" action in Settings > SSH commands, which wipes both
-// stores for a host, every port included.
+// SSH host keys of every endpoint ProxCenter or the orchestrator connects to
+// (PVE nodes, ESXi hosts), shared by both: the orchestrator reads and writes
+// this table in the same database. Keyed by "host:port", so two SSH endpoints
+// behind one hostname (NAT, a bastion port-forward) are told apart.
+//
+// No key is trusted on first use: a key ProxCenter has
+// not seen confirmed is stored in pending_key_data and the connection is
+// refused until an operator confirms its fingerprint. One row per endpoint
+// and key type, because ssh2, Go and OpenSSH do not all negotiate the same
+// host key algorithm. key_data is the trusted key; confirmed_at null on a
+// trusted key means it was pinned automatically before confirmation existed.
 model SshHostKey {
-  id          String   @id @default(cuid())
-  host        String   @unique
-  keyType     String   @map("key_type")
-  keyData     Bytes    @map("key_data")
-  firstSeenAt DateTime @default(now()) @map("first_seen_at")
-  lastUsedAt  DateTime @default(now()) @updatedAt @map("last_used_at")
+  id             String    @id @default(cuid())
+  host           String
+  keyType        String    @map("key_type")
+  keyData        Bytes?    @map("key_data")
+  pendingKeyData Bytes?    @map("pending_key_data")
+  pendingSeenAt  DateTime? @map("pending_seen_at")
+  confirmedAt    DateTime? @map("confirmed_at")
+  confirmedBy    String?   @map("confirmed_by")
+  firstSeenAt    DateTime  @default(now()) @map("first_seen_at")
+  lastUsedAt     DateTime  @default(now()) @updatedAt @map("last_used_at")
 
+  @@unique([host, keyType])
+  @@index([host])
   @@map("ssh_host_keys")
 }
 
@@ -1799,4 +2017,36 @@ model SlaMaintenanceWindow {
 
   @@index([tenantId, startsAt])
   @@map("sla_maintenance_windows")
+}
+
+/// GPU chargeback (#672): how long one VM held one GPU within one hour, split
+/// into running (the VM was started) and reserved (stopped but holding it).
+/// The sampler of lib/gpu/billing adds the time elapsed since its previous
+/// pass to the row of the hour, so a restart or a leader change loses nothing.
+/// The owner (vDC, tenant) and the names are copied as they were, so a month
+/// stays invoiceable after a VM, a vDC or a tenant is deleted.
+model GpuUsageHour {
+  id             String   @id @default(cuid())
+  hour           DateTime
+  connectionId   String   @map("connection_id")
+  connectionName String   @map("connection_name")
+  node           String
+  vmid           Int
+  vmName         String   @map("vm_name")
+  deviceKey      String   @map("device_key")
+  modelKey       String   @map("model_key")
+  modelName      String   @map("model_name")
+  mdev           String?
+  pool           String?
+  vdcId          String?  @map("vdc_id")
+  vdcName        String?  @map("vdc_name")
+  tenantId       String?  @map("tenant_id")
+  tenantName     String?  @map("tenant_name")
+  runningSeconds  Int     @default(0) @map("running_seconds")
+  reservedSeconds Int     @default(0) @map("reserved_seconds")
+
+  @@unique([hour, connectionId, vmid, deviceKey])
+  @@index([hour])
+  @@index([tenantId, hour])
+  @@map("gpu_usage_hours")
 }

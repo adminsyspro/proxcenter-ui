@@ -15,6 +15,8 @@
 import { pveFetch } from '@/lib/proxmox/client'
 import { safeLog } from '@/lib/log/sanitize'
 
+import { FirewallParamError, pveSegment } from './pathParams'
+
 import type { LogPage, LogPageQuery } from './logWindow'
 import type { PveConn } from '@/lib/connections/getConnection'
 import type {
@@ -82,6 +84,34 @@ async function putForm(conn: PveConn, path: string, form: URLSearchParams): Prom
 async function del(conn: PveConn, path: string): Promise<StatusBody> {
   await pveFetch(conn, path, { method: 'DELETE' })
   return { status: 'deleted' }
+}
+
+// ================================================================================
+// PATH HELPERS
+// Every value placed in a PVE API path is checked against its grammar and
+// encoded here, whatever the caller already checked: the path PVE receives
+// never leaves the firewall subtree it was built for.
+// ================================================================================
+
+function nodePath(node: unknown): string {
+  return `/nodes/${pveSegment('node', node)}`
+}
+
+function guestPath(node: unknown, vmType: unknown, vmid: unknown): string {
+  return `${nodePath(node)}/${pveSegment('vmType', vmType)}/${pveSegment('vmid', vmid)}`
+}
+
+/**
+ * An alias, IP set or security group name, or an IP set member, as one path
+ * segment. Names listed by PVE itself come through here too, so the only
+ * values refused are the ones no encoding makes safe: empty and dot segments.
+ */
+function nameSegment(value: string): string {
+  if (typeof value !== 'string' || value === '' || value === '.' || value === '..') {
+    throw new FirewallParamError('Invalid firewall object name')
+  }
+
+  return encodeURIComponent(value)
 }
 
 /** Set a form field only when the value is a non-empty string (Go: `!= ""`). */
@@ -188,11 +218,11 @@ export async function updateAlias(conn: PveConn, name: string, req: UpdateAliasR
   form.set('cidr', req.cidr)
   setIf(form, 'comment', req.comment)
 
-  return putForm(conn, `/cluster/firewall/aliases/${encodeURIComponent(name)}`, form)
+  return putForm(conn, `/cluster/firewall/aliases/${nameSegment(name)}`, form)
 }
 
 export async function deleteAlias(conn: PveConn, name: string): Promise<StatusBody> {
-  return del(conn, `/cluster/firewall/aliases/${encodeURIComponent(name)}`)
+  return del(conn, `/cluster/firewall/aliases/${nameSegment(name)}`)
 }
 
 // ================================================================================
@@ -200,7 +230,7 @@ export async function deleteAlias(conn: PveConn, name: string): Promise<StatusBo
 // ================================================================================
 
 async function getIPSetMembers(conn: PveConn, name: string): Promise<IPSetEntry[]> {
-  return (await pveFetch<IPSetEntry[]>(conn, `/cluster/firewall/ipset/${encodeURIComponent(name)}`)) ?? []
+  return (await pveFetch<IPSetEntry[]>(conn, `/cluster/firewall/ipset/${nameSegment(name)}`)) ?? []
 }
 
 export async function getIPSets(conn: PveConn): Promise<IPSet[]> {
@@ -246,7 +276,7 @@ export async function updateIPSetComment(conn: PveConn, name: string, comment: s
 }
 
 export async function deleteIPSet(conn: PveConn, name: string): Promise<StatusBody> {
-  return del(conn, `/cluster/firewall/ipset/${encodeURIComponent(name)}`)
+  return del(conn, `/cluster/firewall/ipset/${nameSegment(name)}`)
 }
 
 export async function addIPSetEntry(conn: PveConn, ipsetName: string, req: AddIPSetEntryRequest): Promise<StatusBody> {
@@ -256,12 +286,12 @@ export async function addIPSetEntry(conn: PveConn, ipsetName: string, req: AddIP
   setIf(form, 'comment', req.comment)
   if (req.nomatch) form.set('nomatch', '1')
 
-  return postForm(conn, `/cluster/firewall/ipset/${encodeURIComponent(ipsetName)}`, form)
+  return postForm(conn, `/cluster/firewall/ipset/${nameSegment(ipsetName)}`, form)
 }
 
 export async function deleteIPSetEntry(conn: PveConn, ipsetName: string, cidr: string): Promise<StatusBody> {
   // The CIDR contains a slash — encode it like the Go url.PathEscape
-  return del(conn, `/cluster/firewall/ipset/${encodeURIComponent(ipsetName)}/${encodeURIComponent(cidr)}`)
+  return del(conn, `/cluster/firewall/ipset/${nameSegment(ipsetName)}/${nameSegment(cidr)}`)
 }
 
 // ================================================================================
@@ -269,7 +299,7 @@ export async function deleteIPSetEntry(conn: PveConn, ipsetName: string, cidr: s
 // ================================================================================
 
 async function getSecurityGroupRules(conn: PveConn, groupName: string): Promise<FirewallRule[]> {
-  return (await pveFetch<FirewallRule[]>(conn, `/cluster/firewall/groups/${encodeURIComponent(groupName)}`)) ?? []
+  return (await pveFetch<FirewallRule[]>(conn, `/cluster/firewall/groups/${nameSegment(groupName)}`)) ?? []
 }
 
 export async function getSecurityGroups(conn: PveConn): Promise<SecurityGroup[]> {
@@ -298,19 +328,19 @@ export async function createSecurityGroup(conn: PveConn, req: CreateSecurityGrou
 }
 
 export async function deleteSecurityGroup(conn: PveConn, name: string): Promise<StatusBody> {
-  return del(conn, `/cluster/firewall/groups/${encodeURIComponent(name)}`)
+  return del(conn, `/cluster/firewall/groups/${nameSegment(name)}`)
 }
 
 export async function addSecurityGroupRule(conn: PveConn, groupName: string, req: CreateRuleRequest): Promise<StatusBody> {
-  return postForm(conn, `/cluster/firewall/groups/${encodeURIComponent(groupName)}`, ruleToForm(req))
+  return postForm(conn, `/cluster/firewall/groups/${nameSegment(groupName)}`, ruleToForm(req))
 }
 
 export async function updateSecurityGroupRule(conn: PveConn, groupName: string, pos: number | string, req: UpdateRuleRequest): Promise<StatusBody> {
-  return putForm(conn, `/cluster/firewall/groups/${encodeURIComponent(groupName)}/${pos}`, updateRuleToForm(req))
+  return putForm(conn, `/cluster/firewall/groups/${nameSegment(groupName)}/${pveSegment('pos', pos)}`, updateRuleToForm(req))
 }
 
 export async function deleteSecurityGroupRule(conn: PveConn, groupName: string, pos: number | string): Promise<StatusBody> {
-  return del(conn, `/cluster/firewall/groups/${encodeURIComponent(groupName)}/${pos}`)
+  return del(conn, `/cluster/firewall/groups/${nameSegment(groupName)}/${pveSegment('pos', pos)}`)
 }
 
 // ================================================================================
@@ -326,11 +356,11 @@ export async function addClusterRule(conn: PveConn, req: CreateRuleRequest): Pro
 }
 
 export async function updateClusterRule(conn: PveConn, pos: number | string, req: UpdateRuleRequest): Promise<StatusBody> {
-  return putForm(conn, `/cluster/firewall/rules/${pos}`, updateRuleToForm(req))
+  return putForm(conn, `/cluster/firewall/rules/${pveSegment('pos', pos)}`, updateRuleToForm(req))
 }
 
 export async function deleteClusterRule(conn: PveConn, pos: number | string): Promise<StatusBody> {
-  return del(conn, `/cluster/firewall/rules/${pos}`)
+  return del(conn, `/cluster/firewall/rules/${pveSegment('pos', pos)}`)
 }
 
 export async function getClusterOptions(conn: PveConn): Promise<ClusterOptions> {
@@ -346,27 +376,27 @@ export async function updateClusterOptions(conn: PveConn, req: UpdateOptionsRequ
 // ================================================================================
 
 export async function getNodeOptions(conn: PveConn, node: string): Promise<NodeOptions> {
-  return await pveFetch<NodeOptions>(conn, `/nodes/${node}/firewall/options`)
+  return await pveFetch<NodeOptions>(conn, `${nodePath(node)}/firewall/options`)
 }
 
 export async function updateNodeOptions(conn: PveConn, node: string, req: UpdateOptionsRequest): Promise<StatusBody> {
-  return putForm(conn, `/nodes/${node}/firewall/options`, optionsToForm(req))
+  return putForm(conn, `${nodePath(node)}/firewall/options`, optionsToForm(req))
 }
 
 export async function getNodeRules(conn: PveConn, node: string): Promise<FirewallRule[]> {
-  return (await pveFetch<FirewallRule[]>(conn, `/nodes/${node}/firewall/rules`)) ?? []
+  return (await pveFetch<FirewallRule[]>(conn, `${nodePath(node)}/firewall/rules`)) ?? []
 }
 
 export async function addNodeRule(conn: PveConn, node: string, req: CreateRuleRequest): Promise<StatusBody> {
-  return postForm(conn, `/nodes/${node}/firewall/rules`, ruleToForm(req))
+  return postForm(conn, `${nodePath(node)}/firewall/rules`, ruleToForm(req))
 }
 
 export async function updateNodeRule(conn: PveConn, node: string, pos: number | string, req: UpdateRuleRequest): Promise<StatusBody> {
-  return putForm(conn, `/nodes/${node}/firewall/rules/${pos}`, updateRuleToForm(req))
+  return putForm(conn, `${nodePath(node)}/firewall/rules/${pveSegment('pos', pos)}`, updateRuleToForm(req))
 }
 
 export async function deleteNodeRule(conn: PveConn, node: string, pos: number | string): Promise<StatusBody> {
-  return del(conn, `/nodes/${node}/firewall/rules/${pos}`)
+  return del(conn, `${nodePath(node)}/firewall/rules/${pveSegment('pos', pos)}`)
 }
 
 // ================================================================================
@@ -376,27 +406,27 @@ export async function deleteNodeRule(conn: PveConn, node: string, pos: number | 
 // ================================================================================
 
 export async function getVMOptions(conn: PveConn, node: string, vmType: string, vmid: number | string): Promise<VMOptions> {
-  return await pveFetch<VMOptions>(conn, `/nodes/${node}/${vmType}/${vmid}/firewall/options`)
+  return await pveFetch<VMOptions>(conn, `${guestPath(node, vmType, vmid)}/firewall/options`)
 }
 
 export async function updateVMOptions(conn: PveConn, node: string, vmType: string, vmid: number | string, req: UpdateOptionsRequest): Promise<StatusBody> {
-  return putForm(conn, `/nodes/${node}/${vmType}/${vmid}/firewall/options`, optionsToForm(req))
+  return putForm(conn, `${guestPath(node, vmType, vmid)}/firewall/options`, optionsToForm(req))
 }
 
 export async function getVMRules(conn: PveConn, node: string, vmType: string, vmid: number | string): Promise<FirewallRule[]> {
-  return (await pveFetch<FirewallRule[]>(conn, `/nodes/${node}/${vmType}/${vmid}/firewall/rules`)) ?? []
+  return (await pveFetch<FirewallRule[]>(conn, `${guestPath(node, vmType, vmid)}/firewall/rules`)) ?? []
 }
 
 export async function addVMRule(conn: PveConn, node: string, vmType: string, vmid: number | string, req: CreateRuleRequest): Promise<StatusBody> {
-  return postForm(conn, `/nodes/${node}/${vmType}/${vmid}/firewall/rules`, ruleToForm(req))
+  return postForm(conn, `${guestPath(node, vmType, vmid)}/firewall/rules`, ruleToForm(req))
 }
 
 export async function updateVMRule(conn: PveConn, node: string, vmType: string, vmid: number | string, pos: number | string, req: UpdateRuleRequest): Promise<StatusBody> {
-  return putForm(conn, `/nodes/${node}/${vmType}/${vmid}/firewall/rules/${pos}`, updateRuleToForm(req))
+  return putForm(conn, `${guestPath(node, vmType, vmid)}/firewall/rules/${pveSegment('pos', pos)}`, updateRuleToForm(req))
 }
 
 export async function deleteVMRule(conn: PveConn, node: string, vmType: string, vmid: number | string, pos: number | string): Promise<StatusBody> {
-  return del(conn, `/nodes/${node}/${vmType}/${vmid}/firewall/rules/${pos}`)
+  return del(conn, `${guestPath(node, vmType, vmid)}/firewall/rules/${pveSegment('pos', pos)}`)
 }
 
 /** Mirrors the Go LogQuery: PVE counts `limit` from the oldest line, 0 = all. */
@@ -415,7 +445,7 @@ function logQuery(limit: number, window?: LogWindow): string {
 }
 
 export async function getVMFirewallLog(conn: PveConn, node: string, vmType: string, vmid: number | string, limit = 50, window?: LogWindow): Promise<FirewallLogEntry[]> {
-  return (await pveFetch<FirewallLogEntry[]>(conn, `/nodes/${node}/${vmType}/${vmid}/firewall/log?${logQuery(limit, window)}`)) ?? []
+  return (await pveFetch<FirewallLogEntry[]>(conn, `${guestPath(node, vmType, vmid)}/firewall/log?${logQuery(limit, window)}`)) ?? []
 }
 
 /**
@@ -429,7 +459,7 @@ export async function getFirewallLogPage(conn: PveConn, node: string, q: LogPage
 
   if (q.start) params.set('start', String(q.start))
 
-  const path = guest ? `/nodes/${node}/${guest.vmType}/${guest.vmid}/firewall/log` : `/nodes/${node}/firewall/log`
+  const path = guest ? `${guestPath(node, guest.vmType, guest.vmid)}/firewall/log` : `${nodePath(node)}/firewall/log`
   const body = await pveFetch<{ data?: FirewallLogEntry[]; total?: number } | null>(conn, `${path}?${params}`, {}, { envelope: true, slowRead: true })
 
   return { total: Number(body?.total) || 0, lines: body?.data ?? [] }
@@ -471,7 +501,7 @@ function rebuildNicConfig(parts: Map<string, string>): string {
  * `firewall=1` per NIC actually filters the traffic.
  */
 export async function toggleVMNICFirewall(conn: PveConn, node: string, vmType: string, vmid: number | string, enable: boolean): Promise<StatusBody> {
-  const configPath = `/nodes/${node}/${vmType}/${vmid}/config`
+  const configPath = `${guestPath(node, vmType, vmid)}/config`
   const vmConfig = await pveFetch<Record<string, unknown>>(conn, configPath)
 
   const firewallVal = enable ? '1' : '0'

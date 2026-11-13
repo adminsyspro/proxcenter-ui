@@ -1,5 +1,6 @@
 // src/app/api/v1/connections/[id]/route.ts
 import { NextResponse } from "next/server"
+import { migrationLimitFields } from "@/lib/migration/migration-limits"
 
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
@@ -25,6 +26,7 @@ import { normalizeXapiBaseUrl } from "@/lib/xcpng/xapi-client"
 import { hasServerFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
 import { withAudit } from "@/lib/audit/withAudit"
+import { forgetHostKeysOf, hostKeysOwnedBy } from "@/lib/ssh/hostKeyAccess"
 
 /** Warm migration settings are Enterprise (migration feature). */
 const migrationFeatureLicensed = () => hasServerFeature(Features.VMWARE_MIGRATION)
@@ -233,12 +235,16 @@ async function handlePatch(req: Request, ctx: { params: Promise<{ id: string }> 
     // clears it. A Community server ignores it rather than failing the save.
     // The post-copy integrity settings (roadmap#1) follow the same gate; null
     // puts a value back to its default.
+    // The bulk migration limits (ui#1332) follow the same gate: the cluster
+    // and per-node limits of a PVE target, the per-host limit of a VMware source.
     const migrationFields = ['warmZeroRateLimitMBps', 'integrityCheckEnabled', 'integrityRegionCount', 'integrityRegionSizeMiB'] as const
-    if (migrationFields.some(f => body[f] !== undefined) && await migrationFeatureLicensed()) {
+    const limitFieldSent = ([body.migrationMaxParallel, body.migrationMaxPerNode, body.migrationMaxPerSourceHost] as const).some(v => v !== undefined)
+    if ((migrationFields.some(f => body[f] !== undefined) || limitFieldSent) && await migrationFeatureLicensed()) {
       const current = await prisma.connection.findUnique({ where: { id }, select: { type: true } })
       if (current?.type === 'pve') {
         for (const f of migrationFields) if (body[f] !== undefined) data[f] = body[f]
       }
+      Object.assign(data, migrationLimitFields(current?.type, body))
     }
     if (body.sshAuthMethod !== undefined) {
       data.sshAuthMethod = body.sshAuthMethod || null
@@ -412,10 +418,18 @@ async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string }
       }
     }
 
+    // Host keys only this connection used, read while its nodes are still known.
+    const hostKeyHosts = await hostKeysOwnedBy(id).catch(() => [] as string[])
+
     // Option: supprime aussi les hosts gérés liés
     await prisma.managedHost.deleteMany({ where: { connectionId: id } }).catch(() => {})
 
     await prisma.connection.delete({ where: { id } })
+
+    // A host reinstalled and registered again must not meet the old key.
+    await forgetHostKeysOf(hostKeyHosts).catch((e: any) => {
+      console.error(`[connections] host key cleanup after deleting ${id} failed:`, e?.message || e)
+    })
 
     // Invalidate caches after deletion
     invalidateConnectionCache(id)

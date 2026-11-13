@@ -40,7 +40,18 @@ export interface AptRepoError {
  */
 export type RepoIssue =
   | { kind: 'enterprise'; component?: string }
+  | { kind: 'unreadable'; detail: string }
   | { kind: 'parse'; detail: string }
+
+/**
+ * An unreadable file and an unparsable one need different fixes. pveproxy
+ * serves the APT API as www-data, so a list written 0640 under umask 027
+ * answers `Permission denied (os error 13)` there while root reads it fine
+ * (issue #1366, measured on PVE 9).
+ */
+export function repoErrorKind(error: string | undefined): 'unreadable' | 'parse' {
+  return /os error 13|permission denied/i.test(error ?? '') ? 'unreadable' : 'parse'
+}
 
 export interface RepoIssueOptions {
   /**
@@ -52,6 +63,27 @@ export interface RepoIssueOptions {
    * blocks an `apt update` doomed to a 401.
    */
   subscriptionActive?: boolean
+}
+
+export type RepoIssueKind = RepoIssue['kind']
+
+/** Explanation shown above the list, one per kind of problem present. */
+export const REPO_ISSUE_DESCRIPTION_KEY: Record<RepoIssueKind, string> = {
+  enterprise: 'updates.repoIssuesDescription',
+  unreadable: 'updates.repoUnreadableDescription',
+  parse: 'updates.repoParseErrorsDescription',
+}
+
+/**
+ * Kind of a rolling-update preflight repository issue. The orchestrator sends
+ * it; one that predates the field sends only a message, where a PVE file
+ * error starts with "Repository error:" and everything else is an enterprise
+ * repository problem.
+ */
+export function preflightRepoIssueKind(issue: { kind?: string; message?: string }): RepoIssueKind {
+  if (issue.kind === 'enterprise' || issue.kind === 'unreadable' || issue.kind === 'parse') return issue.kind
+
+  return (issue.message ?? '').startsWith('Repository error:') ? repoErrorKind(issue.message) : 'enterprise'
 }
 
 /** Accepts the raw PVE payload or our own normalized `standard_repos` shape. */
@@ -99,7 +131,7 @@ export function computeRepoIssues(payload: any, options: RepoIssueOptions = {}):
   }
 
   for (const e of readRepoErrors(payload)) {
-    issues.push({ kind: 'parse', detail: formatRepoError(e) })
+    issues.push({ kind: repoErrorKind(e?.error), detail: formatRepoError(e) })
   }
 
   return issues

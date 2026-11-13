@@ -6,7 +6,7 @@ const { isSessionTenantDisabledMock } = vi.hoisted(() => ({
 
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
-    user: { findUnique: vi.fn(), update: vi.fn(), create: vi.fn() },
+    user: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn(), create: vi.fn() },
     userTenant: { findFirst: vi.fn(), upsert: vi.fn() },
     rbacUserRole: { findFirst: vi.fn() },
   },
@@ -373,5 +373,96 @@ describe("LDAP authorize records why a sign-in was refused", () => {
     expect(error).toHaveBeenCalled()
     warn.mockRestore()
     error.mockRestore()
+  })
+})
+
+// The local password left on an account that now signs in
+// through OIDC or LDAP is no second way in.
+describe("credentials authorize on an SSO or LDAP account", () => {
+  it.each(["oidc", "ldap"])("refuses the leftover local password of a %s account without checking it", async (provider) => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ ...LOCAL_USER, authProvider: provider, localLoginAllowed: false })
+    ;(prisma.rbacUserRole.findFirst as any).mockResolvedValue(null)
+    ;(verifyPassword as any).mockResolvedValue(true)
+
+    await expect(authorizeOf("credentials")({ email: "a@b.com", password: "old" }, REQ)).rejects.toThrow(
+      /^Invalid credentials$/,
+    )
+    expect(verifyPassword).not.toHaveBeenCalled()
+    expect(burnPasswordCheck).toHaveBeenCalledWith("old")
+    expect(fail).toHaveBeenCalledExactlyOnceWith(false)
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({
+      action: "login_failed",
+      details: { reason: "Local password of an SSO account", provider: "credentials" },
+    }))
+  })
+
+  it("lets an account with emergency access sign in with its local password", async () => {
+    ;(prisma.user.findUnique as any)
+      .mockResolvedValueOnce({ ...LOCAL_USER, authProvider: "oidc", localLoginAllowed: true })
+    ;(verifyPassword as any).mockResolvedValue(true)
+
+    const user = await authorizeOf("credentials")({ email: "a@b.com", password: "right" }, REQ)
+    expect(user.id).toBe("u1")
+    expect(prisma.rbacUserRole.findFirst).not.toHaveBeenCalled()
+  })
+
+  it("keeps the last super admin able to sign in locally and records it as emergency access", async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValueOnce({ ...LOCAL_USER, authProvider: "oidc", localLoginAllowed: false })
+    ;(prisma.rbacUserRole.findFirst as any).mockResolvedValue({ id: "grant-sa" })
+    ;(prisma.user.findFirst as any).mockResolvedValue(null)
+    ;(verifyPassword as any).mockResolvedValue(true)
+
+    const user = await authorizeOf("credentials")({ email: "a@b.com", password: "right" }, REQ)
+    expect(user.id).toBe("u1")
+    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: "u1" }, data: { localLoginAllowed: true } })
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({
+      category: "auth",
+      details: { localLoginAllowed: true, reason: "last_super_admin", provider: "oidc" },
+    }))
+  })
+
+  it("does not grant the last super admin anything on a wrong password", async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValueOnce({ ...LOCAL_USER, authProvider: "oidc", localLoginAllowed: false })
+    ;(prisma.rbacUserRole.findFirst as any).mockResolvedValue({ id: "grant-sa" })
+    ;(prisma.user.findFirst as any).mockResolvedValue(null)
+    ;(verifyPassword as any).mockResolvedValue(false)
+
+    await expect(authorizeOf("credentials")({ email: "a@b.com", password: "bad" }, REQ)).rejects.toThrow(
+      /^Invalid credentials$/,
+    )
+    expect(prisma.user.update).not.toHaveBeenCalled()
+  })
+})
+
+describe("LDAP authorize on an existing local account", () => {
+  const LDAP_OK = {
+    user: { email: "j@d.io", name: "J", avatar: null, dn: "cn=j", groups: [] },
+    failure: null,
+  }
+
+  it("turns it into an LDAP account and drops its local password", async () => {
+    ;(authenticateLdapDetailed as any).mockResolvedValue(LDAP_OK)
+    ;(prisma.user.findUnique as any)
+      .mockResolvedValueOnce({ id: "u2", email: "j@d.io", name: "J", role: "viewer", enabled: true, password: "h", localLoginAllowed: false })
+      .mockResolvedValueOnce({ totpEnabled: false })
+    ;(prisma.rbacUserRole.findFirst as any).mockResolvedValue(null)
+
+    await authorizeOf("ldap")({ username: "jdoe", password: "right" }, REQ)
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "u2" },
+      data: expect.objectContaining({ authProvider: "ldap", password: null }),
+    }))
+  })
+
+  it("keeps the local password of an account with emergency access", async () => {
+    ;(authenticateLdapDetailed as any).mockResolvedValue(LDAP_OK)
+    ;(prisma.user.findUnique as any)
+      .mockResolvedValueOnce({ id: "u2", email: "j@d.io", name: "J", role: "viewer", enabled: true, password: "h", localLoginAllowed: true })
+      .mockResolvedValueOnce({ totpEnabled: false })
+
+    await authorizeOf("ldap")({ username: "jdoe", password: "right" }, REQ)
+    const { data } = (prisma.user.update as any).mock.calls[0][0]
+    expect(data.authProvider).toBe("ldap")
+    expect(data).not.toHaveProperty("password")
   })
 })

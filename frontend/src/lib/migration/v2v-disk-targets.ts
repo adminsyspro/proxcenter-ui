@@ -11,7 +11,7 @@
  * otherwise), or left in the output directory, which the pipeline removes
  * whole. Nothing is moved between storages after the fact.
  */
-import { planDiskTargets, type MigrationDiskMapping } from "./target-overrides"
+import { planDiskTargets, type MigrationDiskMapping, type MigrationDiskOptions } from "./target-overrides"
 
 export interface V2vDiskImport {
   /** Position of the disk in the source VM's disk list, which is also its position in virt-v2v's output. */
@@ -24,6 +24,8 @@ export interface V2vDiskImport {
   slotIndex: number
   /** Source capacity for the integrity check, when the source disk list is known and lines up with the output. */
   capacityBytes?: number
+  /** The operator's options for this disk (ui#1331). */
+  options?: MigrationDiskOptions
 }
 
 export interface V2vImportPlan {
@@ -73,6 +75,7 @@ export function planV2vImports(
       storage: k.storage,
       slotIndex,
       capacityBytes: sizes?.[k.sourceIndex]?.capacityBytes,
+      ...(k.options && { options: k.options }),
     })),
     excluded: plan.excluded.map(i => ({ sourceIndex: i, file: diskFiles[i] })),
   }

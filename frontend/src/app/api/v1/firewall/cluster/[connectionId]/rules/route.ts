@@ -3,13 +3,14 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
-import { verifyConnectionOwnership } from '@/lib/tenant'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { orchestratorPath } from '@/lib/orchestrator/path'
+import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { withAudit } from '@/lib/audit/withAudit'
+import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
 
 // POST /api/v1/firewall/cluster/[connectionId]/rules - Add cluster rule
 async function postHandler(
@@ -18,10 +19,7 @@ async function postHandler(
 ) {
   try {
     const { connectionId } = await params
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
 
     const body = await request.json()
@@ -29,7 +27,7 @@ async function postHandler(
     const orchestrator = getOrchestratorClient()
     const result = await orchestratorOrPve(
       'firewall/cluster/rules',
-      () => orchestrator.post(`/firewall/cluster/${connectionId}/rules`, body),
+      () => orchestrator.post(orchestratorPath`/firewall/cluster/${connectionId}/rules`, body),
       async () => pveDirect.addClusterRule(await getConnectionById(connectionId), body),
     )
 

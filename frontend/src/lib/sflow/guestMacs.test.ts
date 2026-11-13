@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { GUEST_MACS_COMMAND, parseGuestMACs } from "./guestMacs"
+import { resolveSudo } from "@/lib/ssh/sudo"
 
 // Real output, taken from a three node lab, asked of a node hosting no guest.
 // That is the case that broke: the answer covers the whole cluster only because
@@ -26,7 +27,10 @@ describe("GUEST_MACS_COMMAND", () => {
   // (internal/api/ssh_allowlist.go, entry `grep -H "^net" /etc/pve/`). Changing
   // the start of this command silently breaks the feature with a 403.
   it("keeps the prefix the SSH allowlist matches on", () => {
-    expect(GUEST_MACS_COMMAND.startsWith('grep -H "^net" /etc/pve/')).toBe(true)
+    // Root receives it bare, a sudo account behind `sudo -n`, which the
+    // orchestrator strips before matching the allowlist.
+    expect(resolveSudo(GUEST_MACS_COMMAND, false).startsWith('grep -H "^net" /etc/pve/')).toBe(true)
+    expect(resolveSudo(GUEST_MACS_COMMAND, true).startsWith('sudo -n grep -H "^net" /etc/pve/')).toBe(true)
   })
 
   it("cannot fail the whole probe when no config file matches", () => {

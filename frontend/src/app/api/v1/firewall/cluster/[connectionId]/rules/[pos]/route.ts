@@ -3,13 +3,15 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
-import { verifyConnectionOwnership } from '@/lib/tenant'
-import { checkPermission, PERMISSIONS } from '@/lib/rbac'
+import { orchestratorPath } from '@/lib/orchestrator/path'
+import { PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import { firewallParamRefusal } from '@/lib/firewall/pathParams'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { withAudit } from '@/lib/audit/withAudit'
+import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
 
 // PUT /api/v1/firewall/cluster/[connectionId]/rules/[pos] - Update/move cluster rule
 async function putHandler(
@@ -18,18 +20,17 @@ async function putHandler(
 ) {
   try {
     const { connectionId, pos } = await params
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
+    const malformed = firewallParamRefusal({ pos })
+    if (malformed) return malformed
 
     const body = await request.json()
 
     const orchestrator = getOrchestratorClient()
     const result = await orchestratorOrPve(
       'firewall/cluster/rules',
-      () => orchestrator.put(`/firewall/cluster/${connectionId}/rules/${pos}`, body),
+      () => orchestrator.put(orchestratorPath`/firewall/cluster/${connectionId}/rules/${pos}`, body),
       async () => pveDirect.updateClusterRule(await getConnectionById(connectionId), pos, body),
     )
 
@@ -51,17 +52,16 @@ async function deleteHandler(
 ) {
   try {
     const { connectionId, pos } = await params
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
+    const malformed = firewallParamRefusal({ pos })
+    if (malformed) return malformed
 
     const orchestrator = getOrchestratorClient()
 
     await orchestratorOrPve(
       'firewall/cluster/rules',
-      () => orchestrator.delete(`/firewall/cluster/${connectionId}/rules/${pos}`),
+      () => orchestrator.delete(orchestratorPath`/firewall/cluster/${connectionId}/rules/${pos}`),
       async () => pveDirect.deleteClusterRule(await getConnectionById(connectionId), pos),
     )
 

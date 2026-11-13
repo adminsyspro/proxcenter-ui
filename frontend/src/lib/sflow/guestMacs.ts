@@ -6,6 +6,8 @@
  * guest behind an SDN VNet.
  */
 
+import { asRoot } from "@/lib/ssh/sudo"
+
 // Matches an Ethernet address anywhere in a guest NIC line, whichever key
 // carries it: virtio=, e1000=, vmxnet3= for VMs, hwaddr= for containers.
 const MAC_RE = /[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}/
@@ -20,7 +22,7 @@ const MAC_RE = /[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}/
  * filesystem, so any member answers for the whole cluster.
  */
 export const GUEST_MACS_COMMAND =
-  `grep -H "^net" /etc/pve/nodes/*/qemu-server/*.conf /etc/pve/nodes/*/lxc/*.conf 2>/dev/null || true`
+  `${asRoot(`grep -H "^net" /etc/pve/nodes/*/qemu-server/*.conf /etc/pve/nodes/*/lxc/*.conf`)} 2>/dev/null || true`
 
 /**
  * Parse the grep output into a MAC (lower case) to guest id map.

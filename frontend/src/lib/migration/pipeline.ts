@@ -25,13 +25,14 @@ import { reserveTargetVmid } from "./reserve-target-vmid"
 import { releaseVmids } from "./vmid-reservation"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { formatSshEndpoint, resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
-import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, buildVmdkDownloadUrl, buildVmdkDescriptorUrl, extractProp, soapCreateSnapshot, soapRemoveAllSnapshots, soapPowerOffVm, soapExportVm, soapWaitForNfcLease, soapNfcLeaseProgress, soapNfcLeaseComplete, soapNfcLeaseAbort, SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS } from "@/lib/vmware/soap"
+import { soapLogin, soapLogout, soapGetVmConfig, parseVmConfig, soapNameDistributedNics, buildVmdkDownloadUrl, buildVmdkDescriptorUrl, extractProp, soapCreateSnapshot, soapRemoveAllSnapshots, soapPowerOffVm, soapExportVm, soapWaitForNfcLease, soapNfcLeaseProgress, soapNfcLeaseComplete, soapNfcLeaseAbort, SNAPSHOT_REMOVE_TERMINAL_TIMEOUT_MS } from "@/lib/vmware/soap"
 import { mapEsxiToPveConfig, isWindowsVm } from "./configMapper"
 import { warnIfEl10OnLowCpu } from "./el10-check"
-import { describeOverrides, planDiskTargets, describeDiskPlan, bytesPerStorage, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping } from "./target-overrides"
+import { describeOverrides, diskDriveOptions, planDiskTargets, describeDiskPlan, bytesPerStorage, type MigrationDiskMapping, type MigrationHardwareOverrides, type MigrationNicMapping, type MigrationNetworkMapEntry, type MigrationDiskOptions } from "./target-overrides"
 import { coldStorageTarget, coldStorages, localVolumeKinds, describeStorageSpace, storageSpaceShortfall, type ColdStorageTarget } from "./cold-disk-targets"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo, NfcLeaseDeviceUrl } from "@/lib/vmware/soap"
 import { executeSSHWithTimeout } from "./ssh-long-exec"
+import { esxiHostKeyFailure, esxiHostKeyProbeCommand, esxiSshHost, esxiStrictSshfsOptions, esxiStrictSshOptions, loadEsxiHostTrust, qemuHostKeyCheck, qemuHostKeyCheckOption, stageEsxiKnownHosts, type EsxiHostTrust } from "./esxi-host-trust"
 import {
   allocateAndMapBlockVolume, nextFreeDiskName, volumesToFree,
   PVESM_FREE_TIMEOUT_MS, type AllocatedVolume,
@@ -40,6 +41,7 @@ import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
 import { waitForPveTask, getNodeSshEndpointForMigration } from "./pve-tasks"
 import { convertDisksToQcow2 } from "./qcow2-convert"
+import { startMigratedVm } from "./start-migrated-vm"
 import { buildUefiInjectScript } from "./uefi-inject"
 import { startJobHeartbeat } from "./job-heartbeat"
 import { capturePipelineStatus, writePipelineExit } from "./pipe-exit"
@@ -49,7 +51,7 @@ import {
   authorizedKeysDeployCommand, authorizedKeysRevokeCommand, ddCopyScript, ddReadCommand, esxiKeyLoginProbeCommand,
   esxiSshCommand, fileExistsCommand, fileSizeCommand, listDirCommand, parseBackgroundPid, qemuImgConvertScript,
   qemuImgInfoCommand, qemuImgSshProbeCommand, qemuNbdServeCommand, qemuOptionValue, readlinkCommand, sshfsMountCommand,
-  sshpassEsxiCommand, vmfsPath, vmkfstoolsCloneCommand, vmkfstoolsDeleteCommand, writeScriptCommand,
+  sshpassEsxiCommand, esxiPasswordStdin, vmfsPath, vmkfstoolsCloneCommand, vmkfstoolsDeleteCommand, writeScriptCommand,
 } from "./remote-commands"
 import { verifyDiskIntegrity, faultInjectionFromEnv, type RegionSource } from "./integrity"
 import { resolveIntegritySettings } from "./integrity-target"
@@ -87,6 +89,12 @@ interface MigrationConfig {
   hardware?: MigrationHardwareOverrides
   /** Per-source-NIC target bridge, VLAN tag and model (#317); unmapped NICs use networkBridge. */
   nics?: MigrationNicMapping[]
+  /** Bulk network table (ui#1333): source port group to target bridge. */
+  networkMap?: MigrationNetworkMapEntry[]
+  /** "regenerate": Proxmox assigns every NIC without its own MAC choice a new MAC (ui#1330). */
+  macPolicy?: "regenerate"
+  /** Profile of the target disks (ui#1331); absent options take the defaults. */
+  diskOptions?: MigrationDiskOptions
   /** Per-source-disk target storage or exclusion (#317, lot 2); unmapped disks use targetStorage. */
   disks?: MigrationDiskMapping[]
   migrationType?: "cold" | "live" | "sshfs_boot"
@@ -176,7 +184,15 @@ async function powerOffSourceVm(jobId: string, session: SoapSession, vmid: strin
 /**
  * Main migration pipeline — runs async after HTTP response
  */
+/** A private key as a file wants it: ending with a newline. */
+function withTrailingNewline(key: string): string {
+  return key.endsWith("\n") ? key : `${key}\n`
+}
+
 export async function runMigrationPipeline(jobId: string, config: MigrationConfig, tenantId = 'default'): Promise<void> {
+  // Set once the ESXi SSH secret is staged on the node, run when the job ends.
+  let removeEsxiSecret: (() => Promise<void>) | null = null
+  let removeEsxiKnownHosts: (() => Promise<void>) | null = null
   // Register tenant-scoped prisma for this job
   const prisma = getTenantPrisma(tenantId)
   jobPrisma.set(jobId, prisma)
@@ -266,6 +282,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     await appendLog(jobId, `Retrieving VM configuration for "${config.sourceVmId}"...`)
     const vmXml = await soapGetVmConfig(soapSession, config.sourceVmId)
     const vmConfig = parseVmConfig(vmXml)
+    // Port group names of distributed-switch NICs, for the bulk network table (ui#1333).
+    await soapNameDistributedNics(soapSession, vmConfig.nics)
     // EL10 on a CPU type below x86-64-v3 does not boot (#1000): say it now.
     await warnIfEl10OnLowCpu({ session: soapSession, vmid: config.sourceVmId, guest: vmConfig, cpuType: config.cpuType, log: m => appendLog(jobId, m, "warn") })
 
@@ -358,6 +376,51 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // Verify PVE SSH connectivity
     const nodeIp = await getNodeSshEndpointForMigration(prisma, config.targetConnectionId, config.targetNode, pveConn.baseUrl)
+
+    // The ESXi SSH secret of this job, staged on the node once, through stdin
+    // into a file only root reads, and removed when the job ends.
+    const esxiSecretFile = `/tmp/proxcenter-mig-${jobId}-esxi.secret`
+    let esxiSecretStaged = false
+
+    // The ESXi host keys confirmed in ProxCenter, written once to a file on
+    // the node that every ssh/sshfs/QEMU client of the job checks against.
+    // Loaded before any ESXi credential is staged: an unconfirmed host stops
+    // the job before a secret could reach an impostor.
+    const esxiKnownHostsFile = `/tmp/proxcenter-mig-${jobId}-esxi.known_hosts`
+    let esxiTrust: EsxiHostTrust | null = null
+    async function ensureEsxiHostTrust(): Promise<EsxiHostTrust> {
+      if (esxiTrust) return esxiTrust
+      const trust = await loadEsxiHostTrust(esxiSshHost(esxiUrl), esxiConn!.sshPort || 22, esxiKnownHostsFile)
+      const { command, stdin } = stageEsxiKnownHosts(trust)
+      const res = await executeSSH(config.targetConnectionId, nodeIp, command, 30_000, { stdin })
+      if (!res.success) throw new Error(`Cannot write the ESXi host keys on the node: ${res.error || "unknown error"}`)
+      removeEsxiKnownHosts = async () => {
+        await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(esxiKnownHostsFile)}`).catch(() => undefined)
+      }
+      const probe = await executeSSH(config.targetConnectionId, nodeIp,
+        esxiHostKeyProbeCommand(esxiKnownHostsFile, esxiConn!.sshUser || "root", esxiSshHost(esxiUrl), esxiConn!.sshPort || 22))
+      const refusal = esxiHostKeyFailure(trust.endpoint, probe.output, probe.error)
+      if (refusal) throw new Error(refusal)
+      esxiTrust = trust
+      await appendLog(jobId, `ESXi host key checked against ProxCenter: ${trust.keyTypes.join(", ")} of ${trust.endpoint}`, "info")
+
+      return trust
+    }
+
+    async function stageEsxiSecret(): Promise<void> {
+      if (esxiSecretStaged) return
+      await ensureEsxiHostTrust()
+      const isKey = esxiConn!.sshAuthMethod === "key" && !!esxiConn!.sshKeyEnc
+      const secret = isKey ? decryptSecret(esxiConn!.sshKeyEnc!) : (esxiConn!.sshPassEnc ? decryptSecret(esxiConn!.sshPassEnc) : "")
+      if (!secret) return
+      const content = isKey ? withTrailingNewline(secret) : secret
+      const res = await executeSSH(config.targetConnectionId, nodeIp, `umask 077; cat > ${shellEscape(esxiSecretFile)}`, 30_000, { stdin: content })
+      if (!res.success) throw new Error(`Cannot stage the ESXi SSH credentials on the node: ${res.error || "unknown error"}`)
+      esxiSecretStaged = true
+      removeEsxiSecret = async () => {
+        await executeSSH(config.targetConnectionId, nodeIp, `rm -f ${shellEscape(esxiSecretFile)}`).catch(() => undefined)
+      }
+    }
     await appendLog(jobId, `Testing SSH to Proxmox node ${config.targetNode} (${formatSshEndpoint(nodeIp)})...`)
     const sshTest = await executeSSH(config.targetConnectionId, nodeIp, "echo ok")
     if (!sshTest.success) {
@@ -455,7 +518,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     }
     await updateJob(jobId, "creating_vm", { targetVmid })
 
-    const overrides = { hardware: config.hardware, nics: config.nics }
+    const overrides = { hardware: config.hardware, nics: config.nics, networkMap: config.networkMap, macPolicy: config.macPolicy }
     const pveParams = mapEsxiToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, overrides)
     const overridesLine = describeOverrides(overrides)
     if (overridesLine) await appendLog(jobId, overridesLine)
@@ -524,6 +587,12 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     }
     // The target of kept disk i (vmConfig.disks[i] is diskPlan.kept[i].disk).
     const diskTarget = (i: number): ColdStorageTarget => storageTargets.get(diskPlan.kept[i].storage)!
+    // Drive options of kept disk i on `slot` (ui#1331): the operator's choice
+    // for that disk, else the job profile, else discard on a thin storage and
+    // iothread where the bus supports it.
+    const diskDriveOpts = (i: number, slot: string): string => diskDriveOptions({
+      slot, storageType: diskTarget(i).type, scsihw: pveParams.scsihw, profile: config.diskOptions, disk: diskPlan.kept[i].options,
+    })
     // Temp file prefix of disk i: on its storage when file-based, in the temp base otherwise.
     const diskTmpFile = (i: number): string => `${diskTarget(i).imagesDir || tempBase}/proxcenter-mig-${jobId}-disk${i}`
 
@@ -546,7 +615,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // Slot from the mapper: sata0 for the boot disk of OVMF and Windows guests
       // (#653), IDE and SATA source disks on their own bus, the rest on SCSI.
       const diskSlot = pveParams.diskSlots[i] ?? `scsi${i}`
-      const attachBody = new URLSearchParams({ [diskSlot]: volumeId })
+      const attachBody = new URLSearchParams({ [diskSlot]: `${volumeId}${diskDriveOpts(i, diskSlot)}` })
       try {
         await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, attachBody)
         // Record the attachment so the failure-path cleanup in
@@ -728,6 +797,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
       const ctrlPrefix = `/tmp/proxcenter-mig-${jobId}-ctrl${i}`
       const { esxiHost, esxiSshPort, esxiSshUser, setupCmd, sshPrefix, cleanupCmd } = buildEsxiSshPrefix(ctrlPrefix)
+      await stageEsxiSecret()
 
       const flatPath = disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
       const flatVmfsPath = vmfsPath(disk.datastoreName, flatPath)
@@ -752,6 +822,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           const descriptorPath = vmfsPath(disk.datastoreName, disk.relativePath)
           const cloneTmpPrefix = `/tmp/proxcenter-mig-${jobId}-clone${i}`
           const { esxiHost: clHost, esxiSshPort: clPort, esxiSshUser: clUser, setupCmd: clSetup, sshPrefix: clSshPrefix, cleanupCmd: clCleanup } = buildEsxiSshPrefix(cloneTmpPrefix)
+          await stageEsxiSecret()
           const cloneScript = `${cloneTmpPrefix}.sh`
           const cloneExitFile = `${cloneTmpPrefix}.exit`
           const cloneErrFile = `${cloneTmpPrefix}.stderr`
@@ -1089,27 +1160,26 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
     // Helper: build ESXi SSH prefix (sshpass + legacy algorithms for ESXi BusyBox SSH)
     // Returns { setupCmd, sshPrefix, cleanupCmd } to be used in shell scripts on PVE node
-    function buildEsxiSshPrefix(tmpPrefix: string) {
-      const esxiHost = esxiUrl.replace(/^https?:\/\//, "").split("/")[0]
+    function buildEsxiSshPrefix(_tmpPrefix: string) {
+      const esxiHost = esxiSshHost(esxiUrl)
       const esxiSshPort = esxiConn.sshPort || 22
       const esxiSshUser = esxiConn.sshUser || "root"
       const esxiPass = esxiConn.sshPassEnc ? decryptSecret(esxiConn.sshPassEnc) : ""
-      const esxiSshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=15 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
+      const esxiSshOpts = `${esxiStrictSshOptions(esxiKnownHostsFile)} -o LogLevel=ERROR -o ConnectTimeout=15 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
 
+      // The key or password is read from the job's secret file, staged once
+      // through stdin (stageEsxiSecret): written into a command or a script
+      // it would land in the node's sudo log, in ps and in /tmp.
       let setupCmd = ""
       let sshPrefix = ""
-      let cleanupCmd = ""
+      const cleanupCmd = ""
 
       if (esxiConn.sshAuthMethod === "key" && esxiConn.sshKeyEnc) {
-        const esxiKey = decryptSecret(esxiConn.sshKeyEnc)
-        const keyFile = `${tmpPrefix}.esxi-key`
-        setupCmd = `(umask 077; printf '%s\\n' ${shellEscape(esxiKey)} > ${shellEscape(keyFile)}) && chmod 600 ${shellEscape(keyFile)}`
-        sshPrefix = `ssh ${esxiSshOpts} -i "${keyFile}"`
-        cleanupCmd = `rm -f "${keyFile}"`
+        setupCmd = "true"
+        sshPrefix = `ssh ${esxiSshOpts} -i ${shellEscape(esxiSecretFile)}`
       } else if (esxiPass) {
-        setupCmd = `export SSHPASS=${shellEscape(esxiPass)}`
+        setupCmd = `export SSHPASS="$(cat ${shellEscape(esxiSecretFile)})"`
         sshPrefix = `sshpass -e ssh ${esxiSshOpts}`
-        cleanupCmd = ""
       }
 
       return { esxiHost, esxiSshPort, esxiSshUser, esxiSshOpts, setupCmd, sshPrefix, cleanupCmd }
@@ -1119,6 +1189,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     async function executeOnEsxi(command: string, timeoutMs = 3600000): Promise<string> {
       const tmpPrefix = `/tmp/proxcenter-mig-${jobId}-esxicmd`
       const { esxiHost, esxiSshPort, esxiSshUser, setupCmd, sshPrefix, cleanupCmd } = buildEsxiSshPrefix(tmpPrefix)
+      await stageEsxiSecret()
       const script = `${tmpPrefix}.sh`
       const outFile = `${tmpPrefix}.out`
       const errFile = `${tmpPrefix}.stderr`
@@ -1175,6 +1246,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         if (exitCode !== 0) {
           const stderrContent = await executeSSH(config.targetConnectionId, nodeIp, `cat "${errFile}" 2>/dev/null | head -c 500`)
           await executeSSH(config.targetConnectionId, nodeIp, `rm -f "${script}" "${outFile}" "${errFile}" "${exitFile}" "${tmpPrefix}.esxi-key"`)
+          const hostKeyRefusal = esxiHostKeyFailure(`${esxiHost}:${esxiSshPort}`, stderrContent.output)
+          if (hostKeyRefusal) throw new Error(hostKeyRefusal)
           const errMsg = stderrContent.output?.trim() || output
           throw new Error(`ESXi command failed (exit ${exitCode}): ${errMsg}`)
         }
@@ -1188,6 +1261,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // Mount ESXi datastore on PVE node via SSHFS (SSH filesystem)
     // Works with VMFS, NFS, vSAN — anything accessible under /vmfs/volumes/ on ESXi
     async function mountSshfs(datastoreName: string): Promise<string> {
+      await ensureEsxiHostTrust()
       const { esxiHost, esxiSshPort, esxiSshUser } = buildEsxiSshPrefix(`/tmp/proxcenter-sshfs-${jobId}`)
       const esxiPass = esxiConn.sshPassEnc ? decryptSecret(esxiConn.sshPassEnc) : ""
       const esxiKey = (esxiConn.sshAuthMethod === "key" && esxiConn.sshKeyEnc) ? decryptSecret(esxiConn.sshKeyEnc) : ""
@@ -1203,17 +1277,18 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // SSHFS options — FUSE3 compatible (sshfs 3.x on Debian Trixie/PVE 9)
       // Note: big_writes, large_read, kernel_cache are FUSE2-only and removed in FUSE3
       // ssh_command must be quoted to avoid comma conflicts with sshfs -o parser
-      const sshfsBaseOpts = "StrictHostKeyChecking=no,UserKnownHostsFile=/dev/null,allow_other,reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,cache=yes,max_read=1048576,entry_timeout=3600,negative_timeout=3600,attr_timeout=3600"
+      const sshfsBaseOpts = `${esxiStrictSshfsOptions(esxiKnownHostsFile)},allow_other,reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,cache=yes,max_read=1048576,entry_timeout=3600,negative_timeout=3600,attr_timeout=3600`
 
       // ESXi SSH legacy algorithms — passed via ssh_command to avoid comma parsing issues
       // We write a wrapper script so sshfs ssh_command= points to it (no comma escaping needed)
       const sshWrapperPath = `${mountPath}.ssh-wrapper.sh`
-      const sshWrapperContent = `#!/bin/sh\nexec ssh -p ${esxiSshPort} -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519,ecdsa-sha2-nistp256 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password -o Compression=no -o Ciphers=aes128-gcm@openssh.com,aes128-ctr,aes256-ctr -o TCPKeepAlive=yes -o IPQoS=throughput "$@"`
+      const sshWrapperContent = `#!/bin/sh\nexec ssh -p ${esxiSshPort} ${esxiStrictSshOptions(esxiKnownHostsFile)} -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519,ecdsa-sha2-nistp256 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password -o Compression=no -o Ciphers=aes128-gcm@openssh.com,aes128-ctr,aes256-ctr -o TCPKeepAlive=yes -o IPQoS=throughput "$@"`
 
       // Resolve datastore symlink on ESXi — SFTP doesn't follow symlinks for mount root
       // /vmfs/volumes/Datastore is a symlink to /vmfs/volumes/<UUID>, we need the real path
       let remotePath = `/vmfs/volumes/${datastoreName}`
       const { esxiHost: resolveHost, esxiSshPort: resolvePort, esxiSshUser: resolveUser, setupCmd: resolveSetup, sshPrefix: resolveSshPrefix, cleanupCmd: resolveCleanup } = buildEsxiSshPrefix(`/tmp/proxcenter-sshfs-resolve-${jobId}`)
+      await stageEsxiSecret()
       const resolveCmd = `${resolveSetup ? resolveSetup + ' && ' : ''}${esxiSshCommand(resolveSshPrefix, resolvePort, resolveUser, resolveHost, readlinkCommand(remotePath))} 2>/dev/null${resolveCleanup ? ' ; ' + resolveCleanup : ''}`
       const resolveResult = await executeSSH(config.targetConnectionId, nodeIp, resolveCmd)
       if (resolveResult.success && resolveResult.output?.trim().startsWith("/vmfs/")) {
@@ -1237,14 +1312,17 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       }
       let mounted = false
       const mountErrors: string[] = []
+      // Every attempt's full output, for a host key refusal (sshfs reports it
+      // on its output while the error only carries the exit code).
+      const mountOutputs: string[] = []
 
       if (esxiKey) {
         // Key-based auth
         const keyFile = `${mountPath}.esxi-key`
         await executeSSH(config.targetConnectionId, nodeIp,
-          `(umask 077; printf '%s\\n' ${shellEscape(esxiKey)} > ${shellEscape(keyFile)}) && chmod 600 ${shellEscape(keyFile)}`
+          `umask 077; cat > ${shellEscape(keyFile)}`, 30_000, { stdin: withTrailingNewline(esxiKey) }
         )
-        const sshWrapperKey = `#!/bin/sh\nexec ssh -p ${esxiSshPort} -i ${keyFile} -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o Compression=no "$@"`
+        const sshWrapperKey = `#!/bin/sh\nexec ssh -p ${esxiSshPort} -i ${keyFile} -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 ${esxiStrictSshOptions(esxiKnownHostsFile)} -o Compression=no "$@"`
         await executeSSH(config.targetConnectionId, nodeIp,
           `cat > "${sshWrapperPath}" << 'SSHEOF'\n${sshWrapperKey}\nSSHEOF\nchmod +x "${sshWrapperPath}"`
         )
@@ -1252,13 +1330,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         const mountCmd = sshfsMountCommand({ mountPath, options: `${sshfsBaseOpts},ssh_command=${sshWrapperPath}`, user: esxiSshUser, host: esxiHost, remotePath })
         const rc = await executeSSH(config.targetConnectionId, nodeIp, mountCmd)
         if (rc.success) mounted = true
-        else mountErrors.push(`attempt 1 (key+perf): ${(rc.error || rc.output || '').toString().trim().slice(0, 300)}`)
+        else { mountOutputs.push(String(rc.output ?? '')); mountErrors.push(`attempt 1 (key+perf): ${(rc.error || rc.output || '').toString().trim().slice(0, 300)}`) }
         if (!mounted) {
           // Fallback: minimal
-          const mountCmd2 = sshfsMountCommand({ mountPath, options: `StrictHostKeyChecking=no,UserKnownHostsFile=/dev/null,allow_other,reconnect,ssh_command=${sshWrapperPath}`, user: esxiSshUser, host: esxiHost, remotePath })
+          const mountCmd2 = sshfsMountCommand({ mountPath, options: `${esxiStrictSshfsOptions(esxiKnownHostsFile)},allow_other,reconnect,ssh_command=${sshWrapperPath}`, user: esxiSshUser, host: esxiHost, remotePath })
           const rc2 = await executeSSH(config.targetConnectionId, nodeIp, mountCmd2)
           if (rc2.success) mounted = true
-          else mountErrors.push(`attempt 2 (key+minimal): ${(rc2.error || rc2.output || '').toString().trim().slice(0, 300)}`)
+          else { mountOutputs.push(String(rc2.output ?? '')); mountErrors.push(`attempt 2 (key+minimal): ${(rc2.error || rc2.output || '').toString().trim().slice(0, 300)}`) }
         }
       } else if (esxiPass) {
         // Password-based auth via password_stdin + ssh wrapper script
@@ -1266,23 +1344,23 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           `cat > "${sshWrapperPath}" << 'SSHEOF'\n${sshWrapperContent}\nSSHEOF\nchmod +x "${sshWrapperPath}"`
         )
         // Try with perf options + algo wrapper
-        const mountCmd = sshfsMountCommand({ mountPath, options: `password_stdin,${sshfsBaseOpts},ssh_command=${sshWrapperPath}`, user: esxiSshUser, host: esxiHost, remotePath, password: esxiPass })
-        const rc = await executeSSH(config.targetConnectionId, nodeIp, mountCmd)
+        const mountCmd = sshfsMountCommand({ mountPath, options: `password_stdin,${sshfsBaseOpts},ssh_command=${sshWrapperPath}`, user: esxiSshUser, host: esxiHost, remotePath })
+        const rc = await executeSSH(config.targetConnectionId, nodeIp, mountCmd, undefined, { stdin: esxiPass })
         if (rc.success) mounted = true
-        else mountErrors.push(`attempt 1 (perf+algo): ${(rc.error || rc.output || '').toString().trim().slice(0, 300)}`)
+        else { mountOutputs.push(String(rc.output ?? '')); mountErrors.push(`attempt 1 (perf+algo): ${(rc.error || rc.output || '').toString().trim().slice(0, 300)}`) }
         if (!mounted) {
           // Fallback: no algo wrapper (let ssh negotiate)
-          const mountCmd2 = sshfsMountCommand({ mountPath, options: "password_stdin,StrictHostKeyChecking=no,UserKnownHostsFile=/dev/null,allow_other,reconnect,ServerAliveInterval=15,cache=yes,entry_timeout=3600,attr_timeout=3600", user: esxiSshUser, host: esxiHost, remotePath, password: esxiPass })
-          const rc2 = await executeSSH(config.targetConnectionId, nodeIp, mountCmd2)
+          const mountCmd2 = sshfsMountCommand({ mountPath, options: `password_stdin,${esxiStrictSshfsOptions(esxiKnownHostsFile)},allow_other,reconnect,ServerAliveInterval=15,cache=yes,entry_timeout=3600,attr_timeout=3600`, user: esxiSshUser, host: esxiHost, remotePath })
+          const rc2 = await executeSSH(config.targetConnectionId, nodeIp, mountCmd2, undefined, { stdin: esxiPass })
           if (rc2.success) mounted = true
-          else mountErrors.push(`attempt 2 (negotiate): ${(rc2.error || rc2.output || '').toString().trim().slice(0, 300)}`)
+          else { mountOutputs.push(String(rc2.output ?? '')); mountErrors.push(`attempt 2 (negotiate): ${(rc2.error || rc2.output || '').toString().trim().slice(0, 300)}`) }
         }
         if (!mounted) {
           // Fallback: absolute minimal
-          const mountCmd3 = sshfsMountCommand({ mountPath, options: "password_stdin,StrictHostKeyChecking=no,UserKnownHostsFile=/dev/null,allow_other,reconnect,cache=yes", user: esxiSshUser, host: esxiHost, remotePath, password: esxiPass })
-          const rc3 = await executeSSH(config.targetConnectionId, nodeIp, mountCmd3)
+          const mountCmd3 = sshfsMountCommand({ mountPath, options: `password_stdin,${esxiStrictSshfsOptions(esxiKnownHostsFile)},allow_other,reconnect,cache=yes`, user: esxiSshUser, host: esxiHost, remotePath })
+          const rc3 = await executeSSH(config.targetConnectionId, nodeIp, mountCmd3, undefined, { stdin: esxiPass })
           if (rc3.success) mounted = true
-          else mountErrors.push(`attempt 3 (minimal): ${(rc3.error || rc3.output || '').toString().trim().slice(0, 300)}`)
+          else { mountOutputs.push(String(rc3.output ?? '')); mountErrors.push(`attempt 3 (minimal): ${(rc3.error || rc3.output || '').toString().trim().slice(0, 300)}`) }
         }
       }
 
@@ -1294,6 +1372,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         //   - "Permission denied": wrong password, or root login disabled
         //   - "subsystem request failed" / "Connection reset": SFTP subsystem disabled on ESXi
         //   - "no matching host key type": ESXi's old SSH algos need the wrapper (already attempted)
+        const hostKeyRefusal = esxiHostKeyFailure(`${esxiHost}:${esxiSshPort}`, ...mountOutputs)
+        if (hostKeyRefusal) throw new Error(hostKeyRefusal)
         const errSummary = mountErrors.length
           ? mountErrors.join(" | ")
           : "no SSH/sshfs output captured (check authentication method and ESXi SSH availability)"
@@ -1361,8 +1441,9 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
       // Slot from the mapper (IDE and SATA source disks keep their bus).
       const diskSlot = pveParams.diskSlots[i] ?? `scsi${i}`
-      // Format, images directory and drive options of THIS disk's storage.
-      const { storage: diskStorage, importFormat, imagesDir, driveOpts } = diskTarget(i)
+      // Format and images directory of THIS disk's storage, and its drive options.
+      const { storage: diskStorage, importFormat, imagesDir } = diskTarget(i)
+      const driveOpts = diskDriveOpts(i, diskSlot)
 
       await updateJob(jobId, "transferring", {
         currentStep: `converting_disk_${i + 1}`,
@@ -1668,6 +1749,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       const diskSizeGB = (disk.capacityBytes / 1073741824).toFixed(1)
       const tmpFile = diskTmpFile(i)
       const { esxiHost, esxiSshPort, esxiSshUser, setupCmd, sshPrefix, cleanupCmd } = buildEsxiSshPrefix(tmpFile)
+      await stageEsxiSecret()
 
       // Build the VMFS path
       const flatPath = disk.relativePath.replace(/\.vmdk$/, "-flat.vmdk")
@@ -1696,6 +1778,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           // Run vmkfstools clone in background on ESXi (via PVE → ESXi SSH)
           const cloneTmpPrefix = `/tmp/proxcenter-mig-${jobId}-clone${i}`
           const { esxiHost: clHost, esxiSshPort: clPort, esxiSshUser: clUser, setupCmd: clSetup, sshPrefix: clSshPrefix, cleanupCmd: clCleanup } = buildEsxiSshPrefix(cloneTmpPrefix)
+          await stageEsxiSecret()
           const cloneScript = `${cloneTmpPrefix}.sh`
           const cloneExitFile = `${cloneTmpPrefix}.exit`
           const cloneErrFile = `${cloneTmpPrefix}.stderr`
@@ -1910,13 +1993,14 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     // Helper: convert + import + attach a single disk
     async function convertAndImportDisk(i: number) {
       const tmpFile = diskTmpFile(i)
-      // Format, images directory and drive options of THIS disk's storage.
-      const { storage: diskStorage, importFormat, imagesDir, driveOpts } = diskTarget(i)
+      // Format and images directory of THIS disk's storage.
+      const { storage: diskStorage, importFormat, imagesDir } = diskTarget(i)
       // Slot from the mapper: sata0 for the boot disk of OVMF guests (the firmware
       // cannot enumerate an LSI controller) and of Windows guests (no boot-start
       // VirtIO driver in an untouched guest, #653), IDE and SATA source disks on
       // their own bus, SCSI data disks on SCSI for performance.
       const diskSlot = pveParams.diskSlots[i] ?? `scsi${i}`
+      const driveOpts = diskDriveOpts(i, diskSlot)
 
       // Convert VMDK to target format
       await appendLog(jobId, `[Disk ${i + 1}/${vmConfig.disks.length}] Converting to ${importFormat} format...`)
@@ -1996,11 +2080,13 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       await appendLog(jobId, "=== SSHFS BOOT: Near-zero downtime migration ===", "info")
 
       // ── Phase 1: Deploy temp SSH key to ESXi (QEMU libssh requires key auth) ──
-      const esxiHost = new URL(esxiUrl).hostname
+      const esxiHost = esxiSshHost(esxiUrl)
       const esxiSshPort = esxiConn.sshPort || 22
       const esxiSshUser = esxiConn.sshUser || "root"
       const esxiPass = esxiConn.sshPassEnc ? decryptSecret(esxiConn.sshPassEnc) : ""
       const esxiKeyRaw = (esxiConn.sshAuthMethod === "key" && esxiConn.sshKeyEnc) ? decryptSecret(esxiConn.sshKeyEnc) : ""
+      // QEMU's ssh driver and the key deployment below check the ESXi host key.
+      const bootTrust = await ensureEsxiHostTrust()
 
       const tmpKeyPath = `/tmp/proxcenter-sshfsboot-${jobId}-key`
       let qemuSshKeyPath = ""
@@ -2010,7 +2096,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       if (esxiKeyRaw) {
         // Already have a key - just write it to PVE node
         await executeSSH(config.targetConnectionId, nodeIp,
-          `(umask 077; printf '%s\\n' ${shellEscape(esxiKeyRaw)} > ${shellEscape(tmpKeyPath)}) && chmod 600 ${shellEscape(tmpKeyPath)}`)
+          `umask 077; cat > ${shellEscape(tmpKeyPath)}`, 30_000, { stdin: withTrailingNewline(esxiKeyRaw) })
         qemuSshKeyPath = tmpKeyPath
         await appendLog(jobId, "Using existing SSH key for QEMU SSH driver", "info")
       } else if (esxiPass) {
@@ -2031,15 +2117,15 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         // Deploy to ESXi via nested SSH (using sshpass for password auth)
         // ESXi stores keys in /etc/ssh/keys-<user>/authorized_keys
-        const esxiSshOpts = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=15 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
+        const esxiSshOpts = `${esxiStrictSshOptions(esxiKnownHostsFile)} -o LogLevel=ERROR -o ConnectTimeout=15 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
 
-        const deployCmd = sshpassEsxiCommand(esxiPass, esxiSshOpts, esxiSshPort, esxiSshUser, esxiHost, authorizedKeysDeployCommand(esxiSshUser, pubKey, "etc"))
-        const deployResult = await executeSSH(config.targetConnectionId, nodeIp, deployCmd)
+        const deployCmd = sshpassEsxiCommand(esxiSshOpts, esxiSshPort, esxiSshUser, esxiHost, authorizedKeysDeployCommand(esxiSshUser, pubKey, "etc"))
+        const deployResult = await executeSSH(config.targetConnectionId, nodeIp, deployCmd, undefined, { stdin: esxiPasswordStdin(esxiPass) })
 
         if (!deployResult.output?.includes("DEPLOYED")) {
           // Fallback: try ~/.ssh/authorized_keys
-          const deployCmd2 = sshpassEsxiCommand(esxiPass, esxiSshOpts, esxiSshPort, esxiSshUser, esxiHost, authorizedKeysDeployCommand(esxiSshUser, pubKey, "home"))
-          const deployResult2 = await executeSSH(config.targetConnectionId, nodeIp, deployCmd2)
+          const deployCmd2 = sshpassEsxiCommand(esxiSshOpts, esxiSshPort, esxiSshUser, esxiHost, authorizedKeysDeployCommand(esxiSshUser, pubKey, "home"))
+          const deployResult2 = await executeSSH(config.targetConnectionId, nodeIp, deployCmd2, undefined, { stdin: esxiPasswordStdin(esxiPass) })
 
           if (!deployResult2.output?.includes("DEPLOYED")) {
             await appendLog(jobId, "SSH key deployment to ESXi failed - will use SSHFS/FUSE fallback for boot", "warn")
@@ -2048,7 +2134,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
 
         // Verify key-based login works
         const verifyResult = await executeSSH(config.targetConnectionId, nodeIp,
-          esxiKeyLoginProbeCommand(tmpKeyPath, "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -o ConnectTimeout=10 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PubkeyAcceptedAlgorithms=+ssh-rsa,ssh-ed25519", esxiSshPort, esxiSshUser, esxiHost))
+          esxiKeyLoginProbeCommand(tmpKeyPath, `${esxiStrictSshOptions(esxiKnownHostsFile)} -o BatchMode=yes -o ConnectTimeout=10 -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PubkeyAcceptedAlgorithms=+ssh-rsa,ssh-ed25519`, esxiSshPort, esxiSshUser, esxiHost))
 
         if (verifyResult.output?.includes("KEYOK")) {
           qemuSshKeyPath = tmpKeyPath
@@ -2092,7 +2178,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       if (qemuSshKeyPath) {
         await appendLog(jobId, "Testing QEMU SSH driver connectivity...", "info")
         const qemuTestResult = await executeSSH(config.targetConnectionId, nodeIp,
-          qemuImgSshProbeCommand({ host: esxiHost, port: esxiSshPort, path: firstEsxiPath, user: esxiSshUser, identityFile: qemuSshKeyPath }))
+          qemuImgSshProbeCommand({ host: esxiHost, port: esxiSshPort, path: firstEsxiPath, user: esxiSshUser, identityFile: qemuSshKeyPath, hostKeyCheck: qemuHostKeyCheck(bootTrust) }))
 
         if (qemuTestResult.output?.includes("virtual size") || qemuTestResult.output?.includes("file format")) {
           bootMethod = "qemu-ssh"
@@ -2271,7 +2357,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           if (bootMethod === "qemu-ssh") {
             const esxiPath = `/vmfs/volumes/${disk.datastoreName}/${diskFile}`
             // A comma in a datastore name would otherwise start another QEMU option.
-            driveSpec = `file.driver=ssh,file.host=${esxiHost},file.port=${esxiSshPort},file.path=${qemuOptionValue(esxiPath)},file.user=${esxiSshUser},file.host-key-check.mode=none${sshKeyOpt},format=${bootDiskFormat},if=none,id=${driveId},cache=writeback,aio=threads`
+            driveSpec = `file.driver=ssh,file.host=${esxiHost},file.port=${esxiSshPort},file.path=${qemuOptionValue(esxiPath)},file.user=${esxiSshUser},${qemuHostKeyCheckOption(bootTrust)}${sshKeyOpt},format=${bootDiskFormat},if=none,id=${driveId},cache=writeback,aio=threads`
           } else if (bootMethod === "sshfs") {
             const mp = sshfsMountedDatastores.get(disk.datastoreName) || sshfsMountPath
             const fusePath = `${mp}/${diskFile}`
@@ -2740,7 +2826,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
         // Attach all disks + boot order atomically in a single PVE API PUT (replaces previous per-disk PUTs).
         const reconfigBody = new URLSearchParams()
         for (let di = 0; di < localVolumes.length; di++) {
-          reconfigBody.set(slotPerDisk[di], `${localVolumes[di].volumeId}${localTargets[di].driveOpts}`)
+          reconfigBody.set(slotPerDisk[di], `${localVolumes[di].volumeId}${diskDriveOpts(di, slotPerDisk[di])}`)
         }
         reconfigBody.set('boot', `order=${slotPerDisk[0]}`)
         await pveSetVmConfig(pveConn, config.targetNode, targetVmid!, reconfigBody)
@@ -2772,9 +2858,10 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
           if (pubKey) {
             // The first 40 characters of the key body: unique enough to match only this key.
             const keyMaterial = pubKey.split(/\s+/)[1]?.substring(0, 40) || ""
-            const esxiSshOpts2 = `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
+            const esxiSshOpts2 = `${esxiStrictSshOptions(esxiKnownHostsFile)} -o LogLevel=ERROR -o HostKeyAlgorithms=+ssh-rsa,ssh-ed25519 -o KexAlgorithms=+diffie-hellman-group14-sha1,diffie-hellman-group14-sha256 -o PreferredAuthentications=keyboard-interactive,password`
             if (keyMaterial) await executeSSH(config.targetConnectionId, nodeIp,
-              sshpassEsxiCommand(esxiPass, esxiSshOpts2, esxiSshPort, esxiSshUser, esxiHost, authorizedKeysRevokeCommand(esxiSshUser, keyMaterial, "CLEANED")))
+              sshpassEsxiCommand(esxiSshOpts2, esxiSshPort, esxiSshUser, esxiHost, authorizedKeysRevokeCommand(esxiSshUser, keyMaterial, "CLEANED")),
+              undefined, { stdin: esxiPasswordStdin(esxiPass) })
           }
         }
         // Remove temp key from PVE node
@@ -2972,12 +3059,7 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       // ── STEP 5: Optionally start ──
       if (config.startAfterMigration) {
         await appendLog(jobId, "Starting VM on Proxmox...")
-        await pveFetch<any>(
-          pveConn,
-          `/nodes/${encodeURIComponent(config.targetNode)}/qemu/${targetVmid}/status/start`,
-          { method: "POST" }
-        )
-        await appendLog(jobId, "VM started", "success")
+        await startMigratedVm({ conn: pveConn, node: config.targetNode, vmid: targetVmid!, log: (m, l) => appendLog(jobId, m, l), startedMessage: "VM started" })
       }
     }
 
@@ -3098,6 +3180,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
       }
     }
   } finally {
+    if (removeEsxiSecret) await removeEsxiSecret()
+    if (removeEsxiKnownHosts) await removeEsxiKnownHosts()
     // The VMID reserved for this job is either created on the cluster or unused now.
     releaseVmids(jobId)
     stopHeartbeat()

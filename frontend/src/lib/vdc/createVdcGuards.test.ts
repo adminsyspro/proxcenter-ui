@@ -21,7 +21,9 @@ const {
     vdcVlanPool: { findMany: vi.fn() },
     connection: { findUnique: vi.fn(), findMany: vi.fn() },
     providerConnection: { findUnique: vi.fn() },
-    tenantNetworkMember: { findMany: vi.fn() },
+    tenantNetworkMember: { findMany: vi.fn(), count: vi.fn() },
+    tenantNetwork: { deleteMany: vi.fn() },
+    sdnEvpnZone: { findUnique: vi.fn() },
     $transaction: vi.fn(),
   } as any,
   clearVdcScopeCacheMock: vi.fn(),
@@ -95,6 +97,9 @@ beforeEach(() => {
   prismaMock.vdcVlanPool.findMany.mockResolvedValue([])
   prismaMock.vdcVnet.findMany.mockResolvedValue([])
   prismaMock.tenantNetworkMember.findMany.mockResolvedValue([])
+  prismaMock.tenantNetworkMember.count.mockResolvedValue(0)
+  prismaMock.tenantNetwork.deleteMany.mockResolvedValue({ count: 0 })
+  prismaMock.sdnEvpnZone.findUnique.mockResolvedValue(null)
 })
 
 describe('createVdc guards', () => {
@@ -497,5 +502,104 @@ describe('deleteVdc: stretched tenant networks (#901)', () => {
   it('touches no network for a vDC that carried none', async () => {
     await deleteVdc('v1')
     expect(syncNetworksOfVdcMock).not.toHaveBeenCalled()
+    expect(prismaMock.tenantNetwork.deleteMany).not.toHaveBeenCalled()
+  })
+
+  // A network of a shared EVPN zone (#1334) goes with its last vDC.
+  it('deletes the shared-zone networks the vDC was the last to carry', async () => {
+    prismaMock.tenantNetworkMember.findMany.mockResolvedValue([{ tenantNetworkId: 'n1' }])
+    await deleteVdc('v1')
+    expect(prismaMock.tenantNetwork.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ['n1'] }, evpnZoneId: { not: null }, members: { none: {} } },
+    })
+  })
+})
+
+describe('shared EVPN zone (#1334)', () => {
+  const ZONE = { id: 'z1', name: 'Shared', zoneName: 'zshared', mtu: 1450, vniStart: 9001, vniEnd: 9099, members: [{ connectionId: 'conn-2' }] }
+  const createdRow = () => {
+    let row: any
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(new Proxy({}, {
+      get: (_t, model) => model === 'vdc' ? { ...txModel(), create: vi.fn(async ({ data }: any) => { row = data; return data }) } : txModel(),
+    })))
+    return () => row
+  }
+
+  beforeEach(() => {
+    prismaMock.connection.findUnique.mockResolvedValue({ tenantId: 'default' })
+    getConnectionByIdMock.mockResolvedValue({ id: 'conn-2' })
+    pveFetchMock.mockResolvedValue({})
+    generateZoneNameMock.mockResolvedValue('zacme')
+    createZoneMock.mockResolvedValue(undefined)
+    applySdnMock.mockResolvedValue(undefined)
+    prismaMock.vdc.findUnique.mockResolvedValue(fullRow)
+    prismaMock.$transaction.mockImplementation(permissiveTransaction)
+  })
+
+  it('refuses a zone that does not exist or that the cluster does not carry, before touching Proxmox', async () => {
+    await expect(createVdc({ ...baseInput, evpnZoneId: 'ghost' }, null)).rejects.toThrow('EVPN zone: not found.')
+    prismaMock.sdnEvpnZone.findUnique.mockResolvedValue({ ...ZONE, members: [{ connectionId: 'conn-9' }] })
+    await expect(createVdc({ ...baseInput, evpnZoneId: 'z1' }, null)).rejects.toThrow('"Shared" is not carried by the cluster of this vDC')
+    await expect(createVdc({ ...baseInput, ownVxlanZone: false }, null)).rejects.toThrow('must be attached to an EVPN zone')
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('attaches the vDC and still creates its own VXLAN zone by default', async () => {
+    prismaMock.sdnEvpnZone.findUnique.mockResolvedValue(ZONE)
+    const row = createdRow()
+    await createVdc({ ...baseInput, evpnZoneId: 'z1' }, null)
+    expect(row()).toMatchObject({ evpnZoneId: 'z1', sdnZoneName: 'zacme' })
+    expect(createZoneMock).toHaveBeenCalled()
+    expect(applySdnMock).toHaveBeenCalled()
+  })
+
+  it('creates no zone and reloads no network for a vDC that lives in the shared zone alone', async () => {
+    prismaMock.sdnEvpnZone.findUnique.mockResolvedValue(ZONE)
+    const row = createdRow()
+    await createVdc({ ...baseInput, evpnZoneId: 'z1', ownVxlanZone: false }, null)
+    expect(row()).toMatchObject({ evpnZoneId: 'z1', sdnZoneName: null })
+    expect(generateZoneNameMock).not.toHaveBeenCalled()
+    expect(createZoneMock).not.toHaveBeenCalled()
+    expect(applySdnMock).not.toHaveBeenCalled()
+  })
+
+  const updatedData = () => {
+    let data: any
+    prismaMock.$transaction.mockImplementation(async (fn: any) => fn(new Proxy({}, {
+      get: (_t, model) => model === 'vdc' ? { ...txModel(), update: vi.fn(async (args: any) => { data = args.data; return {} }) } : txModel(),
+    })))
+    return () => data
+  }
+  const existing = (over: Record<string, unknown>) =>
+    prismaMock.vdc.findUnique.mockReset()
+      .mockResolvedValueOnce({ id: 'v1', tenantId: 't1', connectionId: 'conn-2', sdnZoneName: 'zacme', evpnZoneId: null, ...over })
+      .mockResolvedValue(fullRow)
+
+  it('updateVdc attaches to a zone of the cluster, and leaves the attachment alone when the key is absent', async () => {
+    prismaMock.sdnEvpnZone.findUnique.mockResolvedValue(ZONE)
+    existing({})
+    let data = updatedData()
+    await updateVdc('v1', { evpnZoneId: 'z1' } as any)
+    expect(data().evpnZoneId).toBe('z1')
+
+    existing({ evpnZoneId: 'z1' })
+    data = updatedData()
+    await updateVdc('v1', { name: 'x' } as any)
+    expect('evpnZoneId' in data()).toBe(false)
+  })
+
+  it('updateVdc detaches only a vDC that carries no network of the zone and keeps a zone of its own', async () => {
+    existing({ evpnZoneId: 'z1' })
+    prismaMock.tenantNetworkMember.count.mockResolvedValue(2)
+    await expect(updateVdc('v1', { evpnZoneId: null } as any)).rejects.toThrow('still carries 2 network(s) of the zone')
+
+    prismaMock.tenantNetworkMember.count.mockResolvedValue(0)
+    existing({ evpnZoneId: 'z1', sdnZoneName: null })
+    await expect(updateVdc('v1', { evpnZoneId: null } as any)).rejects.toThrow('it cannot leave its EVPN zone')
+
+    existing({ evpnZoneId: 'z1' })
+    const data = updatedData()
+    await updateVdc('v1', { evpnZoneId: null } as any)
+    expect(data().evpnZoneId).toBeNull()
   })
 })

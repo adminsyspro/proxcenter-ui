@@ -9,6 +9,7 @@ import { NextResponse } from "next/server"
 
 import { prisma } from "@/lib/db/prisma"
 import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
+import { runResolvingPrincipal } from "@/lib/auth/principalResolution"
 import { extractTokenPrefix, verifyTokenHash } from "@/lib/api-tokens/tokenCrypto"
 import { touchTokenUsage } from "@/lib/api-tokens/lastUsed"
 import { allowHeaderForPath, getAllowlistEntryById, isWriteEntry, matchesEntry } from "@/lib/api-tokens/allowlist"
@@ -97,7 +98,13 @@ async function sessionPrincipal(): Promise<PrincipalResult> {
   }
 }
 
-export async function getPrincipal(options: GetPrincipalOptions = {}): Promise<PrincipalResult> {
+export function getPrincipal(options: GetPrincipalOptions = {}): Promise<PrincipalResult> {
+  // Marked so an orchestrator call made while resolving (the license verdict
+  // of step 8) does not resolve the principal again for its actor headers.
+  return runResolvingPrincipal(() => resolvePrincipal(options))
+}
+
+async function resolvePrincipal(options: GetPrincipalOptions): Promise<PrincipalResult> {
   // 1. Authorization via headers(), same mechanism as audit
   //    (frontend/src/lib/audit/index.ts:142).
   const hdrs = await headers()

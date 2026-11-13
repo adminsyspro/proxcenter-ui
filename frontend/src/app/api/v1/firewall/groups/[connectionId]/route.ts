@@ -3,13 +3,17 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { verifyConnectionOwnership } from '@/lib/tenant'
+import { resolveCallerInfraScope } from '@/lib/tenant/iaasGuard'
+import { iaasFirewallNamesView } from '@/lib/connections/iaasView'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { withAudit } from '@/lib/audit/withAudit'
+import { guardProviderInfra } from '@/lib/firewall/providerInfraGuard'
 
 // GET /api/v1/firewall/groups/[connectionId] - Get all security groups
 async function getHandler(
@@ -18,6 +22,11 @@ async function getHandler(
 ) {
   try {
     const { connectionId } = await params
+    // An IaaS tenant picks these by name in its guests' firewall rules and
+    // reads nothing else of the provider's datacenter firewall (lib/connections/iaasView).
+    const caller = await resolveCallerInfraScope()
+    if (caller.ok === false) return caller.response
+
     const ownershipDenied = await verifyConnectionOwnership(connectionId)
     if (ownershipDenied) return ownershipDenied
 
@@ -29,11 +38,11 @@ async function getHandler(
     // The connection is only loaded on that fallback path.
     const groups = await orchestratorOrPve(
       'firewall/groups',
-      () => orchestrator.get(`/firewall/groups/${connectionId}`),
+      () => orchestrator.get(orchestratorPath`/firewall/groups/${connectionId}`),
       async () => pveDirect.getSecurityGroups(await getConnectionById(connectionId)),
     )
 
-    return NextResponse.json(groups)
+    return NextResponse.json(caller.infra.kind === 'iaas' ? iaasFirewallNamesView(groups, 'group') : groups)
   } catch (error: any) {
     console.error('Error fetching security groups:', error)
     
@@ -51,10 +60,7 @@ async function postHandler(
 ) {
   try {
     const { connectionId } = await params
-    const ownershipDenied = await verifyConnectionOwnership(connectionId)
-    if (ownershipDenied) return ownershipDenied
-
-    const denied = await checkPermission(PERMISSIONS.NODE_MANAGE, "connection", connectionId)
+    const denied = await guardProviderInfra(connectionId, PERMISSIONS.NODE_MANAGE)
     if (denied) return denied
 
     const body = await request.json()
@@ -62,7 +68,7 @@ async function postHandler(
     const orchestrator = getOrchestratorClient()
     const created = await orchestratorOrPve(
       'firewall/groups',
-      () => orchestrator.post(`/firewall/groups/${connectionId}`, body),
+      () => orchestrator.post(orchestratorPath`/firewall/groups/${connectionId}`, body),
       async () => pveDirect.createSecurityGroup(await getConnectionById(connectionId), body),
     )
 

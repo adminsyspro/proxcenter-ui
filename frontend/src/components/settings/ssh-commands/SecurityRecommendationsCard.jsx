@@ -12,11 +12,14 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
+  FormControlLabel,
   Stack,
   Typography
 } from '@mui/material'
 
-import { buildSudoersTemplate, buildInstallCommand, SETUP_BASH } from './sudoersTemplate'
+import { buildProfileSudoersTemplate, buildInstallCommand, profileRules, SETUP_BASH } from './sudoersTemplate'
+import { SUDO_PROFILES, SUDO_PROFILE_I18N } from '@/lib/ssh/sudo'
 import { copyToClipboard } from '@/lib/clipboard'
 
 const fetcher = url => fetch(url).then(r => {
@@ -57,13 +60,30 @@ function CodeBlock({ text, onCopy }) {
 
 export default function SecurityRecommendationsCard() {
   const t = useTranslations()
-  const { data } = useSWR('/api/v1/ssh/allowlist', fetcher)
+  const { data } = useSWR('/api/v1/ssh/sudo-rules', fetcher)
   const [copied, setCopied] = useState('')
+  const [profiles, setProfiles] = useState(['node-ops', 'site-recovery'])
 
-  const { body: templateBody, shellWrappedCount } = useMemo(() => {
-    if (!data?.categories) return { body: '', shellWrappedCount: 0 }
-    return buildSudoersTemplate(data.categories)
-  }, [data])
+  const rules = useMemo(() => data?.rules ?? [], [data])
+
+  const templateBody = useMemo(
+    () => (rules.length > 0 && profiles.length > 0 ? buildProfileSudoersTemplate(rules, SUDO_PROFILES.filter(p => profiles.includes(p))) : ''),
+    [rules, profiles]
+  )
+
+  // Restricted profiles still holding a rule that amounts to root, with why.
+  const rootEquivalent = useMemo(
+    () => profiles.filter(p => p !== 'migrations').flatMap(p => profileRules(rules, p).filter(r => r.rootEquivalent)),
+    [rules, profiles]
+  )
+
+  // Rules short of root that a stolen key could still misuse, with how.
+  const sensitive = useMemo(
+    () => profiles.flatMap(p => profileRules(rules, p).filter(r => r.sensitive)),
+    [rules, profiles]
+  )
+
+  const toggleProfile = (p, on) => setProfiles(prev => (on ? [...new Set([...prev, p])] : prev.filter(x => x !== p)))
 
   const installCommand = useMemo(
     () => (templateBody ? buildInstallCommand(templateBody) : ''),
@@ -111,15 +131,60 @@ export default function SecurityRecommendationsCard() {
               {t('settings.sshCommands.recs.step2Hint')}
             </Typography>
 
-            {shellWrappedCount > 0 && (
+            <Stack direction='row' spacing={2} sx={{ mt: 1.5, flexWrap: 'wrap' }}>
+              {SUDO_PROFILES.map(p => (
+                <FormControlLabel
+                  key={p}
+                  control={<Checkbox size='small' checked={profiles.includes(p)} onChange={e => toggleProfile(p, e.target.checked)} />}
+                  label={t(`settings.sshCommands.profiles.${SUDO_PROFILE_I18N[p]}.label`)}
+                />
+              ))}
+            </Stack>
+            {SUDO_PROFILES.map(p => (
+              <Typography key={p} variant='caption' color='text.secondary' sx={{ display: 'block' }}>
+                {t(`settings.sshCommands.profiles.${SUDO_PROFILE_I18N[p]}.label`)} : {t(`settings.sshCommands.profiles.${SUDO_PROFILE_I18N[p]}.features`)}
+              </Typography>
+            ))}
+
+            {profiles.includes('migrations') && (
               <Alert severity='warning' sx={{ mt: 1.5 }} icon={<i className='ri-alert-line' />}>
-                {t('settings.sshCommands.recs.shellWrapWarning')}
+                {t('settings.sshCommands.recs.migrationsWarning')}
               </Alert>
             )}
 
-            <Alert severity='warning' sx={{ mt: 1.5 }} icon={<i className='ri-alert-line' />}>
-              {t('settings.sshCommands.recs.rollingUpdateWarning')}
-            </Alert>
+            {rootEquivalent.length > 0 && (
+              <Alert severity='warning' sx={{ mt: 1.5 }} icon={<i className='ri-alert-line' />}>
+                {t('settings.sshCommands.recs.rootEquivalentWarning')}
+                {rootEquivalent.map(r => (
+                  <Typography key={r.id} variant='caption' sx={{ display: 'block' }}>
+                    {r.path} : {r.why}
+                  </Typography>
+                ))}
+              </Alert>
+            )}
+
+            {sensitive.length > 0 && (
+              <Alert severity='info' sx={{ mt: 1.5 }} icon={<i className='ri-information-line' />}>
+                {t('settings.sshCommands.recs.sensitiveWarning')}
+                {sensitive.map(r => (
+                  <Typography key={r.id} variant='caption' sx={{ display: 'block' }}>
+                    {r.path} : {r.why}
+                  </Typography>
+                ))}
+              </Alert>
+            )}
+
+            {profiles.includes('node-ops') && data?.sflowCollector && (
+              <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mt: 1.5 }}>
+                {t('settings.sshCommands.recs.sflowPinned', { target: data.sflowCollector })}
+              </Typography>
+            )}
+
+            {data && data.orchestratorAvailable === false && (
+              <Alert severity='info' sx={{ mt: 1.5 }} icon={<i className='ri-information-line' />}>
+                {t('settings.sshCommands.recs.orchestratorRulesMissing')}
+              </Alert>
+            )}
 
             <Stack direction='row' spacing={1} sx={{ mt: 1.5, mb: 1 }}>
               <Button

@@ -10,7 +10,7 @@ vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: getCurrentTenantIdMock,
 }))
 
-import { resolveVisibleConnectionIds, resolvePublicRequestScope, restrictToTokenScope } from './scope'
+import { filterToTokenPerimeter, resolveVisibleConnectionIds, resolvePublicRequestScope, restrictToTokenScope } from './scope'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -101,5 +101,32 @@ describe('resolvePublicRequestScope', () => {
     const scope = await resolvePublicRequestScope(undefined)
     expect(scope.tenantId).toBe('tenant-1')
     expect(scope.visible).toEqual(new Set(['conn-a', 'conn-b', 'conn-c']))
+  })
+})
+
+describe('filterToTokenPerimeter (issue #1360)', () => {
+  const items = [
+    { id: 'v1', conns: ['conn-a'] },
+    { id: 'v2', conns: ['conn-b'] },
+    { id: 'z1', conns: ['conn-a', 'conn-b'] },
+    { id: 'foreign', conns: ['conn-z'] },
+    { id: 'broken', conns: [null] },
+  ]
+  const ids = (list: typeof items) => list.map(i => i.id)
+
+  it('is a no-op for a session and for no principal, without any lookup', async () => {
+    expect(await filterToTokenPerimeter(items, { kind: 'session', connectionIds: null }, i => i.conns)).toBe(items)
+    expect(await filterToTokenPerimeter(items, undefined, i => i.conns)).toBe(items)
+    expect(getTenantConnectionIdsMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps for an unrestricted token what sits on the tenant connections', async () => {
+    const kept = await filterToTokenPerimeter(items, { kind: 'token', connectionIds: null }, i => i.conns)
+    expect(ids(kept)).toEqual(['v1', 'v2', 'z1'])
+  })
+
+  it('keeps for a restricted token only the items whose every connection is inside its perimeter', async () => {
+    const kept = await filterToTokenPerimeter(items, { kind: 'token', connectionIds: ['conn-a'] }, i => i.conns)
+    expect(ids(kept)).toEqual(['v1'])
   })
 })

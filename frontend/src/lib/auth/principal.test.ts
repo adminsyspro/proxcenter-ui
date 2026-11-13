@@ -256,6 +256,41 @@ describe('getPrincipal, license (step 8, D6)', () => {
     expect(result.rejection?.status).toBe(403)
     expect(result.rejection?.body).toEqual({ error: 'Feature not licensed', feature: 'api_access' })
   })
+
+  // roadmap#208: the real license call builds its orchestrator headers, and
+  // the actor headers used to resolve the principal again, which reached
+  // step 8 again with the verdict still uncached: an endless async loop.
+  it('settles against the real license call, without re-entering the principal resolution', async () => {
+    vi.restoreAllMocks()
+    _resetLicenseVerdictCache()
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) =>
+      new Response(JSON.stringify({ licensed: true, edition: 'enterprise', options: ['api_access'] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const { secret } = await seedApiToken()
+      setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+      const result = await Promise.race([
+        getPrincipal({ recordUsage: true }),
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => reject(new Error('getPrincipal did not settle')), 3000)
+        }),
+      ])
+      expect(result.ok).toBe(true)
+      expect(result.principal?.kind).toBe('token')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      const sent = fetchMock.mock.calls[0][1]?.headers as Record<string, string>
+      expect(Object.keys(sent)).not.toContain('X-ProxCenter-Actor-Email')
+      expect(Object.keys(sent)).not.toContain('X-ProxCenter-Actor-Id')
+    } finally {
+      clearTimeout(timer)
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 describe('getPrincipal, quota and scopes (steps 9-10)', () => {

@@ -13,6 +13,7 @@ import { aggregateUsage, USAGE_BUCKETS, type UsageBucket, type UsageSampleRow } 
 import MOCK_DATA from '../mock-data.json'
 
 import type { DemoMockMap, DemoMockResolver } from './index'
+import { FRONTEND_SUDO_RULES } from '@/lib/ssh/sudo'
 
 const MD = MOCK_DATA as Record<string, any>
 const DAY = 86400000
@@ -775,6 +776,7 @@ export const SETTINGS_MOCKS: DemoMockMap = {
   },
   'GET:/api/v1/settings/tls/certificates': { certificates: TLS_CERTS },
   'GET:/api/v1/ssh/allowlist': SSH_ALLOWLIST,
+  'GET:/api/v1/ssh/sudo-rules': { rules: FRONTEND_SUDO_RULES, orchestratorAvailable: true },
   'GET:/api/v1/ssh/host-keys': SSH_HOST_KEYS,
   get 'GET:/api/v1/settings/api-tokens'() {
     return {

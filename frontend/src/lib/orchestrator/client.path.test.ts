@@ -56,6 +56,54 @@ describe('orchestratorFetch path net', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('refuses what the URL parser would read as another path: backslash, encoded dot, fragment, rewritten characters', async () => {
+    const paths = [
+      '/firewall/cluster/c-1/..\\..\\..\\notifications\\settings',
+      '/firewall/cluster/c-1/..\\..\\..\\notifications\\settings?',
+      '/firewall/nodes/c-1/pve1\\..\\x/rules',
+      '/firewall/cluster/c-1/%2e%2e/%2e%2e/notifications/settings',
+      '/firewall/cluster/c-1/%2E%2E/health',
+      '/firewall/cluster/c-1/.%2e/health',
+      '/firewall/cluster/c-1/%2e./health',
+      '/firewall/cluster/c-1/%2e/health',
+      '/reports/a#b',
+      '/reports/a b',
+      '/reports/a\tb',
+      '/reports/a\nb',
+      '/reports/é',
+      '/reports/a"b',
+    ]
+
+    for (const path of paths) {
+      await expect(orchestratorFetch(path), JSON.stringify(path)).rejects.toBeInstanceOf(OrchestratorPathError)
+    }
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('sends the path it checked: the URL the request leaves with has the same pathname', async () => {
+    for (const path of ['/firewall/vms/c-1/pve1/qemu/100/rules/3', '/notifications/channels/a%20b', '/firewall/ipsets/c-1/set_1/entries/fd00::1', '/sflow/timeseries/all-vms']) {
+      fetchMock.mockClear()
+      await orchestratorFetch(path)
+      expect(calledPath(), path).toBe(`/api/v1${path}`)
+    }
+  })
+
+  it('lets an encoded slash through only when the caller asks for it, and still refuses the rest', async () => {
+    await getOrchestratorClient().delete('/firewall/ipsets/c-1/set_1/entries/10.0.0.0%2F8', { encodedSlash: true })
+    expect(calledPath()).toBe('/api/v1/firewall/ipsets/c-1/set_1/entries/10.0.0.0%2F8')
+    fetchMock.mockClear()
+    for (const path of ['/firewall/ipsets/c-1/set_1/entries/..%2F..%2Fhealth/../x', '/firewall/ipsets/c-1/set_1/entries/%2e%2e%2Fx', '/firewall/ipsets/c-1/set_1/entries/a\\b']) {
+      await expect(orchestratorFetch(path, { method: 'DELETE', encodedSlash: true }), path).rejects.toBeInstanceOf(OrchestratorPathError)
+    }
+    await expect(getOrchestratorClient().delete('/firewall/ipsets/c-1/set_1/entries/10.0.0.0%2F8')).rejects.toBeInstanceOf(OrchestratorPathError)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('leaves the query string alone: only the path is checked', async () => {
+    await orchestratorFetch('/drs/check-migration/100?connection_id=c-1&node=pve1&note=a%2Fb..%2e\\c')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('still sends a plain path with its query string', async () => {
     await orchestratorFetch('/reports?limit=10&offset=0')
     expect(fetchMock).toHaveBeenCalledTimes(1)

@@ -939,6 +939,12 @@ export interface EsxiNicInfo {
   network: string
   /** `pciSlotNumber` of the adapter: a Linux guest names it `ens<slot>` (ens160, ens192, ...). */
   pciSlot?: number
+  /**
+   * Distributed port group of an adapter on a vSphere Distributed Switch: its
+   * `summary` only names the switch, so `network` gets the port group's name
+   * from soapNameDistributedNics (ui#1333).
+   */
+  portgroupKey?: string
 }
 
 export interface EsxiVmConfig {
@@ -1035,15 +1041,97 @@ export function parseNicDevices(devicesXml: string): EsxiNicInfo[] {
   while ((nicMatch = nicRegex.exec(devicesXml)) !== null) {
     const n = nicMatch[2]
     const slot = Number(n.match(/<pciSlotNumber>(\d+)<\/pciSlotNumber>/)?.[1])
+    const portgroupKey = n.match(/<portgroupKey>([^<]+)<\/portgroupKey>/)?.[1]
     nics.push({
       label: decodeXmlText(n.match(/<label>([^<]*)<\/label>/)?.[1] || ""),
       type: nicMatch[1],
       macAddress: n.match(/<macAddress>([^<]*)<\/macAddress>/)?.[1] || "",
       network: decodeXmlText(n.match(/<summary>([^<]*)<\/summary>/)?.[1] || ""),
       ...(Number.isInteger(slot) && slot > 0 && { pciSlot: slot }),
+      ...(portgroupKey && { portgroupKey: decodeXmlText(portgroupKey) }),
     })
   }
   return nics
+}
+
+/** A managed object id as vSphere writes them (`dvportgroup-42`, `vm-1001`). */
+const MOID_RE = /^[A-Za-z0-9_.:-]+$/
+
+/** Names of distributed port groups by key (the key is the port group's object id). */
+export async function soapResolvePortgroupNames(session: SoapSession, keys: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  const ids = [...new Set(keys.filter(k => MOID_RE.test(k)))]
+  if (ids.length === 0) return out
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RetrievePropertiesEx>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
+      <urn:specSet>
+        <urn:propSet><urn:type>DistributedVirtualPortgroup</urn:type><urn:pathSet>name</urn:pathSet></urn:propSet>
+${ids.map(id => `        <urn:objectSet><urn:obj type="DistributedVirtualPortgroup">${id}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>`).join("\n")}
+      </urn:specSet>
+      <urn:options/>
+    </urn:RetrievePropertiesEx>
+  </soapenv:Body>
+</soapenv:Envelope>`
+  const text = await retrieveAllPropertiesEx(b => soapRequest(session.baseUrl, b, session.cookie, session.insecureTLS), body, session.propertyCollector)
+  for (const m of text.matchAll(/<objects>([\s\S]*?)<\/objects>/g)) {
+    const key = /<obj type="DistributedVirtualPortgroup">([^<]+)<\/obj>/.exec(m[1])?.[1]
+    const name = /<name>name<\/name>\s*<val[^>]*>([^<]*)<\/val>/.exec(m[1])?.[1]
+    if (key && name) out.set(key, decodeXmlText(name))
+  }
+  return out
+}
+
+/**
+ * Give each adapter on a distributed switch its port group name as `network`
+ * (ui#1333), in place. Best effort: a lookup that fails leaves the vSphere
+ * summary, so the NIC falls back to the default bridge.
+ */
+export async function soapNameDistributedNics(session: SoapSession, nics: EsxiNicInfo[]): Promise<void> {
+  const keys = nics.flatMap(n => (n.portgroupKey ? [n.portgroupKey] : []))
+  if (keys.length === 0) return
+  const names = await soapResolvePortgroupNames(session, keys).catch(() => new Map<string, string>())
+  for (const n of nics) {
+    const name = n.portgroupKey ? names.get(n.portgroupKey) : undefined
+    if (name) n.network = name
+  }
+}
+
+/**
+ * The network adapters of several VMs in one read (ui#1333, bulk dialog),
+ * named as the pipelines name them: the port group of each adapter, distributed
+ * ones included. VMs that do not answer are left out.
+ */
+export async function soapGetVmsNics(session: SoapSession, moIds: string[]): Promise<Map<string, EsxiNicInfo[]>> {
+  const out = new Map<string, EsxiNicInfo[]>()
+  const ids = [...new Set(moIds.filter(id => MOID_RE.test(id)))]
+  if (ids.length === 0) return out
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
+  <soapenv:Body>
+    <urn:RetrievePropertiesEx>
+      <urn:_this type="PropertyCollector">${session.propertyCollector}</urn:_this>
+      <urn:specSet>
+        <urn:propSet><urn:type>VirtualMachine</urn:type><urn:pathSet>config.hardware.device</urn:pathSet></urn:propSet>
+${ids.map(id => `        <urn:objectSet><urn:obj type="VirtualMachine">${id}</urn:obj><urn:skip>false</urn:skip></urn:objectSet>`).join("\n")}
+      </urn:specSet>
+      <urn:options/>
+    </urn:RetrievePropertiesEx>
+  </soapenv:Body>
+</soapenv:Envelope>`
+  const text = await retrieveAllPropertiesEx(b => soapRequest(session.baseUrl, b, session.cookie, session.insecureTLS), body, session.propertyCollector)
+  const all: EsxiNicInfo[] = []
+  for (const m of text.matchAll(/<objects>([\s\S]*?)<\/objects>/g)) {
+    const moId = /<obj type="VirtualMachine">([^<]+)<\/obj>/.exec(m[1])?.[1]
+    if (!moId) continue
+    const nics = parseNicDevices(m[1])
+    out.set(moId, nics)
+    all.push(...nics)
+  }
+  await soapNameDistributedNics(session, all)
+  return out
 }
 
 /** Parse full VM config from SOAP XML */

@@ -1,26 +1,28 @@
-import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth/config"
+import { NextResponse } from "next/server"
+import { getActingSession } from "@/lib/auth/actingUser"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { listVdcs, createVdc } from "@/lib/vdc"
 import { mapCreateVdcError } from "@/lib/vdc/httpErrors"
 import { audit } from "@/lib/audit"
 import { requireProviderTenant } from "@/lib/tenant"
+import type { Principal } from "@/lib/auth/principal"
+import { filterToTokenPerimeter } from "@/lib/api-tokens/scope"
 import { normalizeIdList } from "@/lib/templates/catalogGrants"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 // GET /api/v1/admin/vdcs — list all vDCs (optionally filtered by ?tenantId=xxx)
-export async function GET(req: NextRequest) {
+async function handleGet(req: Request, ctx: { principal?: Principal }) {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS_VIEW)
     if (denied) return denied
 
-    const tenantId = req.nextUrl.searchParams.get("tenantId") || undefined
-    const vdcs = await listVdcs(tenantId)
+    const tenantId = new URL(req.url).searchParams.get("tenantId") || undefined
+    const vdcs = await filterToTokenPerimeter(await listVdcs(tenantId), ctx?.principal, v => [v.connectionId])
 
     return NextResponse.json({ data: vdcs })
   } catch (e: any) {
@@ -28,15 +30,17 @@ export async function GET(req: NextRequest) {
   }
 }
 
+export const GET = withPublicApiGuard("admin-vdcs-list", handleGet)
+
 // POST /api/v1/admin/vdcs — create a vDC
-async function handlePost(req: NextRequest) {
+async function handlePost(req: Request) {
   try {
     const providerGate = await requireProviderTenant()
     if (providerGate) return providerGate
-    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS)
+    const denied = await checkPermission(PERMISSIONS.ADMIN_SETTINGS_VDCS)
     if (denied) return denied
 
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
     const body = await req.json()
 
     // Validate required fields
@@ -91,6 +95,8 @@ async function handlePost(req: NextRequest) {
           : undefined,
         transport: body.transport && typeof body.transport === 'object' ? body.transport : undefined,
         edgeModel: typeof body.edgeModel === 'string' ? body.edgeModel : undefined,
+        evpnZoneId: typeof body.evpnZoneId === 'string' && body.evpnZoneId ? body.evpnZoneId : null,
+        ownVxlanZone: body.ownVxlanZone === false ? false : undefined,
         quota: body.quota,
       },
       session?.user?.id ?? null
@@ -119,4 +125,4 @@ async function handlePost(req: NextRequest) {
   }
 }
 
-export const POST = withAudit({ category: "admin", resourceType: "vdc" }, handlePost)
+export const POST = withAudit({ category: "admin", resourceType: "vdc" }, withPublicApiGuard("admin-vdc-create", handlePost))

@@ -96,21 +96,17 @@ describe('syncOidcRoleAssignment (issue #383)', () => {
     expect(created.tenantId).toBe('default')
   })
 
-  it('demotes the OIDC row to the default role when no group matches (full re-sync)', async () => {
-    // Unlike LDAP, OIDC always resolves a concrete role, so leaving every
-    // mapped group reverts the user to the default role on the next login.
+  it('grants no provider role when a configured mapping matches no group (CX-23)', async () => {
+    // Leaving every mapped group revokes the old grants (issue #442 intent) but
+    // must NOT hand out the provider default role: provider membership needs an
+    // explicit group. With no owned rows here, nothing is created.
     db = makeDb({ rbacRole: { findUnique: vi.fn().mockResolvedValue({ id: 'role_viewer' }) } })
     await syncOidcRoleAssignment(
       db,
       baseParams({ groups: ['unmapped'], config: makeConfig({ db: 'role_db' }, 'role_viewer') }),
     )
 
-    expect(db.rbacUserRole.deleteMany).toHaveBeenCalledWith({
-      where: { userId: 'u1', tenantId: 'default', id: { startsWith: 'oidc_' } },
-    })
-    const created = db.rbacUserRole.create.mock.calls[0][0].data
-    expect(created.roleId).toBe('role_viewer')
-    expect(created.scopeType).toBe('inherit')
+    expect(db.rbacUserRole.create).not.toHaveBeenCalled()
   })
 
   it('falls back to role_viewer when the resolved role no longer exists', async () => {
@@ -170,17 +166,13 @@ describe('syncOidcRoleAssignment — preserve vs revoke (issue #442 regression)'
     expect(db.rbacUserRole.create).not.toHaveBeenCalled()
   })
 
-  it('demotes to the default role when the IdP sends an empty groups array and a mapping exists (authoritative revoke)', async () => {
+  it('grants no provider role when the IdP sends an empty groups array and a mapping exists (CX-23)', async () => {
     const db = makeDb({ rbacRole: { findUnique: vi.fn().mockResolvedValue({ id: 'role_viewer' }) } })
     await syncOidcRoleAssignment(
       db,
       baseParams({ groups: [], groupsClaimIsArray: true, config: makeConfig({ db: 'role_db' }, 'role_viewer') }),
     )
-    expect(db.rbacUserRole.deleteMany).toHaveBeenCalledWith({
-      where: { userId: 'u1', tenantId: 'default', id: { startsWith: 'oidc_' } },
-    })
-    const created = db.rbacUserRole.create.mock.calls[0][0].data
-    expect(created.roleId).toBe('role_viewer')
+    expect(db.rbacUserRole.create).not.toHaveBeenCalled()
   })
 
   it('seeds role_viewer when the configured default role no longer exists (first login, no mapping, Codex P2)', async () => {
@@ -237,14 +229,16 @@ describe('syncOidcRoleAssignment — admin takeover from the Users dialog', () =
     expect(db.rbacUserRole.create).not.toHaveBeenCalled()
   })
 
-  it('still replaces the provider row while the IdP owns it (issue #442 revoke)', async () => {
+  it('revokes the provider row the IdP owns and grants nothing back (issue #442 revoke + CX-23)', async () => {
     const db = makeDbWithRows({ id: 'oidc_previous' }, { id: 'oidc_previous' })
     await syncOidcRoleAssignment(db, baseParams({ groups: ['unmapped'] }))
 
+    // The owned provider row is revoked...
     expect(db.rbacUserRole.deleteMany).toHaveBeenCalledWith({
       where: { userId: 'u1', tenantId: 'default', id: { startsWith: 'oidc_' } },
     })
-    expect(db.rbacUserRole.create.mock.calls[0][0].data.roleId).toBe('role_viewer')
+    // ...and no provider role is handed back.
+    expect(db.rbacUserRole.create).not.toHaveBeenCalled()
   })
 
   it('seeds the provider row for a first login, when the user holds nothing at all', async () => {

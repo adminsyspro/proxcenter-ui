@@ -35,6 +35,7 @@ vi.mock('@/lib/rbac', () => ({
     VM_CONFIG_NIC: 'vm.config.nic',
     VM_CONFIG_HARDWARE: 'vm.config.hardware',
     VM_CONFIG_BOOT: 'vm.config.boot',
+    STORAGE_CONTENT: 'storage.content',
   },
 }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
@@ -232,14 +233,98 @@ describe('PUT config: LXC type-aware forwarding (code review fix)', () => {
 
   it('200: a provider lxc passes unused0 verbatim (non-regression)', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+    // the container carries this volume: re-sending its line is not a new reference
+    pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (opts?.method === 'POST' || opts?.method === 'PUT') return null
+
+      return String(path).endsWith('/config') ? { unused0: 'local-lvm:vm-100-disk-9' } : []
+    })
     const PUT = await loadPut()
     const res = await callRoute(PUT, {
       method: 'PUT',
       params: lxcParams,
-      body: { unused0: 'local-lvm:vm-1-disk-9' },
+      body: { unused0: 'local-lvm:vm-100-disk-9' },
     })
     expect(res.status).toBe(200)
-    expect(configWriteBody()?.get('unused0')).toBe('local-lvm:vm-1-disk-9')
+    expect(configWriteBody()?.get('unused0')).toBe('local-lvm:vm-100-disk-9')
+  })
+})
+
+describe('PUT config: volumes of another guest and cicustom, for every caller (roadmap#219)', () => {
+  const withCluster = (config: Record<string, unknown> = {}) => {
+    pveFetchMock.mockReset().mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (String(path).startsWith('/cluster/resources')) return [{ vmid: 100, node: 'pve3', type: 'qemu' }, { vmid: 200, node: 'pve1', type: 'qemu' }]
+      if (String(path).endsWith('/config') && !opts?.method) return config
+
+      return null
+    })
+  }
+
+  it.each([
+    ['attach', { scsi5: 'ceph:vm-200-disk-0' }],
+    ['unused', { unused3: 'ceph:vm-200-disk-0' }],
+    ['import', { scsi5: 'ceph:0,import-from=ceph:vm-200-disk-0' }],
+  ])('403: a provider caller without the hardware right on the owning guest (%s), nothing written', async (_label, body) => {
+    withCluster()
+    checkPermissionMock.mockImplementation(async (permission: string) =>
+      permission === 'vm.config.hardware' ? new Response(JSON.stringify({ error: 'Permission denied' }), { status: 403 }) : null)
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, { method: 'PUT', params: baseParams, body })
+
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toMatch(/this volume is not one of this guest's disks/)
+    expect(configWriteBody()).toBeFalsy()
+  })
+
+  it('200: the same reference passes with the hardware right on the owning guest', async () => {
+    withCluster()
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, { method: 'PUT', params: baseParams, body: { scsi5: 'ceph:vm-200-disk-0' } })
+
+    expect(res.status).toBe(200)
+    expect(configWriteBody()?.get('scsi5')).toBe('ceph:vm-200-disk-0')
+    expect(checkPermissionMock).toHaveBeenCalledWith('vm.config.hardware', 'vm', 'res')
+  })
+
+  it('200: re-saving a line the guest already carries asks nothing about its name', async () => {
+    withCluster({ scsi1: 'ceph:vm-200-disk-0,size=8G' })
+    checkPermissionMock.mockImplementation(async (permission: string) =>
+      permission === 'vm.config.hardware' ? new Response('{}', { status: 403 }) : null)
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, { method: 'PUT', params: baseParams, body: { scsi1: 'ceph:vm-200-disk-0,size=8G,discard=on' } })
+
+    expect(res.status).toBe(200)
+    expect(configWriteBody()?.get('scsi1')).toBe('ceph:vm-200-disk-0,size=8G,discard=on')
+  })
+
+  it('403: cicustom on a storage the caller holds no content right on, nothing written', async () => {
+    checkPermissionMock.mockImplementation(async (permission: string) =>
+      permission === 'storage.content' ? new Response('{}', { status: 403 }) : null)
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, { method: 'PUT', params: baseParams, body: { cicustom: 'user=local:snippets/user.yaml' } })
+
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'cicustom: storage "local" is outside your scope.' })
+    expect(configWriteBody()).toBeFalsy()
+  })
+
+  it('200: cicustom passes with that right, and clearing it asks nothing', async () => {
+    const PUT = await loadPut()
+    const set = await callRoute(PUT, { method: 'PUT', params: baseParams, body: { cicustom: 'user=local:snippets/user.yaml' } })
+
+    expect(set.status).toBe(200)
+    expect(checkPermissionMock).toHaveBeenCalledWith('storage.content', 'storage', 'conn-1:local')
+    expect(configWriteBody()?.get('cicustom')).toBe('user=local:snippets/user.yaml')
+  })
+
+  it('403: a vDC tenant naming a cicustom storage outside its vDC', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['gold'], {}))
+    const PUT = await loadPut()
+    const res = await callRoute(PUT, { method: 'PUT', params: baseParams, body: { cicustom: 'user=local:snippets/user.yaml' } })
+
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'cicustom: this storage is not part of your vDC.' })
+    expect(configWriteBody()).toBeFalsy()
   })
 })
 
@@ -287,7 +372,8 @@ describe('PUT config: import-from metering (Finding I2 -- meter, never refuse)',
       if (path === '/cluster/resources?type=vm') return [{ vmid: 100, type: 'qemu', node: 'pve3', pool: 'pool-1' }]
       if (opts?.method === 'PUT') return { data: 'ok' }
       if (String(path).endsWith('/storage/gold/content')) throw new Error('storage unreachable')
-      return {}
+      // the guest copies a disk it carries
+      return String(path).endsWith('/config') ? { scsi0: 'gold:vm-100-disk-0,size=8G' } : {}
     })
 
     const PUT = await loadPut()

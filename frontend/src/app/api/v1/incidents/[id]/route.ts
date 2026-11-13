@@ -9,7 +9,7 @@ import { NextResponse } from 'next/server'
 import { withAudit } from '@/lib/audit/withAudit'
 import { codeResponse } from '@/lib/availability/orchestrator'
 import { incidentViewResponse } from '@/lib/incidents/alertVisibility'
-import { requireIncidentAccess } from '@/lib/incidents/guard'
+import { requireIncidentAccess, requireIncidentWrite } from '@/lib/incidents/guard'
 import { deleteIncident, getIncident, incidentErrorResponse, patchIncident } from '@/lib/incidents/orchestrator'
 import { parseIncidentPatch, readJson } from '@/lib/incidents/validate'
 import { PERMISSIONS } from '@/lib/rbac'
@@ -34,13 +34,13 @@ export async function GET(_request: Request, ctx: Ctx) {
 
 async function handlePatch(request: Request, ctx: Ctx) {
   try {
-    const access = await requireIncidentAccess('write')
+    const { id } = await ctx.params
+    const access = await requireIncidentWrite(id)
     if (access.denied) return access.denied
 
     const parsed = parseIncidentPatch(await readJson(request))
     if (parsed.ok === false) return codeResponse(parsed.code, 400)
 
-    const { id } = await ctx.params
     return await incidentViewResponse(await patchIncident(id, parsed.value), PERMISSIONS.ALERTS_MANAGE)
   } catch (e) {
     return incidentErrorResponse(e, 'update incident')
@@ -49,10 +49,10 @@ async function handlePatch(request: Request, ctx: Ctx) {
 
 async function handleDelete(_request: Request, ctx: Ctx) {
   try {
-    const access = await requireIncidentAccess('admin')
+    const { id } = await ctx.params
+    const access = await requireIncidentWrite(id, 'admin')
     if (access.denied) return access.denied
 
-    const { id } = await ctx.params
     return NextResponse.json(await deleteIncident(id))
   } catch (e) {
     return incidentErrorResponse(e, 'delete incident')

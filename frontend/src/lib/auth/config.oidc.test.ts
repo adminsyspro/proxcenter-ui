@@ -19,6 +19,18 @@ vi.mock('@/lib/auth/oidc', () => ({
   oidcSeedRoleId: vi.fn(),
   syncOidcRoleAssignment: vi.fn(),
 }))
+// getAuthOptions lists the live connections (issue #1289); here they are the
+// provider IdP returned by the getOidcConfig mock, when it is enabled.
+vi.mock('./oidcConnections', async () => {
+  const actual = await vi.importActual<typeof import('./oidcConnections')>('./oidcConnections')
+  return {
+    ...actual,
+    listActiveOidcConnections: async () => {
+      const c = await getOidcConfig()
+      return c && c.enabled ? [{ id: 'default', tenantId: 'default', ...c }] : []
+    },
+  }
+})
 vi.mock('./jwtContext', () => ({
   loadJwtContext: vi.fn(),
   isSessionTenantDisabled: isSessionTenantDisabledMock,
@@ -42,12 +54,16 @@ function baseConfig(overrides: Record<string, unknown> = {}) {
     userinfoUrl: '',
     claimEmail: 'email',
     claimName: 'name',
+    requireVerifiedEmail: true,
+    idpVerifiesEmail: false,
     ...overrides,
   }
 }
 
+// Ported to oidcMetadata.test.ts: discovery URL, manual endpoints and the
+// per-connection agent are no longer provider fields (issue #1289).
 async function oidcProvider() {
-  const opts = await getAuthOptions()
+  const opts = await getAuthOptions(new Request('http://pxc.test/api/auth/signin/oidc', { method: 'POST' }))
   return (opts.providers as any[]).find(p => p.id === 'oidc')
 }
 
@@ -56,47 +72,6 @@ describe('getAuthOptions OIDC provider', () => {
     vi.clearAllMocks()
     getOidcConfig.mockReset()
     isSessionTenantDisabledMock.mockReset().mockResolvedValue(false)
-  })
-
-  it('trims every trailing slash of the issuer before building the discovery URL', async () => {
-    getOidcConfig.mockResolvedValue(baseConfig())
-    const p = await oidcProvider()
-    expect(p.wellKnown).toBe('https://idp.example.com/realms/x/.well-known/openid-configuration')
-    expect(p.issuer).toBeUndefined()
-    expect(p.name).toBe('Keycloak')
-  })
-
-  it('leaves an issuer without trailing slash untouched', async () => {
-    getOidcConfig.mockResolvedValue(baseConfig({ issuerUrl: 'https://idp.example.com/realms/x' }))
-    const p = await oidcProvider()
-    expect(p.wellKnown).toBe('https://idp.example.com/realms/x/.well-known/openid-configuration')
-  })
-
-  it('skips discovery and passes the raw issuer when manual endpoints are set', async () => {
-    getOidcConfig.mockResolvedValue(baseConfig({ authorizationUrl: 'https://idp.example.com/auth' }))
-    const p = await oidcProvider()
-    expect(p.wellKnown).toBeUndefined()
-    expect(p.issuer).toBe('https://idp.example.com/realms/x//')
-    expect(p.authorization.url).toBe('https://idp.example.com/auth')
-  })
-
-  it('always hands openid-client an agent, false when no proxy is set (roadmap#78)', async () => {
-    vi.stubEnv('HTTPS_PROXY', '')
-    vi.stubEnv('HTTP_PROXY', '')
-    getOidcConfig.mockResolvedValue(baseConfig())
-    const p = await oidcProvider()
-    // false, not undefined: openid-client keeps the options in a module global
-    // that NextAuth only merges into, so a previous proxy agent would survive.
-    expect(p.httpOptions).toEqual({ agent: false, timeout: 10000 })
-    vi.unstubAllEnvs()
-  })
-
-  it('routes discovery, token and keys through the saved proxy (roadmap#78)', async () => {
-    const https = await import('node:https')
-    getOidcConfig.mockResolvedValue(baseConfig({ proxyUrl: 'http://proxy.corp:3128', proxyUsername: 'svc', proxyPassword: 'pw' }))
-    const p = await oidcProvider()
-    expect(p.httpOptions.agent).toBeInstanceOf(https.Agent)
-    expect(p.httpOptions.timeout).toBe(10000)
   })
 
   it('adds no OIDC provider when OIDC is disabled', async () => {
@@ -150,7 +125,7 @@ describe('OIDC sign-in binding a local account found by e-mail (H2)', () => {
     expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({
       action: 'login_failed',
       userEmail: 'admin@example.test',
-      details: { reason: 'oidc_sub_mismatch', provider: 'oidc' },
+      details: { reason: 'oidc_sub_mismatch', provider: 'oidc', connection: 'default' },
     }))
   })
 
@@ -161,11 +136,24 @@ describe('OIDC sign-in binding a local account found by e-mail (H2)', () => {
     expect(await signIn({})).toBe('/login?error=OidcLinkRefused')
     expect(prisma.user.update).not.toHaveBeenCalled()
     expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({
-      details: { reason: 'email_not_verified', provider: 'oidc' },
+      details: { reason: 'email_not_verified', provider: 'oidc', connection: 'default' },
     }))
   })
 
-  it('still links an unverified address to an ordinary account', async () => {
+  it('refuses an unverified address for an ordinary account when a verified e-mail is required', async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ ...localAccount, oidcSub: null })
+    ;(prisma.rbacUserRole.findFirst as any).mockResolvedValue(null)
+
+    expect(await signIn({ email_verified: false })).toBe('/login?error=OidcLinkRefused')
+    expect(prisma.user.update).not.toHaveBeenCalled()
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'login_failed',
+      details: { reason: 'email_not_verified', provider: 'oidc', connection: 'default' },
+    }))
+  })
+
+  it('links an unverified address to an ordinary account when only auditing, and audits it', async () => {
+    getOidcConfig.mockResolvedValue(baseConfig({ requireVerifiedEmail: false }))
     ;(prisma.user.findUnique as any).mockResolvedValue({ ...localAccount, oidcSub: null })
     ;(prisma.rbacUserRole.findFirst as any).mockResolvedValue(null)
 
@@ -174,7 +162,41 @@ describe('OIDC sign-in binding a local account found by e-mail (H2)', () => {
       where: { id: 'u-local' },
       data: expect.objectContaining({ oidcSub: 'sub-new', authProvider: 'oidc' }),
     }))
+    expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'login',
+      status: 'warning',
+      userEmail: 'admin@example.test',
+      details: { reason: 'email_not_verified', provider: 'oidc', linked: true, connection: 'default' },
+    }))
+  })
+
+  it('links a verified address without any audit entry', async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ ...localAccount, oidcSub: null })
+    ;(prisma.rbacUserRole.findFirst as any).mockResolvedValue(null)
+
+    await signIn({ email_verified: true })
+    expect(prisma.user.update).toHaveBeenCalled()
     expect(auditMock).not.toHaveBeenCalled()
+  })
+
+  it('drops the local password of the account it converts', async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ ...localAccount, oidcSub: null, password: 'h', localLoginAllowed: false })
+    ;(prisma.rbacUserRole.findFirst as any).mockResolvedValue(null)
+
+    await signIn({ email_verified: true })
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'u-local' },
+      data: expect.objectContaining({ authProvider: 'oidc', password: null }),
+    }))
+  })
+
+  it('keeps the local password of an account with emergency access', async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ ...localAccount, oidcSub: null, password: 'h', localLoginAllowed: true })
+
+    await signIn({ email_verified: true })
+    const { data } = (prisma.user.update as any).mock.calls[0][0]
+    expect(data).not.toHaveProperty('password')
+    expect(data.localLoginAllowed).toBe(true)
   })
 
   it('leaves an account found by its own subject alone', async () => {
@@ -186,3 +208,4 @@ describe('OIDC sign-in binding a local account found by e-mail (H2)', () => {
     expect(auditMock).not.toHaveBeenCalled()
   })
 })
+

@@ -1,30 +1,33 @@
 // src/app/api/v1/users/[id]/route.ts
 import { NextResponse } from "next/server"
 
-import { getServerSession } from "next-auth"
-
-import { authOptions } from "@/lib/auth/config"
+import { getActingSession, getTokenCaller } from "@/lib/auth/actingUser"
 import { prisma } from "@/lib/db/prisma"
 import { hashPassword } from "@/lib/auth/password"
 import { safeLog } from "@/lib/log/sanitize"
-import { checkPermission, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { checkPermission, isUserSuperAdmin, PERMISSIONS, PROTECTED_ROLE_IDS } from "@/lib/rbac"
+import { isExternalProvider } from "@/lib/auth/localLogin"
 import { guardRoleAssignment } from "@/lib/rbac/assignmentGuards"
+import { isServiceDeskAccount, SERVICE_DESK_ACCOUNT_ERROR, SERVICE_DESK_ROW_PREFIX } from "@/lib/rbac/serviceDesk"
 import { denyIfTargetIsProtectedAndCallerIsNot, findUserInTenant } from "@/lib/rbac/userTargetGuards"
 import { nanoid } from "nanoid"
 import { DEFAULT_TENANT_ID, addUserToTenant, removeUserFromTenant, TenantMembershipError, getCurrentTenantId } from "@/lib/tenant"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
+const TOKEN_ON_CREATOR = "An API token cannot change or delete the account of its creator"
+
 // GET /api/v1/users/[id] - Récupérer un utilisateur
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleGet(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    // RBAC: Check admin.users permission
-    const denied = await checkPermission(PERMISSIONS.ADMIN_USERS)
+    // RBAC: admin.users.view, implied by admin.users (API tokens: users:read)
+    const denied = await checkPermission(PERMISSIONS.ADMIN_USERS_VIEW)
     if (denied) return denied
 
     const { id } = await params
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
     const superAdminBlock = await denyIfTargetIsProtectedAndCallerIsNot(id, session?.user?.id)
     if (superAdminBlock) return superAdminBlock
 
@@ -51,6 +54,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         name: user.name,
         role: user.role,
         auth_provider: user.authProvider,
+        local_login_allowed: user.localLoginAllowed,
         enabled: user.enabled,
         last_login_at: user.lastLoginAt?.toISOString() ?? null,
         created_at: user.createdAt.toISOString(),
@@ -63,13 +67,31 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
 }
 
+export const GET = withPublicApiGuard("user-get", handleGet)
+
 // PATCH /api/v1/users/[id] - Modifier un utilisateur
 async function handlePatch(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
     const { id } = await params
     const body = await req.json()
-    const { name, enabled, password, tenantIds, roleId, deleteApiTokens } = body
+    const { name, enabled, password, tenantIds, roleId, deleteApiTokens, localLoginAllowed } = body
+
+    // An API token (users:write) never touches the account of its creator,
+    // and never sets a credential on an existing account: a leaked token must
+    // not turn into a sign-in.
+    const tokenCaller = await getTokenCaller()
+    if (tokenCaller) {
+      if (tokenCaller.creatorUserId === id) {
+        return NextResponse.json({ error: TOKEN_ON_CREATOR }, { status: 403 })
+      }
+      if (password !== undefined || localLoginAllowed !== undefined) {
+        return NextResponse.json(
+          { error: "An API token cannot set the password or the emergency access of an existing account" },
+          { status: 403 }
+        )
+      }
+    }
 
     const isSelf = session?.user?.id === id
     const selfServiceFields = new Set(["name", "password"])
@@ -107,14 +129,58 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    // Build the Prisma update payload from whitelisted fields only.
+    // The password, the enabled flag and the name are one account for every
+    // tenant the user belongs to. A customer tenant administers its own
+    // memberships and grants; when the user is also a member elsewhere, the
+    // account itself is changed by the provider or by its holder. A field
+    // sent back with its current value (the dialog resends the whole form)
+    // changes nothing and is not held against the caller.
+    // A provider service-desk account is the provider's, in every tenant it
+    // reaches (ui#1336).
+    if (!isProviderView && !isSelf && (await isServiceDeskAccount(id))) {
+      return NextResponse.json(SERVICE_DESK_ACCOUNT_ERROR, { status: 403 })
+    }
+    if (localLoginAllowed !== undefined && typeof localLoginAllowed !== "boolean") {
+      return NextResponse.json({ error: "localLoginAllowed must be a boolean" }, { status: 400 })
+    }
+    const localLoginChanged = localLoginAllowed !== undefined && localLoginAllowed !== user.localLoginAllowed
+    const touchesAccount = Boolean(password)
+      || (enabled !== undefined && !!enabled !== user.enabled)
+      || (name !== undefined && name !== user.name)
+      || localLoginChanged
+    if (!isProviderView && !isSelf && touchesAccount) {
+      const elsewhere = await prisma.userTenant.count({ where: { userId: id, tenantId: { not: tenantId } } })
+      if (elsewhere > 0) {
+        return NextResponse.json(
+          { error: "This user also belongs to other tenants; their account is managed by the provider", code: "SHARED_ACCOUNT" },
+          { status: 403 }
+        )
+      }
+    }
+
+    // Build the Prisma update payload from whitelisted fields only. A field
+    // equal to what was just read is left out: writing it back would also
+    // overwrite whatever another request set in between (a provider
+    // disabling the account while a tenant dialog saves "enabled: true").
     const data: Record<string, unknown> = {}
-    if (name !== undefined) data.name = name
-    if (enabled !== undefined) data.enabled = !!enabled
+    if (name !== undefined && name !== user.name) data.name = name
+    if (enabled !== undefined && !!enabled !== user.enabled) data.enabled = !!enabled
+    // Emergency access: a local password that keeps working once the account
+    // is OIDC or LDAP. Only a super admin grants or withdraws it; withdrawing
+    // it from an SSO account drops the password with it.
+    if (localLoginChanged) {
+      if (!session?.user?.id || !(await isUserSuperAdmin(session.user.id))) {
+        return NextResponse.json({ error: "Only a super admin may change emergency access" }, { status: 403 })
+      }
+      data.localLoginAllowed = localLoginAllowed
+      if (!localLoginAllowed && isExternalProvider(user.authProvider) && user.password) data.password = null
+    }
+    const localLoginAfter = localLoginAllowed ?? user.localLoginAllowed
     // Password is owned by the external IdP for SSO/LDAP accounts. Refuse to set
     // a local password on them — it would open a credentials login path that
-    // bypasses SSO/MFA. Covers both admin edits and self-service profile changes.
-    if (password && (user.authProvider === "ldap" || user.authProvider === "oidc")) {
+    // bypasses SSO/MFA — unless the account has emergency access. Covers both
+    // admin edits and self-service profile changes.
+    if (password && isExternalProvider(user.authProvider) && !localLoginAfter) {
       return NextResponse.json(
         { error: "The password is managed by the identity provider (OIDC/LDAP) and cannot be set here." },
         { status: 403 }
@@ -282,6 +348,8 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
           where: {
             userId: id,
             ...(wouldStripProtected ? {} : { roleId: { notIn: [...PROTECTED_ROLE_IDS] } }),
+            // Service-desk rows follow their assignment (ui#1336), not this dialog.
+            NOT: { id: { startsWith: SERVICE_DESK_ROW_PREFIX } },
           },
         })
         if (typeof roleId === "string" && roleId.length > 0) {
@@ -309,7 +377,10 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
 
     const wantsTokenDeletion = deleteApiTokens === true
 
-    if (Object.keys(data).length === 0 && !tenantsChanged && !rolesChanged && !wantsTokenDeletion) {
+    // Account fields sent back unchanged are a valid no-op (the dialog
+    // resends its form); an empty body is still a client error.
+    const accountFieldsSent = name !== undefined || enabled !== undefined || localLoginAllowed !== undefined
+    if (Object.keys(data).length === 0 && !tenantsChanged && !rolesChanged && !wantsTokenDeletion && !accountFieldsSent) {
       return NextResponse.json({ error: "No changes provided" }, { status: 400 })
     }
 
@@ -357,7 +428,7 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     // open, otherwise a stolen cookie survives the exact action a compromised
     // user takes to defend themselves. No exception sid: the caller's own
     // session goes too, which is the expected outcome of "change my password".
-    if (password || enabled === false) {
+    if (password || data.enabled === false || data.password === null) {
       try {
         const { revokeAllSessions } = await import("@/lib/auth/sessions")
         const revoked = await revokeAllSessions(id)
@@ -374,9 +445,11 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     // Audit
     const { audit } = await import("@/lib/audit")
     const changes: Record<string, any> = {}
-    if (name !== undefined) changes.name = name
-    if (enabled !== undefined) changes.enabled = enabled
+    if (data.name !== undefined) changes.name = data.name
+    if (data.enabled !== undefined) changes.enabled = data.enabled
     if (password) changes.passwordChanged = true
+    if (data.localLoginAllowed !== undefined) changes.localLoginAllowed = data.localLoginAllowed
+    if (data.password === null) changes.passwordRemoved = true
     if (tenantsChanged && (tenantsChanged.added.length > 0 || tenantsChanged.removed.length > 0)) {
       changes.tenants = tenantsChanged
     }
@@ -411,6 +484,7 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
         name: updated.name,
         role: updated.role,
         auth_provider: updated.authProvider,
+        local_login_allowed: updated.localLoginAllowed,
         enabled: updated.enabled,
         last_login_at: updated.lastLoginAt?.toISOString() ?? null,
         created_at: updated.createdAt.toISOString(),
@@ -431,8 +505,11 @@ async function handleDelete(req: Request, { params }: { params: Promise<{ id: st
     const denied = await checkPermission(PERMISSIONS.ADMIN_USERS)
     if (denied) return denied
 
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
     const { id } = await params
+    if ((await getTokenCaller())?.creatorUserId === id) {
+      return NextResponse.json({ error: TOKEN_ON_CREATOR }, { status: 403 })
+    }
     const superAdminBlock = await denyIfTargetIsProtectedAndCallerIsNot(id, session?.user?.id)
     if (superAdminBlock) return superAdminBlock
 
@@ -456,6 +533,11 @@ async function handleDelete(req: Request, { params }: { params: Promise<{ id: st
         { error: "You cannot delete your own account" },
         { status: 400 }
       )
+    }
+
+    // A provider service-desk account is the provider's (ui#1336).
+    if (!isProviderView && (await isServiceDeskAccount(id))) {
+      return NextResponse.json(SERVICE_DESK_ACCOUNT_ERROR, { status: 403 })
     }
 
     // Offboarding (#632), opt-in through ?deleteApiTokens=true. This MUST run
@@ -536,5 +618,5 @@ async function handleDelete(req: Request, { params }: { params: Promise<{ id: st
   }
 }
 
-export const PATCH = withAudit({ category: "users", resourceType: "user", resourceParam: "id" }, handlePatch)
-export const DELETE = withAudit({ category: "users", resourceType: "user", resourceParam: "id" }, handleDelete)
+export const PATCH = withAudit({ category: "users", resourceType: "user", resourceParam: "id" }, withPublicApiGuard("user-update", handlePatch))
+export const DELETE = withAudit({ category: "users", resourceType: "user", resourceParam: "id" }, withPublicApiGuard("user-delete", handleDelete))

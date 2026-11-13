@@ -5,6 +5,10 @@ vi.mock('@/lib/auth/oidc', () => ({
   getOidcConfig: async () => null,
   isOidcEnabled: async () => false,
 }))
+vi.mock('./oidcConnections', async () => {
+  const actual = await vi.importActual<typeof import('./oidcConnections')>('./oidcConnections')
+  return { ...actual, listActiveOidcConnections: async () => [] }
+})
 
 import { getAuthOptions } from './config'
 

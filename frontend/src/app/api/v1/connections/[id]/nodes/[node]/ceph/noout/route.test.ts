@@ -49,6 +49,7 @@ import { checkPermission } from '@/lib/rbac'
 import { executeSSH } from '@/lib/ssh/exec'
 import { getNodeIp } from '@/lib/ssh/node-ip'
 import { PveLicenseExcludedError } from '@/lib/license/exclusions'
+import { asRoot, resolveSudo } from '@/lib/ssh/sudo'
 
 const getConnectionByIdMock = getConnectionById as any
 const pveFetchMock = pveFetch as any
@@ -126,7 +127,8 @@ const healthy = (tree = osdTree()) => ({
   '/cluster/ceph/status': HEALTH_OK,
 })
 
-const sshCalls = () => executeSSHMock.mock.calls.map((c: any[]) => c[2])
+// The commands as a root account receives them (sudo marks dropped).
+const sshCalls = () => executeSSHMock.mock.calls.map((c: any[]) => resolveSudo(c[2], false))
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -203,7 +205,7 @@ describe('GET /api/v1/connections/[id]/nodes/[node]/ceph/noout', () => {
     expect(executeSSHMock).toHaveBeenCalledWith(
       CONN_ID,
       expect.objectContaining({ host: '10.42.0.103' }),
-      'ceph osd ok-to-stop 2 5 -f json 2>/dev/null; true',
+      asRoot('ceph osd ok-to-stop 2 5 -f json') + ' 2>/dev/null; true',
       30_000,
       { readOnly: true },
     )
@@ -357,7 +359,7 @@ describe('DELETE /api/v1/connections/[id]/nodes/[node]/ceph/noout', () => {
     const res = await callRoute(DELETE, { params, method: 'DELETE', searchParams: { force: '1' } })
     expect(res.status).toBe(200)
     expect(await readJson<any>(res)).toMatchObject({ success: true, forced: true, osdsDown: [5] })
-    expect(executeSSHMock).toHaveBeenCalledWith(CONN_ID, expect.objectContaining({ host: '10.42.0.101' }), 'ceph osd unset-group noout pve3')
+    expect(executeSSHMock).toHaveBeenCalledWith(CONN_ID, expect.objectContaining({ host: '10.42.0.101' }), asRoot('ceph osd unset-group noout pve3'))
   })
 
   it('409 no_osds without a CRUSH host, 500 with a hint when unset-group fails', async () => {

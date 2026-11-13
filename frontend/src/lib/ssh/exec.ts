@@ -5,8 +5,9 @@ import { decryptSecret } from "@/lib/crypto/secret"
 import { isConnectionLicenseExcluded, licenseExcludedError, PveLicenseExcludedError } from "@/lib/license/exclusions"
 import { safeLog } from "@/lib/log/sanitize"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
-import { makeHostVerifier } from "@/lib/ssh/host-key-store"
+import { hostKeyAlgorithms, makeHostVerifier, type HostKeyRefusal } from "@/lib/ssh/host-key-store"
 import { resolveSshTargetPort, sshTargetHost, type SshTarget } from "@/lib/ssh/node-endpoint-core"
+import { hasSudoMark, resolveSudo } from "@/lib/ssh/sudo"
 
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:8080"
 
@@ -38,6 +39,8 @@ export interface SSHResult {
   success: boolean
   output?: string
   error?: string
+  /** Set when the host key was refused: the key it presented, now pending. */
+  hostKey?: HostKeyRefusal
 }
 
 // Keepalive on every ssh2 connection: send a probe every 15s and give up after
@@ -64,18 +67,31 @@ export interface SSHExecOpts {
    *  command is refused (roadmap#58). A caller vouches for its own command;
    *  in doubt, leave it unset and the command is refused there. */
   readOnly?: boolean
+  /** The command runs as the SSH account: only the programs it marks with
+   *  asRoot() (lib/ssh/sudo) escalate, as `sudo -n <program>`. Implied by a
+   *  command carrying a mark. Without it, an unmarked command keeps the
+   *  historical `sudo sh -c '<command>'` wrapping, which only a full sudoers
+   *  grant satisfies (migrations). */
+  asAccount?: boolean
+  /** Sent on the command's stdin, then closed. The way to hand a secret to a
+   *  node: a command line lands in the sudo log and in ps, stdin does not.
+   *  Only honoured on the ssh2 path, so the call skips the orchestrator. */
+  stdin?: string
 }
 
 /**
  * Build the ssh2 connect config, with keepalive always on (see the constants
- * above) and TOFU host-key verification. Auth is key (+ optional passphrase) or
+ * above) and host-key verification against the confirmed keys. Auth is key (+ optional passphrase) or
  * password (+ keyboard-interactive), matching what the connection record holds.
  */
 export function buildConnectConfig(opts: {
   host: string; port: number; user: string; key?: string; password?: string; passphrase?: string
-  /** Called with a human-readable reason when the pinned host key no longer
-   *  matches, so the caller can replace ssh2's opaque handshake error. */
-  onMismatch?: (message: string) => void
+  /** Called when the host key is refused (not confirmed, or changed), so the
+   *  caller can replace ssh2's opaque handshake error. */
+  onRefusal?: (refusal: HostKeyRefusal, message: string) => void
+  /** Host key algorithms to offer (hostKeyAlgorithms()), so the server
+   *  presents a key type ProxCenter holds a trusted key for. */
+  hostKeyAlgorithms?: string[]
 }): Record<string, unknown> {
   const cfg: Record<string, unknown> = {
     host: opts.host,
@@ -84,11 +100,11 @@ export function buildConnectConfig(opts: {
     readyTimeout: 30_000,
     keepaliveInterval: SSH_KEEPALIVE_INTERVAL_MS,
     keepaliveCountMax: SSH_KEEPALIVE_COUNT_MAX,
-    // TOFU host-key verification. Pin on first contact, refuse any later
-    // connection whose server key differs. Closes the MITM gap that ssh2's
-    // default "trust everything" behaviour leaves open.
-    hostVerifier: makeHostVerifier(opts.host, opts.port, opts.onMismatch),
+    // Only a confirmed host key is accepted; an unknown or changed one
+    // refuses the connection (ssh2 trusts every key by default).
+    hostVerifier: makeHostVerifier(opts.host, opts.port, opts.onRefusal),
   }
+  if (opts.hostKeyAlgorithms?.length) cfg.algorithms = { serverHostKey: opts.hostKeyAlgorithms }
   if (opts.key) {
     cfg.privateKey = opts.key
     if (opts.passphrase) cfg.passphrase = opts.passphrase
@@ -145,6 +161,26 @@ export function createInactivityTimer(ms: number, onFire: () => void): { bump: (
   }
   bump()
   return { bump, clear }
+}
+
+// sudo's own refusals when a full grant is missing: no password can be typed
+// in a non-interactive session, or the command is outside the sudoers rules.
+const SUDO_REFUSED = /sudo: (a password is required|a terminal is required|sorry, user \S+ is not allowed)/
+
+/**
+ * A command still wrapped in `sudo sh -c` (the migration pipelines) needs the
+ * full grant of the migrations profile: say so instead of sudo's bare refusal.
+ */
+export function explainSudoRefusal(result: SSHResult, wrapped: boolean): SSHResult {
+  if (!wrapped || result.success) return result
+  const text = `${result.error ?? ""}\n${result.output ?? ""}`
+
+  if (!SUDO_REFUSED.test(text)) return result
+
+  return {
+    ...result,
+    error: "sudo refused the command: this operation runs a whole script as root and needs the migrations sudo profile (NOPASSWD: ALL), see Settings > SSH commands",
+  }
 }
 
 /**
@@ -254,16 +290,21 @@ export async function executeSSH(
   // otherwise fail every check with `bash: sudo: command not found`.
   // Use `sudo sh -c '...'` so compound commands (&&, ||, pipes, redirects)
   // all execute under sudo. Naive `sudo cmd1 && cmd2` only sudo's cmd1.
-  const needsSudo = connection.sshUseSudo && user !== 'root'
-  const finalCommand = needsSudo ? `sudo sh -c ${shellEscape(command)}` : command
+  const needsSudo = !!connection.sshUseSudo && user !== 'root'
+  const perProgram = execOpts.asAccount === true || hasSudoMark(command)
+  const finalCommand = perProgram
+    ? resolveSudo(command, needsSudo)
+    : needsSudo ? `sudo sh -c ${shellEscape(command)}` : command
 
+  const wrapped = !perProgram && needsSudo
   const direct = () => executeSSHDirect({
     host: nodeIp, port, user, key, password, passphrase, command: finalCommand, timeoutMs,
-    inactivityMs: execOpts.inactivityMs, onData: execOpts.onData,
-  })
+    inactivityMs: execOpts.inactivityMs, onData: execOpts.onData, stdin: execOpts.stdin,
+  }).then(r => explainSudoRefusal(r, wrapped))
 
-  // The orchestrator answers once at the end, so a streaming call cannot go through it.
-  if (execOpts.onData !== undefined || execOpts.inactivityMs !== undefined) return direct()
+  // The orchestrator answers once at the end and takes no stdin, so a
+  // streaming call or one feeding stdin cannot go through it.
+  if (execOpts.onData !== undefined || execOpts.inactivityMs !== undefined || execOpts.stdin !== undefined) return direct()
 
   // 1. Try orchestrator
   try {
@@ -283,7 +324,7 @@ export async function executeSSH(
     if (res.ok) {
       const data = await res.json()
       console.log(`[ssh] executed via orchestrator on ${safeLog(nodeIp)}`)
-      return { success: data.success !== false, output: data.output, error: data.error }
+      return explainSudoRefusal({ success: data.success !== false, output: data.output, error: data.error }, wrapped)
     }
 
     const err = await res.json().catch(() => ({}))
@@ -324,7 +365,7 @@ export async function executeSSH(
 /**
  * Execute a command over SSH using the ssh2 library directly.
  */
-export function executeSSHDirect(opts: {
+export async function executeSSHDirect(opts: {
   host: string
   port: number
   user: string
@@ -335,7 +376,11 @@ export function executeSSHDirect(opts: {
   timeoutMs?: number
   inactivityMs?: number
   onData?: (chunk: string) => void
+  /** Written to the command's stdin, which is then closed. */
+  stdin?: string
 }): Promise<SSHResult> {
+  const algorithms = await hostKeyAlgorithms(opts.host, opts.port)
+
   return new Promise((resolve) => {
     const conn = new Client()
     // Absolute cap for the whole SSH operation (connect + exec + stream).
@@ -345,12 +390,10 @@ export function executeSSHDirect(opts: {
     // transfer long before this fires.
     const overallTimeoutMs = opts.timeoutMs ?? 30_000
 
-    // Set by the host-key verifier when the pinned key no longer matches.
-    // ssh2 reports that rejection as a bare "Handshake failed" on the error
-    // event, so without this the caller only sees a generic failure and the
-    // operator has no way to tell a rotated host key from a network problem
-    // (adminsyspro/proxcenter-ui#979).
-    let hostKeyMismatch: string | null = null
+    // Set by the host-key verifier when it refuses the key. ssh2 reports that
+    // rejection as a bare "Handshake failed" on the error event, so without
+    // this the caller could not tell a key to confirm from a network problem.
+    let refused: { refusal: HostKeyRefusal; message: string } | null = null
 
     // Single-settle guard: whichever of close/error/timeout/inactivity happens
     // first wins and tears down both timers + the connection.
@@ -383,6 +426,8 @@ export function executeSSHDirect(opts: {
           settle({ success: false, error: err.message })
           return
         }
+
+        if (opts.stdin !== undefined) stream.end(opts.stdin)
 
         let stdout = ""
         let stderr = ""
@@ -418,7 +463,9 @@ export function executeSSHDirect(opts: {
       })
     })
 
-    conn.on("error", (err) => settle({ success: false, error: hostKeyMismatch ?? err.message }))
+    conn.on("error", (err) => settle(refused
+      ? { success: false, error: refused.message, hostKey: refused.refusal }
+      : { success: false, error: err.message }))
 
     // Handle keyboard-interactive auth (used by ESXi and some other hosts)
     conn.on("keyboard-interactive", (_name, _instructions, _instructionsLang, prompts, finish) => {
@@ -431,7 +478,8 @@ export function executeSSHDirect(opts: {
 
     conn.connect(buildConnectConfig({
       ...opts,
-      onMismatch: (message) => { hostKeyMismatch = message },
+      hostKeyAlgorithms: algorithms,
+      onRefusal: (refusal, message) => { refused = { refusal, message } },
     }) as any)
   })
 }

@@ -26,11 +26,13 @@ function VmActions({
   isLocked,
   lockType,
   canMigrate = true,
+  canMoveVdc = false,
   onStart,
   onShutdown,
   onStop,
   onPause,
   onMigrate,
+  onMoveVdc,
   onClone,
   onConvertTemplate,
   onDelete,
@@ -46,11 +48,15 @@ function VmActions({
   // rather than disabling, since there's no useful "informational" value
   // in a non-clickable migrate button.
   canMigrate?: boolean
+  // #1335: move the VM to another vDC of its tenant (vm.move_vdc, a tenant
+  // with at least two vDCs, or the provider on a guest of a vDC).
+  canMoveVdc?: boolean
   onStart: () => void
   onShutdown: () => void
   onStop: () => void
   onPause: () => void
   onMigrate: () => void
+  onMoveVdc?: () => void
   onClone: () => void
   onConvertTemplate: () => void
   onDelete: () => void
@@ -131,6 +137,22 @@ function VmActions({
               sx={{ color: 'text.secondary', '&:hover': { bgcolor: 'action.hover' } }}
             >
               <MoveUpIcon fontSize="small" />
+            </IconButton>
+          </span>
+        </MuiTooltip>
+      )}
+
+      {canMoveVdc && onMoveVdc && (
+        <MuiTooltip title={t('moveVdc.action')}>
+          <span>
+            <IconButton
+              size="small"
+              onClick={onMoveVdc}
+              disabled={disabled}
+              aria-label={t('moveVdc.action')}
+              sx={{ color: 'text.secondary', '&:hover': { bgcolor: 'action.hover' } }}
+            >
+              <i className="ri-arrow-left-right-line" style={{ fontSize: 18 }} />
             </IconButton>
           </span>
         </MuiTooltip>

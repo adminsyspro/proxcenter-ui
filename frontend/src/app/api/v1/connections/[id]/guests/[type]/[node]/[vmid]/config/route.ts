@@ -14,10 +14,13 @@ import { classifyConfigBody } from "@/lib/rbac/configClassifier"
 import { isOpticalDrive } from "@/lib/proxmox/cdrom"
 import { getCurrentTenantId } from "@/lib/tenant"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { hostpciEntries } from "@/lib/gpu/quota"
+import { gpuAddRefusal, heldHostpci, tenantAddsGpu } from "@/lib/gpu/vdcGuard"
 import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
 import { parseGuestTarget } from "@/lib/vdc/guestGuard"
 import { validateCpuAgainstPolicy, parseCpuProperty, loadCpuCapabilitiesIfNeeded } from "@/lib/vdc/computePolicy"
 import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
+import { cicustomRefusal, foreignVolumeRefusal } from "@/lib/proxmox/volumeOwnership"
 import { getAllowedNetworksForTenant, validateNetAgainstScope } from "@/lib/vdc/vnets"
 import { syncIpamForVmConfig, IpamHintUnavailableError, IpamExhaustedError } from "@/lib/vdc/ipamSync"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
@@ -49,6 +52,10 @@ const ALLOWED_QEMU_FIELDS = new Set([
 
   // Options
   'ostype', 'hotplug', 'tablet', 'localtime', 'freeze', 'kvm', 'acpi',
+  // Options the Options tab edits too (roadmap#201): RTC start date and the
+  // hibernation state storage. SPICE enhancements and AMD SEV stay out: PVE
+  // lets root@pam alone set them, never the API token a connection uses.
+  'startdate', 'vmstatestorage',
 
   // Args
   'args',
@@ -68,7 +75,9 @@ const ALLOWED_LXC_FIELDS = new Set([
   'hostname', 'description', 'tags', 'onboot', 'protection', 'startup',
   'cores', 'cpulimit', 'cpuunits',
   'memory', 'swap',
-  'unprivileged', 'features',
+  // `unprivileged` is deliberately NOT here: a tenant's container is forced
+  // unprivileged at creation and must not be flipped to privileged later.
+  'features',
   'delete',
   'revert',
 ])
@@ -342,6 +351,25 @@ async function putHandler(
           }
         }
       }
+
+      // GPUs (#672): a vDC tenant gets a GPU from the GPU section of its vDC,
+      // which draws on the contingent, never through the hardware dialog or
+      // the API. Removals and unchanged entries are always allowed. The config
+      // read above holds pending values only: a slot whose GPU the VM still
+      // runs (removal pending) or takes at its next start is read from
+      // /pending, one more GET only when a hostpciN is written. Any write
+      // over such a slot would drop that GPU from the contingent count.
+      if (vdcInfo && type === 'qemu') {
+        const written = Object.fromEntries(
+          Object.entries(hostpciEntries(body)).filter(([k, v]) => v !== undefined && v !== null && v !== '' && String(v) !== String(currentConfig?.[k] ?? '')),
+        )
+        if (Object.keys(written).length > 0) {
+          const previous = Object.fromEntries(Object.keys(written).filter(k => currentConfig?.[k] !== undefined).map(k => [k, currentConfig[k]]))
+          const held = await heldHostpci(conn, node, vmid)
+          const gpuRefused = gpuAddRefusal(held ? await tenantAddsGpu(id, node, written, previous, held) : 'unknown')
+          if (gpuRefused) return gpuRefused
+        }
+      }
     } catch (e: any) {
       if (e?.message === 'NODE_NOT_AUTHORIZED') {
         return NextResponse.json({ error: 'This node is not authorized for your vDC' }, { status: 403 })
@@ -368,7 +396,7 @@ async function putHandler(
     // Disk storage allow-list + storage-policy QoS stamping + quota metering
     // (pre-existing hole: disk keys used to flow verbatim to PVE).
     try {
-      const drives = await enforceTenantDrives({ tenantId, connectionId: id, type: type as 'qemu' | 'lxc', body })
+      const drives = await enforceTenantDrives({ tenantId, connectionId: id, type: type as 'qemu' | 'lxc', body, targetVmid: vmid })
       if (drives && vdcInfo) {
         // Import-from metering (Finding I2): PVE allocates a full-size
         // volume for scsiN: "gold:0,import-from=gold:vm-100-disk-0", so meter
@@ -396,6 +424,18 @@ async function putHandler(
         return NextResponse.json({ error: e.message }, { status: 403 })
       }
       throw e
+    }
+
+    // An existing volume of another guest, attached or imported, needs the
+    // hardware right on that guest: the right held on this one opens its own
+    // disks only. Same for the storage a cicustom line reads its files from.
+    const foreignDenied = await foreignVolumeRefusal({
+      connectionId: id, conn, tenantId, type: type as 'qemu' | 'lxc', body, targetVmid: vmid, currentConfig,
+    })
+    if (foreignDenied) return foreignDenied
+    if (body.cicustom !== undefined) {
+      const cicustomDenied = await cicustomRefusal(id, body.cicustom)
+      if (cicustomDenied) return cicustomDenied
     }
 
     // Sélectionner les champs autorisés selon le type

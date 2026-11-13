@@ -5,16 +5,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 // and lib/connections/iaasView.routes.test.ts (roadmap#189); the caller here is the provider.
 vi.mock("@/lib/tenant/iaasGuard", () => ({
   denyIaasTenant: async () => null,
-  resolveCallerInfraScope: async () => ({ ok: true, tenantId: "default", infra: { kind: "provider" } }),
+  resolveCallerInfraScope: () => callerMock(),
+}))
+// The masked view of a vDC tenant is covered by lib/connections/iaasView: here it lets the list through.
+vi.mock("@/lib/connections/iaasView", () => ({
+  iaasMappingsView: (list: unknown[]) => list,
+  iaasNodeAllowed: () => true,
 }))
 
 import { callRoute } from "@/__tests__/setup/route-test"
 
-const { checkPermissionMock, getConnectionByIdMock, pveFetchMock, guestPerimeterAllowsMock } = vi.hoisted(() => ({
+const { checkPermissionMock, getConnectionByIdMock, pveFetchMock, guestPerimeterAllowsMock, callerMock, tenantPciMappingsMock } = vi.hoisted(() => ({
   checkPermissionMock: vi.fn(),
   getConnectionByIdMock: vi.fn(),
   pveFetchMock: vi.fn(),
   guestPerimeterAllowsMock: vi.fn(),
+  callerMock: vi.fn(),
+  tenantPciMappingsMock: vi.fn(),
 }))
 
 vi.mock("@/lib/rbac", () => ({
@@ -29,6 +36,8 @@ vi.mock("@/lib/proxmox/client", () => ({
   pveFetch: (...a: any[]) => pveFetchMock(...a),
 }))
 
+vi.mock("@/lib/gpu/vdcGuard", () => ({ tenantPciMappings: (...a: any[]) => tenantPciMappingsMock(...a) }))
+
 async function get(kind: string, searchParams?: Record<string, string>) {
   const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
   const res = await callRoute(GET, { params: { id: "conn-1", kind }, searchParams })
@@ -41,6 +50,8 @@ beforeEach(() => {
   guestPerimeterAllowsMock.mockReset().mockResolvedValue(false)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: "c", baseUrl: "https://x:8006", apiToken: "t" })
   pveFetchMock.mockReset()
+  callerMock.mockReset().mockResolvedValue({ ok: true, tenantId: "default", infra: { kind: "provider" } })
+  tenantPciMappingsMock.mockReset().mockImplementation(async (_c: string, list: any[]) => list.filter((m) => m.id === "nic-x710"))
 })
 
 // Resource mappings are the only passthrough route open to an API token (#852).
@@ -102,12 +113,43 @@ describe("GET .../cluster/mapping/[kind]", () => {
     expect(json.data).toEqual([])
   })
 
-  it("returns 500 with the PVE error message when the call fails", async () => {
-    pveFetchMock.mockRejectedValue(new Error("PVE 501 /cluster/mapping/usb: not implemented"))
+  it("answers 502 without the upstream text or address when the PVE call fails", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {})
 
-    const { status, json } = await get("usb")
+    pveFetchMock.mockRejectedValue(new Error("Connect Timeout Error (attempted address: 173.208.138.139:8006, timeout: 10000ms)"))
 
-    expect(status).toBe(500)
-    expect(json.error).toMatch(/not implemented/)
+    const { status, json } = await get("pci")
+
+    expect(status).toBe(502)
+    expect(json).toEqual({ error: "pve_unreachable" })
+    expect(JSON.stringify(json)).not.toMatch(/173\.208|8006|Timeout/)
+    expect(spy).toHaveBeenCalledWith("[cluster-mapping] read failed:", expect.stringContaining("173.208.138.139"))
+    spy.mockRestore()
+  })
+})
+
+// A vDC tenant gets its GPUs through its vDC GPU section (#672): the hardware
+// dialog never offers a mapping that covers a GPU (judged in vdcGuard).
+describe("GET .../cluster/mapping/[kind]: GPU mappings of a vDC tenant", () => {
+  const mappings = [{ id: "gpu-n1-03-00" }, { id: "nic-x710" }, { id: "vgpu-n1-03-00" }]
+
+  it("hands the PCI list of a vDC tenant to the GPU filter", async () => {
+    callerMock.mockResolvedValue({ ok: true, tenantId: "t1", infra: { kind: "iaas", vdcScope: { nodesByConnection: new Map() } } })
+    pveFetchMock.mockResolvedValue(mappings)
+
+    const { status, json } = await get("pci")
+
+    expect(status).toBe(200)
+    expect(json.data).toEqual([{ id: "nic-x710" }])
+    expect(tenantPciMappingsMock).toHaveBeenCalledWith("conn-1", mappings)
+  })
+
+  it("keeps the whole list for USB and for the provider", async () => {
+    pveFetchMock.mockResolvedValue(mappings)
+    expect((await get("pci")).json.data).toEqual(mappings)
+
+    callerMock.mockResolvedValue({ ok: true, tenantId: "t1", infra: { kind: "iaas", vdcScope: { nodesByConnection: new Map() } } })
+    expect((await get("usb")).json.data).toEqual(mappings)
+    expect(tenantPciMappingsMock).not.toHaveBeenCalled()
   })
 })

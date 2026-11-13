@@ -3,6 +3,7 @@ import { cookies } from "next/headers"
 
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
+import { pbsIdentityOf, samePbsServer } from "@/lib/guestFileRestore/pbsPveStorages"
 import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraScope"
 import { listGuestVzdumpBackups } from "@/lib/backups/pveVzdump"
 import { fetchPbsGroupNotes, pbsSnapshotName } from "@/lib/backups/pbsGroupNotes"
@@ -19,17 +20,6 @@ export const runtime = "nodejs"
 
 // The `type` query filter ('vm' | 'ct') as a PVE guest type; anything else names none.
 const GUEST_TYPE_BY_FILTER: Record<string, "qemu" | "lxc"> = { vm: "qemu", ct: "lxc" }
-
-/**
- * Strip scheme, path and port so a PBS connection baseUrl (e.g.
- * "https://10.0.0.1:8007") can be compared to a PVE pbs-storage `server`
- * (a bare host or IP, e.g. "10.0.0.1").
- */
-function normalizeHost(s?: string | null): string {
-  if (!s) return ''
-
-  return s.replace(/^https?:\/\//, '').split('/')[0].split(':')[0].trim().toLowerCase()
-}
 
 /**
  * GET /api/v1/guests/[vmid]/backups
@@ -150,6 +140,7 @@ export async function GET(
         baseUrl: true,
         insecureTLS: true,
         apiTokenEnc: true,
+        fingerprint: true,
       }
     })
 
@@ -172,19 +163,19 @@ export async function GET(
     }
 
     // Is one of these PBS connections actually the backup target of THIS guest's
-    // cluster? We compare the cluster's pbs-type storage host(s) against the PBS
-    // connection hosts. A cluster that backs up to a PBS we are not connected to
+    // cluster? A pbs-type storage of the cluster must reach one of them, by host
+    // or by pinned certificate fingerprint (ui#1308). A cluster that backs up to a PBS we are not connected to
     // (different host) counts as "no PBS configured" — we cannot read its
     // snapshots — which is what drives the empty-state message.
     let pbsConfigured = pbsConnections.length > 0
 
     if (pveStorages) {
-      const connHosts = new Set(
-        pbsConnections.map(c => normalizeHost(c.baseUrl)).filter(Boolean)
-      )
+      const identities = pbsConnections
+        .filter(c => !!c.baseUrl)
+        .map(c => pbsIdentityOf({ baseUrl: c.baseUrl as string, fingerprint: c.fingerprint }))
 
       pbsConfigured = pveStorages.some(
-        (s: any) => s?.type === 'pbs' && connHosts.has(normalizeHost(s.server))
+        (s: any) => s?.type === 'pbs' && identities.some(id => samePbsServer(s, id))
       )
     }
 

@@ -89,6 +89,11 @@ describe('registry and edition mapping invariants', () => {
     expect(optionDisplayName('control_plane_ha')).toBe('ProxCenter HA')
     expect(optionDisplayName('mystery_cap')).toBe('mystery_cap')
   })
+  it('describes the API Access option as covering reads and writes', () => {
+    const { description } = OPTION_REGISTRY.api_access
+    expect(description).toMatch(/read and write/i)
+    expect(description).not.toMatch(/read-only/i)
+  })
 
   it('grants incidents to both enterprise tiers and not to community', () => {
     expect(Features.INCIDENTS).toBe('incidents')
@@ -106,5 +111,13 @@ describe('registry and edition mapping invariants', () => {
     expect(EDITION_FEATURES.community ?? []).not.toContain('sla_monitoring')
     expect(effectiveHasFeature({ licensed: true, edition: 'community' }, 'sla_monitoring')).toBe(false)
     expect(effectiveHasFeature(enterprise, 'sla_monitoring')).toBe(true)
+  })
+
+  it('grants the GPU page to both enterprise tiers and not to community', () => {
+    expect(Features.GPU_MANAGEMENT).toBe('gpu_management')
+    expect(EDITION_FEATURES.enterprise).toContain('gpu_management')
+    expect(EDITION_FEATURES.enterprise_plus).toContain('gpu_management')
+    expect(effectiveHasFeature({ licensed: true, edition: 'community' }, 'gpu_management')).toBe(false)
+    expect(effectiveHasFeature(enterprise, 'gpu_management')).toBe(true)
   })
 })

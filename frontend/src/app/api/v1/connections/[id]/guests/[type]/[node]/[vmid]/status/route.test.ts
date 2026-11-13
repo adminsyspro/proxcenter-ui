@@ -105,6 +105,27 @@ describe('GET .../status', () => {
     expect(statusCalls()).toHaveLength(0)
   })
 
+  // roadmap#223: vm.view on the URL node does not cover the node the guest moved to.
+  it('re-checks vm.view on the node the guest moved to and reads nothing there without it', async () => {
+    cluster([{ vmid: 100, type: 'qemu', node: 'pve3' }], 'pve3')
+    m.locateVmInCluster.mockResolvedValue({ node: 'pve3' })
+    m.checkPermission.mockImplementation(async (_p: string, _t: string, id: string) =>
+      id === 'c1:pve3:qemu:100' ? Response.json({ error: 'Permission denied: vm.view' }, { status: 403 }) : null)
+    const res = await call()
+    expect(res.status).toBe(403)
+    expect(JSON.stringify(await readJson(res))).not.toContain('pve3')
+    expect(statusCalls().map(c => c[1])).toEqual(['/nodes/pve1/qemu/100/status/current'])
+  })
+
+  it('serves the moved guest when vm.view covers its new node', async () => {
+    cluster([{ vmid: 100, type: 'qemu', node: 'pve3' }], 'pve3')
+    m.locateVmInCluster.mockResolvedValue({ node: 'pve3' })
+    const res = await call()
+    expect(res.status).toBe(200)
+    expect((await readJson<any>(res)).movedTo).toBe('pve3')
+    expect(m.checkPermission).toHaveBeenLastCalledWith('vm.view', 'vm', 'c1:pve3:qemu:100')
+  })
+
   it('answers 503 when the vDC scope cannot be verified', async () => {
     m.getTenantInfrastructureScope.mockRejectedValue(new Error('db down'))
     expect((await call()).status).toBe(503)

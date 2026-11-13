@@ -33,6 +33,8 @@ const BurgerMenu = ({ anchorEl, open, onClose }) => {
   const { hasVdc, loading: vdcLoading } = useMyVdcs()
   const { currentTenant, loading: tenantLoading } = useTenant()
   const isProviderTenant = currentTenant?.id === 'default'
+  // A vDC tenant: neither the provider nor an MSP running its own clusters.
+  const isVdcTenant = !!currentTenant && !isProviderTenant && currentTenant.operatingModel !== 'msp'
   const infraScoped = hasInfraScope(scopeTypes, isAdmin)
 
   const sections = useMemo(() => {
@@ -48,6 +50,7 @@ const BurgerMenu = ({ anchorEl, open, onClose }) => {
       if (entry.requires?.hasVdc === true && !hasVdc) return false
       if (entry.requires?.hasVdc === false && hasVdc) return false
       if (entry.requires?.isProviderTenant === true && !isProviderTenant) return false
+      if (entry.requires?.notVdcTenant === true && isVdcTenant) return false
       if (entry.requires?.infraScope === true && !infraScoped) return false
       return true
     }
@@ -93,7 +96,7 @@ const BurgerMenu = ({ anchorEl, open, onClose }) => {
     }
 
     return result
-  }, [t, hasPermission, hasFeature, hasVdc, isProviderTenant, infraScoped, rbacLoading, vdcLoading, tenantLoading])
+  }, [t, hasPermission, hasFeature, hasVdc, isProviderTenant, isVdcTenant, infraScoped, rbacLoading, vdcLoading, tenantLoading])
 
   const handleNavigate = (href, locked) => {
     if (locked) return

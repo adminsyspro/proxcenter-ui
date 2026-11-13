@@ -17,23 +17,28 @@ import {
 import { mapCreateVdcError } from "@/lib/vdc/httpErrors"
 import { audit } from "@/lib/audit"
 
+import { PERMISSIONS } from "@/lib/rbac"
+
 import { storagePolicyProviderGuard } from "./guard"
 import { withAudit } from "@/lib/audit/withAudit"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
 type RouteContext = { params: Promise<{ id: string }> | { id: string } }
 
-export async function GET(_req: Request, ctx: RouteContext) {
+async function handleGet(_req: Request, ctx: RouteContext) {
   try {
     const { id } = (await Promise.resolve(ctx.params)) as { id: string }
-    const denied = await storagePolicyProviderGuard()
+    const denied = await storagePolicyProviderGuard(PERMISSIONS.ADMIN_SETTINGS_VIEW)
     if (denied) return denied
     return NextResponse.json({ data: await listStoragePolicies(id) })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("storage-policies-list", handleGet)
 
 async function handlePost(req: Request, ctx: RouteContext) {
   try {
@@ -65,4 +70,4 @@ async function handlePost(req: Request, ctx: RouteContext) {
   }
 }
 
-export const POST = withAudit({ category: "storage", resourceType: "storage_policy", resourceParam: "id" }, handlePost)
+export const POST = withAudit({ category: "storage", resourceType: "storage_policy", resourceParam: "id" }, withPublicApiGuard("storage-policy-create", handlePost))

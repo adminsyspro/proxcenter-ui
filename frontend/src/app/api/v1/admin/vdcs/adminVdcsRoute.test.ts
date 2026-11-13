@@ -15,6 +15,10 @@ const { requireProviderTenantMock, checkPermissionMock, listVdcsMock, createVdcM
   auditMock: vi.fn(),
 }))
 
+// API token guard: pass-through, these tests drive the session path (token
+// paths: routeGuard.test.ts, tenancyTokenScope.test.ts).
+vi.mock("@/lib/api-tokens/routeGuard", () => ({ withPublicApiGuard: (_entryId: string, handler: any) => handler }))
+vi.mock("@/lib/auth/actingUser", async () => (await import("@/__tests__/fixtures/actingUserFromNextAuth")).actingUserFromNextAuth())
 vi.mock('@/lib/tenant', () => ({
   requireProviderTenant: (...a: unknown[]) => requireProviderTenantMock(...a),
 }))
@@ -58,9 +62,8 @@ beforeEach(() => {
   createVdcMock.mockResolvedValue({ id: 'vdc-new', name: 'ACME — Paris' })
 })
 
-// The GET handler reads req.nextUrl (NextRequest); callRoute builds a plain
-// Request, so stub the one property the handler touches.
-const nextReq = (url: string) => ({ nextUrl: new URL(url) }) as any
+// The GET handler reads the query string from req.url.
+const nextReq = (url: string) => new Request(url)
 
 describe('GET /api/v1/admin/vdcs', () => {
   it('is provider-gated', async () => {

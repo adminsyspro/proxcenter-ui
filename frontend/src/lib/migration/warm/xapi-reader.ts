@@ -1,5 +1,5 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
-import { buildNbdConnectCmd, buildReaderTeardownCmd, NBD_DEVICE_RE, type PollOpts } from "./vddk-reader"
+import { buildNbdConnectCmd, buildReaderTeardownCmd, NBD_DEVICE_RE, nbdAttachError, type PollOpts } from "./vddk-reader"
 import type { Extent } from "./extents"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
@@ -63,7 +63,7 @@ export function buildNbdkitXapiCmd(t: XapiNbdTarget, caDir: string): string {
 export async function startXapiReader(connectionId: string, nodeIp: SshTarget, t: XapiNbdTarget, poll: PollOpts = {}): Promise<XapiReaderHandle> {
   // Fail here rather than pin nothing: with an empty ca-cert.pem nbdkit still
   // binds the socket, so the missing certificate would only surface later as a
-  // puzzling "nbd-client failed to attach a free NBD device".
+  // puzzling "nbdkit could not open the source disk" with nothing in its log.
   if (!t.cert || !t.cert.trim()) throw new Error("VDI.get_nbd_info returned no host certificate; cannot pin the NBD TLS connection")
   const intervalMs = poll.intervalMs ?? 1000
   const maxAttempts = poll.maxAttempts ?? 60
@@ -110,7 +110,7 @@ export async function startXapiReader(connectionId: string, nodeIp: SshTarget, t
   if (!connect.success || !nbdDev) {
     const log = await executeSSH(connectionId, nodeIp, `cat ${shellEscape(logFile)} 2>/dev/null | tail -n 40`)
     await stopXapiReader(connectionId, nodeIp, { nbdDev, sock: t.sock, logFile, caDir }).catch(() => {})
-    throw new Error(`nbd-client failed to attach a free NBD device: ${redactLogTail((connect.output || connect.error || "").trim())} | nbdkit log: ${redactLogTail(log.output)}`)
+    throw new Error(nbdAttachError(redactLogTail(connect.output || connect.error), redactLogTail(log.output)))
   }
   return { nbdDev, sock: t.sock, logFile, caDir }
 }

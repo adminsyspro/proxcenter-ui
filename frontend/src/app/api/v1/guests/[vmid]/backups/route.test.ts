@@ -89,6 +89,17 @@ describe('GET /api/v1/guests/[vmid]/backups — pbsConfigured (PBS connection ma
     expect(body.data.pbsConfigured).toBe(true)
   })
 
+  it('is true when the cluster names the PBS by FQDN and ProxCenter by IP, with the same pinned certificate (ui#1308)', async () => {
+    findManyMock.mockResolvedValue([
+      { id: 'pbs-1', name: 'PBS', baseUrl: 'https://10.42.0.201:8007', insecureTLS: false, apiTokenEnc: 'enc', fingerprint: '17:44:52:4E:99:EA:D8:04:7E:15:CB:EA:F3:7D:43:56:8F:23:D2:D7:B2:43:26:F4:E6:13:C8:9C:4A:E4:AC:21' },
+    ])
+    pveFetchMock.mockResolvedValue([
+      { storage: 'WH-PBS-Store', type: 'pbs', server: 'pbs.test.com', datastore: 'test-vdc', fingerprint: '17:44:52:4e:99:ea:d8:04:7e:15:cb:ea:f3:7d:43:56:8f:23:d2:d7:b2:43:26:f4:e6:13:c8:9c:4a:e4:ac:21' },
+    ])
+    const body = await call('pve-1')
+    expect(body.data.pbsConfigured).toBe(true)
+  })
+
   it('falls back to "a PBS connection exists" when no connectionId is provided', async () => {
     findManyMock.mockResolvedValue([
       { id: 'pbs-1', name: 'PBS', baseUrl: 'https://10.99.99.204:8007', insecureTLS: false, apiTokenEnc: 'enc' },

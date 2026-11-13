@@ -55,6 +55,9 @@ const SectionHeaderWidget = dynamic(() => import('./widgets/SectionHeaderWidget'
 const DrsStatusWidget = dynamic(() => import('./widgets/DrsStatusWidget'), { ssr: false })
 const SiteRecoveryWidget = dynamic(() => import('./widgets/SiteRecoveryWidget'), { ssr: false })
 
+// GPU inventory capacity (#672)
+const GpuCapacityWidget = dynamic(() => import('./widgets/GpuCapacityWidget'), { ssr: false })
+
 // Other
 const ThemeLogoWidget = dynamic(() => import('./widgets/ThemeLogoWidget'), { ssr: false })
 
@@ -387,6 +390,19 @@ export const WIDGET_REGISTRY = {
   // ═══════════════════════════════════════════════════════════════════════════
   // NODES GAUGES & CLUSTER HEALTH
   // ═══════════════════════════════════════════════════════════════════════════
+  'gpu-capacity': {
+    type: 'gpu-capacity',
+    name: 'GPU Capacity',
+    description: 'Allocated and free GPUs across clusters',
+    icon: 'ri-cpu-line',
+    category: 'resources',
+    defaultSize: { w: 4, h: 4 },
+    minSize: { w: 3, h: 3 },
+    maxSize: { w: 12, h: 20 },
+    // GPUs are an infrastructure concern: no vDC tenant sees them (#672).
+    requiresInfraScope: true,
+    component: GpuCapacityWidget,
+  },
   'nodes-gauges': {
     type: 'nodes-gauges',
     name: 'Nodes Gauges',

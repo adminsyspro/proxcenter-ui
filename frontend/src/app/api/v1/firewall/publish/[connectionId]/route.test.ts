@@ -11,7 +11,7 @@ import { callRoute, readJson } from '@/__tests__/setup/route-test'
 const h = vi.hoisted(() => ({
   ownership: vi.fn<(id: string) => Promise<Response | null>>(),
   permission: vi.fn<(...a: any[]) => Promise<Response | null>>(),
-  infra: vi.fn<(...a: any[]) => Promise<any>>(),
+  iaasDenied: vi.fn<() => Promise<Response | null>>(),
   pveFetch: vi.fn<(...a: any[]) => Promise<any>>(),
   audit: vi.fn<(...a: any[]) => Promise<string>>(),
   forget: vi.fn(),
@@ -22,7 +22,7 @@ vi.mock('@/lib/tenant', () => ({
   verifyConnectionOwnership: (id: string) => h.ownership(id),
   getCurrentTenantId: async () => 'default',
 }))
-vi.mock('@/lib/tenant/infraScope', () => ({ getTenantInfrastructureScope: (...a: any[]) => h.infra(...a) }))
+vi.mock('@/lib/tenant/iaasGuard', () => ({ denyIaasTenant: () => h.iaasDenied() }))
 vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: any[]) => h.permission(...a),
   PERMISSIONS: { NODE_MANAGE: 'node.manage' },
@@ -59,7 +59,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.ownership.mockResolvedValue(null)
   h.permission.mockResolvedValue(null)
-  h.infra.mockResolvedValue({ kind: 'provider' })
+  h.iaasDenied.mockResolvedValue(null)
   h.audit.mockResolvedValue('row')
 })
 
@@ -73,8 +73,9 @@ describe('POST /api/v1/firewall/publish/[connectionId]', () => {
   })
 
   it('refuses a vDC tenant', async () => {
-    h.infra.mockResolvedValue({ kind: 'iaas' })
-    expect((await post({ ops: [edit(0)], digests: {} })).status).toBe(403)
+    h.iaasDenied.mockResolvedValue(new Response('{"error":"Not found"}', { status: 404 }))
+    expect((await post({ ops: [edit(0)], digests: {} })).status).toBe(404)
+    expect(h.ownership).not.toHaveBeenCalled()
     expect(h.pveFetch).not.toHaveBeenCalled()
   })
 

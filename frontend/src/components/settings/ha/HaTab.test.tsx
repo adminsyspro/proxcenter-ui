@@ -12,7 +12,8 @@ vi.mock('next-intl', () => ({ useTranslations: () => (k: string) => k }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ back: vi.fn(), push: vi.fn() }) }))
 
 const useHaConfigMock = vi.fn()
-vi.mock('./useHaConfig', () => ({
+vi.mock('./useHaConfig', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./useHaConfig')>()),
   useHaConfig: () => useHaConfigMock(),
 }))
 
@@ -45,6 +46,20 @@ describe('HaTab', () => {
     useLicenseMock.mockReturnValue({ hasFeature: () => true, loading: false })
     useHaConfigMock.mockReturnValue({
       data: { enabled: true, deploymentState: 'deployed' },
+      isLoading: false,
+      mutate: vi.fn(),
+    })
+
+    render(<HaTab />)
+
+    expect(await screen.findByTestId('ha-cluster-dashboard')).toBeInTheDocument()
+    expect(screen.queryByTestId('ha-deploy-wizard')).not.toBeInTheDocument()
+  })
+
+  it('renders the cluster dashboard for a converted cluster whose last deploy failed (security upgrade reachable)', async () => {
+    useLicenseMock.mockReturnValue({ hasFeature: () => true, loading: false })
+    useHaConfigMock.mockReturnValue({
+      data: { enabled: false, deploymentState: 'failed', deployedAt: '2026-10-01T00:00:00Z' },
       isLoading: false,
       mutate: vi.fn(),
     })

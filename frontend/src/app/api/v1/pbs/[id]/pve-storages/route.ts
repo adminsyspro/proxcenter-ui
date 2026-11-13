@@ -9,7 +9,7 @@ import { NextResponse } from 'next/server'
 
 import { getConnectionByIdOrNull, getPbsConnectionById, getPbsConnectionByIdUnscoped } from '@/lib/connections/getConnection'
 import { prisma } from '@/lib/db/prisma'
-import { matchingPbsStorages, pbsHostOf, type PbsPveStorage } from '@/lib/guestFileRestore/pbsPveStorages'
+import { matchingPbsStorages, pbsIdentityOf, type PbsPveStorage } from '@/lib/guestFileRestore/pbsPveStorages'
 import { pveFetch } from '@/lib/proxmox/client'
 import { PERMISSIONS, checkPermission } from '@/lib/rbac'
 import { getCurrentTenantId } from '@/lib/tenant'
@@ -41,7 +41,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     }
 
     const pbs = access.kind === 'admin' ? await getPbsConnectionById(id) : await getPbsConnectionByIdUnscoped(id)
-    const host = pbsHostOf(pbs.baseUrl)
+    // The pinned certificate joins a storage declared by FQDN to a connection
+    // declared by IP, or the reverse (ui#1308). Access was checked above.
+    const pinned = await prisma.connection.findUnique({ where: { id }, select: { fingerprint: true } })
+    const identity = pbsIdentityOf({ baseUrl: pbs.baseUrl, fingerprint: pinned?.fingerprint })
 
     // PVE connections the tenant may reach, then the storages its vDCs expose.
     const tenantId = await getCurrentTenantId()
@@ -70,7 +73,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           const conn = await getConnectionByIdOrNull(c.id)
           if (!conn) return []
           const storages = await pveFetch<unknown>(conn, '/storage', {}, { timeoutMs: 10_000 })
-          return matchingPbsStorages(storages, { host, datastore, namespace })
+          return matchingPbsStorages(storages, { ...identity, datastore, namespace })
             .filter(s => !storageFilter || storageFilter.get(c.id)?.has(s.storage))
             .map(s => ({ connId: c.id, connName: c.name, storage: s.storage, nodes: s.nodes }))
         } catch {

@@ -15,7 +15,7 @@ const STORAGE_URL = `*/api/v1/connections/${CLUSTER_ID}/storage`
 // `baseUrl` is what the duplicate check derives the host from, the same host
 // PVE stores in a pbs: storage `server` field.
 const backupServers = [
-  { id: 'pbs-1', name: 'Primary backup server', baseUrl: 'https://pbs.lab:8007', fingerprint: 'AA:BB:CC' },
+  { id: 'pbs-1', name: 'Primary backup server', baseUrl: 'https://pbs.lab:8007', fingerprint: '17:44:52:4E:99:EA:D8:04:7E:15:CB:EA:F3:7D:43:56:8F:23:D2:D7:B2:43:26:F4:E6:13:C8:9C:4A:E4:AC:21' },
   { id: 'pbs-2', name: 'Secondary backup server', baseUrl: 'https://pbs2.lab:8007', fingerprint: 'DD:EE:FF' },
   { id: 'pbs-no-fingerprint', name: 'Untrusted backup server', baseUrl: 'https://pbs3.lab:8007', fingerprint: null },
 ]
@@ -191,6 +191,19 @@ describe('AttachPbsStorageDialog', () => {
     await chooseDatastore()
 
     expect(await screen.findByText(/already attached to the cluster as pbs-same/i)).toBeInTheDocument()
+  })
+
+  it('flags a datastore attached under another name and address when the pinned certificate is the same (ui#1308)', async () => {
+    // The cluster reaches the server by FQDN, ProxCenter by its other name: only
+    // the certificate tells it is the same server, and a second storage on it
+    // would duplicate the first.
+    server.use(http.get(STORAGE_URL, () => HttpResponse.json({ data: [
+      { type: 'pbs', storage: 'SZ-PBS-Backup', server: 'pbs.test.com', datastore: 'S3manu', fingerprint: '17:44:52:4e:99:ea:d8:04:7e:15:cb:ea:f3:7d:43:56:8f:23:d2:d7:b2:43:26:f4:e6:13:c8:9c:4a:e4:ac:21' },
+    ] })))
+    renderWithProviders(<AttachPbsStorageDialog {...makeProps()} />)
+    await chooseDatastore()
+
+    expect(await screen.findByText(/already attached to the cluster as SZ-PBS-Backup/i)).toBeInTheDocument()
   })
 
   it('marks an existing storage name as invalid and blocks submission', async () => {

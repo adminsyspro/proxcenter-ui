@@ -98,6 +98,15 @@ export function buildOpenVddkInstallScript(opts: OpenVddkInstallScriptOpts = {})
   ].join("\n")
 }
 
+/** Debian contrib source, written only on a node that lacks contrib. */
+export const CONTRIB_LIST = "/etc/apt/sources.list.d/proxcenter-contrib.list"
+
+/**
+ * The contrib + non-free list earlier releases wrote unconditionally. It is
+ * left in place (an operator may rely on non-free since) but given mode 0644.
+ */
+export const LEGACY_NONFREE_LIST = "/etc/apt/sources.list.d/proxcenter-nonfree.list"
+
 /** Steps 0 to 2: OS gate, NBD tools, nbdkit's VDDK plugin. */
 function runtimeHeadSteps(): string[] {
   return [
@@ -123,13 +132,25 @@ function runtimeHeadSteps(): string[] {
     // package is genuinely unavailable.
     "apt-get update || true",
     "apt-get install -y nbdkit nbd-client",
-    // 2. nbdkit-plugin-vddk lives in Debian non-free, which a stock PVE node
-    // does not enable. Overwriting the same one-line file is idempotent.
+    // 2. nbdkit-plugin-vddk is in Debian contrib, which the Proxmox VE 9
+    // installer already enables (debian.sources: main contrib
+    // non-free-firmware), so most nodes need no new source. Only a node
+    // without contrib (Proxmox VE installed on top of Debian) gets one line.
+    // Every file is given an explicit mode: under a hardened umask (027) a
+    // plain redirection writes 0640, and pveproxy, which serves the APT API
+    // as www-data, then fails on it with "Permission denied (os error 13)"
+    // and blocks every rolling update (#1366). The list earlier releases
+    // wrote is repaired the same way.
     ". /etc/os-release",
-    `echo "deb http://deb.debian.org/debian \${VERSION_CODENAME} contrib non-free non-free-firmware" > /etc/apt/sources.list.d/proxcenter-nonfree.list`,
+    `if [ -f ${LEGACY_NONFREE_LIST} ]; then chmod 0644 ${LEGACY_NONFREE_LIST}; fi`,
+    `VDDK_CANDIDATE="$(apt-cache policy nbdkit-plugin-vddk 2>/dev/null | sed -n 's/^ *Candidate: //p')" || true`,
+    'if [ -z "$VDDK_CANDIDATE" ] || [ "$VDDK_CANDIDATE" = "(none)" ]; then',
+    `  echo "deb http://deb.debian.org/debian \${VERSION_CODENAME} contrib" > ${CONTRIB_LIST}`,
+    `  chmod 0644 ${CONTRIB_LIST}`,
     // Same tolerance as above: the enterprise-repo 401 must not mask the fact
-    // that the non-free component itself refreshed correctly.
-    "apt-get update || true",
+    // that the contrib component itself refreshed correctly.
+    "  apt-get update || true",
+    "fi",
     "apt-get install -y nbdkit-plugin-vddk",
   ]
 }
@@ -141,6 +162,7 @@ function runtimeTailSteps(): string[] {
     "modprobe nbd max_part=0",
     "echo nbd > /etc/modules-load.d/proxcenter-nbd.conf",
     "printf 'options nbd max_part=0\\n' > /etc/modprobe.d/proxcenter-nbd.conf",
+    "chmod 0644 /etc/modules-load.d/proxcenter-nbd.conf /etc/modprobe.d/proxcenter-nbd.conf",
     // 5. Keep the host's LVM off the transient NBD devices (#535). Without
     // this, udev's `pvscan --cache -aay` auto-activates the GUEST volume group
     // it finds on /dev/nbdN(pM): the dm LVs pin the device until reboot, and a

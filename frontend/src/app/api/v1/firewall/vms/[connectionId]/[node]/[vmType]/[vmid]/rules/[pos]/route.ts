@@ -3,11 +3,13 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getOrchestratorClient } from '@/lib/orchestrator/client'
+import { orchestratorPath } from '@/lib/orchestrator/path'
 import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
+import { firewallParamRefusal } from '@/lib/firewall/pathParams'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { guardSessionGuest } from '@/lib/vdc/guestGuard'
 import { withAudit } from '@/lib/audit/withAudit'
@@ -32,6 +34,8 @@ async function putHandler(req: NextRequest, ctx: RouteContext) {
 
     const scopeDenied = await guardSessionGuest({ connectionId, conn: () => getConnectionById(connectionId), type: vmType, node, vmid })
     if (scopeDenied) return scopeDenied
+    const malformed = firewallParamRefusal({ pos })
+    if (malformed) return malformed
 
     const body = await req.json()
     
@@ -39,7 +43,7 @@ async function putHandler(req: NextRequest, ctx: RouteContext) {
 
     const result = await orchestratorOrPve(
       'firewall/vms/rules',
-      () => orchestrator.put(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules/${pos}`, body),
+      () => orchestrator.put(orchestratorPath`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules/${pos}`, body),
       async () => pveDirect.updateVMRule(await getConnectionById(connectionId), node, vmType, vmid, pos, body),
     )
 
@@ -64,12 +68,14 @@ async function deleteHandler(req: NextRequest, ctx: RouteContext) {
 
     const scopeDenied = await guardSessionGuest({ connectionId, conn: () => getConnectionById(connectionId), type: vmType, node, vmid })
     if (scopeDenied) return scopeDenied
+    const malformed = firewallParamRefusal({ pos })
+    if (malformed) return malformed
 
     const orchestrator = getOrchestratorClient()
 
     const result = await orchestratorOrPve(
       'firewall/vms/rules',
-      () => orchestrator.delete(`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules/${pos}`),
+      () => orchestrator.delete(orchestratorPath`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules/${pos}`),
       async () => pveDirect.deleteVMRule(await getConnectionById(connectionId), node, vmType, vmid, pos),
     )
 

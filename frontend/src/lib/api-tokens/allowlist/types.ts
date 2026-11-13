@@ -12,6 +12,7 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
 export type ApiTag =
   | "Monitoring" | "VMs" | "Snapshots" | "Backups" | "Storage"
   | "HA" | "Pools" | "Network" | "Firewall" | "Tasks"
+  | "Tenants" | "vDCs" | "RBAC" | "Users"
 
 export type BodyOrQueryField = { source: "body" | "query"; field: string }
 
@@ -36,8 +37,13 @@ export type AllowlistEntry = {
   vmKeySegment?: string
   /** Connection id carried in the body or query string. */
   connectionField?: BodyOrQueryField
-  /** The handler resolves the connection itself (pinned list). */
-  perimeter?: "handler"
+  /**
+   * "handler": the handler resolves the connection itself (pinned list).
+   * "fleet": the operation reaches clusters beyond any one connection (VNI
+   * scan, stretched networks, PBS storages), so only a token not restricted
+   * to connections may call it (issue #1360).
+   */
+  perimeter?: "handler" | "fleet"
   /** Closed value set for a dynamic segment; keeps {action} from swallowing sibling literals. */
   segmentEnum?: Record<string, readonly string[]>
   /** Values a dynamic segment never takes: static sibling routes Next serves before it. */

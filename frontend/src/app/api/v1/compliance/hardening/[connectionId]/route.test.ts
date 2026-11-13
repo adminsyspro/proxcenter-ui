@@ -18,6 +18,9 @@ const getProfileChecksMock = vi.fn<(id: string, tenantId: string) => Promise<any
 const executeSSHMock = vi.fn<(connId: string, ip: string, cmd: string) => Promise<any>>()
 const getNodeIpMock = vi.fn<(conn: any, node: string) => Promise<string>>()
 
+// roadmap#224: the IaaS gate is covered by lib/tenant/iaasGuard.complianceRoutes.test.ts;
+// here the caller is a provider or MSP tenant.
+vi.mock('@/lib/tenant/iaasGuard', () => ({ denyIaasTenant: vi.fn(async () => null) }))
 vi.mock('@/lib/tenant', () => ({
   getSessionPrisma: async () => ({
     connection: { findUnique: findUniqueMock },

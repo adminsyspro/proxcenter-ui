@@ -13,6 +13,7 @@ import { getCurrentTenantId, verifyConnectionOwnership } from '@/lib/tenant'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getSessionPrisma } from "@/lib/tenant"
 import { collectHardeningData } from '@/lib/compliance/collectHardeningData'
+import { denyIaasTenant } from '@/lib/tenant/iaasGuard'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -25,10 +26,16 @@ export async function GET(
   if (demo) return demo
 
   try {
-    const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.ADMIN_COMPLIANCE)
     if (denied) return denied
 
+    // Reads the whole cluster and audits every node over SSH: not for an
+    // IaaS tenant, whose vDC binding would otherwise hand it the provider's
+    // connection.
+    const iaasDenied = await denyIaasTenant()
+    if (iaasDenied) return iaasDenied
+
+    const prisma = await getSessionPrisma()
     const { connectionId } = await ctx.params
 
     // Verify connection belongs to current tenant

@@ -11,6 +11,7 @@ import { fetchWithInsecureTLS } from "@/lib/http/insecure-fetch"
 import type { XoVmConfig, XoDiskInfo, XoNetworkInfo } from "@/lib/xcpng/client"
 import type { Extent } from "@/lib/migration/warm/extents"
 import { cbtBitmapToExtents } from "./cbt-bitmap"
+import { xenGuestOs } from "./guest-os"
 
 export interface XapiSession { baseUrl: string; insecureTLS: boolean; ref: string }
 
@@ -129,10 +130,53 @@ export async function xapiCallAsync(s: XapiSession, method: string, params: unkn
 
 // ── inventory ──
 
-export interface XapiHostInfo { uuid: string; name_label: string; address: string; version: string }
+export interface XapiHostInfo { uuid: string; name_label: string; address: string; version: string; brand: string }
 export async function xapiHosts(s: XapiSession): Promise<XapiHostInfo[]> {
   const recs = await xapiCall<Record<string, any>>(s, "host.get_all_records")
-  return Object.values(recs).map(h => ({ uuid: h.uuid, name_label: h.name_label, address: h.address, version: h.software_version?.product_version || "" }))
+  return Object.values(recs).map(h => ({
+    uuid: h.uuid, name_label: h.name_label, address: h.address,
+    version: h.software_version?.product_version || "", brand: h.software_version?.product_brand || "",
+  }))
+}
+
+/** What the pool runs and what its licence allows, read from the master. */
+export interface XapiPoolInfo {
+  /** "XenServer", "XCP-ng", "Citrix Hypervisor"; empty when the master does not say. */
+  brand: string
+  /** product_version of the master ("8.4.0", "7.1.2"). */
+  version: string
+  /** True when the licence withholds changed block tracking (XenServer Standard / Free editions). */
+  cbtRestricted: boolean
+}
+
+export async function xapiPoolInfo(s: XapiSession): Promise<XapiPoolInfo> {
+  const pools = await xapiCall<Record<string, any>>(s, "pool.get_all_records")
+  const pool = Object.values(pools)[0] || {}
+  const master = pool.master ? await xapiCall<any>(s, "host.get_record", pool.master).catch(() => null) : null
+  return {
+    brand: master?.software_version?.product_brand || "",
+    version: master?.software_version?.product_version || "",
+    cbtRestricted: pool.restrictions?.restrict_cbt === "true",
+  }
+}
+
+/** Name of the product for the job log and the UI: what the pool says it is, XCP-ng when it says nothing. */
+export function xapiProductName(brand: string | undefined): string {
+  return brand?.trim() || "XCP-ng"
+}
+
+/**
+ * Why a pool cannot run a warm migration at all, null when it can. Changed
+ * block tracking and the NBD server came with XenServer 7.3: a 7.1 or 7.2 pool
+ * has neither, so neither the CBT path nor its checksum fallback (which reads
+ * through NBD) can work. XCP-ng starts at 7.4.
+ */
+export function xapiWarmUnsupportedReason(info: Pick<XapiPoolInfo, "brand" | "version">): string | null {
+  const m = /^(\d+)\.(\d+)/.exec(info.version || "")
+  if (!m) return null
+  const [major, minor] = [Number(m[1]), Number(m[2])]
+  if (major > 7 || (major === 7 && minor >= 3)) return null
+  return `${xapiProductName(info.brand)} ${info.version} has neither changed block tracking nor the NBD server (both arrived in XenServer 7.3): a warm migration cannot run from this pool. Use an offline migration (the VM is shut down for the copy), or upgrade the pool first`
 }
 
 export interface XcpngVmListItem {
@@ -202,7 +246,9 @@ export async function xapiGetVmConfig(s: XapiSession, vmUuid: string): Promise<X
     numCPU: Number(vm.VCPUs_at_startup) || Number(vm.VCPUs_max) || 1,
     memoryMB: Math.round((Number(vm.memory_static_max) || 0) / 1048576),
     firmware, virtualizationMode: vm.HVM_boot_policy ? "hvm" : "pv",
-    guestOS: vm._guest?.os_version?.name || vm._guest?.os_version?.distro || "",
+    guestOS: xenGuestOs({ osVersion: vm._guest?.os_version, otherConfig: vm.other_config, referenceLabel: vm.reference_label, viridian: vm.platform?.viridian }),
+    // XAPI has had a VTPM class since XenServer 8.3 / XCP-ng 8.3: a VM with one keeps a TPM on the target.
+    hasVtpm: Array.isArray(vm.VTPMs) && vm.VTPMs.length > 0,
     tags: vm.tags || [], snapshotCount: (vm.snapshots || []).length, disks, networks,
   }
 }

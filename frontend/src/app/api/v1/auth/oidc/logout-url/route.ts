@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getToken } from "next-auth/jwt"
 
-import { getOidcConfig } from "@/lib/auth/oidc"
+import { connectionIdOfUser, getOidcConnection, loginPathOfConnection } from "@/lib/auth/oidcConnections"
 import { buildEndSessionUrl, discoverEndSessionEndpoint } from "@/lib/auth/oidcLogout"
 import { sessionIdToken } from "@/lib/auth/sessions"
 
@@ -30,17 +30,21 @@ export async function GET(req: NextRequest) {
     })
     if (!token || token.authProvider !== "oidc") return noLogout()
 
-    const config = await getOidcConfig()
+    // The IdP the user signed in with: the provider's, or their tenant's own
+    // (issue #1289). Ending the session at the wrong one would leave theirs open.
+    const connectionId = await connectionIdOfUser(typeof token.id === "string" ? token.id : null)
+    const config = await getOidcConnection(connectionId)
     if (!config || !config.enabled) return noLogout()
 
-    const endSessionEndpoint = await discoverEndSessionEndpoint(config.issuerUrl, fetch, config)
+    const endSessionEndpoint = await discoverEndSessionEndpoint(config.issuerUrl, fetch, config, { strict: config.strictUrls === true })
     if (!endSessionEndpoint) return noLogout()
 
     // Back to our own login page. Built from the request so a deployment behind
     // a proxy lands on the host the user actually browsed, and NEXTAUTH_URL
     // wins when it is set (it is the value registered at the IdP).
     const base = process.env.NEXTAUTH_URL || new URL(req.url).origin
-    const postLogoutRedirectUri = new URL("/login", base).toString()
+    // A tenant user goes back to the tenant's own login page (issue #1289).
+    const postLogoutRedirectUri = new URL(await loginPathOfConnection(connectionId), base).toString()
 
     // The hint lives on the session row. `token.idToken` is the cookie-borne
     // form this release moves away from: sessions opened before the upgrade

@@ -19,9 +19,9 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from 'next/server'
 
 import { OrchestratorPathError, orchestratorRelay, orchestratorSegment } from '@/lib/orchestrator/client'
-import { getCurrentTenantId, verifyConnectionOwnership } from '@/lib/tenant'
+import { verifyConnectionOwnership } from '@/lib/tenant'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
-import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
+import { denyIaasTenant } from '@/lib/tenant/iaasGuard'
 import { matchMicrosegRoute, type MicrosegRoute } from '@/lib/microseg/proxyRoutes'
 import { audit } from '@/lib/audit'
 
@@ -86,16 +86,6 @@ function refusal(status: number, code: string, error: string) {
   return NextResponse.json({ code, error }, { status })
 }
 
-// Micro-segmentation acts on the cluster firewall: not available to a vDC tenant.
-async function refusedForVdcTenant(): Promise<NextResponse | null> {
-  const tenantId = await getCurrentTenantId()
-  const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
-
-  return infra.kind === 'iaas'
-    ? refusal(403, 'FORBIDDEN', 'Micro-segmentation is not available to a vDC tenant')
-    : null
-}
-
 /** The draft version a write body carries, when it carries one. */
 function bodyVersion(body: string | undefined): number | undefined {
   if (!body) return undefined
@@ -148,6 +138,13 @@ async function recordAudit(route: MicrosegRoute, connectionId: string, path: str
 }
 
 async function relay(request: NextRequest, { params }: { params: Promise<Params> }) {
+  // Micro-segmentation acts on the cluster firewall: a vDC (iaas) tenant gets
+  // the 404 of every provider infrastructure route (lib/tenant/iaasGuard),
+  // before the route lookup, any ownership or permission check and the audit.
+  const iaasDenied = await denyIaasTenant()
+
+  if (iaasDenied) return iaasDenied
+
   const { connectionId, path } = await params
   const route = matchMicrosegRoute(request.method, path ?? [])
 
@@ -161,7 +158,7 @@ async function relay(request: NextRequest, { params }: { params: Promise<Params>
   return res
 }
 
-/** The refusal of a caller who may not make this call (ownership, RBAC, vDC tenant), or null. */
+/** The refusal of a caller who may not make this call (ownership, RBAC), or null. */
 async function accessRefusal(connectionId: string, route: MicrosegRoute): Promise<Response | null> {
   const ownershipDenied = await verifyConnectionOwnership(connectionId)
 
@@ -169,9 +166,7 @@ async function accessRefusal(connectionId: string, route: MicrosegRoute): Promis
 
   const denied = await checkPermission(route.write ? PERMISSIONS.NODE_MANAGE : PERMISSIONS.NODE_VIEW, 'connection', connectionId)
 
-  if (denied) return denied
-
-  return refusedForVdcTenant()
+  return denied
 }
 
 /** The orchestrator's answer as the UI gets it. */

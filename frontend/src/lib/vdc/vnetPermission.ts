@@ -32,6 +32,20 @@ export async function checkVnetPermission(
   }
 }
 
+/**
+ * Read verdict of the vDC VNet IPAM routes. A token (the only caller the
+ * public-API guard hands a principal) is judged like any VNet read: its
+ * tenant and its connection perimeter. A session keeps the plain permission
+ * check; the IPAM query already scopes the vDC to the caller's tenant.
+ */
+export async function checkVnetReadForCaller(
+  principal: Principal | undefined,
+  vdcId: string,
+  permission: string,
+): Promise<Response | null> {
+  return principal ? checkVnetPermission(principal, vdcId, permission) : checkPermission(permission)
+}
+
 const VDC_NOT_FOUND = () => NextResponse.json({ error: "vDC not found" }, { status: 404 })
 
 /** The vDC as seen from `tenantId`: null when missing or another tenant's (the provider sees them all). */

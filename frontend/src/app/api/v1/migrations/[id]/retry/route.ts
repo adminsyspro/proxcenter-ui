@@ -53,6 +53,7 @@ async function handlePost(
       networkBridge: typeof saved.networkBridge === "string" ? saved.networkBridge : "vmbr0",
       vlanTag: typeof saved.vlanTag === "number" ? saved.vlanTag : undefined,
       nics: Array.isArray(saved.nics) ? saved.nics : undefined,
+      networkMap: Array.isArray(saved.networkMap) ? saved.networkMap : undefined,
       copyVmk: typeof saved.copyVmk === "string" && saved.copyVmk !== "" ? saved.copyVmk : undefined,
     })
     if (unauthorized) return unauthorized

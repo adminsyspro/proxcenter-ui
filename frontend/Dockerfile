@@ -150,6 +150,11 @@ COPY --from=builder --chown=nextjs:nodejs --chmod=0555 /app/prisma.config.ts ./p
 # Migration script with advisory lock (serializes Prisma migrate deploy across HA nodes).
 COPY --from=builder --chown=nextjs:nodejs --chmod=0555 /app/scripts/migrate-with-lock.js ./scripts/migrate-with-lock.js
 
+# DATABASE_URL to per-consumer TLS settings, shared by prisma.config.ts (Prisma
+# CLI) and migrate-with-lock.js (loaded through Node type stripping). The app
+# bundle and seed.js carry their own compiled copy.
+COPY --from=builder --chown=nextjs:nodejs --chmod=0555 /app/src/lib/db/connectionConfig.ts ./src/lib/db/connectionConfig.ts
+
 # Unified server entry point + WebSocket proxy.
 COPY --from=builder --chown=nextjs:nodejs --chmod=0555 /app/start.js ./start.js
 COPY --from=builder --chown=nextjs:nodejs --chmod=0555 /app/ws-proxy.js ./ws-proxy.js

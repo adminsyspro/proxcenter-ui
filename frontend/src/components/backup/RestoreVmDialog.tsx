@@ -34,6 +34,7 @@ import { formatDateTime } from '@/lib/i18n/date'
 import { readVdcContextCookie } from '@/lib/vdc/contextCookie'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
 import { checkRestoredTagsOmitted, restoredTagsCheckMessage } from '@/lib/backups/restoreTags'
+import { gpuContingentMessage } from '@/lib/gpu/contingentErrors'
 import RestoreTagsSwitch from '@/components/backup/RestoreTagsSwitch'
 
 interface BackupRef {
@@ -421,7 +422,7 @@ export default function RestoreVmDialog({
       )
       const j = await r.json().catch(() => ({}))
       if (!r.ok) {
-        setError(j?.error || `HTTP ${r.status}`)
+        setError(gpuContingentMessage(t, j) || j?.error || `HTTP ${r.status}`)
         return
       }
       if (typeof j?.data === 'string') {

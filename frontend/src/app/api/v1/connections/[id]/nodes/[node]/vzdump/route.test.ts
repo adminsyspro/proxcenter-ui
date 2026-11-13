@@ -37,6 +37,7 @@ vi.mock('@/lib/tenant', () => ({
 }))
 vi.mock('@/lib/tenant/infraScope', () => ({
   getTenantInfrastructureScope: (...a: unknown[]) => getInfraMock(...a),
+  maskingScope: (infra: any) => (infra?.kind === 'iaas' ? infra.vdcScope : null),
 }))
 vi.mock('@/lib/connections/getConnection', () => ({
   getConnectionById: (...a: unknown[]) => getConnectionByIdMock(...a),
@@ -52,6 +53,9 @@ function libraryScope() {
   return {
     kind: 'iaas',
     vdcScope: {
+      connectionIds: new Set(['conn-1']),
+      nodesByConnection: new Map([['conn-1', new Set(['pve1'])]]),
+      poolsByConnection: new Map([['conn-1', new Set(['p1'])]]),
       storagesByConnection: new Map([['conn-1', new Set(['ceph', 'isolib'])]]),
       writableStoragesByConnection: new Map([['conn-1', new Set(['ceph'])]]),
       isoLibrariesByConnection: new Map([['conn-1', new Set(['isolib'])]]),
@@ -59,13 +63,17 @@ function libraryScope() {
   }
 }
 
+// vmid 100 lives in the vDC pool p1; a stranger (vmid 999) does not.
+const clusterResources = [{ vmid: 100, type: 'qemu', node: 'pve1', pool: 'p1' }]
+
 beforeEach(() => {
   vi.clearAllMocks()
   checkPermissionMock.mockResolvedValue(null)
   getCurrentTenantIdMock.mockResolvedValue('tenant-1')
   getInfraMock.mockResolvedValue(libraryScope())
   getConnectionByIdMock.mockResolvedValue({ id: 'conn-1' })
-  pveFetchMock.mockResolvedValue('UPID:pve1:vzdump:1')
+  pveFetchMock.mockImplementation(async (_conn: unknown, path: string) =>
+    String(path).includes('/cluster/resources') ? clusterResources : 'UPID:pve1:vzdump:1')
 })
 
 describe('POST vzdump: read-only ISO library destination (#894)', () => {
@@ -100,7 +108,12 @@ describe('POST vzdump: read-only ISO library destination (#894)', () => {
   it('a scope without the writable map keeps every visible storage writable (legacy fixture)', async () => {
     getInfraMock.mockResolvedValue({
       kind: 'iaas',
-      vdcScope: { storagesByConnection: new Map([['conn-1', new Set(['ceph', 'isolib'])]]) },
+      vdcScope: {
+        connectionIds: new Set(['conn-1']),
+        nodesByConnection: new Map([['conn-1', new Set(['pve1'])]]),
+        poolsByConnection: new Map([['conn-1', new Set(['p1'])]]),
+        storagesByConnection: new Map([['conn-1', new Set(['ceph', 'isolib'])]]),
+      },
     })
     const { POST } = await import('./route')
     const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
@@ -125,5 +138,34 @@ describe('POST vzdump: destination judged on the storage (#921)', () => {
     expect(allowed.status).toBe(200)
     expect(checkPermissionMock).toHaveBeenCalledWith('vm.backup', 'node', 'conn-1:pve1')
     expect(checkPermissionMock).toHaveBeenCalledWith('vm.backup', 'storage', 'conn-1:pbs')
+  })
+})
+
+describe('POST vzdump: guest ownership (tenant may only back up its own guests)', () => {
+  it('403: a vmid outside the vDC pool is refused and PVE is never called', async () => {
+    const { POST } = await import('./route')
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
+      method: 'POST', params, body: { vmid: 999, storage: 'ceph' },
+    })
+    expect(res.status).toBe(403)
+    expect(((await res.json()) as { error: string }).error).toMatch(/vDC scope/)
+    expect(pveFetchMock).not.toHaveBeenCalledWith(expect.anything(), expect.stringContaining('/vzdump'), expect.anything())
+  })
+
+  it('403: "all" is never a tenant backup request', async () => {
+    const { POST } = await import('./route')
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
+      method: 'POST', params, body: { vmid: 100, storage: 'ceph', all: 1 },
+    })
+    expect(res.status).toBe(403)
+    expect(((await res.json()) as { error: string }).error).toMatch(/all/)
+  })
+
+  it('200: a vmid inside the vDC pool reaches the PVE vzdump call', async () => {
+    const { POST } = await import('./route')
+    const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
+      method: 'POST', params, body: { vmid: 100, storage: 'ceph' },
+    })
+    expect(res.status).toBe(200)
   })
 })

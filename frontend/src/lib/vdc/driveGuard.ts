@@ -15,7 +15,7 @@ import { safeLog } from '@/lib/log/sanitize'
 import { loadTenantSlugs, resolveUploadOwner } from './scope'
 
 import {
-  DATA_DISK_KEY_RE, isTenantDiskKey, stampDriveQos, validateDriveAgainstScope, parseDriveString,
+  DATA_DISK_KEY_RE, cicustomStorages, isTenantDiskKey, stampDriveQos, validateDriveAgainstScope, parseDriveString,
   type DriveQosCaps,
 } from './drives'
 
@@ -46,6 +46,10 @@ export async function enforceTenantDrives(args: {
   connectionId: string
   type: 'qemu' | 'lxc'
   body: Record<string, any>
+  /** The guest id being created or reconfigured. A drive may only reference an
+   *  existing volume owned by this guest; references to other guests' volumes
+   *  on shared storage are refused. */
+  targetVmid: string
 }): Promise<DriveEnforcement | null> {
   const infra = await getTenantInfrastructureScope(args.tenantId, { ignoreVdcContext: true })
   if (infra.kind !== 'iaas') return null
@@ -73,10 +77,26 @@ export async function enforceTenantDrives(args: {
   const libraries = scope.isoLibrariesByConnection?.get(args.connectionId) ?? new Set<string>()
   let slugs: { mine: string; all: string[] } | null = null
 
+  // The hibernation state is a volume like a disk: it lands on a storage of
+  // the vDC or nowhere (roadmap#201). Empty clears it, back to the default.
+  const stateStorage = args.body.vmstatestorage
+  if (args.type === 'qemu' && stateStorage !== undefined && String(stateStorage) !== '' && !writable.has(String(stateStorage))) {
+    throw new DriveScopeError('vmstatestorage: this storage is not part of your vDC.')
+  }
+
+  // cicustom reads cloud-init files from a storage: one of the vDC or none.
+  const cicustom = args.body.cicustom
+  if (args.type === 'qemu' && cicustom !== undefined && String(cicustom).trim() !== '') {
+    const storages = cicustomStorages(cicustom)
+    if (storages === null || storages.some(storage => !allowedStorages.has(storage))) {
+      throw new DriveScopeError('cicustom: this storage is not part of your vDC.')
+    }
+  }
+
   for (const key of Object.keys(args.body)) {
     if (!isTenantDiskKey(key, args.type)) continue
     const raw = String(args.body[key] ?? '')
-    const verdict = validateDriveAgainstScope(key, raw, allowedStorages, readOnlyStorages)
+    const verdict = validateDriveAgainstScope(key, raw, allowedStorages, readOnlyStorages, args.targetVmid)
     if (verdict.ok === false) throw new DriveScopeError(verdict.error)
     const { drive } = verdict
 

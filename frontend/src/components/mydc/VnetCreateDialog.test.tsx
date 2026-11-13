@@ -344,3 +344,69 @@ describe('VnetCreateDialog: vDC with VLAN pools', () => {
     await waitFor(() => expect(createButton().disabled).toBe(true))
   })
 })
+
+// Shared network (#1334): a vDC attached to a shared EVPN zone offers one
+// network present on several vDCs of the tenant.
+describe('VnetCreateDialog: shared network between vDCs (#1334)', () => {
+  const SHARED = { id: 'v1', name: 'ACME GRA4', evpnZoneId: 'z1', hasOwnZone: true }
+  const SHARED_ONLY = { id: 'v1', name: 'ACME GRA4', evpnZoneId: 'z1', hasOwnZone: false }
+  const TARGETS = { available: true, vdcs: [{ id: 'v1', name: 'ACME GRA4' }, { id: 'v2', name: 'ACME SBG' }, { id: 'v3', name: 'ACME RBX' }], networks: [] }
+
+  beforeEach(() => {
+    fetchMock.mockImplementation(async (input: any, init?: any) =>
+      String(input).includes('/evpn-networks') && !init?.method ? jsonRes({ data: TARGETS }) : jsonRes({ data: { id: 'vnet-1' } }, 201))
+  })
+
+  it('a vDC attached to no zone offers no shared network', () => {
+    renderDialog([VDC_PLAIN])
+    expect(queryField('Network type')).toBeNull()
+  })
+
+  it('offers the shared type, ticks every attached vDC by default and posts them', async () => {
+    renderDialog([SHARED])
+    await pickOption('Network type', 'Shared between my vDCs')
+    const other = await screen.findByRole('checkbox', { name: /ACME SBG/ }) as HTMLInputElement
+    expect(other.checked).toBe(true)
+    // The vDC the network is created from cannot be left out.
+    expect((screen.getByRole('checkbox', { name: /ACME GRA4/ }) as HTMLInputElement).disabled).toBe(true)
+    expect(queryField('VNI')).toBeNull()
+    fillRequired('backbone')
+    await waitFor(() => expect(createButton().disabled).toBe(false))
+    fireEvent.click(createButton())
+    await waitFor(() => expect(fetchMock.mock.calls.some(c => c[1]?.method === 'POST')).toBe(true))
+    expect(lastPostBody()).toMatchObject({ displayName: 'backbone', type: 'evpn', vdcIds: ['v1', 'v2', 'v3'] })
+    expect('vni' in lastPostBody()).toBe(false)
+  })
+
+  it('leaves out the vDCs the tenant unticks, one by one or all at once', async () => {
+    renderDialog([SHARED])
+    await pickOption('Network type', 'Shared between my vDCs')
+    fireEvent.click(await screen.findByRole('checkbox', { name: /ACME SBG/ }))
+    fillRequired('backbone')
+    fireEvent.click(createButton())
+    await waitFor(() => expect(fetchMock.mock.calls.some(c => c[1]?.method === 'POST')).toBe(true))
+    expect(lastPostBody().vdcIds).toEqual(['v1', 'v3'])
+
+    cleanup()
+    fetchMock.mockClear()
+    renderDialog([SHARED])
+    await pickOption('Network type', 'Shared between my vDCs')
+    await screen.findByRole('checkbox', { name: /ACME SBG/ })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'All' }))
+    fillRequired('solo')
+    fireEvent.click(createButton())
+    await waitFor(() => expect(fetchMock.mock.calls.some(c => c[1]?.method === 'POST')).toBe(true))
+    expect(lastPostBody().vdcIds).toEqual(['v1'])
+  })
+
+  it('a vDC with no VXLAN zone of its own creates shared networks only', async () => {
+    renderDialog([SHARED_ONLY])
+    // No type to choose: the shared network is the only overlay offered.
+    expect(queryField('Network type')).toBeNull()
+    expect(await screen.findByRole('checkbox', { name: /ACME SBG/ })).toBeTruthy()
+    fillRequired('backbone')
+    fireEvent.click(createButton())
+    await waitFor(() => expect(fetchMock.mock.calls.some(c => c[1]?.method === 'POST')).toBe(true))
+    expect(lastPostBody().type).toBe('evpn')
+  })
+})

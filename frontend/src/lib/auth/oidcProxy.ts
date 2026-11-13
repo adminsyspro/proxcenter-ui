@@ -20,8 +20,11 @@
 
 import http from "node:http"
 import https from "node:https"
+import net from "node:net"
 
-import { ProxyAgent, type Dispatcher } from "undici"
+import { Agent, buildConnector, ProxyAgent, type Dispatcher } from "undici"
+
+import { isPublicAddress, OidcUrlRefused, strictLookup } from "./oidcUrlGuard"
 
 export interface OidcProxySettings {
   proxyUrl?: string | null
@@ -209,6 +212,72 @@ export function clearOidcProxyAgents(): void {
   nodeAgents.clear()
 }
 
+// Checked connections of a tenant IdP (issue #1289): every address the host
+// resolves to is checked when the socket opens, so a name re-pointed at an
+// internal address after it was saved is refused. A proxy would resolve the
+// host itself, out of reach of that check, so a checked connection never goes
+// through one: refused, unless the bypass list sends the host direct.
+const STRICT_KEY = "strict"
+
+/** Refusal of a checked connection that a proxy would carry. */
+export const PROXY_REFUSED_MESSAGE =
+  "An outbound proxy applies to this identity provider, so its addresses cannot be checked"
+
+// An IP literal never reaches `lookup`: Node and undici connect to it directly.
+// A discovery document from a public host may still name one for its token or
+// userinfo endpoint, so the literal is checked where the socket is opened.
+function refusedLiteral(host: unknown): boolean {
+  const value = typeof host === "string" ? host.replace(/^\[|\]$/g, "") : ""
+  return net.isIP(value) !== 0 && !isPublicAddress(value)
+}
+
+// Refused through the callback, as an error of the request, not as a throw
+// out of the caller's http.request.
+function refuseSocket(callback: any): undefined {
+  process.nextTick(() => callback?.(new OidcUrlRefused()))
+  return undefined
+}
+
+class StrictHttpsAgent extends https.Agent {
+  createConnection(options: any, callback?: any): any {
+    if (refusedLiteral(options?.host)) return refuseSocket(callback)
+    return super.createConnection(options, callback)
+  }
+}
+
+class StrictHttpAgent extends http.Agent {
+  createConnection(options: any, callback?: any): any {
+    if (refusedLiteral(options?.host)) return refuseSocket(callback)
+    return (http.Agent.prototype as any).createConnection.call(this, options, callback)
+  }
+}
+
+function strictNodeAgent(protocol: string): http.Agent {
+  const key = `${STRICT_KEY}|${protocol}`
+  let agent = nodeAgents.get(key)
+  if (!agent) {
+    const options = { keepAlive: true, lookup: strictLookup() as any }
+    agent = protocol === "https:" ? new StrictHttpsAgent(options) : new StrictHttpAgent(options)
+    nodeAgents.set(key, agent)
+  }
+  return agent
+}
+
+function strictDispatcher(): Dispatcher {
+  let dispatcher = dispatchers.get(STRICT_KEY)
+  if (!dispatcher) {
+    const connector = buildConnector({ lookup: strictLookup() as any })
+    dispatcher = new Agent({
+      connect: (opts: any, callback: any) => {
+        if (refusedLiteral(opts?.hostname)) return callback(new OidcUrlRefused(), null)
+        return connector(opts, callback)
+      },
+    })
+    dispatchers.set(STRICT_KEY, dispatcher)
+  }
+  return dispatcher
+}
+
 /**
  * undici dispatcher for a `fetch` to the identity provider, or undefined to
  * keep the process-wide direct dispatcher.
@@ -217,8 +286,13 @@ export function oidcFetchDispatcher(
   settings: OidcProxySettings | null | undefined,
   target: string | URL,
   env: Env = process.env,
+  opts: { strict?: boolean } = {},
 ): Dispatcher | undefined {
   const route = proxyFor(settings, target, env)
+  if (opts.strict) {
+    if (route) throw new OidcUrlRefused(PROXY_REFUSED_MESSAGE)
+    return strictDispatcher()
+  }
   if (!route) return undefined
   let dispatcher = dispatchers.get(route.url)
   if (!dispatcher) {
@@ -243,12 +317,18 @@ export function oidcOpenidAgent(
   settings: OidcProxySettings | null | undefined,
   issuerUrl: string,
   env: Env = process.env,
+  opts: { strict?: boolean } = {},
 ): http.Agent | false {
   let protocol: string
   try {
     protocol = new URL(issuerUrl).protocol
   } catch {
     return false
+  }
+  if (opts.strict) {
+    // Checked per URL: openid-client asks for an agent for each request.
+    if (proxyFor(settings, issuerUrl, env)) throw new OidcUrlRefused(PROXY_REFUSED_MESSAGE)
+    return strictNodeAgent(protocol)
   }
   const route = resolveOidcProxy(settings, protocol, env)
   if (!route) return false

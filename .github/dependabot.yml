@@ -38,3 +38,11 @@ updates:
       day: "monday"
     labels:
       - "dependencies"
+    # init, analyze and upload-sarif are separate actions of one repository
+    # and must run at the same version: CodeQL refuses a configuration file
+    # written by another version. Ungrouped, Dependabot opens one PR per
+    # action and each one fails CodeQL on its own.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"

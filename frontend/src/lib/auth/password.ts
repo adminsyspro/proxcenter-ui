@@ -21,7 +21,8 @@ type Argon2Hash = { memory: number; passes: number; parallelism: number; salt: B
 const PHC_RE = /^\$argon2id\$v=(\d+)\$m=(\d+),t=(\d+),p=(\d+)\$([A-Za-z0-9+/]+)\$([A-Za-z0-9+/]+)$/
 
 function b64(buf: Buffer): string {
-  return buf.toString("base64").replace(/=+$/, "")
+  // Base64 pads with at most two "=": a bounded quantifier keeps the strip linear.
+  return buf.toString("base64").replace(/={1,2}$/, "")
 }
 
 function argon2id(password: string, salt: Buffer, p: Omit<Argon2Hash, "salt" | "tag">, tagLength: number): Promise<Buffer> {

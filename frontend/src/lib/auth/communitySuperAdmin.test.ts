@@ -18,6 +18,7 @@ const {
   rbacUserRoleCreateMock,
   rbacUserPermissionFindFirstMock,
   userTenantFindFirstMock,
+  tenantFindFirstMock,
   userUpdateMock,
   transactionMock,
 } = vi.hoisted(() => ({
@@ -27,6 +28,7 @@ const {
   rbacUserRoleCreateMock: vi.fn((args: any) => ({ __op: "rbacUserRole.create", args })),
   rbacUserPermissionFindFirstMock: vi.fn(),
   userTenantFindFirstMock: vi.fn(),
+  tenantFindFirstMock: vi.fn(),
   userUpdateMock: vi.fn((args: any) => ({ __op: "user.update", args })),
   transactionMock: vi.fn(async (ops: any[]) => ops),
 }))
@@ -36,6 +38,9 @@ vi.mock("@/lib/db/prisma", () => ({
     rbacUserRole: { findFirst: rbacUserRoleFindFirstMock, create: rbacUserRoleCreateMock },
     rbacUserPermission: { findFirst: rbacUserPermissionFindFirstMock },
     userTenant: { findFirst: userTenantFindFirstMock },
+    // Default: the Community shape has only the default tenant, so the
+    // non-default-tenant guard never trips (overridden per test below).
+    tenant: { findFirst: tenantFindFirstMock },
     user: { update: userUpdateMock },
     $transaction: transactionMock,
   },
@@ -72,6 +77,7 @@ function licence(overrides: Partial<ServerLicense> = {}): ServerLicense {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  tenantFindFirstMock.mockResolvedValue(null)
   rbacUserRoleFindFirstMock.mockResolvedValue(null)
   rbacUserPermissionFindFirstMock.mockResolvedValue(null)
   userTenantFindFirstMock.mockResolvedValue(null)
@@ -223,5 +229,17 @@ describe("backfillCommunitySuperAdmin", () => {
   it("does nothing without a user id", async () => {
     expect(await backfillCommunitySuperAdmin("")).toBe(false)
     expect(rbacUserRoleFindFirstMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("backfillCommunitySuperAdmin — non-default tenant guard", () => {
+  it("does not grant when a non-default tenant exists", async () => {
+    getServerLicenseMock.mockResolvedValue(licence({ resolved: true }))
+    rbacUserRoleFindFirstMock.mockResolvedValue(null)
+    rbacUserPermissionFindFirstMock.mockResolvedValue(null)
+    tenantFindFirstMock.mockResolvedValue({ id: "tenant-b" })
+    const { backfillCommunitySuperAdmin } = await import("./communitySuperAdmin")
+    expect(await backfillCommunitySuperAdmin("u1")).toBe(false)
+    expect(rbacUserRoleCreateMock).not.toHaveBeenCalled()
   })
 })

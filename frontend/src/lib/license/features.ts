@@ -44,6 +44,10 @@ export const Features = {
   // Incident register: alerts grouped into incidents with a journal, corrective
   // actions and a post-mortem. Default tenant only. Routes under /api/v1/incidents.
   INCIDENTS: 'incidents',
+  // GPU page (#672): fleet view of the GPUs of every cluster, their load, the
+  // VMs that hold them and the actions on them. The GPU tab of the inventory
+  // and the dashboard widget stay in Community.
+  GPU_MANAGEMENT: 'gpu_management',
   // Option capabilities (granted by stackable add-on licenses, never by an
   // edition). NEVER add these to EDITION_FEATURES.
   // ProxCenter control-plane HA (this paid add-on): multi-node conversion of
@@ -53,7 +57,7 @@ export const Features = {
   // cluster), which lives under the `connections/[id]/ha/**` routes and is
   // not gated by this capability.
   HA: 'control_plane_ha',
-  // Read-only public API access via pxc_ service-account tokens (paid add-on,
+  // Public API access, read and write, via pxc_ service-account tokens (paid add-on,
   // spec 2026-07-28). Enforcement lives in getPrincipal(), UI gate in the
   // Settings API tab FeatureGuard.
   API_ACCESS: 'api_access',
@@ -92,6 +96,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'backup_restore_drills',
     'sla_monitoring',
     'incidents',
+    'gpu_management',
   ],
   enterprise_plus: [
     'drs',
@@ -122,6 +127,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'backup_restore_drills',
     'sla_monitoring',
     'incidents',
+    'gpu_management',
   ],
 }
 
@@ -170,7 +176,7 @@ export const OPTION_REGISTRY: Record<string, OptionInfo> = {
   },
   api_access: {
     name: 'ProxCenter API Access',
-    description: 'Read-only public API: autonomous service-account tokens for Prometheus, Zabbix, PRTG, CI and custom monitoring integrations.',
+    description: 'Public API, read and write: scoped service-account tokens for monitoring (Prometheus, Zabbix, PRTG) and automation (CI, scripts, Terraform, Ansible) across every connected cluster.',
     docsUrl: 'https://proxcenter.io/pricing',
   },
 }

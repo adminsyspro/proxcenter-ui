@@ -9,7 +9,7 @@ import zhCN from './zh-CN.json'
 
 const locales: Record<string, any> = { en, fr, de, es, ko, 'zh-CN': zhCN }
 
-const PLAIN_KEYS = ['repoEnterprisePve', 'repoParseErrorsDescription']
+const PLAIN_KEYS = ['repoEnterprisePve', 'repoParseErrorsDescription', 'repoUnreadableDescription']
 
 describe('node update repository pre-flight i18n parity across the 6 served locales', () => {
   for (const [locale, messages] of Object.entries(locales)) {
@@ -37,6 +37,16 @@ describe('node update repository pre-flight i18n parity across the 6 served loca
       expect(value, `${locale}: must name the directory`).toContain('/etc/apt/sources.list.d/')
       expect(value, `${locale}: must name the .sources extension`).toContain('.sources')
       expect(value, `${locale}: must name the .list extension`).toContain('.list')
+    })
+
+    // Issue #1366: the remedy for a file Proxmox VE cannot read is its mode,
+    // and the reader is www-data, not root.
+    it(`${locale} gives repoUnreadableDescription the www-data reader and the chmod remedy`, () => {
+      const value = messages?.updates?.repoUnreadableDescription as string
+
+      expect(value, `${locale}: must name the reader`).toContain('www-data')
+      expect(value, `${locale}: must give the remedy`).toContain('chmod 644')
+      expect(value, `${locale}: no ICU tag`).not.toMatch(/[<>]/)
     })
   }
 })

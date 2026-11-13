@@ -9321,6 +9321,7 @@
     "dashboard": {
       "stopHeldTitle": "紧急停止已关闭集群防火墙",
       "coverageDefinition": "受保护：客户机选项及其某个网络接口上均已启用防火墙，即 Proxmox 实际应用的状态",
+      "coverageSampled": "超过 {max, number} 台客户机时，仅测量均匀抽取的样本。",
       "todoTitle": "待办",
       "todoNothing": "无待办事项",
       "todoUnavailable": "无法读取防火墙数据时不可用",
@@ -9348,6 +9349,7 @@
       "postureChipZones": "强制执行的区域 {enforced, number} / {total, number}",
       "postureChipZonesUnknown": "强制执行的区域 -",
       "postureChipGuests": "受保护的客户机 {protected, number} / {running, number} 运行中",
+      "postureChipGuestsSampled": "受保护的客户机 {protected, number} / {running, number} 已测量 · {total, number} 运行中",
       "postureChipGuestsUnknown": "受保护的客户机 -",
       "postureChipLastCheck": "上次检查 {time}",
       "postureChipNoCheck": "尚未检查",

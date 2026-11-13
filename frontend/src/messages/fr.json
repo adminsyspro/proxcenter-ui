@@ -9321,6 +9321,7 @@
     "dashboard": {
       "stopHeldTitle": "Pare-feu de cluster coupé par l'arrêt d'urgence",
       "coverageDefinition": "Protégé : pare-feu activé dans les options de l'invité et sur une de ses interfaces réseau, ce que Proxmox applique",
+      "coverageSampled": "Au-delà de {max, number} invités, seul un échantillon régulier est mesuré.",
       "todoTitle": "À faire",
       "todoNothing": "Rien à faire",
       "todoUnavailable": "Indisponible tant que les données du pare-feu ne peuvent pas être lues",
@@ -9348,6 +9349,7 @@
       "postureChipZones": "Zones en blocage {enforced, number} / {total, number}",
       "postureChipZonesUnknown": "Zones en blocage -",
       "postureChipGuests": "Invités protégés {protected, number} / {running, number} en marche",
+      "postureChipGuestsSampled": "Invités protégés {protected, number} / {running, number} mesurés · {total, number} en marche",
       "postureChipGuestsUnknown": "Invités protégés -",
       "postureChipLastCheck": "Dernière vérification {time}",
       "postureChipNoCheck": "Aucune vérification encore",

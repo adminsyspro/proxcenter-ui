@@ -356,11 +356,20 @@ export function zonesEnforced(status: Pick<MicrosegStatus, 'zones_by_state'> | u
   return { enforced: z.enforce ?? 0, total: (z.enforce ?? 0) + (z.observe ?? 0) + (z.disabled ?? 0) }
 }
 
-/** Running guests filtered by Proxmox, of the running guests; null until the coverage route measured them. */
-export function protectedRunning(coverage: Pick<FirewallCoverage, 'computedAt' | 'guests'> | null | undefined): { protected: number; running: number } | null {
+/**
+ * Running guests filtered by Proxmox, of the running guests the coverage route asked; null until it measured them.
+ * Above its guest cap the route asks an even sample: `running` then counts the running guests asked, `total` every
+ * running guest and `asked` the size of the sample (the cap), and a guest the cap left out is not taken for an
+ * unprotected one.
+ */
+export type ProtectedRunning = { protected: number; running: number; total: number; asked: number }
+
+export function protectedRunning(coverage: Pick<FirewallCoverage, 'computedAt' | 'guests'> | null | undefined): ProtectedRunning | null {
   if (!coverage?.computedAt || !coverage.guests) return null
-  const running = coverage.guests.filter(r => r.status === 'running')
-  return { protected: running.filter(r => r.enabled === true).length, running: running.length }
+  const asked = coverage.guests.filter(r => !r.sampledOut)
+  const running = asked.filter(r => r.status === 'running')
+  const total = coverage.guests.filter(r => r.status === 'running').length
+  return { protected: running.filter(r => r.enabled === true).length, running: running.length, total, asked: asked.length }
 }
 
 /**

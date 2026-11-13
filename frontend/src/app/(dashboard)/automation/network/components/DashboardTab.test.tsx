@@ -225,6 +225,21 @@ describe('DashboardTab: header chips', () => {
     expect(screen.queryByRole('tooltip')).toBeNull()
   })
 
+  it('counts the protected guests over the sample only, and says so, above the guest cap of the coverage route', async () => {
+    // The cap left one running guest out: it is not taken for an unprotected one.
+    const guests = TAGGED.map((g, i) => (i < 1 ? { ...g, enabled: null, optionsEnabled: null, nicFirewall: null, sampledOut: true } : g))
+    const asked = guests.filter(g => !g.sampledOut && g.status === 'running')
+
+    stubReads({ coverage: { guests, sampled: true, partial: true } })
+    renderDashboard({ enable: 1, policy_in: 'DROP' })
+
+    const running = guests.filter(g => g.status === 'running').length
+    const label = `Guests protected ${asked.filter(g => g.enabled === true).length} / ${asked.length} measured · ${running} running`
+
+    await waitFor(() => expect(screen.getByTestId('chip-guests').textContent).toBe(label))
+    expect(asked.length).toBeLessThan(running)
+  })
+
   it('says "-" while the guests are not measured, and the host firewall in standalone mode', async () => {
     stubReads({ coverage: 'pending' })
     renderDashboard({ enable: 0, policy_in: 'ACCEPT' }, { firewallMode: 'standalone' })

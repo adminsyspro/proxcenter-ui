@@ -9268,6 +9268,7 @@
     "dashboard": {
       "stopHeldTitle": "Cluster-Firewall durch den Notstopp ausgeschaltet",
       "coverageDefinition": "Geschützt: Firewall in den Gastoptionen und auf einer seiner Netzwerkschnittstellen aktiviert, so wie Proxmox sie anwendet",
+      "coverageSampled": "Oberhalb von {max, number} Gästen wird nur eine gleichmäßige Stichprobe gemessen.",
       "todoTitle": "Zu erledigen",
       "todoNothing": "Nichts zu tun",
       "todoUnavailable": "Nicht verfügbar, solange die Firewall-Daten nicht gelesen werden können",
@@ -9295,6 +9296,7 @@
       "postureChipZones": "Zonen erzwungen {enforced, number} / {total, number}",
       "postureChipZonesUnknown": "Zonen erzwungen -",
       "postureChipGuests": "Geschützte Gäste {protected, number} / {running, number} laufend",
+      "postureChipGuestsSampled": "Geschützte Gäste {protected, number} / {running, number} gemessen · {total, number} laufend",
       "postureChipGuestsUnknown": "Geschützte Gäste -",
       "postureChipLastCheck": "Letzte Prüfung {time}",
       "postureChipNoCheck": "Noch keine Prüfung",

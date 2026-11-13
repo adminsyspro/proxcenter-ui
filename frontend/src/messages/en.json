@@ -9321,6 +9321,7 @@
     "dashboard": {
       "stopHeldTitle": "Cluster firewall held off by the emergency stop",
       "coverageDefinition": "Protected: firewall on in the guest options and on one of its network interfaces, what Proxmox applies",
+      "coverageSampled": "Above {max, number} guests, only an even sample is measured.",
       "todoTitle": "To do",
       "todoNothing": "Nothing to do",
       "todoUnavailable": "Not available while the firewall data cannot be read",
@@ -9348,6 +9349,7 @@
       "postureChipZones": "Zones enforced {enforced, number} / {total, number}",
       "postureChipZonesUnknown": "Zones enforced -",
       "postureChipGuests": "Guests protected {protected, number} / {running, number} running",
+      "postureChipGuestsSampled": "Guests protected {protected, number} / {running, number} measured · {total, number} running",
       "postureChipGuestsUnknown": "Guests protected -",
       "postureChipLastCheck": "Last check {time}",
       "postureChipNoCheck": "No check yet",

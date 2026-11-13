@@ -182,7 +182,7 @@ describe('zone panel: expanded in a dialog', () => {
 describe('zone panel: outbound suggestions', () => {
   it('names the destination as the peer of an outbound row, and keeps the source for an inbound one', async () => {
     setup({ suggestions: [
-      wouldBlock('o1', { direction: 'out', src_zone_id: 'zd', dst_zone_id: '', src_ip: '10.0.0.2', dst_ip: '172.30.99.43', dst_key: '172.30.99.43', proto: 'tcp', dport: 9999 }),
+      wouldBlock('o1', { direction: 'out', src_zone_id: 'zd', dst_zone_id: '', src_ip: '10.0.0.2', dst_ip: '172.30.99.43', dst_key: '172.30.99.43', proto: 'tcp', dport: '9999' }),
       wouldBlock('o2', { direction: 'out', src_zone_id: 'zd', dst_zone_id: 'zw', dst_key: 'zw', dst_ip: '' }),
       wouldBlock('o3', { direction: 'out', src_zone_id: 'zd', dst_zone_id: '', dst_ip: '', dst_key: '0.0.0.0/0' }),
       wouldBlock('i1'),

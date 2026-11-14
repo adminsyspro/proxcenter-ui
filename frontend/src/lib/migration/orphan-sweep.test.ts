@@ -84,6 +84,16 @@ describe("sweepOrphanedMigrationJobs", () => {
     }
   })
 
+  it("fails a job left asleep in a manual hold by this instance, and clears its hold marker", async () => {
+    const held = await seedJob({ ownerInstanceId: ME, status: "delta_sync", currentStep: "delta_4", holdIdleAt: NOW })
+
+    await sweep()
+
+    const row = await reload(held.id)
+    expect(row.status).toBe("failed")
+    expect(row.holdIdleAt).toBeNull()
+  })
+
   it("fails an ownerless legacy job only once it has been silent for more than 12h", async () => {
     const old = await seedJob({ updatedAt: hoursAgo(13) })
     const atCutoff = await seedJob({ updatedAt: new Date(NOW.getTime() - FOREIGN_ORPHAN_MAX_AGE_MS) })

@@ -29,6 +29,11 @@ import { buildTabAlertTitle, buildTabTitle, undecorateTabTitle } from '@/lib/tas
 import { INFRA_TYPES } from '@/lib/changes/infra'
 import { useTenant } from '@/contexts/TenantContext'
 import { useActiveDeployments } from '@/hooks/useNavbarNotifications'
+import { useSharedTasks } from '@/hooks/useSharedTasks'
+import { openMigration } from '@/lib/migration/migrationJobOpen'
+import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
+import { activeMigrations, isWaitingForCutover } from '@/lib/tasks/activeMigrations'
+import { stepLabelKey } from '@/lib/tasks/taskProgressDisplay'
 import { useRouter } from 'next/navigation'
 
 type RunningTask = {
@@ -164,6 +169,9 @@ const stopTitleBlink = () => {
   }
 }
 
+/** Rows of the Migrations section before "N more". */
+const MIGRATIONS_SHOWN = 5
+
 export default function TasksDropdown() {
   const t = useTranslations()
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
@@ -215,6 +223,17 @@ export default function TasksDropdown() {
   const { data: deploymentsResponse } = useActiveDeployments()
   const activeDeployments: any[] = Array.isArray(deploymentsResponse?.data) ? deploymentsResponse.data : []
   const router = useRouter()
+
+  // Migrations under way (any pipeline, waiting ones included), the same list
+  // the ProxCenter task bar reads: one SWR key, so no extra poll. A big wave
+  // shows its first rows, the rest on demand.
+  const { data: sharedResponse } = useSharedTasks()
+  const migrations = activeMigrations(sharedResponse?.data ?? [])
+  const [allMigrations, setAllMigrations] = useState(false)
+  const shownMigrations = allMigrations ? migrations : migrations.slice(0, MIGRATIONS_SHOWN)
+  // A click opens the dialog the run was started from, like the task bar
+  // (lib/migration/migrationJobOpen): migrate dialog, or batch follow-up.
+  const { restoreTask } = useProxCenterTasks()
 
   // Sync SWR data to local state and handle notifications
   useEffect(() => {
@@ -366,7 +385,7 @@ return () => window.removeEventListener('focus', handleFocus)
     setAnchorEl(null)
   }
 
-  const taskCount = tasks.length + activeUpdates.length + activeDeployments.length
+  const taskCount = tasks.length + activeUpdates.length + activeDeployments.length + migrations.length
 
   return (
     <>
@@ -449,14 +468,14 @@ return () => window.removeEventListener('focus', handleFocus)
 
         {/* Tasks list */}
         <Box sx={{ flex: 1, overflow: 'auto' }}>
-          {tasks.length === 0 ? (
+          {tasks.length === 0 ? (taskCount > 0 ? null : (
             <Box sx={{ px: 2, py: 4, textAlign: 'center' }}>
               <i className="ri-check-double-line" style={{ fontSize: 32, opacity: 0.3 }} />
               <Typography variant="body2" sx={{ mt: 1, opacity: 0.6 }}>
                 {t('common.noData')}
               </Typography>
             </Box>
-          ) : (
+          )) : (
             tasks.map((task, idx) => (
               <Box key={task.id}>
                 <Box
@@ -596,6 +615,62 @@ return () => window.removeEventListener('focus', handleFocus)
                 {idx < activeUpdates.length - 1 && <Divider />}
               </Box>
             ))}
+          </Box>
+        )}
+
+        {/* Migrations into Proxmox under way, from any source and any
+            pipeline. A click opens the dialog the run was started from. */}
+        {migrations.length > 0 && (
+          <Box data-testid="tasks-dropdown-migrations">
+            <Box sx={{ px: 2, py: 1, borderTop: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <i className="ri-arrow-left-right-line" style={{ fontSize: 16, opacity: 0.6 }} />
+              <Typography variant="subtitle2" fontWeight={600} sx={{ opacity: 0.8 }}>
+                {t('notifications.migrations')}
+              </Typography>
+              <Chip label={migrations.length} size="small" color="primary" sx={{ height: 18, fontSize: '0.65rem' }} />
+            </Box>
+            {shownMigrations.map((m, idx) => {
+              const waiting = isWaitingForCutover(m)
+              const stepKey = stepLabelKey(m.currentStep)
+              const step = waiting ? t('tasks.shared.waitingForCutover') : (stepKey ? t(`tasks.steps.${stepKey}` as any) : (m.currentStep || m.status))
+              return (
+                <Box key={m.id}>
+                  <Box
+                    data-testid="tasks-dropdown-migration"
+                    sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                    onClick={() => {
+                      handleClose()
+                      openMigration(m, { restore: restoreTask, navigate: url => router.push(url) })
+                    }}
+                  >
+                    <Box sx={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: waiting ? 'warning.main' : 'primary.main', color: 'primary.contrastText', borderRadius: 1, position: 'relative' }}>
+                      <i className={waiting ? 'ri-pause-line' : 'ri-arrow-left-right-line'} style={{ fontSize: 15 }} />
+                      {!waiting && <CircularProgress size={28} thickness={2} sx={{ position: 'absolute', color: 'primary.light', opacity: 0.5 }} />}
+                    </Box>
+                    <Typography variant="body2" fontWeight={500} noWrap sx={{ flex: 1, minWidth: 0 }}>
+                      {m.sourceVmName || m.label}
+                    </Typography>
+                    <Chip label={step} size="small" color={waiting ? 'warning' : 'default'} sx={{ height: 18, fontSize: '0.65rem', maxWidth: 150 }} />
+                    <Typography variant="caption" sx={{ opacity: 0.7, width: 32, textAlign: 'right', flexShrink: 0 }}>
+                      {`${Math.round(m.progress)}%`}
+                    </Typography>
+                    <i className="ri-arrow-right-s-line" style={{ fontSize: 18, opacity: 0.4 }} />
+                  </Box>
+                  {idx < shownMigrations.length - 1 && <Divider />}
+                </Box>
+              )
+            })}
+            {migrations.length > shownMigrations.length && (
+              <Box
+                data-testid="tasks-dropdown-migrations-more"
+                sx={{ px: 2, py: 0.75, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                onClick={() => setAllMigrations(true)}
+              >
+                <Typography variant="caption" color="primary">
+                  {t('tasks.shared.moreMigrations', { count: migrations.length - shownMigrations.length })}
+                </Typography>
+              </Box>
+            )}
           </Box>
         )}
 

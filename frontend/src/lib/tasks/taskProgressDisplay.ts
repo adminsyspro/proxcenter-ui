@@ -1,6 +1,6 @@
 /**
  * Pure display helpers for the shared-task detail readout (speed parsing, ETA,
- * step labels). Kept out of SharedTaskDetailDialog so every branch is
+ * step labels). Kept out of the components that show them so every branch is
  * unit-testable; the component only assembles the pieces.
  */
 

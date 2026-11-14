@@ -87,6 +87,13 @@ describe("jobPassesSharedTaskScope", () => {
 })
 
 describe("toSharedTask", () => {
+  it("carries what reopens the dialog the run was started from: its source and its batch", () => {
+    const single = toSharedTask({ ...baseJob, sourceConnectionId: "vc-1", batchId: null } as any, { isMine: true, createdByName: "Alice" })
+    expect(single).toMatchObject({ sourceConnectionId: "vc-1", sourceVmId: "vm-100", batchId: null })
+    const inBatch = toSharedTask({ ...baseJob, sourceConnectionId: "vc-1", batchId: "b-7" } as any, { isMine: true, createdByName: "Alice" })
+    expect(inBatch.batchId).toBe("b-7")
+  })
+
   it("maps fields, coerces BigInt, builds label, never includes raw createdBy", () => {
     const st = toSharedTask(baseJob as any, { isMine: true, createdByName: "Alice" })
     expect(st.id).toBe("job-1")

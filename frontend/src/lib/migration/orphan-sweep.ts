@@ -67,6 +67,8 @@ export async function sweepOrphanedMigrationJobs(deps: {
     currentStep: "failed",
     error: ORPHANED_JOB_ERROR,
     completedAt: now,
+    // A job that died asleep in a manual hold (lib/migration/warm/hold-slot).
+    holdIdleAt: null,
   }
 
   const ownedWhere = { ownerInstanceId: instanceId, status: nonTerminal }

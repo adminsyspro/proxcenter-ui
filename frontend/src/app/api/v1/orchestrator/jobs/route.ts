@@ -356,6 +356,10 @@ export async function GET(req: Request) {
           target: migTarget,
           metadata: {
             connectionId: mj.targetConnectionId,
+            // What reopens the dialog the run was started from: its source
+            // host, and its batch for a bulk migration (migrationJobOpen).
+            sourceConnectionId: mj.sourceConnectionId,
+            batchId: mj.batchId ?? null,
             sourceVmName: mj.sourceVmName,
             sourceHost: mj.sourceHost,
             targetNode: mj.targetNode,

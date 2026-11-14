@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
-import { registerJob, unregisterJob, isCutoverRequested, isCancelled, isForcePowerOffRequested } from "./job-control"
+import { registerJob, unregisterJob, isCutoverRequested, isCancelled, isForcePowerOffRequested, updateJob, updateJobFields } from "./job-control"
 import { OPERATOR_SIGNAL_POLL_MS } from "@/lib/migration/operator-signals"
 
 /**
@@ -81,5 +81,74 @@ describe("warm job control, signals recorded on the row", () => {
     await vi.advanceTimersByTimeAsync(OPERATOR_SIGNAL_POLL_MS * 3)
     expect(prisma.migrationJob.findUnique.mock.calls.length).toBe(reads)
     expect(isCutoverRequested(JOB)).toBe(false)
+  })
+})
+
+describe("updateJobFields", () => {
+  it("writes the fields of a running job without touching its status or its step", async () => {
+    await registerJob(JOB, prisma)
+    prisma.migrationJob.updateMany.mockClear()
+
+    await updateJobFields(JOB, { suggestedSyncIntervalSec: 900 })
+
+    expect(prisma.migrationJob.updateMany).toHaveBeenCalledWith({
+      where: { id: JOB, status: { notIn: ["completed", "failed", "cancelled"] } },
+      data: { suggestedSyncIntervalSec: 900 },
+    })
+  })
+})
+
+describe("updateJob", () => {
+  // Seen at the lab (14/11, twice): a cancel sent while a sync was running was
+  // written to the row, then the sync's own progress write put "delta_sync"
+  // back before the pipeline had read the cancel, and the migration kept
+  // syncing behind a task the operator believed stopped.
+  const guarded = () => {
+    const calls: any[] = []
+    const db = {
+      migrationJob: {
+        findUnique: vi.fn(async () => row),
+        update: vi.fn(async ({ data }: any) => { calls.push("update"); Object.assign(row, data); return row }),
+        updateMany: vi.fn(async ({ where, data }: any) => {
+          calls.push("updateMany")
+          if (where.status?.not === row.status || where.status?.notIn?.includes(row.status)) return { count: 0 }
+          Object.assign(row, data)
+          return { count: 1 }
+        }),
+      },
+    }
+    return { db, calls }
+  }
+
+  it("does not bring back a migration cancelled while it was working", async () => {
+    const { db } = guarded()
+    await registerJob(JOB, db)
+    row.status = "cancelled"
+    row.currentStep = "cancelled"
+
+    await updateJob(JOB, "delta_sync", { currentStep: "delta_3", progress: 90 })
+
+    expect(row).toMatchObject({ status: "cancelled", currentStep: "cancelled" })
+    expect(row.progress).toBeUndefined()
+  })
+
+  it("still moves a running migration from one step to the next", async () => {
+    const { db } = guarded()
+    await registerJob(JOB, db)
+
+    await updateJob(JOB, "cutover", { progress: 95 })
+
+    expect(row).toMatchObject({ status: "cutover", currentStep: "cutover", progress: 95 })
+  })
+
+  it("still writes how the run ended, whatever the row says", async () => {
+    const { db } = guarded()
+    await registerJob(JOB, db)
+    row.status = "cancelled"
+
+    await updateJob(JOB, "completed")
+
+    expect(row.status).toBe("completed")
+    expect(row.completedAt).toBeInstanceOf(Date)
   })
 })

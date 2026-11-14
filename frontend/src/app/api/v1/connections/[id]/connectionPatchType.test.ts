@@ -90,6 +90,20 @@ describe('PATCH /api/v1/connections/[id] migration limits (ui#1332)', () => {
   }
   const limits = { migrationMaxParallel: 12, migrationMaxPerNode: 3, migrationMaxPerSourceHost: 6 }
 
+  it('stores the sync interval on a VMware or XCP-ng source, not on a PVE target', async () => {
+    findUniqueMock.mockResolvedValue({ type: 'xcpng' })
+    expect((await patch('xo-1', { migrationSyncIntervalSec: 900 })).status).toBe(200)
+    expect(updateMock.mock.calls[0][0].data).toMatchObject({ migrationSyncIntervalSec: 900 })
+
+    findUniqueMock.mockResolvedValue({ type: 'vmware' })
+    expect((await patch('vc-1', { migrationSyncIntervalSec: null })).status).toBe(200)
+    expect(updateMock.mock.calls[1][0].data).toMatchObject({ migrationSyncIntervalSec: null })
+
+    findUniqueMock.mockResolvedValue({ type: 'pve' })
+    expect((await patch('pve-1', { migrationSyncIntervalSec: 900, name: 'x' })).status).toBe(200)
+    expect(updateMock.mock.calls[2][0].data).not.toHaveProperty('migrationSyncIntervalSec')
+  })
+
   it('stores the cluster and per-node limits on a PVE connection, the per-host limit on a VMware one', async () => {
     findUniqueMock.mockResolvedValue({ type: 'pve' })
     expect((await patch('pve-1', limits)).status).toBe(200)

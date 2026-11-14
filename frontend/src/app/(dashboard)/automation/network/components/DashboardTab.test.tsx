@@ -228,7 +228,7 @@ describe('DashboardTab: header chips', () => {
   it('counts the protected guests over the sample only, and says so, above the guest cap of the coverage route', async () => {
     // The cap left one running guest out: it is not taken for an unprotected one.
     const guests = TAGGED.map((g, i) => (i < 1 ? { ...g, enabled: null, optionsEnabled: null, nicFirewall: null, sampledOut: true } : g))
-    const asked = guests.filter(g => !g.sampledOut && g.status === 'running')
+    const asked = guests.filter(g => !('sampledOut' in g) && g.status === 'running')
 
     stubReads({ coverage: { guests, sampled: true, partial: true } })
     renderDashboard({ enable: 1, policy_in: 'DROP' })

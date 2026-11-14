@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import type { MicrosegSettings } from '@/lib/microseg/types'
 
 import {
-  SETTING_BOUNDS, buildRateLimit, changedUpdate, formFromSettings, parseRateLimit, selfIpsFallback, validateSettingsForm,
+  SETTING_BOUNDS, buildRateLimit, changedUpdate, formFromSettings, parseRateLimit, selfIpsFallback, validateSettingsForm, type SettingNumberKey,
 } from './settingsModel'
 
 const base: MicrosegSettings = {
@@ -26,7 +26,7 @@ describe('bounds', () => {
     })
   })
 
-  for (const [field, [lo, hi]] of Object.entries(SETTING_BOUNDS)) {
+  for (const [field, [lo, hi]] of Object.entries(SETTING_BOUNDS) as [SettingNumberKey, [number, number]][]) {
     it(`${field} accepts ${lo} and ${hi}, refuses ${lo - 1} and ${hi + 1}, a fraction and text`, () => {
       const at = (value: string) => validateSettingsForm({ ...formFromSettings('zone-', base), [field]: value })
       expect(at(String(lo))[field]).toBeUndefined()

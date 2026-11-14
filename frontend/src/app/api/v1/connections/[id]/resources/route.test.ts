@@ -37,7 +37,8 @@ vi.mock('@/lib/inventory/guestDiskTotals', () => ({
 
 import { GET } from './route'
 
-const get = () => callRoute(GET, { params: { id: 'conn-1' } })
+// The route's own signature is narrower than the harness's (its declared answer may be undefined): same call.
+const get = () => callRoute(GET as Parameters<typeof callRoute>[0], { params: { id: 'conn-1' } })
 
 beforeEach(() => {
   h.attach.mockClear()

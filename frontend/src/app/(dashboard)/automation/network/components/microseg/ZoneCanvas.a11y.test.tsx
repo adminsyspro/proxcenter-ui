@@ -33,7 +33,7 @@ function render(locale: string, messages: Record<string, unknown>) {
     <ZoneCanvas nodes={nodes} edges={edges} onSelectZone={noop} onSelectGuest={noop} onSelectEdge={noop} onHover={noop} onFocusNode={noop} onClear={noop} />,
     { locale, messages },
   )
-  return received.props as Record<string, any>
+  return received.props as unknown as Record<string, any>
 }
 
 describe('zone map screen-reader texts', () => {

@@ -936,7 +936,7 @@ function readOptions(
 function objectName(s: Section, t: ReturnType<typeof useTranslations<'microsegPilot.dfw'>>): string {
   if (s.kind === 'zone') return t('object.group', { group: s.zone!.group })
   if (s.kind === 'cluster') return t('object.cluster')
-  if (s.kind === 'host') return t('object.host', { node: s.node })
+  if (s.kind === 'host') return t('object.host', { node: s.node! })
   return t('object.guest', { vmid: s.guest!.vmid, node: s.guest!.node })
 }
 

@@ -13489,7 +13489,8 @@
         "gatewayFirst": "Enter the gateway first",
         "gatewayServicesHint": "Pick in the list, or type a protocol and its ports: tcp/8443, udp/5000:5010, icmp",
         "gatewayTypedInvalid": "Not a service: tcp or udp with ports (tcp/8443, udp/53,123, tcp/5000:5010), or icmp, icmpv6, any",
-        "gatewayTypeHint": "Pick or type a service"
+        "gatewayTypeHint": "Pick or type a service",
+        "gatewayAdd": "Add {service}"
       },
       "flowDialog": {
         "createTitle": "New flow",

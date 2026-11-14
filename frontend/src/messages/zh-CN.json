@@ -13489,7 +13489,8 @@
         "gatewayFirst": "请先输入网关",
         "gatewayServicesHint": "从列表中选择，或输入协议及端口：tcp/8443、udp/5000:5010、icmp",
         "gatewayTypedInvalid": "无法识别的服务：带端口的 tcp 或 udp（tcp/8443、udp/53,123、tcp/5000:5010），或 icmp、icmpv6、any",
-        "gatewayTypeHint": "选择或输入服务"
+        "gatewayTypeHint": "选择或输入服务",
+        "gatewayAdd": "添加 {service}"
       },
       "flowDialog": {
         "createTitle": "新建流量规则",

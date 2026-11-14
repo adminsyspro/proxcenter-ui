@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { gatewayNameMap, gatewayZones, namedAddress } from './gatewayNames'
-import { gatewayCidr, gatewayServiceFlows, gatewayServicePorts, GATEWAY_SERVICES, typedServiceText, validateZoneForm, ZONE_COLORS } from './zoneForm'
+import { gatewayCidr, gatewayServiceFlows, gatewayServicePorts, GATEWAY_SERVICES, typedServiceCandidates, typedServiceText, validateZoneForm, ZONE_COLORS } from './zoneForm'
 
 const zones = [{ name: 'web', gateway: '10.30.0.1' }, { name: 'db', gateway: '10.30.0.1' }, { name: 'v6', gateway: '2001:db8::1' }, { name: 'none', gateway: '' }, { name: 'old' }]
 
@@ -38,6 +38,11 @@ describe('gateway flows', () => {
     for (const bad of ['tcp', 'tcp/', 'tcp/0', 'tcp/70000', 'tcp/10:5', 'icmp/8', 'gre/1', 'tcp/22/23', 'ssh']) expect(typedServiceText(bad), bad).toBeNull()
     expect(gatewayServiceFlows('udp/5000:5010', '10.30.0.1')).toEqual([{ proto: 'udp', dport: '5000:5010' }])
     expect(gatewayServiceFlows('nonsense', '10.30.0.1')).toEqual([])
+    expect(typedServiceText('tcp 8443')).toBe('tcp/8443')
+    expect(typedServiceCandidates('udp 514')).toEqual(['udp/514'])
+    expect(typedServiceCandidates('8443')).toEqual(['tcp/8443', 'udp/8443'])
+    expect(typedServiceCandidates('5000:5010')).toEqual(['tcp/5000:5010', 'udp/5000:5010'])
+    expect(typedServiceCandidates('dn')).toEqual([])
   })
 
   it('takes an empty gateway or a plain address, refuses a prefix or a name', () => {

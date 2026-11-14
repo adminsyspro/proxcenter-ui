@@ -241,16 +241,20 @@ describe('zone dialog, state rows and Outbound section', () => {
     fireEvent.change(field(), { target: { value: 'gopher' } })
     fireEvent.keyDown(field(), { key: 'Enter' })
     expect(within(dialog).getByText(/^Not a service/)).toBeTruthy()
-    fireEvent.change(field(), { target: { value: 'TCP/8443' } })
+    fireEvent.change(field(), { target: { value: 'tcp 8443' } })
+    expect(within(await screen.findByRole('listbox')).getAllByRole('option')[0].textContent).toBe('Add tcp/8443')
+    fireEvent.keyDown(field(), { key: 'Enter' })
+    fireEvent.change(field(), { target: { value: '9000' } })
+    expect(within(await screen.findByRole('listbox')).getAllByRole('option').map(o => o.textContent)).toEqual(['Add tcp/9000', 'Add udp/9000'])
     fireEvent.keyDown(field(), { key: 'Enter' })
     fireEvent.change(field(), { target: { value: 'udp/5000:5010' } })
     fireEvent.blur(field())
-    expect(value()).toBe('DNS, NTP, HTTPS, tcp/8443, udp/5000:5010')
+    expect(value()).toBe('DNS, NTP, HTTPS, tcp/8443, tcp/9000, udp/5000:5010')
     expect(within(dialog).queryByText(/^Not a service/)).toBeNull()
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
-    expect(onSave.mock.calls[0][0]).toMatchObject({ gateway: '10.30.0.1', gateway_services: ['ntp', 'https', 'tcp/8443', 'udp/5000:5010'] })
+    expect(onSave.mock.calls[0][0]).toMatchObject({ gateway: '10.30.0.1', gateway_services: ['ntp', 'https', 'tcp/8443', 'tcp/9000', 'udp/5000:5010'] })
   })
 
   it('says the rows and the tooltips in French', async () => {

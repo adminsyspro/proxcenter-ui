@@ -13490,7 +13490,8 @@
         "gatewayFirst": "Saisir d'abord la passerelle",
         "gatewayServicesHint": "Choisir dans la liste, ou saisir un protocole et ses ports : tcp/8443, udp/5000:5010, icmp",
         "gatewayTypedInvalid": "Service non reconnu : tcp ou udp avec ports (tcp/8443, udp/53,123, tcp/5000:5010), ou icmp, icmpv6, any",
-        "gatewayTypeHint": "Choisir ou saisir un service"
+        "gatewayTypeHint": "Choisir ou saisir un service",
+        "gatewayAdd": "Ajouter {service}"
       },
       "flowDialog": {
         "createTitle": "Nouveau flux",

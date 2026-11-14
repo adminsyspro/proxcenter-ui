@@ -13,7 +13,8 @@ import { DialogErrorLine, FLUSH_TOGGLE_SX, FormRow, isVersionConflict, ONE_LINE_
 import { missingGatewayFlows, zoneStateChanges } from './useZoneEdits'
 import type { ZoneGate } from './zoneGate'
 import {
-  DEFAULT_GATEWAY_SERVICES, GATEWAY_SERVICES, gatewayServicePorts, isGatewayService, typedServiceText, validateZoneForm, ZONE_COLORS, type GatewayService,
+  DEFAULT_GATEWAY_SERVICES, GATEWAY_SERVICES, gatewayServicePorts, isGatewayService, typedServiceCandidates, typedServiceText, validateZoneForm, ZONE_COLORS,
+  type GatewayService,
   type ZoneFormValues,
 } from './zoneForm'
 import ZoneStatesConfirm from './ZoneStatesConfirm'
@@ -159,9 +160,19 @@ function GatewayRows({ values, zoneId, flows, disabled, error, set }: {
           multiple
           freeSolo
           disableCloseOnSelect
+          // While typing, Enter takes the first proposal ("Add tcp/8443"); with nothing typed it toggles nothing by itself.
+          autoHighlight={!!typing.trim()}
           size='small'
           fullWidth
           options={[...GATEWAY_SERVICES]}
+          // The listed services whose name or ports hold the text, after what the text itself adds ("Add tcp/8443").
+          filterOptions={(options, { inputValue }) => {
+            const text = inputValue.trim().toLowerCase()
+            if (!text) return options
+            const adds = typedServiceCandidates(text).filter(c => !picked.includes(c))
+            const listed = options.filter(o => `${name(o)} ${gatewayServicePorts(o, gateway)}`.toLowerCase().includes(text))
+            return [...adds, ...listed]
+          }}
           value={picked}
           disabled={disabled || !usable}
           getOptionDisabled={o => allowed.includes(o as GatewayService)}
@@ -177,10 +188,12 @@ function GatewayRows({ values, zoneId, flows, disabled, error, set }: {
           )}
           renderOption={({ key, ...props }, option, { selected }) => (
             <li key={key} {...props}>
-              <Checkbox checked={selected || allowed.includes(option as GatewayService)} size='small' sx={{ p: 0, mr: 1 }} />
+              {isGatewayService(option)
+                ? <Checkbox checked={selected || allowed.includes(option as GatewayService)} size='small' sx={{ p: 0, mr: 1 }} />
+                : <Box component='i' className='ri-add-line' aria-hidden sx={{ fontSize: 18, mr: 1, color: 'primary.main' }} />}
               <ListItemText
-                primary={name(option)}
-                secondary={allowed.includes(option as GatewayService) ? td('gatewayAllowed') : gatewayServicePorts(option, gateway)}
+                primary={isGatewayService(option) ? name(option) : td('gatewayAdd', { service: option })}
+                secondary={allowed.includes(option as GatewayService) ? td('gatewayAllowed') : isGatewayService(option) ? gatewayServicePorts(option, gateway) : ''}
                 slotProps={{ primary: { noWrap: true }, secondary: { noWrap: true } }}
                 sx={{ display: 'flex', alignItems: 'baseline', gap: 1, m: 0 }}
               />
@@ -189,7 +202,7 @@ function GatewayRows({ values, zoneId, flows, disabled, error, set }: {
           renderInput={params => (
             <TextField
               {...params}
-              placeholder={usable ? (picked.length ? '' : td('gatewayTypeHint')) : td('gatewayFirst')}
+              placeholder={usable ? td('gatewayTypeHint') : td('gatewayFirst')}
               error={typedError}
               helperText={typedError ? td('gatewayTypedInvalid') : td('gatewayServicesHint')}
               slotProps={{ htmlInput: { ...params.inputProps, 'aria-label': td('gatewayAllow') }, formHelperText: { sx: HELPER_SX } }}

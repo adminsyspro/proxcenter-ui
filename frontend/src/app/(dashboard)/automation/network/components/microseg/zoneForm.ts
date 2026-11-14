@@ -60,11 +60,23 @@ export const isGatewayService = (choice: string): choice is GatewayService => (G
  * protocol without port ("icmp", "icmpv6", "any"); null when it is none of them.
  */
 export function parseTypedService(text: string): { proto: string; dport: string } | null {
-  const value = text.trim().toLowerCase().replace(/\s+/g, '')
+  // "tcp 8443" and "TCP / 8443" are "tcp/8443".
+  const value = text.trim().toLowerCase().replace(/^(tcp|udp)\s*[\s/]\s*/, '$1/').replace(/\s+/g, '')
   const [proto, ports, extra] = value.split('/')
   if (extra !== undefined) return null
   if (proto === 'tcp' || proto === 'udp') return ports && validPorts(ports) ? { proto, dport: ports } : null
   return ports === undefined && (proto === 'icmp' || proto === 'icmpv6' || proto === 'any') ? { proto, dport: '' } : null
+}
+
+/**
+ * What the list offers for a text being typed: the service it is ("tcp 8443" offers "tcp/8443"), or for ports alone
+ * ("8443", "5000:5010") the TCP and the UDP service; nothing for anything else.
+ */
+export function typedServiceCandidates(text: string): string[] {
+  const one = typedServiceText(text)
+  if (one) return [one]
+  const ports = text.trim().replace(/\s+/g, '')
+  return ports && validPorts(ports) ? [`tcp/${ports}`, `udp/${ports}`] : []
 }
 
 /** The canonical text of a typed service ("TCP / 8443" is "tcp/8443"), null when it is not one. */

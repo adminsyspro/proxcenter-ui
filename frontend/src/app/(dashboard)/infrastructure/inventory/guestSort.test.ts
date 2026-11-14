@@ -1,6 +1,8 @@
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
-import { compareGuestNames, parseGuestSortMode, sortClusterGuests } from './guestSort'
+import { compareGuestNames, GuestSortContext, parseGuestSortMode, sortClusterGuests } from './guestSort'
 import type { TreeCluster } from './InventoryTree'
 
 type Node = TreeCluster['nodes'][number]
@@ -66,5 +68,15 @@ describe('sortClusterGuests', () => {
 
     expect(names(out)).toEqual(['audb-victim', 'debian-test', 'NginX', 'Win2025'])
     expect(names(input)).toEqual(['debian-test', 'Win2025', 'NginX', 'audb-victim'])
+  })
+})
+
+describe('GuestSortContext', () => {
+  it('defaults to the VMID order with no toggle when no page provides it', () => {
+    const html = renderToStaticMarkup(
+      createElement(GuestSortContext.Consumer, { children: v => `${v.mode}:${typeof v.toggle}` })
+    )
+
+    expect(html).toBe('vmid:undefined')
   })
 })

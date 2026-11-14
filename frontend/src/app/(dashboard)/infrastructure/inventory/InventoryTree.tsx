@@ -59,7 +59,7 @@ const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" st
 import EntityTagManager from './components/EntityTagManager'
 import { resolveVmPowerAction } from './helpers'
 import { applyInventoryEvents } from './applyInventoryEvents'
-import { sortClusterGuests, type GuestSortMode } from './guestSort'
+import { GuestSortContext, sortClusterGuests } from './guestSort'
 import { useExpectedVmStatuses } from './hooks/useExpectedVmStatuses'
 import { networkConnKey } from './networkConnKey'
 import { useRBAC } from '@/contexts/RBACContext'
@@ -203,8 +203,6 @@ type Props = {
   onExternalHypervisorsChange?: (hypervisors: { id: string; name: string; type: string; vms?: { vmid: string; name: string; status: string; cpu?: number; memory_size_MiB?: number; guest_OS?: string }[] }[]) => void
   showVmId?: boolean
   onToggleShowVmId?: () => void
-  guestSort?: GuestSortMode
-  onToggleGuestSort?: () => void
 }
 
 type Connection = {
@@ -480,7 +478,7 @@ function safeJson<T>(x: any): T {
   return (x?.data ?? x) as T
 }
 
-export default function InventoryTree({ selected, onSelect, onRefreshRef, onPoolActions, onOptimisticVmStatusRef, onOptimisticVmTagsRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, pendingActionVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, onCreateVm, onCreateLxc, onNodeAction, onStoragesChange, onExternalHypervisorsChange, showVmId, onToggleShowVmId, guestSort = 'vmid', onToggleGuestSort }: Readonly<Props>) {
+export default function InventoryTree({ selected, onSelect, onRefreshRef, onPoolActions, onOptimisticVmStatusRef, onOptimisticVmTagsRef, viewMode: controlledViewMode, onViewModeChange, onAllVmsChange, onHostsChange, onPoolsChange, onTagsChange, onPbsServersChange, favorites: propFavorites, onToggleFavorite, migratingVmIds, pendingActionVmIds, onRefresh, refreshLoading, onCollapse, isCollapsed, allowedViewModes, onCreateVm, onCreateLxc, onNodeAction, onStoragesChange, onExternalHypervisorsChange, showVmId, onToggleShowVmId }: Readonly<Props>) {
   const t = useTranslations()
   const theme = useTheme()
   const { isAdmin, scopeTypes, hasPermission } = useRBAC()
@@ -552,6 +550,7 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onPool
   // answered: an empty guest list only means "no guest" once the stream ended.
   const [inventoryLoaded, setInventoryLoaded] = useState(false)
   const onInventoryLoadedChange = React.useContext(InventoryLoadedContext)
+  const { mode: guestSort, toggle: onToggleGuestSort } = React.useContext(GuestSortContext)
   const [error, setError] = useState<string | null>(null)
   const [clusters, setClusters] = useState<TreeCluster[]>([])
   const [pbsServers, setPbsServers] = useState<TreePbsServer[]>([])

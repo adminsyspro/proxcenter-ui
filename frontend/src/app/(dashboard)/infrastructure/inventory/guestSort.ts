@@ -1,3 +1,5 @@
+import { createContext } from 'react'
+
 import type { TreeCluster } from './InventoryTree'
 
 type TreeGuest = TreeCluster['nodes'][number]['vms'][number]
@@ -6,6 +8,13 @@ type TreeGuest = TreeCluster['nodes'][number]['vms'][number]
 export type GuestSortMode = 'vmid' | 'name'
 
 export const GUEST_SORT_STORAGE_KEY = 'pxc-inventory-guest-sort'
+
+/**
+ * The page owns the choice and the tree reads it. A context rather than a prop
+ * keeps the tree's signature untouched, like InventoryLoadedContext. Without a
+ * provider the tree keeps the VMID order and shows no toggle.
+ */
+export const GuestSortContext = createContext<{ mode: GuestSortMode; toggle?: () => void }>({ mode: 'vmid' })
 
 export function parseGuestSortMode(stored: string | null): GuestSortMode {
   return stored === 'name' ? 'name' : 'vmid'

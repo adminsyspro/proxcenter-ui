@@ -34,7 +34,7 @@ function useGuestName(connectionId: string): (ip: string) => string | undefined 
   const { guests } = useZoneGuests(connectionId)
   const byIp = useMemo(() => {
     const map = new Map<string, string>()
-    for (const g of guests) for (const ip of g.ips) if (!map.has(ip)) map.set(ip, g.name)
+    for (const g of guests) for (const ip of g.ips ?? []) if (!map.has(ip)) map.set(ip, g.name)
     return map
   }, [guests])
   return ip => byIp.get(ip)

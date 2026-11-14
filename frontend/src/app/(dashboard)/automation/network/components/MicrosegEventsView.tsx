@@ -170,7 +170,7 @@ export default function MicrosegEventsView({ connectionId, zones, guests }: Prop
         </Tooltip>
       </Box>
 
-      {(error || olderError) && (
+      {!!(error || olderError) && (
         <Box sx={{ px: 2 }}>
           <MicrosegErrorAlert error={error ?? olderError} onRetry={error ? () => { void reload() } : () => { void loadOlder() }} />
         </Box>

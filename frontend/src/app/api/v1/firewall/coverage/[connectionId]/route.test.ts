@@ -97,7 +97,8 @@ function options(enabled: (vmid: number) => boolean, delayMs = 5) {
   return stats
 }
 
-const get = (searchParams?: Record<string, string>) => callRoute(GET, { params: { connectionId: 'conn-1' }, searchParams })
+// The route declares a NextRequest where the harness's signature names the plain Request: same call.
+const get = (searchParams?: Record<string, string>) => callRoute(GET as Parameters<typeof callRoute>[0], { params: { connectionId: 'conn-1' }, searchParams })
 
 beforeEach(() => {
   vi.clearAllMocks()

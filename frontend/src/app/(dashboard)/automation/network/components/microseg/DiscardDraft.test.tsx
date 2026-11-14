@@ -37,7 +37,7 @@ const renderBar = (canWrite = true) => renderWithProviders(
   <MicrosegWriteContext.Provider value={canWrite}><PendingChangesBar connectionId='c1' policy={POLICY} onOpenPlan={vi.fn()} /></MicrosegWriteContext.Provider>,
 )
 
-const discardCalls = () => fetchSpy.mock.calls.filter(([url, init]) => String(url).endsWith('/policy/discard') && (init as RequestInit)?.method === 'POST')
+const discardCalls = () => fetchSpy.mock.calls.filter((call: unknown[]) => String(call[0]).endsWith('/policy/discard') && (call[1] as RequestInit | undefined)?.method === 'POST')
 
 describe('Discard of the pending micro-segmentation changes', () => {
   it('confirms with the count, then posts the draft version', async () => {

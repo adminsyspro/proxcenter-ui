@@ -152,7 +152,17 @@ export default function ZoneCard(props: ZoneCardProps) {
             )}
           </Box>
         </Box>
-        <TruncatedText text={zone.label} variant='body2' color='text.secondary' sx={{ minHeight: 20 }} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, minHeight: 20 }}>
+          <TruncatedText text={zone.label} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
+          {zone.gateway && (
+            <Tooltip title={t('gatewayTip', { ip: zone.gateway })}>
+              <Box component='span' data-testid='zone-gateway' sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexShrink: 0, color: 'text.secondary' }}>
+                <i className='ri-router-line' aria-hidden style={{ fontSize: 14 }} />
+                <Typography component='span' variant='caption' sx={{ fontVariantNumeric: 'tabular-nums' }}>{zone.gateway}</Typography>
+              </Box>
+            </Tooltip>
+          )}
+        </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Stat name='members' value={membersKnown ? members.length : null} label={t('statMembers')} />
           <Stat name='incoming' value={incoming.length} label={t('statIncoming')} />

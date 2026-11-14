@@ -13,7 +13,7 @@ import { MicrosegApiError } from '@/lib/microseg/api'
 import { useMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 import enMessages from '@/messages/en.json'
 
-import { calls, mock, policy, reply, zone, REVISION_HEAD } from './microsegTestKit'
+import { calls, flow, mock, policy, reply, zone, REVISION_HEAD } from './microsegTestKit'
 import { body, installFreshMocks } from './policyTestKit'
 import { InboundRunFailedError } from './dialogParts'
 import { useZoneEdits, zoneStateChanges, type ZoneEditsInput } from './useZoneEdits'
@@ -23,7 +23,7 @@ installFreshMocks()
 const web = zone('zw', { name: 'web', state: 'disabled' })
 const draft = policy({ zones: [web], last_revision: REVISION_HEAD })
 const ref = { node: 'pve1', type: 'qemu' as const, vmid: 100 }
-const values = { name: 'web', label: 'front', color: '#ef4444', isolate_members: true, state: 'disabled' as const, egress_state: 'off' as const, egress_mode: 'all' as const }
+const values = { name: 'web', label: 'front', color: '#ef4444', isolate_members: true, state: 'disabled' as const, egress_state: 'off' as const, egress_mode: 'all' as const, gateway: '', gateway_services: [] }
 const flowValues = { src_zone_id: 'zw', src_cidr: '', dst_zone_id: 'zw', dst_cidr: '', proto: 'tcp', dport: '22', comment: '', origin: 'manual' }
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -61,7 +61,7 @@ describe('useZoneEdits', () => {
     await waitFor(() => expect(calls('GET /status')).toHaveLength(1))
     await act(() => result.current.saveZone(web, values))
     expect(body(calls('PUT /zones/zw')[0][1] as RequestInit)).toEqual({
-      version: 3, name: 'web', label: 'front', color: '#ef4444', enforcement: 'guest', vnet_id: '', isolate_members: true, egress_mode: 'all',
+      version: 3, name: 'web', label: 'front', color: '#ef4444', enforcement: 'guest', vnet_id: '', isolate_members: true, egress_mode: 'all', gateway: '',
     })
     expect(reloadPolicy).toHaveBeenCalledTimes(1)
     await waitFor(() => expect(calls('GET /status')).toHaveLength(2))
@@ -72,6 +72,40 @@ describe('useZoneEdits', () => {
     const { result } = setup()
     await act(() => result.current.saveZone(null, values))
     expect(body(calls('POST /zones')[0][1] as RequestInit).version).toBe(3)
+  })
+
+  it('creates the flows to the gateway with a new zone, one per protocol, each with the version the write before returned', async () => {
+    mock.routes['POST /zones'] = () => reply(200, { version: 4, zone: zone('zn', { name: 'app' }) })
+    let v = 4
+    mock.routes['POST /flows'] = () => reply(200, { version: ++v, flow: {} })
+    const { result } = setup()
+    await act(() => result.current.saveZone(null, { ...values, name: 'app', gateway: ' 10.30.0.1 ', gateway_services: ['dns', 'ping'] }))
+    expect(body(calls('POST /zones')[0][1] as RequestInit).gateway).toBe('10.30.0.1')
+    const sent = calls('POST /flows').map(c => body(c[1] as RequestInit))
+    expect(sent.map(f => [f.version, f.src_zone_id, f.dst_cidr, f.proto, f.dport])).toEqual([
+      [4, 'zn', '10.30.0.1/32', 'udp', '53'], [5, 'zn', '10.30.0.1/32', 'tcp', '53'], [6, 'zn', '10.30.0.1/32', 'icmp', ''],
+    ])
+    expect(sent[0].comment).toBe('Gateway of the zone')
+  })
+
+  it('creates a typed service as its own flow, once when a listed service names the same port', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web })
+    let v = 4
+    mock.routes['POST /flows'] = () => reply(200, { version: ++v, flow: {} })
+    const { result } = setup()
+    await act(() => result.current.saveZone(web, { ...values, gateway: '10.30.0.1', gateway_services: ['ssh', 'tcp/22', 'tcp/8443'] }))
+    expect(calls('POST /flows').map(c => [body(c[1] as RequestInit).proto, body(c[1] as RequestInit).dport])).toEqual([['tcp', '22'], ['tcp', '8443']])
+  })
+
+  it('creates no flow to the gateway the draft already allows, nor any without a gateway', async () => {
+    const withDns = { ...draft, flows: [{ ...flow('f1'), src_zone_id: 'zw', src_cidr: '', dst_zone_id: '', dst_cidr: '10.30.0.1/32', proto: 'udp', dport: '53' }] }
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web })
+    mock.routes['POST /flows'] = () => reply(200, { version: 5, flow: {} })
+    const { result } = setup({ policy: withDns })
+    await act(() => result.current.saveZone(web, { ...values, gateway: '10.30.0.1', gateway_services: ['dns'] }))
+    expect(calls('POST /flows').map(c => [body(c[1] as RequestInit).proto, body(c[1] as RequestInit).dport])).toEqual([['tcp', '53']])
+    await act(() => result.current.saveZone(web, { ...values, gateway: '', gateway_services: ['dns', 'ntp', 'ping'] }))
+    expect(calls('POST /flows')).toHaveLength(1)
   })
 
   it('reads the policy again and rethrows on a version conflict', async () => {

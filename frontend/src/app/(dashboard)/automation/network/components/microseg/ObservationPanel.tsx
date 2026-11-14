@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { Alert, Box, CircularProgress, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import { isAggregateDst, type MicrosegSuggestion, type SuggestionAction } from '@/lib/microseg/types'
+import { isAggregateDst, type MicrosegSuggestion, type MicrosegZone, type SuggestionAction } from '@/lib/microseg/types'
 import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 
 import MicrosegErrorAlert from './MicrosegErrorAlert'
@@ -15,6 +15,7 @@ import { decodeCollapsed, destinationKey, encodeCollapsed } from './observationM
 import ObservationTable from './ObservationTable'
 import { destinationName, endpoint } from './ObservationRow'
 import ObservedFlowDialog from './ObservedFlowDialog'
+import { gatewayNameMap, namedAddress } from './gatewayNames'
 import { useResolveSuggestions } from './observationParts'
 import { PrevNextPager } from './PolicyPager'
 import { useNow } from './useNow'
@@ -29,15 +30,24 @@ export const COLLAPSED_STORAGE_KEY = 'microseg.observation.collapsed'
 /** Flows per page. The request asks for one more, which tells whether a next page exists. */
 export const OBSERVATION_PAGE_SIZE = 25
 
-/** The guests by address, from the inventory the tab already reads (one request for the whole folder). */
-function useGuestName(connectionId: string): (ip: string) => string | undefined {
+/**
+ * The guests by address, from the inventory the tab already reads (one request for the whole folder), and the gateways
+ * of the zones ("Gateway of web (10.30.0.1)"): a guest keeps its name when it is also a gateway.
+ */
+function useAddressNames(connectionId: string, zones: readonly MicrosegZone[]): { guestName: (ip: string) => string | undefined; gatewayName: (ip: string) => string | undefined } {
   const { guests } = useZoneGuests(connectionId)
+  const tg = useTranslations('microsegPilot.gateway')
+  const gateways = useMemo(() => gatewayNameMap(zones, names => tg('name', { zones: names })), [zones, tg])
   const byIp = useMemo(() => {
     const map = new Map<string, string>()
-    for (const g of guests) for (const ip of g.ips ?? []) if (!map.has(ip)) map.set(ip, g.name)
+    for (const ip of gateways.keys()) map.set(ip, namedAddress(ip, gateways))
+    for (const g of guests) for (const ip of g.ips ?? []) map.set(ip, g.name)
     return map
-  }, [guests])
-  return ip => byIp.get(ip)
+  }, [guests, gateways])
+  return useMemo(() => ({
+    guestName: (ip: string) => byIp.get(ip),
+    gatewayName: (ip: string) => (gateways.has(ip) ? namedAddress(ip, gateways) : undefined),
+  }), [byIp, gateways])
 }
 
 type Resolved = { action: SuggestionAction; count: number }
@@ -100,7 +110,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
     source: unknownSource ? 'unknown' : undefined,
   })
   const { busy, failure, clearFailure, resolve: resolveIds } = useResolveSuggestions(connectionId, policy.version, reloadPolicy, reload)
-  const guestName = useGuestName(connectionId)
+  const { guestName, gatewayName } = useAddressNames(connectionId, policy.zones)
   const zonesById = useMemo(() => new Map(policy.zones.map(z => [z.id, z])), [policy.zones])
   const rows = useMemo(() => (data ?? []).slice(0, OBSERVATION_PAGE_SIZE), [data])
   const hasNext = (data?.length ?? 0) > OBSERVATION_PAGE_SIZE
@@ -178,7 +188,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
     setDetail(null)
     void resolve([s.id], action, prefixLen)
   }
-  const endName = (zoneId: string, ip: string) => endpoint(zoneId, ip, zonesById, t)
+  const endName = (zoneId: string, ip: string) => endpoint(zoneId, ip, zonesById, t, gatewayName)
   const bulk = (action: SuggestionAction) => resolve(chosen.map(r => r.id), action)
 
   return (
@@ -218,6 +228,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
               rows={rows}
               zones={zonesById}
               guestName={guestName}
+              gatewayName={gatewayName}
               selected={selected}
               busy={busy}
               now={now}

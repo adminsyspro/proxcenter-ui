@@ -66,6 +66,8 @@ export type MicrosegZone = {
   /** Absent: 'local'. */
   egress_mode?: EgressMode
   egress_observe_since?: string | null
+  /** The address of the router of the zone's network; absent or empty when unknown (an older orchestrator). */
+  gateway?: string
 }
 
 /** The effective outbound state of a zone: absent, or a zone neither observed nor enforced, is off. */
@@ -332,6 +334,8 @@ export type ZoneInput = {
   isolate_members?: boolean
   /** The orchestrator ignores `egress_state` on a zone write: it changes through setZoneEgressState. */
   egress_mode?: EgressMode
+  /** The address of the router of the zone's network, empty when unknown. */
+  gateway?: string
 }
 
 export type FlowInput = {

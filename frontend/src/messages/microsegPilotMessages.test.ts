@@ -62,11 +62,12 @@ describe('microsegPilot i18n parity across the 6 served locales', () => {
   it('is translated, not copied from English', () => {
     // Proper nouns and words that are the same in a language (Plan, Zones, Type, Page, Observation, Direction, Destination...) may coincide:
     // each locale has its own ceiling, set just above what it legitimately shares.
-    // de shares 11 words with English today (Name, Zone, Status, Plan, Engine...), at its ceiling: room for two more.
-    const ceilings: Record<string, number> = { fr: 21, de: 13, es: 5, ko: 3, 'zh-CN': 3 }
+    // de shares 14 words with English today (Name, Zone, Status, Plan, Gateway...): room for two more.
+    const ceilings: Record<string, number> = { fr: 21, de: 16, es: 5, ko: 3, 'zh-CN': 3 }
     for (const [locale, ceiling] of Object.entries(ceilings)) {
       const flat = flatten(locales[locale].microsegPilot)
-      const same = Object.keys(reference).filter(key => flat[key] === reference[key])
+      // The names of the gateway services (DNS, NTP, Ping) are protocol names, the same everywhere.
+      const same = Object.keys(reference).filter(key => !key.startsWith('policy.zoneDialog.gatewayServices.') && flat[key] === reference[key])
       expect(same.length, `${locale}: ${same.join(', ')}`).toBeLessThanOrEqual(ceiling)
     }
   })

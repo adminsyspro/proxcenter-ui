@@ -13405,7 +13405,8 @@
             "ready": "관찰 기간 내내 아웃바운드에서 차단될 항목이 없었습니다",
             "enforce": "정책의 플로우만 영역 밖으로 나갑니다"
           }
-        }
+        },
+        "gatewayTip": "게이트웨이 {ip}"
       },
       "flow": {
         "notApplied": "적용되지 않음 (송신 제어 안 함)",
@@ -13468,7 +13469,27 @@
         "egressOnConfirm": "제어",
         "egressOffConfirm": "제어 중지",
         "create": "만들기",
-        "save": "저장"
+        "save": "저장",
+        "gateway": "게이트웨이",
+        "gatewayHint": "영역 네트워크의 라우터(선택 사항)",
+        "gatewayAllow": "게이트웨이로 허용",
+        "gatewayServices": {
+          "dns": "DNS",
+          "ntp": "NTP",
+          "ping": "Ping",
+          "http": "HTTP",
+          "https": "HTTPS",
+          "ssh": "SSH",
+          "snmp": "SNMP",
+          "syslog": "Syslog",
+          "proxy": "HTTP 프록시"
+        },
+        "gatewayAllowed": "초안의 흐름이 이미 허용합니다",
+        "gatewayFlowComment": "영역 게이트웨이",
+        "gatewayFirst": "먼저 게이트웨이를 입력하세요",
+        "gatewayServicesHint": "목록에서 선택하거나 프로토콜과 포트를 입력하세요: tcp/8443, udp/5000:5010, icmp",
+        "gatewayTypedInvalid": "인식할 수 없는 서비스: 포트가 있는 tcp 또는 udp(tcp/8443, udp/53,123, tcp/5000:5010), 또는 icmp, icmpv6, any",
+        "gatewayTypeHint": "서비스를 선택하거나 입력"
       },
       "flowDialog": {
         "createTitle": "새 플로우",
@@ -13500,7 +13521,8 @@
         "cidrBoth": "플로우는 양쪽 모두 CIDR일 수 없습니다.",
         "protoInvalid": "잘못된 프로토콜",
         "portInvalid": "잘못된 포트입니다. 80, 80,443 또는 8000:8100 (1~65535)을 사용하세요.",
-        "portNotAllowed": "이 프로토콜에서는 포트를 사용할 수 없습니다."
+        "portNotAllowed": "이 프로토콜에서는 포트를 사용할 수 없습니다.",
+        "gatewayInvalid": "접두사 없는 IPv4 또는 IPv6 주소"
       },
       "delete": {
         "zoneTitle": "영역 {name}을(를) 삭제할까요?",
@@ -13997,7 +14019,9 @@
         "moreUnzonedHint": "{count, plural, other {영역 없는 게스트 #개 더}}: 편차에 모두 나열됩니다",
         "ipHint": "{ip}: 이 영역과 통신한, 영역과 게스트에 속하지 않는 주소",
         "inside": "{count, plural, other {영역 내부에서 관찰된 흐름 #개}}",
-        "observed": "송신 관찰 중"
+        "observed": "송신 관찰 중",
+        "gateway": "게이트웨이",
+        "gatewayHint": "{zones}의 게이트웨이({ip}): 해당 트래픽이 지도와 관찰 하위 탭에 이름으로 표시됩니다"
       },
       "edge": {
         "outside": "송신 차단 안 됨: {services}",
@@ -14783,6 +14807,9 @@
       "titleNoCount": "적용되지 않은 변경을 취소할까요?",
       "body": "초안이 마지막으로 적용된 리비전으로 돌아갑니다.",
       "confirm": "취소하기"
+    },
+    "gateway": {
+      "name": "{zones}의 게이트웨이"
     }
   },
   "bulkPower": {

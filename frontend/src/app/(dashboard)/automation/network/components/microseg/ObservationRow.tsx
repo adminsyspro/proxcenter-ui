@@ -20,9 +20,10 @@ const NO_SHARED: ReadonlySet<string> = new Set()
 const NAME_SX = { maxWidth: 200, minWidth: 0 } as const
 
 /** What a zone-less endpoint is called: its IP, or "Unknown". */
-export function endpoint(zoneId: string, ip: string, zones: Map<string, MicrosegZone>, t: (key: string) => string): string {
+export function endpoint(zoneId: string, ip: string, zones: Map<string, MicrosegZone>, t: (key: string) => string, gatewayName?: (ip: string) => string | undefined): string {
   if (zoneId) return zones.get(zoneId)?.name ?? t('deletedZone')
-  return ip || t('unknownEndpoint')
+  if (!ip) return t('unknownEndpoint')
+  return gatewayName?.(ip) ?? ip
 }
 
 /** The name of the destination of a flow: an outbound one may be an address, a guest or many destinations. */
@@ -48,6 +49,8 @@ export type ObservationRowProps = {
   zones: Map<string, MicrosegZone>
   /** The name of the guest that carries an address, when the inventory knows it. */
   guestName: (ip: string) => string | undefined
+  /** Names the address of a zone's gateway; absent: the bare address. */
+  gatewayName?: (ip: string) => string | undefined
   checked: boolean
   busy: boolean
   /** Most hits of a flow on the page: the bar of each row is its share of it. */
@@ -63,12 +66,12 @@ export type ObservationRowProps = {
 }
 
 /** One observed flow, one row of the table; its details open in a centred dialog (ObservedFlowDialog). */
-export default function ObservationRow({ suggestion: s, zones, guestName, checked, busy, maxHits, now, onToggle, onResolve, onOpenDetails, sharedServices = NO_SHARED }: ObservationRowProps) {
+export default function ObservationRow({ suggestion: s, zones, guestName, gatewayName, checked, busy, maxHits, now, onToggle, onResolve, onOpenDetails, sharedServices = NO_SHARED }: ObservationRowProps) {
   const t = useTranslations('microsegPilot.observation')
   const format = useFormatter()
 
   const when = (iso: string) => formatWhen(format, iso)
-  const source = endpoint(s.src_zone_id, s.src_ip, zones, t)
+  const source = endpoint(s.src_zone_id, s.src_ip, zones, t, gatewayName)
   const destination = destinationName(s, zones, guestName, t)
   const service = serviceLabelIn(s.proto, s.dport, sharedServices)
   const serviceTip = serviceTitle(s.proto, s.dport)

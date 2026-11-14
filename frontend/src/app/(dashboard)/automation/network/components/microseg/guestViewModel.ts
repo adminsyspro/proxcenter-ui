@@ -1,6 +1,7 @@
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import { flowService } from './FlowSummary'
+import { gatewayZones } from './gatewayNames'
 import type { Point } from './edgeGeometry'
 import {
   BOX_SHAPE, EXTERNAL_ID, NODE_H, NODE_W, OUTSIDE_ID, UNZONED_ID, addAllowedPairs, addPair, addressBook, bareIp, cellCenters,
@@ -112,14 +113,16 @@ function addUnzoned(groups: Map<string, Group>, books: AddressBooks, seen: Micro
 }
 
 /** The busiest addresses in no zone and no guest that talked to the centre, at most MAX_IPS. */
-function ownAddresses(seen: MicrosegSuggestion[], known: ReadonlyMap<string, MicrosegZone>, books: AddressBooks): string[] {
+function ownAddresses(seen: MicrosegSuggestion[], known: ReadonlyMap<string, MicrosegZone>, books: AddressBooks, gateways: ReadonlySet<string>): string[] {
   const hits = new Map<string, number>()
   for (const s of seen) {
     const ip = bareIp(s.src_ip || '')
     if (known.has(s.src_zone_id) || !ip || books.get(UNZONED_ID)?.has(ip)) continue
     hits.set(ip, (hits.get(ip) ?? 0) + s.hits)
   }
-  return [...hits].sort((a, b) => b[1] - a[1] || byText(a[0], b[0])).slice(0, MAX_IPS).map(([ip]) => ip)
+  // A gateway is drawn before the other addresses, whatever its traffic: it is named.
+  const rank = (ip: string) => (gateways.has(ip) ? 0 : 1)
+  return [...hits].sort((a, b) => rank(a[0]) - rank(b[0]) || b[1] - a[1] || byText(a[0], b[0])).slice(0, MAX_IPS).map(([ip]) => ip)
 }
 
 function observedPairs(pairs: Map<string, Pair>, seen: MicrosegSuggestion[], known: ReadonlyMap<string, MicrosegZone>, books: AddressBooks, ips: ReadonlySet<string>) {
@@ -134,9 +137,11 @@ function observedPairs(pairs: Map<string, Pair>, seen: MicrosegSuggestion[], kno
   }
 }
 
-function placeIp(out: Placement, ip: string, c: Point) {
+function placeIp(out: Placement, ip: string, c: Point, zones: readonly MicrosegZone[]) {
   const id = ipNodeId(ip)
-  out.nodes.push({ id, type: 'ip', position: { x: c.x - NODE_W / 2, y: c.y - NODE_H / 2 }, width: NODE_W, height: NODE_H, focusable: false, data: { kind: 'ip', ip } satisfies IpNodeData })
+  const gatewayOf = gatewayZones(zones, ip)
+  const data: IpNodeData = { kind: 'ip', ip, ...(gatewayOf.length ? { gatewayOf } : {}) }
+  out.nodes.push({ id, type: 'ip', position: { x: c.x - NODE_W / 2, y: c.y - NODE_H / 2 }, width: NODE_W, height: NODE_H, focusable: false, data })
   out.obstacles.push({ id, center: c, shape: BOX_SHAPE })
   out.endShapes.set(id, { center: c, shape: BOX_SHAPE, group: id })
 }
@@ -173,11 +178,22 @@ export function buildGuestView({ zones, flows, suggestions, members = null, unzo
   const sides = peerSides(around)
   const { groups, books } = buildCircles(around, members, [...sides.left, ...sides.right])
   if (members) addUnzoned(groups, books, around.seen, known, unzoned)
-  const ips = ownAddresses(around.seen, known, books)
+  const gateways = new Set(sorted.map(z => z.gateway ?? '').filter(Boolean))
+  // A host CIDR of a flow ("10.30.0.1/32") that is a zone's gateway is drawn on its own, as the gateway it is.
+  const gatewayOf = (cidr: string) => {
+    const ip = cidr.replace(/\/(32|128)$/, '')
+    return ip !== cidr && gateways.has(ip) ? ip : undefined
+  }
+  const flowGateways = around.flows.flatMap(f => [gatewayOf(f.src_cidr), gatewayOf(f.dst_cidr)]).filter((ip): ip is string => !!ip)
+  const ips = [...new Set([...ownAddresses(around.seen, known, books, gateways), ...flowGateways])]
+  const drawn = new Set(ips)
 
   const pairs = new Map<string, Pair>()
-  addAllowedPairs(pairs, around.flows, known)
-  observedPairs(pairs, around.seen, known, books, new Set(ips))
+  addAllowedPairs(pairs, around.flows, known, cidr => {
+    const ip = gatewayOf(cidr)
+    return ip && drawn.has(ip) ? ipNodeId(ip) : undefined
+  })
+  observedPairs(pairs, around.seen, known, books, drawn)
   const ordered = [...pairs.values()].sort(comparePairs)
 
   // Each side nearest first: the peer zones next to the centre, External the furthest left.
@@ -197,7 +213,7 @@ export function buildGuestView({ zones, flows, suggestions, members = null, unzo
     const c = centers.get(cell.id)!
     const group = groups.get(cell.id)
     if (group) placeGroup(out, group, c)
-    else if (cell.id.startsWith('ip:')) placeIp(out, cell.id.slice(3), c)
+    else if (cell.id.startsWith('ip:')) placeIp(out, cell.id.slice(3), c, sorted)
     else placeBoundary(out, cell.id, c, outsideEgress)
   }
 

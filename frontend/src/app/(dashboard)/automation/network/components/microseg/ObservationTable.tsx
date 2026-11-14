@@ -17,6 +17,7 @@ type Props = {
   rows: MicrosegSuggestion[]
   zones: Map<string, MicrosegZone>
   guestName: (ip: string) => string | undefined
+  gatewayName?: (ip: string) => string | undefined
   selected: ReadonlySet<string>
   busy: boolean
   now: number
@@ -65,7 +66,7 @@ function GroupHeader({ group, color, collapsed, onToggle }: { group: Observation
  * busiest first) that folds its flows (the panel keeps the folded zones). The grouping covers the page only:
  * the caption says so when the next page goes on with a zone.
  */
-export default function ObservationTable({ rows, zones, guestName, selected, busy, now, allChecked, someChecked, canSelect, onToggleAll, onToggle, onResolve, onOpenDetails, nextFlow, collapsed, onToggleGroup }: Props) {
+export default function ObservationTable({ rows, zones, guestName, gatewayName, selected, busy, now, allChecked, someChecked, canSelect, onToggleAll, onToggle, onResolve, onOpenDetails, nextFlow, collapsed, onToggleGroup }: Props) {
   const t = useTranslations('microsegPilot.observation')
   const max = maxHits(rows)
 
@@ -119,6 +120,7 @@ export default function ObservationTable({ rows, zones, guestName, selected, bus
                     suggestion={s}
                     zones={zones}
                     guestName={guestName}
+                    gatewayName={gatewayName}
                     checked={selected.has(s.id)}
                     busy={busy}
                     maxHits={max}

@@ -12976,7 +12976,8 @@
             "ready": "Im gesamten Beobachtungsfenster wäre ausgehend nichts blockiert worden",
             "enforce": "Nur die Flows der Richtlinie verlassen die Zone"
           }
-        }
+        },
+        "gatewayTip": "Gateway {ip}"
       },
       "flow": {
         "notApplied": "Nicht angewendet (Ausgang nicht kontrolliert)",
@@ -13039,7 +13040,27 @@
         "egressOnConfirm": "Kontrollieren",
         "egressOffConfirm": "Nicht mehr kontrollieren",
         "create": "Erstellen",
-        "save": "Speichern"
+        "save": "Speichern",
+        "gateway": "Gateway",
+        "gatewayHint": "Der Router des Netzes der Zone, optional",
+        "gatewayAllow": "Zum Gateway erlauben",
+        "gatewayServices": {
+          "dns": "DNS",
+          "ntp": "NTP",
+          "ping": "Ping",
+          "http": "HTTP",
+          "https": "HTTPS",
+          "ssh": "SSH",
+          "snmp": "SNMP",
+          "syslog": "Syslog",
+          "proxy": "HTTP-Proxy"
+        },
+        "gatewayAllowed": "Bereits durch einen Fluss des Entwurfs erlaubt",
+        "gatewayFlowComment": "Gateway der Zone",
+        "gatewayFirst": "Zuerst das Gateway eingeben",
+        "gatewayServicesHint": "In der Liste wählen oder ein Protokoll mit Ports eingeben: tcp/8443, udp/5000:5010, icmp",
+        "gatewayTypedInvalid": "Kein Dienst: tcp oder udp mit Ports (tcp/8443, udp/53,123, tcp/5000:5010) oder icmp, icmpv6, any",
+        "gatewayTypeHint": "Dienst wählen oder eingeben"
       },
       "flowDialog": {
         "createTitle": "Neuer Fluss",
@@ -13071,7 +13092,8 @@
         "cidrBoth": "Ein Fluss darf nicht auf beiden Seiten ein CIDR haben.",
         "protoInvalid": "Ungültiges Protokoll",
         "portInvalid": "Ungültiger Port. Verwenden Sie 80, 80,443 oder 8000:8100 (1 bis 65535).",
-        "portNotAllowed": "Ein Port ist bei diesem Protokoll nicht erlaubt."
+        "portNotAllowed": "Ein Port ist bei diesem Protokoll nicht erlaubt.",
+        "gatewayInvalid": "Eine IPv4- oder IPv6-Adresse, ohne Präfix"
       },
       "delete": {
         "zoneTitle": "Zone {name} löschen?",
@@ -13568,7 +13590,9 @@
         "moreUnzonedHint": "{count, plural, one {# weiterer Gast} other {# weitere Gäste}} ohne Zone: Abweichungen listet alle",
         "ipHint": "{ip}: eine Adresse ohne Zone und ohne Gast, die mit dieser Zone gesprochen hat",
         "inside": "{count, plural, one {# beobachteter Fluss} other {# beobachtete Flüsse}} innerhalb der Zone",
-        "observed": "Ausgang beobachtet"
+        "observed": "Ausgang beobachtet",
+        "gateway": "Gateway",
+        "gatewayHint": "Gateway von {zones} ({ip}): sein Verkehr wird auf der Karte und im Unterreiter Beobachtung benannt"
       },
       "edge": {
         "outside": "Ausgang nicht blockiert: {services}",
@@ -14354,6 +14378,9 @@
       "titleNoCount": "Die nicht angewendeten Änderungen verwerfen?",
       "body": "Der Entwurf kehrt zur zuletzt angewendeten Revision zurück.",
       "confirm": "Verwerfen"
+    },
+    "gateway": {
+      "name": "Gateway von {zones}"
     }
   },
   "bulkPower": {

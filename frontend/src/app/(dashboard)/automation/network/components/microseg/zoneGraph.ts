@@ -63,7 +63,7 @@ export type MoreNodeData = { kind: 'more'; count: number; groupId: string }
 /** `egress`, on the Outside box: the worst state of the outbound traffic of the zones that send a flow to it. */
 export type BoundaryNodeData = { kind: 'external' | 'outside'; egress?: OutboundFlowStatus }
 /** An address that talks to a zone and is no guest (the guest view draws the busiest ones on their own). */
-export type IpNodeData = { kind: 'ip'; ip: string }
+export type IpNodeData = { kind: 'ip'; ip: string; /** The zones whose gateway the address is, by name. */ gatewayOf?: string[] }
 export type MapNodeData = ZoneNodeData | UnzonedNodeData | GuestNodeData | MoreNodeData | BoundaryNodeData | IpNodeData
 
 export type MapEdgeKind = 'allowed' | 'unprotected' | 'blocked' | 'outside'
@@ -276,13 +276,18 @@ function allowedEnd(cidr: string, zoneId: string, box: string, known: ReadonlyMa
   return known.has(zoneId) ? zoneNodeId(zoneId) : null
 }
 
-/** The allowed flows, circle to circle (a CIDR source from External, a CIDR destination to Outside). */
-export function addAllowedPairs(pairs: Map<string, Pair>, flows: MicrosegFlow[], known: ReadonlyMap<string, MicrosegZone>) {
+/**
+ * The allowed flows, circle to circle (a CIDR source from External, a CIDR destination to Outside). `address` may name
+ * the node of a CIDR drawn on its own (the guest view draws a zone's gateway).
+ */
+export function addAllowedPairs(pairs: Map<string, Pair>, flows: MicrosegFlow[], known: ReadonlyMap<string, MicrosegZone>, address?: (cidr: string) => string | undefined) {
   for (const f of flows) {
-    const source = allowedEnd(f.src_cidr, f.src_zone_id, EXTERNAL_ID, known)
-    const target = allowedEnd(f.dst_cidr, f.dst_zone_id, OUTSIDE_ID, known)
-    if (!source || !target || (source === EXTERNAL_ID && target === OUTSIDE_ID)) continue
-    const toOutside = target === OUTSIDE_ID
+    if (f.src_cidr && f.dst_cidr) continue
+    const source = (f.src_cidr && address?.(f.src_cidr)) || allowedEnd(f.src_cidr, f.src_zone_id, EXTERNAL_ID, known)
+    const target = (f.dst_cidr && address?.(f.dst_cidr)) || allowedEnd(f.dst_cidr, f.dst_zone_id, OUTSIDE_ID, known)
+    if (!source || !target) continue
+    // A flow to a CIDR is outbound, whether it ends on Outside or on a gateway drawn on its own.
+    const toOutside = !!f.dst_cidr
     // A flow to Outside is solid once its source zone enforces the outbound traffic, dashed while it only observes it or not at all.
     const applied = toOutside && outboundFlowStatus(f, known.get(f.src_zone_id)) === 'applied'
     addPair(pairs, toOutside && !applied ? 'outside' : 'allowed', source, target, flowService(f), f)

@@ -2,17 +2,20 @@
 
 import { useId, useState } from 'react'
 import {
-  Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, IconButton, Radio, RadioGroup,
-  Stack, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
+  Autocomplete, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, IconButton, ListItemText,
+  Radio, RadioGroup, Stack, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import { zoneEgress, type EgressMode, type EgressState, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
+import { zoneEgress, type EgressMode, type EgressState, type MicrosegFlow, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
 
 import { DialogErrorLine, FLUSH_TOGGLE_SX, FormRow, isVersionConflict, ONE_LINE_SX, useDialogAction } from './dialogParts'
-import { zoneStateChanges } from './useZoneEdits'
+import { missingGatewayFlows, zoneStateChanges } from './useZoneEdits'
 import type { ZoneGate } from './zoneGate'
-import { validateZoneForm, ZONE_COLORS, type ZoneFormValues } from './zoneForm'
+import {
+  DEFAULT_GATEWAY_SERVICES, GATEWAY_SERVICES, gatewayServicePorts, isGatewayService, typedServiceText, validateZoneForm, ZONE_COLORS, type GatewayService,
+  type ZoneFormValues,
+} from './zoneForm'
 import ZoneStatesConfirm from './ZoneStatesConfirm'
 
 type Props = {
@@ -26,6 +29,8 @@ type Props = {
   onClose: () => void
   /** The pending changes of the draft: a state change applies the whole draft, so it is refused while there are some. */
   gate?: ZoneGate
+  /** The flows of the draft: the services the zone already reaches on its gateway show as allowed. */
+  flows?: MicrosegFlow[]
 }
 
 const HELPER_SX = { ...ONE_LINE_SX, mx: 0 } as const
@@ -99,6 +104,111 @@ function StateToggle<T extends string>({ label, value, options, disabled, onChan
 
 type SetField = <K extends keyof ZoneFormValues>(key: K, value: ZoneFormValues[K]) => void
 
+/**
+ * The gateway of the zone and what the zone may reach on it: services picked in a list or typed ("tcp/8443",
+ * "udp/5000:5010", "icmp"), each one becoming a flow from the zone to the gateway, created with the zone. A listed
+ * service the draft already allows shows picked and fixed.
+ */
+function GatewayRows({ values, zoneId, flows, disabled, error, set }: {
+  values: ZoneFormValues
+  zoneId: string | null
+  flows: MicrosegFlow[]
+  disabled: boolean
+  error?: string
+  set: SetField
+}) {
+  const t = useTranslations()
+  const td = useTranslations('microsegPilot.policy.zoneDialog')
+  const gatewayId = useId()
+  const [typedError, setTypedError] = useState(false)
+  const [typing, setTyping] = useState('')
+  const gateway = values.gateway.trim()
+  const usable = !!gateway && !error
+  const allowed = GATEWAY_SERVICES.filter(s => usable && !!zoneId && missingGatewayFlows(zoneId, gateway, [s], flows).length === 0)
+  const picked = usable ? [...allowed, ...values.gateway_services.filter(s => !allowed.includes(s as GatewayService))] : []
+  const name = (s: string) => (isGatewayService(s) ? td(`gatewayServices.${s}`) : s)
+  const change = (next: string[]) => {
+    const choices: string[] = []
+    let refused = false
+    for (const raw of next) {
+      const choice = isGatewayService(raw) ? raw : typedServiceText(raw)
+      if (!choice) refused = true
+      else if (!choices.includes(choice) && !allowed.includes(choice as GatewayService)) choices.push(choice)
+    }
+    setTypedError(refused)
+    set('gateway_services', choices)
+  }
+  return (
+    <>
+      <FormRow label={td('gateway')} htmlFor={gatewayId}>
+        <TextField
+          id={gatewayId}
+          value={values.gateway}
+          onChange={e => set('gateway', e.target.value)}
+          disabled={disabled}
+          placeholder='10.30.0.1'
+          error={!!error}
+          helperText={error ? t(error) : td('gatewayHint')}
+          slotProps={{ formHelperText: { sx: HELPER_SX } }}
+          size='small'
+          fullWidth
+        />
+      </FormRow>
+      <FormRow label={td('gatewayAllow')}>
+        <Autocomplete
+          multiple
+          freeSolo
+          disableCloseOnSelect
+          size='small'
+          fullWidth
+          options={[...GATEWAY_SERVICES]}
+          value={picked}
+          disabled={disabled || !usable}
+          getOptionDisabled={o => allowed.includes(o as GatewayService)}
+          getOptionLabel={name}
+          onChange={(_, next) => change(next)}
+          inputValue={typing}
+          onInputChange={(_, text, reason) => setTyping(reason === 'reset' ? '' : text)}
+          // On one line: the picked services as text, the field takes what is typed after them.
+          renderValue={selected => (
+            <Box component='span' data-testid='gateway-services-value' title={selected.map(name).join(', ')} sx={{ ...ONE_LINE_SX, flex: '0 1 auto', maxWidth: '70%', pl: 1 }}>
+              {selected.map(name).join(', ')}
+            </Box>
+          )}
+          renderOption={({ key, ...props }, option, { selected }) => (
+            <li key={key} {...props}>
+              <Checkbox checked={selected || allowed.includes(option as GatewayService)} size='small' sx={{ p: 0, mr: 1 }} />
+              <ListItemText
+                primary={name(option)}
+                secondary={allowed.includes(option as GatewayService) ? td('gatewayAllowed') : gatewayServicePorts(option, gateway)}
+                slotProps={{ primary: { noWrap: true }, secondary: { noWrap: true } }}
+                sx={{ display: 'flex', alignItems: 'baseline', gap: 1, m: 0 }}
+              />
+            </li>
+          )}
+          renderInput={params => (
+            <TextField
+              {...params}
+              placeholder={usable ? (picked.length ? '' : td('gatewayTypeHint')) : td('gatewayFirst')}
+              error={typedError}
+              helperText={typedError ? td('gatewayTypedInvalid') : td('gatewayServicesHint')}
+              slotProps={{ htmlInput: { ...params.inputProps, 'aria-label': td('gatewayAllow') }, formHelperText: { sx: HELPER_SX } }}
+              // A service typed and left without Enter is taken too, so a click on Save does not lose it.
+              onBlur={() => {
+                if (typing.trim()) {
+                  change([...picked, typing])
+                  setTyping('')
+                }
+              }}
+            />
+          )}
+          sx={{ '& .MuiAutocomplete-inputRoot': { flexWrap: 'nowrap' } }}
+        />
+      </FormRow>
+    </>
+  )
+}
+
 /** The Inbound and Outbound state rows of an existing zone: the outbound waits for an inbound in observation or blocking. */
 function StateRows({ values, disabled, set }: { values: ZoneFormValues; disabled: boolean; set: SetField }) {
   const t = useTranslations('microsegPilot.policy.zoneDialog')
@@ -161,7 +271,7 @@ function EgressModeRow({ values, disabled, set }: { values: ZoneFormValues; disa
  * also its inbound and outbound states, applied at once with the whole draft after the zone is written (confirmed first,
  * refused while the draft had pending changes), and what its outbound filter covers.
  */
-export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave, onClose, gate }: Props) {
+export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave, onClose, gate, flows = [] }: Props) {
   const t = useTranslations()
   const editing = zone !== null
   const nameId = useId()
@@ -169,6 +279,8 @@ export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave
   const [values, setValues] = useState<ZoneFormValues>({
     name: zone?.name ?? '', label: zone?.label ?? '', color: zone ? zone.color : ZONE_COLORS[0], isolate_members: zone?.isolate_members ?? false,
     state: zone?.state ?? 'disabled', egress_state: zone ? zoneEgress(zone) : 'off', egress_mode: zone?.egress_mode ?? 'local',
+    // A zone without a gateway yet gets the three services ticked, to take as soon as the gateway is typed.
+    gateway: zone?.gateway ?? '', gateway_services: zone?.gateway ? [] : [...DEFAULT_GATEWAY_SERVICES],
   })
   const [confirming, setConfirming] = useState(false)
   // The gate as it was when the question was asked: once the dialog has written (its own changes make the draft
@@ -193,7 +305,7 @@ export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave
     setFrozenGate(prev => prev ?? gate ?? null)
     return run(async () => {
       try {
-        await onSave({ ...values, label: values.label.trim() })
+        await onSave({ ...values, label: values.label.trim(), gateway: values.gateway.trim() })
       } catch (e) {
         // The draft moved elsewhere: the next try is a new question, gated on the draft as it is then.
         if (isVersionConflict(e)) setFrozenGate(null)
@@ -246,6 +358,7 @@ export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave
               sx={TOGGLE_LABEL_SX}
             />
           </FormRow>
+          <GatewayRows values={values} zoneId={zone?.id ?? null} flows={flows} disabled={busy} error={errors.gateway} set={set} />
           <Divider />
           {/* A new zone is created disabled: its states are changed once it exists. */}
           {editing && <StateRows values={values} disabled={busy} set={set} />}

@@ -12,7 +12,7 @@ import { InboundRunFailedError } from './dialogParts'
 import type { FlowSaveValues } from './FlowDialog'
 import type { TrackedRun } from './microsegTabTypes'
 import { usePendingChanges } from './usePendingChanges'
-import type { ZoneFormValues } from './zoneForm'
+import { gatewayCidr, gatewayServiceFlows, type ZoneFormValues } from './zoneForm'
 
 const DEFAULT_READY_AFTER_HOURS = 24
 
@@ -31,6 +31,20 @@ function egressRunningKey(from: EgressState, to: EgressState): string {
   if (to === 'enforce') return 'egressEnforce'
   if (to === 'off') return 'egressOff'
   return from === 'enforce' ? 'egressReopen' : 'egressObserve'
+}
+
+/**
+ * The flows from a zone to its gateway the dialog asks for and the draft does not hold yet: one per protocol and port
+ * of each service (DNS is UDP and TCP 53). A gateway left empty asks for none.
+ */
+export function missingGatewayFlows(zoneId: string, gateway: string, services: readonly string[], flows: readonly MicrosegFlow[]): { dst_cidr: string; proto: string; dport: string }[] {
+  if (!gateway) return []
+  const dst = gatewayCidr(gateway)
+  const has = (proto: string, dport: string) => flows.some(f => f.src_zone_id === zoneId && f.dst_cidr === dst && f.proto === proto && (f.dport ?? '') === dport)
+  const wanted = services.flatMap(s => gatewayServiceFlows(s, gateway))
+  // One flow per protocol and ports, even when two services name the same one (SSH and a typed "tcp/22").
+  const unique = wanted.filter((f, i) => wanted.findIndex(o => o.proto === f.proto && o.dport === f.dport) === i)
+  return unique.filter(f => !has(f.proto, f.dport)).map(f => ({ dst_cidr: dst, ...f }))
 }
 
 export type ZoneEditsInput = {
@@ -96,10 +110,18 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
       vnet_id: zone?.vnet_id ?? '',
       isolate_members: values.isolate_members,
       egress_mode: values.egress_mode,
+      gateway: values.gateway.trim(),
     })
+    // The flows to the gateway, created with the zone (a new one has its id in the answer), one write each.
+    let next = saved.version
+    const zoneId = zone?.id ?? saved.zone?.id
+    if (zoneId) {
+      for (const f of missingGatewayFlows(zoneId, values.gateway.trim(), values.gateway_services, policy.flows)) {
+        next = (await api.saveFlow({ version: next, src_zone_id: zoneId, comment: t('zoneDialog.gatewayFlowComment'), ...f })).version
+      }
+    }
     if (!zone) return
     const { inbound, outbound } = zoneStateChanges(zone, values)
-    let next = saved.version
     if (inbound) {
       const started = await api.setZoneState(zone.id, inbound, next)
       startRun({ runId: started.run_id, kind: 'zoneState', zoneId: zone.id, label: zone.name, runningText: t(`run.running.${inbound}`, { label: zone.name }) })
@@ -154,6 +176,8 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
   const keepMember = (ref: GuestRef) => memberWrite({ version, clear: [{ type: ref.type, vmid: ref.vmid }] })
 
   return {
+    /** The flows of the draft: the zone dialog says which flows to the gateway the zone has already. */
+    flows: policy.flows,
     connectionId,
     policy,
     zones: policy.zones,

@@ -21,6 +21,7 @@ import { SelectionTrafficChart, TrafficSummaryLine, useSelectionTraffic } from '
 import { formatWhen } from './summaryModel'
 import TruncatedText from './TruncatedText'
 import type { ZoneEdits } from './useZoneEdits'
+import { useGatewayName } from './useGatewayName'
 import { bareIp, type MapEdgeKind, type PanelEdgeData } from './zoneGraph'
 import { ExpandAddButton, FlowsList, NewFlowButton, useFlowEditor } from './ZonePanelActions'
 
@@ -113,10 +114,11 @@ function ObservedRow({ s, example, zonesById, peers, busy, onResolve }: {
   const [open, setOpen] = useState(false)
   const when = (iso: string) => formatWhen(format, iso)
   const service = serviceTitle(s.proto, s.dport)
+  const gatewayName = useGatewayName(zonesById.values())
   const zoneName = (id: string) => zonesById.get(id)?.name ?? to('deletedZone')
-  const source = s.src_zone_id ? zoneName(s.src_zone_id) : s.src_ip || to('unknownEndpoint')
+  const source = s.src_zone_id ? zoneName(s.src_zone_id) : (s.src_ip && gatewayName(s.src_ip)) || s.src_ip || to('unknownEndpoint')
   // The destination of an outbound row may be an address, a guest or many destinations.
-  const destination = destinationName(s, zonesById, ip => peers?.get(bareIp(ip)), to as (key: string) => string)
+  const destination = destinationName(s, zonesById, ip => peers?.get(bareIp(ip)) ?? gatewayName(ip), to as (key: string) => string)
   const accept = t('flowPanel.acceptAs', { from: s.src_zone_id ? source : to('unknownEndpoint'), to: destination, service })
   const hitsNames = { ...names, zone: (id: string) => (id ? zoneName(id) : destination) }
 

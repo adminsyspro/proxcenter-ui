@@ -26,13 +26,74 @@ export type ZoneFormValues = {
   /** The outbound state chosen in the dialog; ignored while `state` is disabled (the backend turns the outbound off). */
   egress_state: EgressState
   egress_mode: EgressMode
+  /** The address of the router of the zone's network, empty when unknown. */
+  gateway: string
+  /** What the zone may reach on its gateway, a listed service or a typed one ("tcp/8443"): a flow is created for each one it does not have yet. */
+  gateway_services: string[]
 }
+
+/**
+ * The services a zone may reach on its gateway, offered in the zone dialog: what a router or firewall usually serves
+ * (name resolution, time, reachability, its web and SSH administration, SNMP, syslog, a web proxy).
+ */
+export const GATEWAY_SERVICES = ['dns', 'ntp', 'ping', 'http', 'https', 'ssh', 'snmp', 'syslog', 'proxy'] as const
+export type GatewayService = (typeof GATEWAY_SERVICES)[number]
+
+/** Ticked for a zone that has no gateway yet: what a zone needs even with its outbound blocked. */
+export const DEFAULT_GATEWAY_SERVICES: readonly GatewayService[] = ['dns', 'ntp', 'ping']
+
+const GATEWAY_SERVICE_FLOWS: Record<Exclude<GatewayService, 'ping'>, { proto: string; dport: string }[]> = {
+  dns: [{ proto: 'udp', dport: '53' }, { proto: 'tcp', dport: '53' }],
+  ntp: [{ proto: 'udp', dport: '123' }],
+  http: [{ proto: 'tcp', dport: '80' }],
+  https: [{ proto: 'tcp', dport: '443' }],
+  ssh: [{ proto: 'tcp', dport: '22' }],
+  snmp: [{ proto: 'udp', dport: '161' }],
+  syslog: [{ proto: 'udp', dport: '514' }],
+  proxy: [{ proto: 'tcp', dport: '3128' }],
+}
+
+export const isGatewayService = (choice: string): choice is GatewayService => (GATEWAY_SERVICES as readonly string[]).includes(choice)
+
+/**
+ * A service typed in the zone dialog, as the flow dialog takes it: "tcp/8443", "udp/5000:5010", "tcp/80,443", or a
+ * protocol without port ("icmp", "icmpv6", "any"); null when it is none of them.
+ */
+export function parseTypedService(text: string): { proto: string; dport: string } | null {
+  const value = text.trim().toLowerCase().replace(/\s+/g, '')
+  const [proto, ports, extra] = value.split('/')
+  if (extra !== undefined) return null
+  if (proto === 'tcp' || proto === 'udp') return ports && validPorts(ports) ? { proto, dport: ports } : null
+  return ports === undefined && (proto === 'icmp' || proto === 'icmpv6' || proto === 'any') ? { proto, dport: '' } : null
+}
+
+/** The canonical text of a typed service ("TCP / 8443" is "tcp/8443"), null when it is not one. */
+export function typedServiceText(text: string): string | null {
+  const s = parseTypedService(text)
+  return s && (s.dport ? `${s.proto}/${s.dport}` : s.proto)
+}
+
+/** The flows of a gateway service: DNS answers over UDP and TCP, the ping of an IPv6 gateway is ICMPv6; a typed service is its own flow. */
+export function gatewayServiceFlows(choice: string, gateway: string): { proto: string; dport: string }[] {
+  if (choice === 'ping') return [{ proto: gateway.includes(':') ? 'icmpv6' : 'icmp', dport: '' }]
+  if (isGatewayService(choice)) return GATEWAY_SERVICE_FLOWS[choice as Exclude<GatewayService, 'ping'>]
+  const typed = parseTypedService(choice)
+  return typed ? [typed] : []
+}
+
+/** The ports of a service as the list shows them: "udp/53, tcp/53", "icmp". */
+export const gatewayServicePorts = (choice: string, gateway: string) =>
+  gatewayServiceFlows(choice, gateway).map(f => (f.dport ? `${f.proto}/${f.dport}` : f.proto)).join(', ')
+
+/** The host prefix of a gateway, as a flow names it: "10.30.0.1/32", "2001:db8::1/128". */
+export const gatewayCidr = (gateway: string) => `${gateway}/${gateway.includes(':') ? 128 : 32}`
 
 export function validateZoneForm(v: ZoneFormValues): Record<string, string> {
   const errors: Record<string, string> = {}
   if (!v.name) errors.name = `${V}.nameRequired`
   else if (!ZONE_NAME_RE.test(v.name)) errors.name = `${V}.nameInvalid`
   if (v.color && !/^#[0-9a-f]{6}$/i.test(v.color)) errors.color = `${V}.colorInvalid`
+  if (v.gateway.trim() && !isIpAddress(v.gateway.trim())) errors.gateway = `${V}.gatewayInvalid`
   return errors
 }
 

@@ -13405,7 +13405,8 @@
             "ready": "在整个观察窗口内，出站方向没有任何流量会被阻断",
             "enforce": "只有策略中的流可以离开该区域"
           }
-        }
+        },
+        "gatewayTip": "网关 {ip}"
       },
       "flow": {
         "notApplied": "未应用（出站未受控）",
@@ -13468,7 +13469,27 @@
         "egressOnConfirm": "控制",
         "egressOffConfirm": "停止控制",
         "create": "创建",
-        "save": "保存"
+        "save": "保存",
+        "gateway": "网关",
+        "gatewayHint": "区域网络的路由器，可选",
+        "gatewayAllow": "允许访问网关",
+        "gatewayServices": {
+          "dns": "DNS",
+          "ntp": "NTP",
+          "ping": "Ping",
+          "http": "HTTP",
+          "https": "HTTPS",
+          "ssh": "SSH",
+          "snmp": "SNMP",
+          "syslog": "Syslog",
+          "proxy": "HTTP 代理"
+        },
+        "gatewayAllowed": "草稿中已有流允许",
+        "gatewayFlowComment": "区域网关",
+        "gatewayFirst": "请先输入网关",
+        "gatewayServicesHint": "从列表中选择，或输入协议及端口：tcp/8443、udp/5000:5010、icmp",
+        "gatewayTypedInvalid": "无法识别的服务：带端口的 tcp 或 udp（tcp/8443、udp/53,123、tcp/5000:5010），或 icmp、icmpv6、any",
+        "gatewayTypeHint": "选择或输入服务"
       },
       "flowDialog": {
         "createTitle": "新建流量规则",
@@ -13500,7 +13521,8 @@
         "cidrBoth": "流量规则不能两侧都是 CIDR。",
         "protoInvalid": "协议无效",
         "portInvalid": "端口无效。请使用 80、80,443 或 8000:8100（1 到 65535）。",
-        "portNotAllowed": "此协议不允许指定端口。"
+        "portNotAllowed": "此协议不允许指定端口。",
+        "gatewayInvalid": "IPv4 或 IPv6 地址，不带前缀"
       },
       "delete": {
         "zoneTitle": "删除区域 {name}？",
@@ -13997,7 +14019,9 @@
         "moreUnzonedHint": "{count, plural, other {还有 # 个无区域客户机}}：偏差中列出全部",
         "ipHint": "{ip}：与此区域通信、不属于任何区域或虚拟机的地址",
         "inside": "{count, plural, other {区域内观察到的流 # 条}}",
-        "observed": "出站观察中"
+        "observed": "出站观察中",
+        "gateway": "网关",
+        "gatewayHint": "{zones} 的网关（{ip}）：其流量在地图和“观察”子选项卡中显示名称"
       },
       "edge": {
         "outside": "出站未阻断：{services}",
@@ -14783,6 +14807,9 @@
       "titleNoCount": "放弃未应用的更改？",
       "body": "草稿将恢复为上次应用的修订版。",
       "confirm": "放弃"
+    },
+    "gateway": {
+      "name": "{zones} 的网关"
     }
   },
   "bulkPower": {

@@ -118,7 +118,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         onDelete={flowEditor.remove}
       />
 
-      {zoneDialog && <ZoneDialog zone={zoneDialog.item} connectionId={connectionId} readyAfterHours={edits.readyAfterHours} onSave={saveZone(zoneDialog.item)} onClose={() => setZoneDialog(null)} gate={zoneGateOf(edits, () => setZoneDialog(null))} />}
+      {zoneDialog && <ZoneDialog zone={zoneDialog.item} connectionId={connectionId} readyAfterHours={edits.readyAfterHours} onSave={saveZone(zoneDialog.item)} flows={edits.flows} onClose={() => setZoneDialog(null)} gate={zoneGateOf(edits, () => setZoneDialog(null))} />}
       {flowEditor.dialogs}
       {assigning && (
         <AssignGuestsDialog

@@ -73,6 +73,28 @@ describe('around the zone', () => {
     expect(g.nodes.find(n => n.id === ipNodeId('203.0.113.9'))).toMatchObject({ type: 'ip', width: NODE_W, height: NODE_H, data: { kind: 'ip', ip: '203.0.113.9' } })
   })
 
+  it('names an address that is the gateway of a zone, and draws it before busier addresses', () => {
+    const many = Array.from({ length: MAX_IPS + 2 }, (_, i) => seen(`ip${i}`, { src_zone_id: '', src_ip: `198.51.100.${i + 1}`, dst_zone_id: 'zw', hits: 100 - i }))
+    const zones = demo.zones.map(z => (z.id === 'zw' ? { ...z, gateway: '198.51.100.10' } : z))
+    const g = buildGuestView({ ...demo, zones, suggestions: many, centre: 'zw' })
+    expect(g.nodes.find(n => n.id === ipNodeId('198.51.100.10'))?.data).toEqual({ kind: 'ip', ip: '198.51.100.10', gatewayOf: [zones.find(z => z.id === 'zw')!.name] })
+    expect(g.nodes.find(n => n.id === ipNodeId('198.51.100.1'))?.data).toEqual({ kind: 'ip', ip: '198.51.100.1' })
+  })
+
+  it('draws the allowed flows from and to a gateway on the gateway, not on External and Outside', () => {
+    const zones = demo.zones.map(z => (z.id === 'zw' ? { ...z, gateway: '10.9.0.1' } : z))
+    const base = { ...demo.flows[0], src_zone_id: '', src_cidr: '', dst_zone_id: '', dst_cidr: '', dport: '' }
+    const flows = [
+      { ...base, id: 'gin', src_cidr: '10.9.0.1/32', dst_zone_id: 'zw', proto: 'tcp', dport: '22' },
+      { ...base, id: 'gout', src_zone_id: 'zw', dst_cidr: '10.9.0.1/32', proto: 'udp', dport: '53' },
+    ]
+    const g = buildGuestView({ ...demo, zones, flows, suggestions: [], centre: 'zw' })
+    const gw = ipNodeId('10.9.0.1')
+    expect(g.nodes.find(n => n.id === gw)?.data).toMatchObject({ gatewayOf: [zones.find(z => z.id === 'zw')!.name] })
+    expect(g.edges.map(e => [e.source, e.target])).toEqual(expect.arrayContaining([[gw, 'zone:zw'], ['zone:zw', gw]]))
+    expect(g.nodes.some(n => n.id === 'external' || n.id === 'outside')).toBe(false)
+  })
+
   it('draws a guest in no zone that talked to the zone in the circle of the unzoned guests, alone', () => {
     const g = view('za')
     expect(g.nodes.filter(n => n.parentId === 'unzoned').map(n => n.id)).toEqual(['guest:unzoned:qemu/900'])

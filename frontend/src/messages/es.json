@@ -13405,7 +13405,8 @@
             "ready": "No se habría bloqueado nada en salida durante toda la ventana de observación",
             "enforce": "Solo los flujos de la política salen de la zona"
           }
-        }
+        },
+        "gatewayTip": "Puerta de enlace {ip}"
       },
       "flow": {
         "notApplied": "No aplicado (salida no controlada)",
@@ -13468,7 +13469,27 @@
         "egressOnConfirm": "Controlar",
         "egressOffConfirm": "Dejar de controlar",
         "create": "Crear",
-        "save": "Guardar"
+        "save": "Guardar",
+        "gateway": "Puerta de enlace",
+        "gatewayHint": "El router de la red de la zona, opcional",
+        "gatewayAllow": "Permitir hacia la puerta de enlace",
+        "gatewayServices": {
+          "dns": "DNS",
+          "ntp": "NTP",
+          "ping": "Ping",
+          "http": "HTTP",
+          "https": "HTTPS",
+          "ssh": "SSH",
+          "snmp": "SNMP",
+          "syslog": "Syslog",
+          "proxy": "Proxy HTTP"
+        },
+        "gatewayAllowed": "Ya permitido por un flujo del borrador",
+        "gatewayFlowComment": "Puerta de enlace de la zona",
+        "gatewayFirst": "Introduzca primero la puerta de enlace",
+        "gatewayServicesHint": "Elegir en la lista, o escribir un protocolo y sus puertos: tcp/8443, udp/5000:5010, icmp",
+        "gatewayTypedInvalid": "Servicio no válido: tcp o udp con puertos (tcp/8443, udp/53,123, tcp/5000:5010), o icmp, icmpv6, any",
+        "gatewayTypeHint": "Elegir o escribir un servicio"
       },
       "flowDialog": {
         "createTitle": "Nuevo flujo",
@@ -13500,7 +13521,8 @@
         "cidrBoth": "Un flujo no puede tener un CIDR en ambos lados.",
         "protoInvalid": "Protocolo no válido",
         "portInvalid": "Puerto no válido. Use 80, 80,443 u 8000:8100 (de 1 a 65535).",
-        "portNotAllowed": "No se permite un puerto con este protocolo."
+        "portNotAllowed": "No se permite un puerto con este protocolo.",
+        "gatewayInvalid": "Una dirección IPv4 o IPv6, sin prefijo"
       },
       "delete": {
         "zoneTitle": "¿Eliminar la zona {name}?",
@@ -13997,7 +14019,9 @@
         "moreUnzonedHint": "{count, plural, one {# invitado más} other {# invitados más}} sin zona: Desviaciones los lista todos",
         "ipHint": "{ip}: una dirección sin zona y sin invitado que habló con esta zona",
         "inside": "{count, plural, one {# flujo observado} other {# flujos observados}} dentro de la zona",
-        "observed": "salida en observación"
+        "observed": "salida en observación",
+        "gateway": "Puerta de enlace",
+        "gatewayHint": "Puerta de enlace de {zones} ({ip}): su tráfico se nombra en el mapa y en la subpestaña Observación"
       },
       "edge": {
         "outside": "Salida no bloqueada: {services}",
@@ -14783,6 +14807,9 @@
       "titleNoCount": "¿Descartar los cambios sin aplicar?",
       "body": "El borrador vuelve a la última revisión aplicada.",
       "confirm": "Descartar"
+    },
+    "gateway": {
+      "name": "Puerta de enlace de {zones}"
     }
   },
   "bulkPower": {

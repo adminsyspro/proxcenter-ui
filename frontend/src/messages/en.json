@@ -13405,7 +13405,8 @@
             "ready": "Nothing would have been blocked outbound for the whole observation window",
             "enforce": "Only the flows of the policy leave the zone"
           }
-        }
+        },
+        "gatewayTip": "Gateway {ip}"
       },
       "flow": {
         "notApplied": "Not applied (outbound not controlled)",
@@ -13468,7 +13469,27 @@
         "egressOnConfirm": "Control",
         "egressOffConfirm": "Stop controlling",
         "create": "Create",
-        "save": "Save"
+        "save": "Save",
+        "gateway": "Gateway",
+        "gatewayHint": "The router of the zone's network, optional",
+        "gatewayAllow": "Allow to the gateway",
+        "gatewayServices": {
+          "dns": "DNS",
+          "ntp": "NTP",
+          "ping": "Ping",
+          "http": "HTTP",
+          "https": "HTTPS",
+          "ssh": "SSH",
+          "snmp": "SNMP",
+          "syslog": "Syslog",
+          "proxy": "HTTP proxy"
+        },
+        "gatewayAllowed": "Already allowed by a flow of the draft",
+        "gatewayFlowComment": "Gateway of the zone",
+        "gatewayFirst": "Enter the gateway first",
+        "gatewayServicesHint": "Pick in the list, or type a protocol and its ports: tcp/8443, udp/5000:5010, icmp",
+        "gatewayTypedInvalid": "Not a service: tcp or udp with ports (tcp/8443, udp/53,123, tcp/5000:5010), or icmp, icmpv6, any",
+        "gatewayTypeHint": "Pick or type a service"
       },
       "flowDialog": {
         "createTitle": "New flow",
@@ -13500,7 +13521,8 @@
         "cidrBoth": "A flow cannot have a CIDR on both sides.",
         "protoInvalid": "Invalid protocol",
         "portInvalid": "Invalid port. Use 80, 80,443 or 8000:8100 (1 to 65535).",
-        "portNotAllowed": "A port is not allowed with this protocol."
+        "portNotAllowed": "A port is not allowed with this protocol.",
+        "gatewayInvalid": "An IPv4 or IPv6 address, without prefix"
       },
       "delete": {
         "zoneTitle": "Delete zone {name}?",
@@ -13997,7 +14019,9 @@
         "moreUnzonedHint": "{count, plural, one {# more guest} other {# more guests}} in no zone: Drifts lists them all",
         "ipHint": "{ip}: an address in no zone and no guest that talked to this zone",
         "inside": "{count, plural, one {# observed flow} other {# observed flows}} inside the zone",
-        "observed": "outbound observed"
+        "observed": "outbound observed",
+        "gateway": "Gateway",
+        "gatewayHint": "Gateway of {zones} ({ip}): its traffic is named on the map and in the Observation sub-tab"
       },
       "edge": {
         "outside": "Outbound not blocked: {services}",
@@ -14783,6 +14807,9 @@
       "titleNoCount": "Discard the unapplied changes?",
       "body": "The draft goes back to the last applied revision.",
       "confirm": "Discard"
+    },
+    "gateway": {
+      "name": "Gateway of {zones}"
     }
   },
   "bulkPower": {

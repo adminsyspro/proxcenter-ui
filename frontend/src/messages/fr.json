@@ -13406,7 +13406,8 @@
             "ready": "Rien n'aurait été bloqué en sortie sur toute la fenêtre d'observation",
             "enforce": "Seuls les flux de la politique sortent de la zone"
           }
-        }
+        },
+        "gatewayTip": "Passerelle {ip}"
       },
       "flow": {
         "notApplied": "Non appliqué (sortie non contrôlée)",
@@ -13469,7 +13470,27 @@
         "egressOnConfirm": "Contrôler",
         "egressOffConfirm": "Ne plus contrôler",
         "create": "Créer",
-        "save": "Enregistrer"
+        "save": "Enregistrer",
+        "gateway": "Passerelle",
+        "gatewayHint": "Le routeur du réseau de la zone, facultatif",
+        "gatewayAllow": "Autoriser vers la passerelle",
+        "gatewayServices": {
+          "dns": "DNS",
+          "ntp": "NTP",
+          "ping": "Ping",
+          "http": "HTTP",
+          "https": "HTTPS",
+          "ssh": "SSH",
+          "snmp": "SNMP",
+          "syslog": "Syslog",
+          "proxy": "Proxy HTTP"
+        },
+        "gatewayAllowed": "Déjà autorisé par un flux du brouillon",
+        "gatewayFlowComment": "Passerelle de la zone",
+        "gatewayFirst": "Saisir d'abord la passerelle",
+        "gatewayServicesHint": "Choisir dans la liste, ou saisir un protocole et ses ports : tcp/8443, udp/5000:5010, icmp",
+        "gatewayTypedInvalid": "Service non reconnu : tcp ou udp avec ports (tcp/8443, udp/53,123, tcp/5000:5010), ou icmp, icmpv6, any",
+        "gatewayTypeHint": "Choisir ou saisir un service"
       },
       "flowDialog": {
         "createTitle": "Nouveau flux",
@@ -13501,7 +13522,8 @@
         "cidrBoth": "Un flux ne peut pas avoir un CIDR des deux côtés.",
         "protoInvalid": "Protocole invalide",
         "portInvalid": "Port invalide. Utilisez 80, 80,443 ou 8000:8100 (1 à 65535).",
-        "portNotAllowed": "Un port n'est pas autorisé avec ce protocole."
+        "portNotAllowed": "Un port n'est pas autorisé avec ce protocole.",
+        "gatewayInvalid": "Une adresse IPv4 ou IPv6, sans préfixe"
       },
       "delete": {
         "zoneTitle": "Supprimer la zone {name} ?",
@@ -13998,7 +14020,9 @@
         "moreUnzonedHint": "{count, plural, one {# invité de plus} other {# invités de plus}} sans zone : Écarts les liste tous",
         "ipHint": "{ip} : une adresse hors zone et hors invité qui a parlé à cette zone",
         "inside": "{count, plural, one {# flux observé} other {# flux observés}} dans la zone",
-        "observed": "sortie en observation"
+        "observed": "sortie en observation",
+        "gateway": "Passerelle",
+        "gatewayHint": "Passerelle de {zones} ({ip}) : son trafic est nommé sur la carte et dans le sous-onglet Observation"
       },
       "edge": {
         "outside": "Sortie non bloquée : {services}",
@@ -14784,6 +14808,9 @@
       "titleNoCount": "Abandonner les changements non appliqués ?",
       "body": "Le brouillon revient à la dernière révision appliquée.",
       "confirm": "Abandonner"
+    },
+    "gateway": {
+      "name": "Passerelle de {zones}"
     }
   },
   "bulkPower": {

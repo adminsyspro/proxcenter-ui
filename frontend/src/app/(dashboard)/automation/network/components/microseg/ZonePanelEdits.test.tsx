@@ -12,7 +12,8 @@ import RBACContext, { type RBACContextValue } from '@/contexts/RBACContext'
 import frMessages from '@/messages/fr.json'
 import type { MicrosegFlow, MicrosegZone, PendingMember } from '@/lib/microseg/types'
 
-import { calls, fetchMock, mock, policy, renderTab, reply, revisionWithSnapshot, BASE, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
+import { calls, fetchMock, flow, mock, policy, renderTab, reply, revisionWithSnapshot, BASE, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
+import type { ZoneFormValues } from './zoneForm'
 import MicrosegTab from './MicrosegTab'
 import ZoneDialog from './ZoneDialog'
 import { body, db, installFreshMocks, vm, web } from './policyTestKit'
@@ -210,6 +211,46 @@ describe('zone dialog, state rows and Outbound section', () => {
     expect(await screen.findByText(/^The VMs of this zone reach each other only through a declared flow/)).toBeTruthy()
     fireEvent.mouseOver(within(dialog).getAllByTestId('zone-dialog-tip')[2])
     expect(await screen.findByText('Filters all outbound traffic, Internet included: only the flows of the policy go through.')).toBeTruthy()
+  })
+
+  it('takes a gateway and the services to allow on it, picked in a list or typed, and shows fixed the ones the draft already allows', async () => {
+    const onSave = vi.fn(async (_values: ZoneFormValues) => undefined)
+    const dns: MicrosegFlow = { ...flow('f1'), src_zone_id: 'zw', src_cidr: '', dst_zone_id: '', dst_cidr: '10.30.0.1/32', proto: 'udp', dport: '53' }
+    renderWithProviders(<ZoneDialog zone={web()} connectionId='c1' readyAfterHours={24} onSave={onSave} onClose={vi.fn()} flows={[dns, { ...dns, id: 'f2', proto: 'tcp' }]} />)
+    const dialog = await screen.findByRole('dialog', { name: 'Edit zone' })
+    const field = () => within(dialog).getByRole('combobox', { name: 'Allow to the gateway' }) as HTMLInputElement
+    const value = () => within(dialog).queryByTestId('gateway-services-value')?.textContent ?? ''
+    expect(field().disabled).toBe(true)
+    expect(field().placeholder).toBe('Enter the gateway first')
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Gateway' }), { target: { value: '10.30.0.1/24' } })
+    expect(within(dialog).getByText('An IPv4 or IPv6 address, without prefix')).toBeTruthy()
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Gateway' }), { target: { value: '10.30.0.1' } })
+    // A zone that had no gateway gets DNS, NTP and Ping; DNS is already allowed by the draft.
+    expect(value()).toBe('DNS, NTP, Ping')
+
+    fireEvent.mouseDown(field())
+    const menu = await screen.findByRole('listbox')
+    const option = (name: RegExp) => within(menu).getByRole('option', { name })
+    expect(option(/^DNS/).getAttribute('aria-disabled')).toBe('true')
+    expect(option(/^DNS/).textContent).toContain('Already allowed by a flow of the draft')
+    expect(option(/^SSH/).textContent).toContain('tcp/22')
+    fireEvent.click(option(/^Ping/))
+    fireEvent.click(option(/^HTTPS/))
+    expect(value()).toBe('DNS, NTP, HTTPS')
+
+    fireEvent.change(field(), { target: { value: 'gopher' } })
+    fireEvent.keyDown(field(), { key: 'Enter' })
+    expect(within(dialog).getByText(/^Not a service/)).toBeTruthy()
+    fireEvent.change(field(), { target: { value: 'TCP/8443' } })
+    fireEvent.keyDown(field(), { key: 'Enter' })
+    fireEvent.change(field(), { target: { value: 'udp/5000:5010' } })
+    fireEvent.blur(field())
+    expect(value()).toBe('DNS, NTP, HTTPS, tcp/8443, udp/5000:5010')
+    expect(within(dialog).queryByText(/^Not a service/)).toBeNull()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    expect(onSave.mock.calls[0][0]).toMatchObject({ gateway: '10.30.0.1', gateway_services: ['ntp', 'https', 'tcp/8443', 'udp/5000:5010'] })
   })
 
   it('says the rows and the tooltips in French', async () => {

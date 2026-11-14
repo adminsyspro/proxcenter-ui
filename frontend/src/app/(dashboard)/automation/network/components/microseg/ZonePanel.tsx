@@ -17,7 +17,8 @@ import { MemberChangeChip } from './ZoneRow'
 import EgressChip, { useZoneEgress } from './EgressChip'
 import ExpandDialog, { withCount, type DataTab } from './ExpandDialog'
 import ZoneStateChip from './ZoneStateChip'
-import { destinationName } from './ObservationRow'
+import { destinationName, endpoint } from './ObservationRow'
+import { useGatewayName } from './useGatewayName'
 import { bareIp } from './zoneGraph'
 import { ExpandAddButton, FlowsList, MemberAction, NewFlowButton, ZoneHeaderActions, useFlowEditor } from './ZonePanelActions'
 import type { ZoneEdits } from './useZoneEdits'
@@ -93,10 +94,11 @@ function SuggestionLine({ suggestion: s, zonesById, peers, busy, onResolve }: {
   onResolve: (action: SuggestionAction, prefixLen?: number) => void
 }) {
   const to = useTranslations('microsegPilot.observation')
+  const gatewayName = useGatewayName(zonesById.values())
   // The peer of an inbound row is its source, the peer of an outbound row (emitted by this zone) is its destination.
   const source = s.direction === 'out'
-    ? destinationName(s, zonesById, ip => peers?.get(bareIp(ip)), to as (key: string) => string)
-    : s.src_zone_id ? zonesById.get(s.src_zone_id)?.name ?? to('deletedZone') : s.src_ip || to('unknownEndpoint')
+    ? destinationName(s, zonesById, ip => peers?.get(bareIp(ip)) ?? gatewayName(ip), to as (key: string) => string)
+    : endpoint(s.src_zone_id, s.src_ip, zonesById, to as (key: string) => string, gatewayName)
   return (
     <Box role='listitem' aria-label={source} data-suggestion={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minHeight: 36, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>
       <DirectionGlyph direction={s.direction} />

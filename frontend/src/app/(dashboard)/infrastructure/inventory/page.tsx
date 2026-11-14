@@ -15,6 +15,7 @@ import { useSWRFetch } from '@/hooks/useSWRFetch'
 import { extractTaskVmid } from '@/lib/tasks/scope'
 
 import { findDeepLinkedVm, hasDeepLinkSelection } from './deepLink'
+import { GUEST_SORT_STORAGE_KEY, parseGuestSortMode, type GuestSortMode } from './guestSort'
 import InventoryTree, { InventorySelection, ViewMode, AllVmItem, HostItem, PoolItem, PoolActions, TagItem, TreePbsServer, TreeClusterStorage } from './InventoryTree'
 import InventoryDetails from './InventoryDetails'
 import { InventoryLoadedContext } from './inventoryLoadedContext'
@@ -105,6 +106,22 @@ export default function InventoryPage() {
     setShowVmId(prev => {
       const next = !prev
       localStorage.setItem('pxc-show-vmid', String(next))
+      return next
+    })
+  }, [])
+
+  // Order of the guests under each node of the tree (#1373)
+  const [guestSort, setGuestSort] = useState<GuestSortMode>(() => {
+    if (typeof window !== 'undefined') {
+      return parseGuestSortMode(localStorage.getItem(GUEST_SORT_STORAGE_KEY))
+    }
+    return 'vmid'
+  })
+
+  const toggleGuestSort = useCallback(() => {
+    setGuestSort(prev => {
+      const next: GuestSortMode = prev === 'name' ? 'vmid' : 'name'
+      localStorage.setItem(GUEST_SORT_STORAGE_KEY, next)
       return next
     })
   }, [])
@@ -654,6 +671,8 @@ return () => setPageInfo('', '', '')
                 onExternalHypervisorsChange={setExternalHypervisors}
                 showVmId={showVmId}
                 onToggleShowVmId={toggleShowVmId}
+                guestSort={guestSort}
+                onToggleGuestSort={toggleGuestSort}
               />
             </InventoryLoadedContext.Provider>
           )}

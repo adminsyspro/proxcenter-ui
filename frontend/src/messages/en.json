@@ -2178,6 +2178,8 @@
     "tpl": "Tpl",
     "showVmId": "Show VM IDs",
     "hideVmId": "Hide VM IDs",
+    "sortGuestsByName": "Sort guests by name",
+    "sortGuestsByVmid": "Sort guests by VMID",
     "console": "Console",
     "convertToTemplate": "Convert to template",
     "errorCloningVm": "Error cloning VM",

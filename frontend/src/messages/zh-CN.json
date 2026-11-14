@@ -2182,6 +2182,8 @@
     "tpl": "模板",
     "showVmId": "显示虚拟机ID",
     "hideVmId": "隐藏虚拟机ID",
+    "sortGuestsByName": "按名称排序客户机",
+    "sortGuestsByVmid": "按 VMID 排序客户机",
     "console": "控制台",
     "convertToTemplate": "转换为模板",
     "errorCloningVm": "克隆虚拟机时出错",

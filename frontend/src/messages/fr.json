@@ -1815,6 +1815,8 @@
     "tpl": "Tpl",
     "showVmId": "Afficher les ID des VMs",
     "hideVmId": "Masquer les ID des VMs",
+    "sortGuestsByName": "Trier les invités par nom",
+    "sortGuestsByVmid": "Trier les invités par VMID",
     "console": "Console",
     "convertToTemplate": "Convertir en template",
     "errorCloningVm": "Erreur lors du clonage de la VM",

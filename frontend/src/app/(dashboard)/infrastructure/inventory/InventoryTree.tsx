@@ -59,6 +59,7 @@ const PowerSettingsNewIcon = (props: any) => <i className="ri-shut-down-line" st
 import EntityTagManager from './components/EntityTagManager'
 import { resolveVmPowerAction } from './helpers'
 import { applyInventoryEvents } from './applyInventoryEvents'
+import { GuestSortContext, sortClusterGuests } from './guestSort'
 import { useExpectedVmStatuses } from './hooks/useExpectedVmStatuses'
 import { networkConnKey } from './networkConnKey'
 import { useRBAC } from '@/contexts/RBACContext'
@@ -549,6 +550,7 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onPool
   // answered: an empty guest list only means "no guest" once the stream ended.
   const [inventoryLoaded, setInventoryLoaded] = useState(false)
   const onInventoryLoadedChange = React.useContext(InventoryLoadedContext)
+  const { mode: guestSort, toggle: onToggleGuestSort } = React.useContext(GuestSortContext)
   const [error, setError] = useState<string | null>(null)
   const [clusters, setClusters] = useState<TreeCluster[]>([])
   const [pbsServers, setPbsServers] = useState<TreePbsServer[]>([])
@@ -1936,6 +1938,9 @@ return null
       .filter((clu): clu is NonNullable<typeof clu> => clu !== null)
   }, [clusters, search])
 
+  // Guests of each node in the order picked in the toolbar (#1373)
+  const treeClusters = useMemo(() => sortClusterGuests(filteredClusters, guestSort), [filteredClusters, guestSort])
+
   // Calculer les items à expand automatiquement lors d'une recherche
   const expandedItems = useMemo(() => {
     if (!search.trim()) return []
@@ -3168,11 +3173,15 @@ return favorites.has(vmKey)
     return null
   }, [viewMode, vmsGroupedRows, displayVms, favoritesList, filteredVms])
 
+  // Only the flat views are virtualized. Left enabled in the tree view, the
+  // virtualizer still listens to the shared scroll container and re-renders
+  // the whole tree on every scroll event (#1373).
   const virtualizer = useVirtualizer({
     count: flatItems?.length ?? 0,
     getScrollElement: () => virtualScrollRef.current,
     estimateSize: () => 30,
     overscan: 10,
+    enabled: flatItems !== null,
   })
 
   const isTreeExpanded = manualExpandedItems.length > 1 || storageExpandedItems.length > 0 || backupExpandedItems.length > 0 || migrationExpandedItems.length > 0 || expandedNetSections.size > 0
@@ -3263,6 +3272,13 @@ return favorites.has(vmKey)
             <Tooltip title={showVmId ? t('inventory.hideVmId') : t('inventory.showVmId')}>
               <IconButton size='small' onClick={onToggleShowVmId} sx={{ color: showVmId ? 'primary.main' : 'text.disabled' }}>
                 <i className="ri-hashtag" style={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+          {viewMode === 'tree' && onToggleGuestSort && (
+            <Tooltip title={guestSort === 'name' ? t('inventory.sortGuestsByVmid') : t('inventory.sortGuestsByName')}>
+              <IconButton size='small' onClick={onToggleGuestSort} sx={{ color: guestSort === 'name' ? 'primary.main' : 'text.disabled' }}>
+                <i className={guestSort === 'name' ? 'ri-sort-alphabet-asc' : 'ri-sort-number-asc'} style={{ fontSize: 16 }} />
               </IconButton>
             </Tooltip>
           )}
@@ -3363,7 +3379,7 @@ return favorites.has(vmKey)
         </ToggleButtonGroup>
       </Box>
     ),
-    [loading, searchInput, viewMode, displayVms.length, hostsList.length, poolsTree, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, refreshing, onCollapse, isCollapsed, allowedViewModes, theme.palette.mode, expandAll, collapseAll, expandAllSections, collapseAllSections, isTreeExpanded, isSectionsAllExpanded, showVmId, onToggleShowVmId, canManagePools, clusters.length, openCreatePool]
+    [loading, searchInput, viewMode, displayVms.length, hostsList.length, poolsTree, tagsList.length, templatesCount, favoritesList.length, onRefresh, refreshLoading, refreshing, onCollapse, isCollapsed, allowedViewModes, theme.palette.mode, expandAll, collapseAll, expandAllSections, collapseAllSections, isTreeExpanded, isSectionsAllExpanded, showVmId, onToggleShowVmId, guestSort, onToggleGuestSort, canManagePools, clusters.length, openCreatePool]
   )
 
   return (
@@ -3843,7 +3859,7 @@ return (
             if (sel) onSelect(sel)
           }}
         >
-        {filteredClusters.map(clu => {
+        {treeClusters.map(clu => {
           // Shared VM leaf for the tenant-facing flat non-admin branch below
           // (it used to also serve a per-vDC tree root, removed — the vDC
           // grouping now lives in the `vms` view those tenants actually see,

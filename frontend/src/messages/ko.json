@@ -2178,6 +2178,8 @@
     "tpl": "Tpl",
     "showVmId": "VM ID 표시",
     "hideVmId": "VM ID 숨기기",
+    "sortGuestsByName": "게스트를 이름순으로 정렬",
+    "sortGuestsByVmid": "게스트를 VMID순으로 정렬",
     "console": "콘솔",
     "convertToTemplate": "템플릿으로 변환",
     "errorCloningVm": "VM 복제 오류",

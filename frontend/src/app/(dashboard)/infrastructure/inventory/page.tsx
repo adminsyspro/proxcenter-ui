@@ -15,6 +15,7 @@ import { useSWRFetch } from '@/hooks/useSWRFetch'
 import { extractTaskVmid } from '@/lib/tasks/scope'
 
 import { findDeepLinkedVm, hasDeepLinkSelection } from './deepLink'
+import { GUEST_SORT_STORAGE_KEY, GuestSortContext, parseGuestSortMode, type GuestSortMode } from './guestSort'
 import InventoryTree, { InventorySelection, ViewMode, AllVmItem, HostItem, PoolItem, PoolActions, TagItem, TreePbsServer, TreeClusterStorage } from './InventoryTree'
 import InventoryDetails from './InventoryDetails'
 import { InventoryLoadedContext } from './inventoryLoadedContext'
@@ -108,6 +109,24 @@ export default function InventoryPage() {
       return next
     })
   }, [])
+
+  // Order of the guests under each node of the tree (#1373)
+  const [guestSort, setGuestSort] = useState<GuestSortMode>(() => {
+    if (typeof window !== 'undefined') {
+      return parseGuestSortMode(localStorage.getItem(GUEST_SORT_STORAGE_KEY))
+    }
+    return 'vmid'
+  })
+
+  const toggleGuestSort = useCallback(() => {
+    setGuestSort(prev => {
+      const next: GuestSortMode = prev === 'name' ? 'vmid' : 'name'
+      localStorage.setItem(GUEST_SORT_STORAGE_KEY, next)
+      return next
+    })
+  }, [])
+
+  const guestSortContext = useMemo(() => ({ mode: guestSort, toggle: toggleGuestSort }), [guestSort, toggleGuestSort])
 
   // Create VM/LXC dialog requests from tree context menu
   const [createDialogRequest, setCreateDialogRequest] = useState<{ type: 'createVm' | 'createLxc'; connId: string; node: string; ts: number } | null>(null)
@@ -624,6 +643,7 @@ return () => setPageInfo('', '', '')
             <Typography color='error'>{err}</Typography>
           ) : (
             <InventoryLoadedContext.Provider value={setInventoryLoaded}>
+              <GuestSortContext.Provider value={guestSortContext}>
               <InventoryTree
                 selected={selection}
                 onSelect={(sel) => setSelection(sel)}
@@ -655,6 +675,7 @@ return () => setPageInfo('', '', '')
                 showVmId={showVmId}
                 onToggleShowVmId={toggleShowVmId}
               />
+              </GuestSortContext.Provider>
             </InventoryLoadedContext.Provider>
           )}
         </Box>

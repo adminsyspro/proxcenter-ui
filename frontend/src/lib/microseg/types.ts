@@ -223,7 +223,15 @@ export type MicrosegRunResult = {
   notes?: string[]
   /** The run was written while the emergency stop holds the cluster firewall off. */
   stop_active?: boolean
+  /** Where a plan, an application or a removal still running stands; the outcome of the run replaces it. */
+  progress?: MicrosegRunProgress
 }
+
+/**
+ * `waiting`: another run holds the connection. `reading`: `done` of `total` guests are read.
+ * `writing`: `done` of `total` steps of the plan are over. `total` is 0 while it is not known.
+ */
+export type MicrosegRunProgress = { phase: 'waiting' | 'reading' | 'writing' | (string & {}); done: number; total: number }
 
 export type RunKind = 'light' | 'ips' | 'full' | 'log' | 'targeted' | 'plan' | 'apply' | 'remove'
 export type RunStatus = 'running' | 'done' | 'failed'

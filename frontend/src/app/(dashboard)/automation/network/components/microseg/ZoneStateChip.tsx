@@ -1,7 +1,7 @@
 'use client'
 
 import type { MouseEvent } from 'react'
-import { Chip, Tooltip } from '@mui/material'
+import { Chip, CircularProgress, Tooltip } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { ZoneState } from '@/lib/microseg/types'
@@ -17,18 +17,22 @@ export const STATE_VISUAL: Record<ZoneState, { color: StateColor; icon: string; 
 
 /**
  * The state of a zone as a coloured outlined chip with its icon; the tooltip says in one sentence what the state does.
- * With `onClick` the chip is a button that opens the state menu.
+ * With `onClick` the chip is a button that opens the state menu. `busy` while a run writes this state to Proxmox:
+ * the chip already shows the state asked for, a spinner in place of its icon says it is not there yet.
  */
-export default function ZoneStateChip({ state, size = 'small', onClick }: { state: ZoneState; size?: 'small' | 'medium'; onClick?: (anchor: HTMLElement) => void }) {
+export default function ZoneStateChip({ state, size = 'small', onClick, busy = false }: { state: ZoneState; size?: 'small' | 'medium'; onClick?: (anchor: HTMLElement) => void; busy?: boolean }) {
   const t = useTranslations('microsegPilot.policy.zone')
   const visual = STATE_VISUAL[state]
+  const iconSize = size === 'small' ? 14 : 16
   return (
-    <Tooltip title={t(`stateHint.${state}`)} describeChild>
+    <Tooltip title={busy ? t('stateChanging') : t(`stateHint.${state}`)} describeChild>
       <Chip
         size={size}
         variant='outlined'
         color={visual.color}
-        icon={<i className={visual.icon} style={{ fontSize: size === 'small' ? 14 : 16 }} />}
+        icon={busy
+          ? <CircularProgress size={iconSize - 2} color='inherit' aria-label={t('stateChanging')} />
+          : <i className={visual.icon} style={{ fontSize: iconSize }} />}
         label={t(`state.${state}`)}
         {...(onClick ? { onClick: (e: MouseEvent<HTMLDivElement>) => onClick(e.currentTarget), 'aria-haspopup': 'menu' as const } : {})}
         sx={{ flexShrink: 0, maxWidth: '100%' }}

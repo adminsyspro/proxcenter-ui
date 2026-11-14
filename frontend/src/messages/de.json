@@ -12853,7 +12853,10 @@
       },
       "members": "{count, plural, one {# Mitgliedsänderung} other {# Mitgliedsänderungen}}",
       "tagPrefix": "Tag-Präfix geändert",
-      "whatWillChangeInline": "was sich ändert: {list}"
+      "whatWillChangeInline": "was sich ändert: {list}",
+      "applying": "Wird angewendet: {list}",
+      "applyingInline": "wird angewendet: {list}",
+      "applyingNoCount": "Änderungen werden angewendet"
     },
     "firstRun": {
       "title": "Mikrosegmentierung einrichten",
@@ -12920,6 +12923,7 @@
         "outgoing": "Ausgehende Flüsse",
         "noFlows": "Keine",
         "changeState": "Status ändern",
+        "stateChanging": "Statusänderung läuft",
         "edit": "Zone bearbeiten",
         "delete": "Zone löschen",
         "state": {
@@ -13106,7 +13110,13 @@
         },
         "done": "{label}: {done} erledigt, {failed} fehlgeschlagen, {notRun} nicht ausgeführt",
         "failed": "{label}: der Lauf ist fehlgeschlagen",
-        "unavailable": "{label}: Fortschritt nicht verfügbar"
+        "unavailable": "{label}: Fortschritt nicht verfügbar",
+        "progress": {
+          "waiting": "wartet auf den laufenden Vorgang",
+          "readingStart": "Proxmox wird gelesen",
+          "reading": "Proxmox wird gelesen, {done, number} / {total, number} Gäste",
+          "writing": "Schreiben in Proxmox, {done, number} / {total, number}"
+        }
       },
       "assign": {
         "title": "Gäste der Zone {zone} zuweisen",

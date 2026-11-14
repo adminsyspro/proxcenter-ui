@@ -12,6 +12,7 @@ vi.mock('@/lib/microseg/useLastRevision', () => ({ useLastRevisionSnapshot: () =
 
 import PendingChangesBar, { diffParts } from './PendingChangesBar'
 import { NO_DIFF } from './usePendingChanges'
+import { RunsInProgressProvider } from './runsInProgress'
 
 afterEach(cleanup)
 
@@ -60,5 +61,18 @@ describe('pending bar text', () => {
   it('goes on in lower case after a prefix', () => {
     renderWithProviders(<PendingChangesBar connectionId='c1' policy={policy} prefix='Micro-segmentation' />)
     expect(screen.getByText('Micro-segmentation: what will change: 1 zone added, 1 member change')).toBeTruthy()
+  })
+
+  const applying = { applying: true, zones: new Set<string>() }
+
+  it('says the changes are being applied while a run writes them, with nothing to click', () => {
+    renderWithProviders(<RunsInProgressProvider value={applying}><PendingChangesBar connectionId='c1' policy={policy} onOpenPlan={() => undefined} /></RunsInProgressProvider>)
+    expect(screen.getByText('Being applied: 1 zone added, 1 member change')).toBeTruthy()
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it('says it in lower case after a prefix', () => {
+    renderWithProviders(<RunsInProgressProvider value={applying}><PendingChangesBar connectionId='c1' policy={policy} prefix='Micro-segmentation' /></RunsInProgressProvider>)
+    expect(screen.getByText('Micro-segmentation: being applied: 1 zone added, 1 member change')).toBeTruthy()
   })
 })

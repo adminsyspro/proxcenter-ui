@@ -18,6 +18,8 @@ export type TrackedRun = {
   label: string
   /** The translated line shown while it runs. */
   runningText: string
+  /** The zone whose state the run changes: its card says so while the run goes on. */
+  zoneId?: string
 }
 
 /** What MicrosegTab hands to the content of each sub-tab. */

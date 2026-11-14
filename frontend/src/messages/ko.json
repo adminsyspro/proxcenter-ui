@@ -13282,7 +13282,10 @@
       },
       "members": "{count, plural, other {구성원 변경 #개}}",
       "tagPrefix": "태그 접두사 변경",
-      "whatWillChangeInline": "변경될 내용: {list}"
+      "whatWillChangeInline": "변경될 내용: {list}",
+      "applying": "적용 중: {list}",
+      "applyingInline": "적용 중: {list}",
+      "applyingNoCount": "변경 사항을 적용하는 중"
     },
     "firstRun": {
       "title": "마이크로 세분화 설정",
@@ -13349,6 +13352,7 @@
         "outgoing": "송신 플로우",
         "noFlows": "없음",
         "changeState": "상태 변경",
+        "stateChanging": "상태 변경 중",
         "edit": "영역 편집",
         "delete": "영역 삭제",
         "state": {
@@ -13535,7 +13539,13 @@
         },
         "done": "{label}: 완료 {done}, 실패 {failed}, 미실행 {notRun}",
         "failed": "{label}: 실행에 실패했습니다",
-        "unavailable": "{label}: 진행 상황을 확인할 수 없습니다"
+        "unavailable": "{label}: 진행 상황을 확인할 수 없습니다",
+        "progress": {
+          "waiting": "진행 중인 작업을 기다리는 중",
+          "readingStart": "Proxmox 읽는 중",
+          "reading": "Proxmox 읽는 중, 게스트 {done, number} / {total, number}",
+          "writing": "Proxmox에 쓰는 중, {done, number} / {total, number}"
+        }
       },
       "assign": {
         "title": "{zone}에 게스트 할당",

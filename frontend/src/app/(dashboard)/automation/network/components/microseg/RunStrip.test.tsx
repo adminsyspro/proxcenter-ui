@@ -111,4 +111,21 @@ describe('run strip', () => {
     fireEvent.click(within(line).getByRole('button', { name: /close/i }))
     expect(screen.queryByText('web: the run failed')).toBeNull()
   })
+
+  it('shows how far a running run is, then drops the bar once it has ended', async () => {
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1' })
+    let current: MicrosegRun = run('running', { progress: { phase: 'writing', done: 42, total: 99 } } as MicrosegRun['result'])
+    mock.routes['GET /runs/r1'] = () => reply(200, current)
+    setup({ zones: [web({ state: 'disabled' })] })
+
+    await chooseState('web', 'Observe')
+    const line = (await screen.findByText(/web: change to observation in progress/)).closest('[role="alert"]') as HTMLElement
+    const bar = await within(line).findByRole('progressbar', { name: /web: change to observation in progress/ })
+    await waitFor(() => expect(bar.getAttribute('aria-valuenow')).toBe('42'))
+    expect(within(line).getByText('writing to Proxmox, 42 / 99')).toBeTruthy()
+
+    current = run('done', { guests: 1, members: 1, steps: 99, drifts: 0 })
+    const ended = (await screen.findByText('web: 0 done, 0 failed, 0 not run', undefined, { timeout: 5_000 })).closest('[role="alert"]') as HTMLElement
+    expect(within(ended).queryByRole('progressbar')).toBeNull()
+  })
 })

@@ -102,7 +102,7 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
     let next = saved.version
     if (inbound) {
       const started = await api.setZoneState(zone.id, inbound, next)
-      startRun({ runId: started.run_id, kind: 'zoneState', label: zone.name, runningText: t(`run.running.${inbound}`, { label: zone.name }) })
+      startRun({ runId: started.run_id, kind: 'zoneState', zoneId: zone.id, label: zone.name, runningText: t(`run.running.${inbound}`, { label: zone.name }) })
       if (!outbound) return
       const run = await waitForRun(api.getRun, started.run_id)
       if (run.status === 'failed') throw new InboundRunFailedError(run.error)
@@ -110,7 +110,7 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
     }
     if (!outbound) return
     const started = await api.setZoneEgressState(zone.id, outbound, next)
-    startRun({ runId: started.run_id, kind: 'zoneState', label: zone.name, runningText: t(`run.running.${egressRunningKey(zoneEgress(zone), outbound)}`, { label: zone.name }) })
+    startRun({ runId: started.run_id, kind: 'zoneState', zoneId: zone.id, label: zone.name, runningText: t(`run.running.${egressRunningKey(zoneEgress(zone), outbound)}`, { label: zone.name }) })
   })
 
   const deleteZone = (zone: MicrosegZone) => write(() => api.deleteZone(zone.id, version))
@@ -122,7 +122,7 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
   /** Applied at once with the whole draft (UA30): the run is followed in the strip of the tab. */
   const setZoneState = (zone: MicrosegZone, state: ZoneState) => write(async () => {
     const started = await api.setZoneState(zone.id, state, version)
-    startRun({ runId: started.run_id, kind: 'zoneState', label: zone.name, runningText: t(`run.running.${state}`, { label: zone.name }) })
+    startRun({ runId: started.run_id, kind: 'zoneState', zoneId: zone.id, label: zone.name, runningText: t(`run.running.${state}`, { label: zone.name }) })
   })
 
   /** Applied at once with the whole draft, like the inbound state: the run is followed in the strip of the tab. */
@@ -131,6 +131,7 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
     startRun({
       runId: started.run_id,
       kind: 'zoneState',
+      zoneId: zone.id,
       label: zone.name,
       runningText: t(`run.running.${state === 'observe' ? 'egressReopen' : 'egressEnforce'}`, { label: zone.name }),
     })

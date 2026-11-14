@@ -5,6 +5,7 @@ import { Box, CircularProgress } from '@mui/material'
 import type { MicrosegRun } from '@/lib/microseg/types'
 
 import MicrosegErrorAlert from './MicrosegErrorAlert'
+import RunBar from './RunBar'
 import { OneLine } from './dialogParts'
 
 type Props = {
@@ -15,7 +16,7 @@ type Props = {
   runningText: string
 }
 
-/** One line while a run is going on; nothing once it has ended (its outcome is drawn by the caller). */
+/** One line while a run is going on, with its progress bar; nothing once it has ended (its outcome is drawn by the caller). */
 export default function RunProgress({ run, error, runningText }: Props) {
   if (run && run.status !== 'running') return null
   return (
@@ -23,6 +24,7 @@ export default function RunProgress({ run, error, runningText }: Props) {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0, minHeight: 40 }}>
         <CircularProgress size={18} />
         <OneLine text={runningText} />
+        <RunBar run={run} label={runningText} />
       </Box>
       {!!error && <MicrosegErrorAlert error={error} />}
     </Box>

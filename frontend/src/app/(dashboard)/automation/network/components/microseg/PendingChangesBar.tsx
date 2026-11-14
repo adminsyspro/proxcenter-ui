@@ -1,12 +1,13 @@
 'use client'
 
-import { Alert, Button } from '@mui/material'
+import { Alert, Button, CircularProgress } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { DiffKind, PolicyDiff } from '@/lib/microseg/pendingChanges'
 import type { MicrosegPolicy } from '@/lib/microseg/types'
 
 import DiscardDraft from './DiscardDraft'
+import { useRunsInProgress } from './runsInProgress'
 import { usePendingChanges } from './usePendingChanges'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 
@@ -44,15 +45,27 @@ export function diffParts(diff: PolicyDiff, t: (key: string, values?: Record<str
  * "What will change: 2 zones changed, 3 flows added, 1 flow removed · Discard · View plan" (UA11, UA58). The server
  * tells that something is pending; what is computed here, and only when it can be trusted: with no revision
  * (everything is added) or once the last revision's snapshot is loaded. Otherwise the bar says "Unapplied changes".
+ * While a run writes them to Proxmox the bar says so and offers neither to discard them nor to plan them again.
  */
 export default function PendingChangesBar({ connectionId, policy, onOpenPlan, prefix }: Props) {
   const t = useTranslations()
   const { pending, count, diff } = usePendingChanges(connectionId, policy)
   const { canWrite } = useMicrosegWrite()
+  const { applying } = useRunsInProgress()
 
   if (!pending) return null
   const parts = diff ? diffParts(diff, t) : []
   const prefixed = (text: string) => (prefix ? t('microsegPilot.pending.prefixed', { prefix, text }) : text)
+
+  if (applying) {
+    return (
+      <Alert severity='info' icon={<CircularProgress size={18} />}>
+        {prefixed(parts.length > 0
+          ? t(prefix ? 'microsegPilot.pending.applyingInline' : 'microsegPilot.pending.applying', { list: parts.join(', ') })
+          : t('microsegPilot.pending.applyingNoCount'))}
+      </Alert>
+    )
+  }
 
   return (
     <Alert

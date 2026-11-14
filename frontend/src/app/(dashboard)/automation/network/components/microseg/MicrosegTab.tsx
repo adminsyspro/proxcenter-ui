@@ -24,12 +24,14 @@ import PolicyPanel from './PolicyPanel'
 import PreflightPanel from './PreflightPanel'
 import RunStrip from './RunStrip'
 import SettingsDialog from './SettingsDialog'
+import { RunsInProgressProvider, useTrackedRuns } from './runsInProgress'
 import { useMicrosegControls } from './useMicrosegControls'
+import { useResumeRuns } from './useResumeRuns'
 import { CHECK_STATUS_POLL_MS } from './useMicrosegCheck'
 import { MicrosegActionsSlot, MicrosegWriteContext, useCanManageMicroseg } from './microsegAccess'
 import ZoneMap from './ZoneMap'
 import {
-  MICROSEG_SUBTABS, isMicrosegSubTab, type FirewallWizardData, type MicrosegSubTab, type MicrosegSubTabProps, type TrackedRun,
+  MICROSEG_SUBTABS, isMicrosegSubTab, type FirewallWizardData, type MicrosegSubTab, type MicrosegSubTabProps,
 } from './microsegTabTypes'
 
 const STORAGE_KEY = 'microseg.subTab'
@@ -89,7 +91,8 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
   const [subTab, setSubTab] = useState<MicrosegSubTab>(() => initialSubTab ?? readStoredSubTab() ?? 'overview')
 
   // The runs live here, not in a sub-tab: switching sub-tab must not lose them.
-  const [runs, setRuns] = useState<TrackedRun[]>([])
+  const { runs, startRun, endRun, removeRun, inProgress } = useTrackedRuns()
+  useResumeRuns(connectionId, connectionName || connectionId, startRun)
   // The plan window is opened by the banner, the pending changes bar and the first run guide.
   const [planOpen, setPlanOpen] = useState(false)
   const onOpenPlan = useCallback(() => setPlanOpen(true), [])
@@ -107,16 +110,16 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null)
   const { mutate } = useSWRConfig()
 
-  const startRun = useCallback((run: TrackedRun) => {
-    setRuns(prev => (prev.some(r => r.runId === run.runId) ? prev : [...prev, run]))
-  }, [])
-  const removeRun = useCallback((runId: string) => setRuns(prev => prev.filter(r => r.runId !== runId)), [])
   // A run changes Proxmox and records what it did: the draft, the status, the runs and revisions, the drifts
   // and the zone members (tags) are read again, so no list or count stays stale until a manual reload.
   const refreshAfterRun = useCallback(() => {
     void reload()
     void mutate(isRunAffectedKey(connectionId))
   }, [reload, mutate, connectionId])
+  const runFinished = useCallback((runId: string) => {
+    endRun(runId)
+    refreshAfterRun()
+  }, [endRun, refreshAfterRun])
   // A check also reads the logs: the suggestions it learnt are read again with the rest.
   const refreshAfterCheck = useCallback(() => {
     refreshAfterRun()
@@ -156,6 +159,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
   return (
     <MicrosegWriteContext.Provider value={canWrite}>
     <MicrosegActionsSlot.Provider value={actionsSlot}>
+    <RunsInProgressProvider value={inProgress}>
     <Box sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <MicrosegBanner
         connectionId={connectionId}
@@ -164,7 +168,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
         onOpenPlan={onOpenPlan}
         onOpenWizard={firewall ? () => setWizardOpen(true) : undefined}
       />
-      <RunStrip connectionId={connectionId} runs={runs} onFinished={refreshAfterRun} onRemove={removeRun} />
+      <RunStrip connectionId={connectionId} runs={runs} onFinished={runFinished} onRemove={removeRun} />
       {firstRun && <FirstRunGuide goToSubTab={goToSubTab} onOpenPlan={onOpenPlan} onOpenPreflight={onOpenPreflight} />}
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
         <Tabs
@@ -258,6 +262,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
         />
       )}
     </Box>
+    </RunsInProgressProvider>
     </MicrosegActionsSlot.Provider>
     </MicrosegWriteContext.Provider>
   )

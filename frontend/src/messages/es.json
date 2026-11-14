@@ -13282,7 +13282,10 @@
       },
       "members": "{count, plural, one {# cambio de miembro} other {# cambios de miembros}}",
       "tagPrefix": "prefijo de etiquetas modificado",
-      "whatWillChangeInline": "lo que va a cambiar: {list}"
+      "whatWillChangeInline": "lo que va a cambiar: {list}",
+      "applying": "Aplicación en curso: {list}",
+      "applyingInline": "aplicación en curso: {list}",
+      "applyingNoCount": "Aplicando los cambios"
     },
     "firstRun": {
       "title": "Configurar la microsegmentación",
@@ -13349,6 +13352,7 @@
         "outgoing": "Flujos salientes",
         "noFlows": "Ninguno",
         "changeState": "Cambiar el estado",
+        "stateChanging": "Cambio de estado en curso",
         "edit": "Editar zona",
         "delete": "Eliminar zona",
         "state": {
@@ -13535,7 +13539,13 @@
         },
         "done": "{label}: {done} hechos, {failed} fallidos, {notRun} sin ejecutar",
         "failed": "{label}: la ejecución ha fallado",
-        "unavailable": "{label}: el progreso no está disponible"
+        "unavailable": "{label}: el progreso no está disponible",
+        "progress": {
+          "waiting": "en espera de la operación en curso",
+          "readingStart": "lectura de Proxmox",
+          "reading": "lectura de Proxmox, {done, number} / {total, number} invitados",
+          "writing": "escritura en Proxmox, {done, number} / {total, number}"
+        }
       },
       "assign": {
         "title": "Asignar invitados a {zone}",

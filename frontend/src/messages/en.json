@@ -13282,7 +13282,10 @@
       },
       "members": "{count, plural, one {# member change} other {# member changes}}",
       "tagPrefix": "tag prefix changed",
-      "whatWillChangeInline": "what will change: {list}"
+      "whatWillChangeInline": "what will change: {list}",
+      "applying": "Being applied: {list}",
+      "applyingInline": "being applied: {list}",
+      "applyingNoCount": "Changes being applied"
     },
     "firstRun": {
       "title": "Set up micro-segmentation",
@@ -13349,6 +13352,7 @@
         "outgoing": "Outgoing flows",
         "noFlows": "None",
         "changeState": "Change state",
+        "stateChanging": "State change in progress",
         "edit": "Edit zone",
         "delete": "Delete zone",
         "state": {
@@ -13535,7 +13539,13 @@
         },
         "done": "{label}: {done} done, {failed} failed, {notRun} not run",
         "failed": "{label}: the run failed",
-        "unavailable": "{label}: progress is not available"
+        "unavailable": "{label}: progress is not available",
+        "progress": {
+          "waiting": "waiting for the operation in progress",
+          "readingStart": "reading Proxmox",
+          "reading": "reading Proxmox, {done, number} / {total, number} guests",
+          "writing": "writing to Proxmox, {done, number} / {total, number}"
+        }
       },
       "assign": {
         "title": "Assign guests to {zone}",

@@ -13283,7 +13283,10 @@
       },
       "members": "{count, plural, one {# changement de membre} other {# changements de membres}}",
       "tagPrefix": "préfixe des tags modifié",
-      "whatWillChangeInline": "ce qui va changer : {list}"
+      "whatWillChangeInline": "ce qui va changer : {list}",
+      "applying": "Application en cours : {list}",
+      "applyingInline": "application en cours : {list}",
+      "applyingNoCount": "Application des changements en cours"
     },
     "firstRun": {
       "title": "Mettre en place la micro-segmentation",
@@ -13350,6 +13353,7 @@
         "outgoing": "Flux sortants",
         "noFlows": "Aucun",
         "changeState": "Changer l'état",
+        "stateChanging": "Changement d'état en cours",
         "edit": "Modifier la zone",
         "delete": "Supprimer la zone",
         "state": {
@@ -13536,7 +13540,13 @@
         },
         "done": "{label} : {done} faites, {failed} en échec, {notRun} non exécutées",
         "failed": "{label} : l'exécution a échoué",
-        "unavailable": "{label} : la progression n'est pas disponible"
+        "unavailable": "{label} : la progression n'est pas disponible",
+        "progress": {
+          "waiting": "en attente de l'opération en cours",
+          "readingStart": "lecture de Proxmox",
+          "reading": "lecture de Proxmox, {done, number} / {total, number} invités",
+          "writing": "écriture dans Proxmox, {done, number} / {total, number}"
+        }
       },
       "assign": {
         "title": "Affecter des invités à {zone}",

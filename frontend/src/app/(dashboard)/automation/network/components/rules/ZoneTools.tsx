@@ -15,7 +15,7 @@ import ZoneStateChip from '../microseg/ZoneStateChip'
 import { ZoneStateMenu } from '../microseg/ZoneRow'
 import { ZoneStateConfirm, useFlowEditor } from '../microseg/ZonePanelActions'
 import { WriteTip, useMicrosegWrite } from '../microseg/microsegAccess'
-import type { TrackedRun } from '../microseg/microsegTabTypes'
+import { RunsInProgressProvider, useTrackedRuns } from '../microseg/runsInProgress'
 import { useZoneEdits } from '../microseg/useZoneEdits'
 import { Badge, RuleRow, SectionAddButton, type RuleRowProps } from './DfwTableParts'
 import { draftZoneOf, matchZoneRule, type ZoneRuleMatch } from './zoneRuleMatch'
@@ -55,19 +55,18 @@ export function ZoneTools({ policy, children, ...rest }: Props) {
 
 function ZoneToolsWithPolicy({ connectionId, policy, deployed, reloadPolicy, onRunFinished, children }: Props & { policy: MicrosegPolicy }) {
   const t = useTranslations('microsegPilot.dfw')
-  const [runs, setRuns] = useState<TrackedRun[]>([])
+  const { runs, startRun, endRun, removeRun, inProgress } = useTrackedRuns()
   const [planOpen, setPlanOpen] = useState(false)
   const [stateMenu, setStateMenu] = useState<{ zone: MicrosegZone; anchor: HTMLElement } | null>(null)
   const [stateChange, setStateChange] = useState<{ zone: MicrosegZone; state: ZoneState } | null>(null)
-  const startRun = useCallback((run: TrackedRun) => setRuns(prev => (prev.some(r => r.runId === run.runId) ? prev : [...prev, run])), [])
-  const removeRun = useCallback((runId: string) => setRuns(prev => prev.filter(r => r.runId !== runId)), [])
   // A finished run (state change, apply): the draft once, the firewall lists once (the zone groups changed in Proxmox).
   const refresh = useRef({ reloadPolicy, onRunFinished })
   useEffect(() => { refresh.current = { reloadPolicy, onRunFinished } })
-  const runFinished = useCallback(() => {
+  const runFinished = useCallback((runId: string) => {
+    endRun(runId)
     void refresh.current.reloadPolicy()
     refresh.current.onRunFinished()
-  }, [])
+  }, [endRun])
   const onOpenPlan = useCallback(() => setPlanOpen(true), [])
   const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
   const flows = useFlowEditor(edits)
@@ -85,6 +84,7 @@ function ZoneToolsWithPolicy({ connectionId, policy, deployed, reloadPolicy, onR
 
   return (
     <ZoneToolsContext.Provider value={value}>
+    <RunsInProgressProvider value={inProgress}>
       <Box data-testid='dfw-microseg-pending'>
         <PendingChangesBar connectionId={connectionId} policy={policy} onOpenPlan={onOpenPlan} prefix={t('microsegPrefix')} />
       </Box>
@@ -94,6 +94,7 @@ function ZoneToolsWithPolicy({ connectionId, policy, deployed, reloadPolicy, onR
       {stateMenu && <ZoneStateMenu zone={stateMenu.zone} anchor={stateMenu.anchor} onClose={() => setStateMenu(null)} onPick={state => setStateChange({ zone: stateMenu.zone, state })} />}
       {stateChange && <ZoneStateConfirm zone={stateChange.zone} state={stateChange.state} edits={edits} onClose={() => setStateChange(null)} />}
       <PlanDialog open={planOpen} connectionId={connectionId} policy={policy} reloadPolicy={reloadPolicy} startRun={startRun} onClose={() => setPlanOpen(false)} />
+    </RunsInProgressProvider>
     </ZoneToolsContext.Provider>
   )
 }

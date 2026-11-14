@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useRef, type ReactNode } from 'react'
-import { Alert, Box, CircularProgress, Tooltip, Typography } from '@mui/material'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { Alert, Box, CircularProgress, Portal, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { useMicrosegRun } from '@/lib/microseg/useMicroseg'
 
+import RunBar from './RunBar'
 import type { TrackedRun } from './microsegTabTypes'
 
 /** A finished run stays visible this long (or until dismissed). A removal stays until dismissed. */
@@ -17,13 +19,15 @@ export const NOTE_SEPARATOR = ' · '
 type LineProps = {
   connectionId: string
   run: TrackedRun
-  /** Called once when the run has ended (done or failed): refresh what it changed. */
-  onFinished: () => void
+  /** Called once when the run has ended (done or failed), with its id: refresh what it changed. */
+  onFinished: (runId: string) => void
   onRemove: (runId: string) => void
+  /** Where the line is drawn a second time while the strip floats over the scrolled page (null otherwise). */
+  floatHost: HTMLElement | null
 }
 
-/** One run on one line: running, then the counts of steps done, failed and not run (UA13). */
-function RunLine({ connectionId, run: tracked, onFinished, onRemove }: LineProps) {
+/** One run on one line: running with its progress bar, then the counts of steps done, failed and not run (UA13). */
+function RunLine({ connectionId, run: tracked, onFinished, onRemove, floatHost }: LineProps) {
   const t = useTranslations('microsegPilot.policy.run')
   const tr = useTranslations('microsegPilot.settings.remove')
   const { run, done, error } = useMicrosegRun(connectionId, tracked.runId)
@@ -42,7 +46,7 @@ function RunLine({ connectionId, run: tracked, onFinished, onRemove }: LineProps
   useEffect(() => {
     if (!done || finishedRun.current === tracked.runId) return
     finishedRun.current = tracked.runId
-    finished.current()
+    finished.current(tracked.runId)
   }, [done, tracked.runId])
   // The removal is rare and undoes everything: its outcome and its notes stay until the admin dismisses them.
   const lingers = tracked.kind !== 'remove'
@@ -84,16 +88,20 @@ function RunLine({ connectionId, run: tracked, onFinished, onRemove }: LineProps
     icon = undefined
   }
 
+  const running = !done && !lost
   const extra = [notes, run?.status === 'failed' ? run.error : ''].filter(Boolean).join(' ')
   const detail = extra ? `${text}${NOTE_SEPARATOR}${extra}` : text
 
-  return (
+  // The copy over the scrolled page is not announced again: the line in the page already is.
+  const line = (floating: boolean) => (
     <Alert
+      role={floating ? 'none' : undefined}
       severity={severity}
       icon={icon}
       variant='outlined'
       onClose={done || lost ? () => onRemove(tracked.runId) : undefined}
-      sx={{ py: 0, '& .MuiAlert-message': { minWidth: 0, overflow: 'hidden' } }}
+      // Opaque: the strip floats over the page when it is scrolled past its place.
+      sx={{ py: 0, bgcolor: 'background.paper', '& .MuiAlert-message': { minWidth: 0, overflow: 'hidden', flex: 1 } }}
     >
       <Tooltip title={detail}>
         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, minWidth: 0 }}>
@@ -104,27 +112,98 @@ function RunLine({ connectionId, run: tracked, onFinished, onRemove }: LineProps
               <Typography variant='caption' color='text.secondary' noWrap sx={{ display: 'block', minWidth: 0 }}>{notes}</Typography>
             </>
           ) : null}
+          {running ? <RunBar run={run} label={text} separator={NOTE_SEPARATOR.trim()} /> : null}
         </Box>
       </Tooltip>
     </Alert>
+  )
+
+  return (
+    <>
+      {line(false)}
+      {floatHost ? createPortal(line(true), floatHost) : null}
+    </>
   )
 }
 
 type Props = {
   connectionId: string
   runs: TrackedRun[]
-  onFinished: () => void
+  onFinished: (runId: string) => void
   onRemove: (runId: string) => void
 }
 
-/** The runs in progress or just finished, under the banner on every sub-tab. */
-export default function RunStrip({ connectionId, runs, onFinished, onRemove }: Props) {
-  if (runs.length === 0) return null
+/** The gap between the page header and the strip when it floats under it. */
+const FLOAT_GAP = 8
+
+type Floating = { top: number; left: number; width: number }
+
+const sameFloating = (a: Floating | null, b: Floating | null) =>
+  a === b || (!!a && !!b && a.top === b.top && a.left === b.left && a.width === b.width)
+
+/**
+ * Where the strip floats once its place in the page has scrolled above the page header, null while that place
+ * is in view. The page scrolls with the window, under a header that stays: the floating copy is laid just below
+ * it, over the width the strip has in the page.
+ */
+function useFloating(lines: number) {
+  const place = useRef<HTMLDivElement | null>(null)
+  const [floating, setFloating] = useState<Floating | null>(null)
+
+  useEffect(() => {
+    const measure = () => {
+      const at = place.current?.getBoundingClientRect()
+      if (!at) return
+      const top = (document.querySelector('header')?.getBoundingClientRect().bottom ?? 0) + FLOAT_GAP
+      // A strip that is not laid out (hidden, or a document without layout) has no place to scroll past.
+      const laidOut = at.width > 0 || at.height > 0
+      const next = laidOut && at.bottom < top ? { top, left: at.left, width: at.width } : null
+      setFloating(prev => (sameFloating(prev, next) ? prev : next))
+    }
+    // Measured after the paint, then on every scroll (of the window or of a panel) and resize.
+    const frame = requestAnimationFrame(measure)
+    window.addEventListener('scroll', measure, { passive: true, capture: true })
+    window.addEventListener('resize', measure)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', measure, { capture: true })
+      window.removeEventListener('resize', measure)
+    }
+  }, [lines])
+
+  return { place, floating }
+}
+
+const STRIP_SX = { display: 'flex', flexDirection: 'column', gap: 1 } as const
+
+/**
+ * The runs in progress or just finished, under the banner on every sub-tab. When the page is scrolled past it,
+ * a copy of the strip floats under the page header: a run started from a zone far down stays in view. The copy
+ * is drawn at the root of the document, where nothing of the page can clip or shift it.
+ */
+function Strip({ connectionId, runs, onFinished, onRemove }: Props) {
+  const { place, floating } = useFloating(runs.length)
+  const [floatHost, setFloatHost] = useState<HTMLElement | null>(null)
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
+    <Box ref={place} data-testid='microseg-run-strip' sx={{ ...STRIP_SX, mt: 2 }}>
       {runs.map(run => (
-        <RunLine key={run.runId} connectionId={connectionId} run={run} onFinished={onFinished} onRemove={onRemove} />
+        <RunLine key={run.runId} connectionId={connectionId} run={run} onFinished={onFinished} onRemove={onRemove} floatHost={floating ? floatHost : null} />
       ))}
+      {floating ? (
+        <Portal>
+          <Box
+            ref={setFloatHost}
+            data-testid='microseg-run-strip-floating'
+            sx={{ ...STRIP_SX, position: 'fixed', zIndex: theme => theme.zIndex.appBar - 1, boxShadow: 6, borderRadius: 1 }}
+            style={{ top: floating.top, left: floating.left, width: floating.width }}
+          />
+        </Portal>
+      ) : null}
     </Box>
   )
+}
+
+export default function RunStrip(props: Props) {
+  if (props.runs.length === 0) return null
+  return <Strip {...props} />
 }

@@ -16,6 +16,7 @@ import { flowsOfZone, type ZoneMember } from './zoneModel'
 import { HOVER_ACTIONS, ZoneDetails, ZoneGlyph, ZoneStateMenu, type ZoneRowProps } from './ZoneRow'
 import ZoneSparkline from './ZoneSparkline'
 import ZoneStateChip from './ZoneStateChip'
+import { useRunsInProgress } from './runsInProgress'
 import TruncatedText from './TruncatedText'
 
 /** How many members and flows a card previews. */
@@ -116,6 +117,8 @@ export default function ZoneCard(props: ZoneCardProps) {
   const ts = useTranslations('microsegPilot.overview.sections')
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const { canWrite } = useMicrosegWrite()
+  // While a run writes the state of this zone, the chip says so and no other state can be asked for.
+  const changing = useRunsInProgress().zones.has(zone.id)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
 
   return (
@@ -130,7 +133,7 @@ export default function ZoneCard(props: ZoneCardProps) {
           <ZoneGlyph zone={zone} label={t(`state.${zone.state}`)} />
           <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '1 1 0', minWidth: NAME_MIN_WIDTH }} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 1, minWidth: 0 }}>
-            <ZoneStateChip state={zone.state} onClick={canWrite ? setAnchor : undefined} />
+            <ZoneStateChip state={zone.state} busy={changing} onClick={canWrite && !changing ? setAnchor : undefined} />
             <EgressChip state={zoneEgress(zone)} ready={egressReady} iconOnlyBelow={EGRESS_ICON_ONLY_BELOW} />
             <DiffChip kind={diffKind} />
             {!!drifts && (
@@ -177,7 +180,7 @@ export default function ZoneCard(props: ZoneCardProps) {
             <IconButton size='small' aria-label={t('edit')} disabled={!canWrite} onClick={() => onEdit(zone)}><i className='ri-pencil-line' /></IconButton>
           </WriteTip>
           <WriteTip title={t('changeState')}>
-            <IconButton size='small' aria-label={t('changeState')} aria-haspopup='menu' disabled={!canWrite} onClick={e => setAnchor(e.currentTarget)}>
+            <IconButton size='small' aria-label={t('changeState')} aria-haspopup='menu' disabled={!canWrite || changing} onClick={e => setAnchor(e.currentTarget)}>
               <i className='ri-toggle-line' />
             </IconButton>
           </WriteTip>

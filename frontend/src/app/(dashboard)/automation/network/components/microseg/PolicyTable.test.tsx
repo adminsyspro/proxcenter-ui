@@ -108,7 +108,7 @@ describe('flow table: state against the applied revision, diff badges', () => {
     expect(within(gone).queryByRole('button', { name: 'Edit flow' })).toBeNull()
     expect(stateOf('Outside the zones', 'DNS').cells[3].textContent).toBe('Not applied')
 
-    expect(await screen.findByText('What will change: 2 flows added, 1 flow changed, 1 flow removed')).toBeTruthy()
+    expect(await screen.findByText('Not applied yet: 2 flows added, flow web → db SSH changed, flow db → web HTTP removed.')).toBeTruthy()
   })
 
   it('badges the zones added and changed, and keeps a removed zone struck through until the next apply', async () => {
@@ -133,7 +133,7 @@ describe('flow table: state against the applied revision, diff badges', () => {
     expect(within(oldGroup).getByText('Removed')).toBeTruthy()
     expect(rowsOf(oldGroup)[0].cells[3].textContent).toBe('Pending removal')
     expect(within(oldGroup).queryByRole('button', { name: 'New flow into old' })).toBeNull()
-    expect(screen.getByText('What will change: 1 zone added, 1 zone changed, 1 zone removed, 1 flow removed')).toBeTruthy()
+    expect(screen.getByText('Not applied yet: zone fresh added, zone db changed, zone old removed, flow web → old HTTPS removed.')).toBeTruthy()
   })
 
   it('marks every flow pending add when nothing was applied yet', async () => {

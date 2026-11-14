@@ -1,6 +1,6 @@
 import type { FirewallCoverage } from '@/hooks/useZeroTrust'
 import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, OUTSIDE_KEY, UNZONED_KEY, zoneKey } from '@/lib/microseg/trafficLens'
-import type { MicrosegFlow, MicrosegStatus, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
+import { zoneEgress, type MicrosegFlow, type MicrosegStatus, type MicrosegSuggestion, type MicrosegZone } from '@/lib/microseg/types'
 import { serviceTokenLabel } from '@/lib/network/serviceNames'
 
 import { flowService } from './microseg/FlowSummary'
@@ -313,40 +313,64 @@ export function postureDistribution(input: {
 
 export type ServiceStatus = 'allowed' | 'not_covered' | 'blocked'
 
+/** What one service does under one status: its flows, their hits (null for the allowed flows, which carry no counter) and what they are made of. */
+export type ServicePart = { status: ServiceStatus; flows: number; hits: number | null; tokens: string[] }
+
 /**
- * One row of the top services: a service by its name ("SSH", or the raw "tcp/9999" for a port without one) and status,
- * the protocol/port tokens it was seen or allowed on ("tcp/22", "udp/22"), its flows and hits.
+ * One row of the top services: a service by its name ("SSH", or the raw "tcp/9999" for a port without one), with one
+ * part per status it is seen under (SSH blocked into one zone and still only observed into another is one row with
+ * two parts). `hits` sums the observed parts, null when the service is only allowed.
  */
-export type ServiceRow = { key: string; label: string; tokens: string[]; flows: number; hits: number | null; status: ServiceStatus }
+export type ServiceRow = { key: string; label: string; tokens: string[]; flows: number; hits: number | null; parts: ServicePart[] }
 
 const tokenOf = (proto: string, dport: string) => flowService({ proto: proto.toLowerCase(), dport })
 
-/** Adds one flow of `token` to the row of its service name and status. */
+/** Adds one flow of `token` to the part of `status` of the row of its service name. */
 function addTo(rows: Map<string, ServiceRow>, status: ServiceStatus, token: string, hits: number | null) {
   const label = serviceTokenLabel(token)
-  const key = `${status}|${label}`
-  const row = rows.get(key) ?? { key, label, tokens: [], flows: 0, hits: hits === null ? null : 0, status }
+  const row = rows.get(label) ?? { key: label, label, tokens: [], flows: 0, hits: null, parts: [] }
+  let part = row.parts.find(p => p.status === status)
+  if (!part) {
+    part = { status, flows: 0, hits: hits === null ? null : 0, tokens: [] }
+    row.parts.push(part)
+  }
+  if (!part.tokens.includes(token)) part.tokens.push(token)
   if (!row.tokens.includes(token)) row.tokens.push(token)
+  part.flows += 1
   row.flows += 1
-  if (hits !== null) row.hits = (row.hits ?? 0) + hits
-  rows.set(key, row)
+  if (hits !== null) {
+    part.hits = (part.hits ?? 0) + hits
+    row.hits = (row.hits ?? 0) + hits
+  }
+  rows.set(label, row)
 }
 
+/** The observed parts first, the busiest first, then the allowed one. */
+const byPart = (a: ServicePart, b: ServicePart) => (b.hits ?? -1) - (a.hits ?? -1) || byText(a.status, b.status)
+
 /**
- * The services by hits, one row per service name and status: the pending observed flows (not covered while observing,
- * blocked while enforcing), the busiest first, then the services the policy allows (its flows, which carry no counter).
- * The tokens of one name ("tcp/22" and "udp/22" are both SSH) sum their flows and hits; the row keeps them for its
- * tooltip.
+ * The services by hits, one row per service name: the pending observed flows (not covered while observing, blocked
+ * while enforcing) and the flows the policy allows (which carry no counter), each status a part of the row. The
+ * busiest observed services first, then the services that are only allowed, by flows. The tokens of one name
+ * ("tcp/22" and "udp/22" are both SSH) sum their flows and hits; the row and its parts keep them.
  */
 export function topServices(suggestions: readonly MicrosegSuggestion[], flows: readonly MicrosegFlow[], max = MAX_SERVICES): ServiceRow[] {
-  const observed = new Map<string, ServiceRow>()
-  for (const s of suggestions) addTo(observed, s.kind === 'blocked' ? 'blocked' : 'not_covered', tokenOf(s.proto, s.dport), s.hits)
-  const allowed = new Map<string, ServiceRow>()
-  for (const f of flows) addTo(allowed, 'allowed', tokenOf(f.proto, f.dport), null)
-  for (const row of [...observed.values(), ...allowed.values()]) row.tokens.sort(byText)
-  const busiest = [...observed.values()].sort((a, b) => (b.hits ?? 0) - (a.hits ?? 0) || byText(a.key, b.key))
-  const allowedRows = [...allowed.values()].sort((a, b) => b.flows - a.flows || byText(a.key, b.key))
-  return [...busiest, ...allowedRows].slice(0, max)
+  const rows = new Map<string, ServiceRow>()
+  for (const s of suggestions) addTo(rows, s.kind === 'blocked' ? 'blocked' : 'not_covered', tokenOf(s.proto, s.dport), s.hits)
+  for (const f of flows) addTo(rows, 'allowed', tokenOf(f.proto, f.dport), null)
+  for (const row of rows.values()) {
+    row.tokens.sort(byText)
+    row.parts.sort(byPart)
+    for (const part of row.parts) part.tokens.sort(byText)
+  }
+  const observed = [...rows.values()].filter(r => r.hits !== null).sort((x, y) => (y.hits ?? 0) - (x.hits ?? 0) || byText(x.key, y.key))
+  const allowedOnly = [...rows.values()].filter(r => r.hits === null).sort((x, y) => y.flows - x.flows || byText(x.key, y.key))
+  return [...observed, ...allowedOnly].slice(0, max)
+}
+
+/** The tokens of the observed parts of a service: what the Observation list can be filtered on. */
+export function observedTokens(row: Pick<ServiceRow, 'parts'>): string[] {
+  return [...new Set(row.parts.filter(p => p.status !== 'allowed').flatMap(p => p.tokens))].sort(byText)
 }
 
 /** Zones that enforce, of all the zones; null while the status is not read. */
@@ -354,6 +378,15 @@ export function zonesEnforced(status: Pick<MicrosegStatus, 'zones_by_state'> | u
   const z = status?.zones_by_state
   if (!z) return null
   return { enforced: z.enforce ?? 0, total: (z.enforce ?? 0) + (z.observe ?? 0) + (z.disabled ?? 0) }
+}
+
+/** Zones that block their outbound traffic and zones that only observe it; null while the policy is not read. */
+export type ZonesOutbound = { blocked: number; observed: number }
+
+export function zonesOutbound(zones: readonly Pick<MicrosegZone, 'state' | 'egress_state'>[] | undefined): ZonesOutbound | null {
+  if (!zones) return null
+  const states = zones.map(zoneEgress)
+  return { blocked: states.filter(s => s === 'enforce').length, observed: states.filter(s => s === 'observe').length }
 }
 
 /**

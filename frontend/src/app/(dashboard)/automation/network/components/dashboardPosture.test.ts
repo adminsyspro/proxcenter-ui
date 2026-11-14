@@ -4,7 +4,7 @@ import type { FirewallCoverage } from '@/hooks/useZeroTrust'
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import {
-  MAX_CHORDS, MAX_SLICES, arcPath, chordPath, polar, postureDistribution, postureGuests, postureTraffic, protectedRunning, topServices, zonesEnforced,
+  MAX_CHORDS, MAX_SLICES, arcPath, chordPath, polar, postureDistribution, postureGuests, postureTraffic, observedTokens, protectedRunning, topServices, zonesEnforced, zonesOutbound,
 } from './dashboardPosture'
 import type { PolicyGuest } from './microseg/zoneModel'
 
@@ -198,27 +198,38 @@ describe('postureDistribution', () => {
 })
 
 describe('topServices', () => {
-  it('sums the observed flows per service and status, busiest first, then the services the policy allows', () => {
+  it('gives one row per service, a part per status, the busiest observed first, then the services only allowed', () => {
     const rows = topServices(FLOWS_SEEN, [flow({}), flow({ dport: '9100' }), flow({ dport: '9100', src_zone_id: 'zapp' }), flow({ proto: 'ICMP', dport: '' })])
     expect(rows).toEqual([
-      { key: 'not_covered|PostgreSQL', label: 'PostgreSQL', tokens: ['tcp/5432'], flows: 1, hits: 300, status: 'not_covered' },
-      { key: 'blocked|PostgreSQL', label: 'PostgreSQL', tokens: ['tcp/5432'], flows: 1, hits: 100, status: 'blocked' },
-      { key: 'not_covered|SSH', label: 'SSH', tokens: ['tcp/22'], flows: 2, hits: 100, status: 'not_covered' },
-      { key: 'allowed|node-exporter', label: 'node-exporter', tokens: ['tcp/9100'], flows: 2, hits: null, status: 'allowed' },
-      { key: 'allowed|PostgreSQL', label: 'PostgreSQL', tokens: ['tcp/5432'], flows: 1, hits: null, status: 'allowed' },
-      { key: 'allowed|icmp', label: 'icmp', tokens: ['icmp'], flows: 1, hits: null, status: 'allowed' },
+      {
+        key: 'PostgreSQL', label: 'PostgreSQL', tokens: ['tcp/5432'], flows: 3, hits: 400,
+        parts: [
+          { status: 'not_covered', flows: 1, hits: 300, tokens: ['tcp/5432'] },
+          { status: 'blocked', flows: 1, hits: 100, tokens: ['tcp/5432'] },
+          { status: 'allowed', flows: 1, hits: null, tokens: ['tcp/5432'] },
+        ],
+      },
+      { key: 'SSH', label: 'SSH', tokens: ['tcp/22'], flows: 2, hits: 100, parts: [{ status: 'not_covered', flows: 2, hits: 100, tokens: ['tcp/22'] }] },
+      { key: 'node-exporter', label: 'node-exporter', tokens: ['tcp/9100'], flows: 2, hits: null, parts: [{ status: 'allowed', flows: 2, hits: null, tokens: ['tcp/9100'] }] },
+      { key: 'icmp', label: 'icmp', tokens: ['icmp'], flows: 1, hits: null, parts: [{ status: 'allowed', flows: 1, hits: null, tokens: ['icmp'] }] },
     ])
   })
 
-  it('merges the ports of one service name and status, summing flows and hits, the raw tokens kept', () => {
+  it('merges the ports of one service name, summing flows and hits, the raw tokens kept', () => {
     const rows = topServices([
       seen({ dport: '8080', hits: 5 }), seen({ dport: '8081', hits: 7 }), seen({ proto: 'TCP', dport: '8080', hits: 1 }),
       seen({ dport: '22', hits: 2 }), seen({ proto: 'udp', dport: '22', hits: 3 }), seen({ dport: '22', hits: 4, src_ip: '10.9.9.9' }),
     ], [])
     expect(rows).toEqual([
-      { key: 'not_covered|HTTP-alt', label: 'HTTP-alt', tokens: ['tcp/8080', 'tcp/8081'], flows: 3, hits: 13, status: 'not_covered' },
-      { key: 'not_covered|SSH', label: 'SSH', tokens: ['tcp/22', 'udp/22'], flows: 3, hits: 9, status: 'not_covered' },
+      { key: 'HTTP-alt', label: 'HTTP-alt', tokens: ['tcp/8080', 'tcp/8081'], flows: 3, hits: 13, parts: [{ status: 'not_covered', flows: 3, hits: 13, tokens: ['tcp/8080', 'tcp/8081'] }] },
+      { key: 'SSH', label: 'SSH', tokens: ['tcp/22', 'udp/22'], flows: 3, hits: 9, parts: [{ status: 'not_covered', flows: 3, hits: 9, tokens: ['tcp/22', 'udp/22'] }] },
     ])
+  })
+
+  it('puts the busiest part of a service first: SSH blocked on tcp, still only observed on udp', () => {
+    const [ssh] = topServices([seen({ dport: '22', hits: 2 }), seen({ proto: 'udp', dport: '22', hits: 30, kind: 'blocked' })], [])
+    expect(ssh.parts.map(p => [p.status, p.hits, p.tokens])).toEqual([['blocked', 30, ['udp/22']], ['not_covered', 2, ['tcp/22']]])
+    expect(ssh.hits).toBe(32)
   })
 
   it('keeps the top 8', () => {
@@ -226,6 +237,25 @@ describe('topServices', () => {
     const rows = topServices(many, [])
     expect(rows).toHaveLength(8)
     expect(rows[0]).toMatchObject({ label: 'tcp/40011', hits: 11 })
+  })
+})
+
+describe('observedTokens', () => {
+  it('keeps what the Observation list can be filtered on: the tokens of the observed parts, not those only allowed', () => {
+    const [row] = topServices([seen({ dport: '22', hits: 2 })], [flow({ proto: 'udp', dport: '22' })])
+    expect(row.tokens).toEqual(['tcp/22', 'udp/22'])
+    expect(observedTokens(row)).toEqual(['tcp/22'])
+  })
+})
+
+describe('zonesOutbound', () => {
+  it('counts the zones that block and that observe their outbound; a zone that is disabled or has no outbound state counts for neither', () => {
+    expect(zonesOutbound(undefined)).toBeNull()
+    expect(zonesOutbound([])).toEqual({ blocked: 0, observed: 0 })
+    expect(zonesOutbound([
+      { state: 'enforce', egress_state: 'enforce' }, { state: 'observe', egress_state: 'enforce' }, { state: 'observe', egress_state: 'observe' },
+      { state: 'observe', egress_state: 'off' }, { state: 'observe' }, { state: 'disabled', egress_state: 'enforce' },
+    ])).toEqual({ blocked: 2, observed: 1 })
   })
 })
 

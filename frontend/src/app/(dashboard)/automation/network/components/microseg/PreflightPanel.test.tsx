@@ -7,10 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, within } from '@testing-library/react'
 
 import { screen, fireEvent, renderWithProviders, waitFor } from '@/__tests__/setup/renderWithProviders'
+import { MicrosegApiError } from '@/lib/microseg/api'
 import type { PreflightCheck } from '@/lib/microseg/types'
 
 import { calls, mock, reply, resetMocks } from './microsegTestKit'
 import PreflightPanel from './PreflightPanel'
+import { RECOMMENDED_OBSERVE_LOG_RATE } from './preflightModel'
 
 beforeEach(resetMocks)
 afterEach(() => {
@@ -156,13 +158,12 @@ describe('checks', () => {
 })
 
 describe('fixes', () => {
-  it('opens the deployment wizard from a failed socle check', async () => {
+  it('offers no wizard on a failed socle check: the wizard writes nothing on the nodes', async () => {
     mock.routes['GET /preflight'] = () => reply(200, { checks: CHECKS })
-    const { onOpenWizard } = open()
+    open()
 
     const socle = await screen.findByRole('listitem', { name: 'Management access: failed' })
-    fireEvent.click(within(socle).getByRole('button', { name: 'Open the deployment wizard' }))
-    expect(onOpenWizard).toHaveBeenCalledTimes(1)
+    expect(within(socle).queryByRole('button', { name: 'Open the deployment wizard' })).toBeNull()
   })
 
   it('explains the cluster firewall fix and points to the same wizard, which turns it on', async () => {
@@ -191,6 +192,38 @@ describe('fixes', () => {
 })
 
 describe('errors', () => {
+  it('raises the log rate from the check: one click sets the rate of the settings, nothing is written to Proxmox', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, { checks: CHECKS })
+    const onRaise = vi.fn(async () => {})
+    renderWithProviders(<PreflightPanel open connectionId='c1' onClose={vi.fn()} rateLimit={{ observe: '', onRaise }} />)
+
+    const row = await screen.findByRole('listitem', { name: 'Log rate limit: warning' })
+    expect(row.textContent).toContain('PVE logs at its default rate (1 per second), so the observation misses flows.')
+    fireEvent.click(within(row).getByRole('button', { name: 'Raise while observing' }))
+    await waitFor(() => expect(onRaise).toHaveBeenCalledTimes(1))
+  })
+
+  it('says the rate the engine raises the log to once the settings hold one, with no button', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, { checks: CHECKS })
+    renderWithProviders(<PreflightPanel open connectionId='c1' onClose={vi.fn()} rateLimit={{ observe: RECOMMENDED_OBSERVE_LOG_RATE, onRaise: vi.fn() }} />)
+
+    const row = await screen.findByRole('listitem', { name: 'Log rate limit: warning' })
+    expect(row.textContent).toContain('Raised to 20 per second while a zone is observed, then set back (settings).')
+    expect(within(row).queryByRole('button', { name: 'Raise while observing' })).toBeNull()
+  })
+
+  it('shows why the rate could not be set, and keeps the button', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, { checks: CHECKS })
+    const onRaise = vi.fn(async () => { throw new MicrosegApiError(409, 'VERSION_CONFLICT', 'x') })
+    renderWithProviders(<PreflightPanel open connectionId='c1' onClose={vi.fn()} rateLimit={{ observe: '', onRaise }} />)
+
+    const row = await screen.findByRole('listitem', { name: 'Log rate limit: warning' })
+    fireEvent.click(within(row).getByRole('button', { name: 'Raise while observing' }))
+    await waitFor(() => expect(within(row).getByRole('button', { name: 'Raise while observing' })).not.toBeDisabled())
+    expect(onRaise).toHaveBeenCalledTimes(1)
+    expect(row.querySelector('.MuiTypography-caption')?.textContent).toBeTruthy()
+  })
+
   it('tells an apply is running on 409 BUSY and checks again on request', async () => {
     let busy = true
     mock.routes['GET /preflight'] = () => (busy

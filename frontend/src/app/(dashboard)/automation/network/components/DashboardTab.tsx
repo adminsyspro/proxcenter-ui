@@ -13,9 +13,9 @@ import type { ListSuggestionsParams } from '@/lib/microseg/api'
 import type { MicrosegPolicy, MicrosegStatus, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import DashboardTodo, { type TodoActions } from './DashboardTodo'
-import { dashboardPhase, missingManagementPorts, todoItems, type BlockPhase } from './dashboardModel'
+import { dashboardPhase, todoItems, type BlockPhase } from './dashboardModel'
 import {
-  GROUP_BYS, POSTURE_SUGGESTIONS_LIMIT, isZoneGrouping, postureDistribution, postureGuests, postureTraffic, protectedRunning, topServices, zonesEnforced, type GroupBy,
+  GROUP_BYS, POSTURE_SUGGESTIONS_LIMIT, isZoneGrouping, postureDistribution, postureGuests, postureTraffic, protectedRunning, topServices, zonesEnforced, zonesOutbound, type GroupBy,
 } from './dashboardPosture'
 import DeploymentWizard from './DeploymentWizard'
 import FirewallLoadAlert from './FirewallLoadAlert'
@@ -29,7 +29,7 @@ import { useTrafficTimeline } from './useTrafficTimeline'
 import { useStoredChoice } from './microseg/useStoredChoice'
 import { usePostureVolume } from './usePostureVolume'
 import { coverage as microsegCoverage } from './microseg/coverage'
-import type { MicrosegSubTab } from './microseg/microsegTabTypes'
+import type { MicrosegSubTab, ObservationFocus } from './microseg/microsegTabTypes'
 import { clusterFirewallOff, lastCheckAt, unzonedRunning } from './microseg/summaryModel'
 import { useZoneGuests } from './microseg/useZoneGuests'
 import type { PolicyGuest } from './microseg/zoneModel'
@@ -63,8 +63,8 @@ interface DashboardTabProps {
   onNavigateRulesSubTab: (subTab: number) => void
   /** Firewalling > VMs, filtered on the guests without firewall when asked. */
   onOpenGuests?: (filter?: GuestFilter) => void
-  /** The Micro-segmentation tab, on one of its sub-tabs when asked. */
-  onOpenMicroseg?: (subTab?: MicrosegSubTab) => void
+  /** The Micro-segmentation tab, on one of its sub-tabs when asked; the Observation one on a type of flow or a service. */
+  onOpenMicroseg?: (subTab?: MicrosegSubTab, focus?: ObservationFocus) => void
 }
 
 /** The pending observed flows, the same page as the zone map (one SWR key, one read for both). */
@@ -107,6 +107,7 @@ function usePostureFigures(policy: MicrosegPolicy | undefined, suggestions: Micr
       traffic: postureTraffic({ groupBy, zones, tagPrefix, suggestions: seen, guests, addresses }),
       distribution: postureDistribution({ zones, tagPrefix, flows, suggestions: seen, guests, addresses }),
       services: topServices(seen, flows),
+      servicesTotal: topServices(seen, flows, Number.POSITIVE_INFINITY).length,
     }
   }, [policy, suggestions, rows, listed, groupBy])
 }
@@ -199,7 +200,6 @@ export default function DashboardTab({
     stopped,
     stopHoldsFirewall,
     policyIn,
-    missingManagement: missingManagementPorts(clusterRules, securityGroups),
     unprotected: coverage ? coverage.disabled : null,
     unzoned: unzonedRunning(status ? microsegCoverage(status) : null, drifts.data),
     pendingFlows: pendingFlowsOf(pending.data),
@@ -210,14 +210,14 @@ export default function DashboardTab({
     if (onOpenGuests) onOpenGuests(filter)
     else openRules(2)()
   }
-  const openMicroseg = (subTab?: MicrosegSubTab) => {
-    if (onOpenMicroseg) onOpenMicroseg(subTab)
-    else onNavigateTab(6)
+  const openMicroseg = (subTab?: MicrosegSubTab, focus?: ObservationFocus) => {
+    if (!onOpenMicroseg) onNavigateTab(6)
+    else if (focus) onOpenMicroseg(subTab, focus)
+    else onOpenMicroseg(subTab)
   }
   const actions: TodoActions = {
     stopHeld: () => openMicroseg('overview'),
     firewallOff: () => setDeployWizardOpen(true),
-    managementRules: () => setDeployWizardOpen(true),
     policyIn: openRules(0),
     unprotected: () => openGuests('unprotected'),
     unzoned: () => openMicroseg('drifts'),
@@ -256,6 +256,7 @@ export default function DashboardTab({
         stopped={stopped}
         stopHoldsFirewall={stopHoldsFirewall}
         zones={engine.zones}
+        zonesOutbound={zonesOutbound(policy?.zones)}
         guests={protectedRunning(coverage)}
         lastCheck={engine.lastCheck}
         logNodes={engine.logNodes}
@@ -277,12 +278,27 @@ export default function DashboardTab({
             onGroupBy={changeGroupBy}
             truncated={(pending.data?.length ?? 0) >= POSTURE_SUGGESTIONS_LIMIT}
             addresses={addresses}
+            onOpenZone={zoneId => openMicroseg('observation', { zoneId })}
+            onOpenUnknown={() => openMicroseg('observation', { source: 'unknown' })}
             footer={<TrafficTimeline phase={timelinePhase} timeline={timeline} verdict={verdict} onVerdict={setVerdict} volume={volume} volumeSent={groupBy === 'zone'} range={range} onRange={setRange} rangeLock={rangeLock} />}
           />
         </Box>
         <Box sx={{ gridColumn: { xs: 'span 12', lg: 'span 5' }, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-          <TrafficDistribution phase={listsPhase} distribution={posture.distribution} />
-          <TopServices phase={listsPhase} rows={posture.services} />
+          <TrafficDistribution
+            phase={listsPhase}
+            distribution={posture.distribution}
+            onOpenObserved={kind => openMicroseg('observation', { kind })}
+            onOpenUnknown={() => openMicroseg('observation', { source: 'unknown' })}
+            onOpenPolicy={() => openMicroseg('policy')}
+          />
+          <TopServices
+            phase={listsPhase}
+            rows={posture.services}
+            total={posture.servicesTotal}
+            onOpenAll={() => openMicroseg('observation')}
+            onOpenService={(service, kind) => openMicroseg('observation', { service, kind })}
+            onOpenPolicy={() => openMicroseg('policy')}
+          />
         </Box>
       </Box>
 

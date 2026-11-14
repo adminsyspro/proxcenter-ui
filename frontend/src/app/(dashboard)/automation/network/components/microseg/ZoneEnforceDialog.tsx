@@ -18,7 +18,7 @@ type Props = {
   pending?: boolean
   pendingCount?: number | null
   onViewPlan?: () => void
-  /** Discard of the pending changes, next to View plan in the refusal. */
+  /** Discard of the pending changes, next to Review and apply in the refusal. */
   discard?: ReactNode
   /** Starts the state change; throws when it fails (the dialog shows the error). */
   onConfirm: () => Promise<void>

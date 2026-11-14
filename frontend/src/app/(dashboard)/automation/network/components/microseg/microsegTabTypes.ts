@@ -1,5 +1,5 @@
 import type { ClusterOptions, FirewallMode, FirewallRule } from '@/lib/api/firewall'
-import type { MicrosegPolicy } from '@/lib/microseg/types'
+import type { MicrosegPolicy, SuggestionKind } from '@/lib/microseg/types'
 
 export const MICROSEG_SUBTABS = ['overview', 'policy', 'observation', 'drifts', 'history'] as const
 
@@ -8,6 +8,15 @@ export type MicrosegSubTab = (typeof MICROSEG_SUBTABS)[number]
 export function isMicrosegSubTab(value: unknown): value is MicrosegSubTab {
   return typeof value === 'string' && (MICROSEG_SUBTABS as readonly string[]).includes(value)
 }
+
+/** A service of the Dashboard: its name and what it is made of ("SSH" is tcp/22 and udp/22). */
+export type ObservedService = { label: string; tokens: string[] }
+
+/**
+ * What the Observation sub-tab opens filtered on, from a figure of the Dashboard: a type of flow, a service, a zone,
+ * or the flows whose source is in no zone.
+ */
+export type ObservationFocus = { kind?: SuggestionKind; service?: ObservedService; zoneId?: string; source?: 'unknown' }
 
 /** A run followed in the strip under the banner, whatever sub-tab is shown. */
 export type TrackedRun = {
@@ -34,6 +43,8 @@ export type MicrosegSubTabProps = {
   driftsZone?: string | null
   /** The zone the Observation sub-tab opens filtered on (from a Policy zone group), null for every zone. */
   observationZone?: string | null
+  /** The type of flow and the service the Observation sub-tab opens filtered on (from the Dashboard). */
+  observationFocus?: ObservationFocus | null
   /** Opens the plan window (computes the plan, then applies it). */
   onOpenPlan: () => void
   /** Follow a run in the strip under the banner; the policy and the status are refreshed when it ends. */

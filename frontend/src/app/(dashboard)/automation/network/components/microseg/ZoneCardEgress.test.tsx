@@ -43,7 +43,7 @@ describe('outbound actions of a zone card', () => {
     setup({ zones: [web({ state: 'enforce', egress_state: 'enforce' })], pending_changes: true })
     fireEvent.click(within(await card()).getByRole('button', { name: 'Reopen outbound' }))
     const dialog = await screen.findByRole('dialog', { name: 'Reopen outbound of zone web?' })
-    expect(within(dialog).getByRole('button', { name: 'View plan' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Review and apply' })).toBeTruthy()
     expect((within(dialog).getByRole('button', { name: 'Reopen outbound' }) as HTMLButtonElement).disabled).toBe(true)
     expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
   })

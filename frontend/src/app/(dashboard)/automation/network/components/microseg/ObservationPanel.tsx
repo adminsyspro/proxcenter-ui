@@ -8,7 +8,7 @@ import { isAggregateDst, type MicrosegSuggestion, type SuggestionAction } from '
 import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 
 import MicrosegErrorAlert from './MicrosegErrorAlert'
-import type { MicrosegSubTabProps } from './microsegTabTypes'
+import type { MicrosegSubTabProps, ObservedService } from './microsegTabTypes'
 import { BulkBar, ObservationLegend } from './ObservationActions'
 import ObservationFilters, { type ObservationFilterValues } from './ObservationFilters'
 import { decodeCollapsed, destinationKey, encodeCollapsed } from './observationModel'
@@ -65,10 +65,24 @@ function ZoneFilterBanner({ connectionId, policy, zoneId }: { connectionId: stri
   )
 }
 
-export default function ObservationPanel({ connectionId, policy, reloadPolicy, onOpenSettings, observationZone = null }: MicrosegSubTabProps) {
+/** A filter the Dashboard opened the list on that no select of the row holds: a line above the table, closed to drop it. */
+function FocusBanner({ testId, text, clearText, onClear }: { testId: string; text: string; clearText: string; onClear: () => void }) {
+  return (
+    <Alert severity='info' icon={<i className='ri-filter-3-line' />} onClose={onClear} closeText={clearText} data-testid={testId} sx={{ mb: 1.5 }}>
+      {text}
+    </Alert>
+  )
+}
+
+export default function ObservationPanel({ connectionId, policy, reloadPolicy, onOpenSettings, observationZone = null, observationFocus = null }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.observation')
-  // Opened from a Policy zone group: filtered on that zone (it stays a filter the user can clear).
-  const [filters, setFilters] = useState<ObservationFilterValues>(() => ({ kind: '', status: 'pending', zone: observationZone ?? '', direction: '' }))
+  // Opened from a Policy zone group: filtered on that zone; from a figure of the Dashboard: on its type of flow. Both
+  // stay filters the user can clear.
+  const [filters, setFilters] = useState<ObservationFilterValues>(() => ({ kind: observationFocus?.kind ?? '', status: 'pending', zone: observationZone ?? observationFocus?.zoneId ?? '', direction: '' }))
+  // The service a row of the Dashboard opened the list on: not one of the selects, shown in its own line above the table.
+  const [service, setService] = useState<ObservedService | null>(() => observationFocus?.service ?? null)
+  // The flows whose source is in no zone, opened from the "Unknown source" figures of the Dashboard.
+  const [unknownSource, setUnknownSource] = useState(() => observationFocus?.source === 'unknown')
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [resolved, setResolved] = useState<Resolved | null>(null)
@@ -82,6 +96,8 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
     status: filters.status || undefined,
     zone: filters.zone || undefined,
     direction: filters.direction || undefined,
+    service: service?.tokens,
+    source: unknownSource ? 'unknown' : undefined,
   })
   const { busy, failure, clearFailure, resolve: resolveIds } = useResolveSuggestions(connectionId, policy.version, reloadPolicy, reload)
   const guestName = useGuestName(connectionId)
@@ -108,6 +124,18 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
     setFilters(next)
     setPage(0)
     setSelected(new Set())
+  }
+  const backToFirstPage = () => {
+    setPage(0)
+    setSelected(new Set())
+  }
+  const clearService = () => {
+    setService(null)
+    backToFirstPage()
+  }
+  const clearUnknownSource = () => {
+    setUnknownSource(false)
+    backToFirstPage()
   }
   const goToPage = (next: number) => {
     setPage(next)
@@ -158,6 +186,8 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
       <ObservationLegend onOpenSettings={onOpenSettings} />
       <ObservationFilters values={filters} zones={policy.zones} onChange={changeFilters} />
       {filters.zone && <ZoneFilterBanner connectionId={connectionId} policy={policy} zoneId={filters.zone} />}
+      {service && <FocusBanner testId='observation-service-filter' text={t('serviceBanner', { service: service.label, ports: service.tokens.join(', ') })} clearText={t('serviceBannerClear')} onClear={clearService} />}
+      {unknownSource && <FocusBanner testId='observation-source-filter' text={t('sourceBanner')} clearText={t('sourceBannerClear')} onClear={clearUnknownSource} />}
 
       {error && <MicrosegErrorAlert error={error} onRetry={reload} />}
       {failure && <Alert severity='error' onClose={clearFailure} sx={{ mb: 1.5 }}>{failure}</Alert>}

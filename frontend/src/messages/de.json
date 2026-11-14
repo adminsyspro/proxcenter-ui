@@ -9273,7 +9273,6 @@
       "todoNothing": "Nichts zu tun",
       "todoUnavailable": "Nicht verfügbar, solange die Firewall-Daten nicht gelesen werden können",
       "todoFirewallOff": "Cluster-Firewall ausgeschaltet",
-      "todoManagementRules": "Keine Cluster-Regel lässt die Verwaltung zu ({count, plural, one {Port {ports}} other {Ports {ports}}})",
       "todoPolicyIn": "Eingangsrichtlinie ACCEPT: alles, was keine Regel verwirft, kommt herein",
       "todoUnprotected": "{count, plural, one {# Gast ohne Firewall} other {# Gäste ohne Firewall}}",
       "todoUnzoned": "{count, plural, one {# laufender Gast in keiner Zone} other {# laufende Gäste in keiner Zone}}",
@@ -9294,6 +9293,8 @@
       "postureChipClusterUnknown": "Cluster-Firewall nicht verfügbar",
       "postureChipStopped": "Notstopp aktiv",
       "postureChipZones": "Zonen erzwungen {enforced, number} / {total, number}",
+      "postureChipZonesOut": "Zonen erzwungen {enforced, number} / {total, number} · ausgehend {blocked, number} / {total, number}",
+      "postureChipZonesTip": "Eingehend: {enforced, number} von {total, number} Zonen sperren, was die Richtlinie nicht erlaubt. Ausgehend: {blocked, number} sperren, {observed, number} beobachten, {off, number} nicht kontrolliert.",
       "postureChipZonesUnknown": "Zonen erzwungen -",
       "postureChipGuests": "Geschützte Gäste {protected, number} / {running, number} laufend",
       "postureChipGuestsSampled": "Geschützte Gäste {protected, number} / {running, number} gemessen · {total, number} laufend",
@@ -9328,14 +9329,16 @@
       "postureAllowed": "Erlaubt",
       "postureWouldBlock": "Würde blockiert",
       "postureBlocked": "Blockiert",
-      "postureNotCovered": "Nicht abgedeckt",
       "postureFlows": "{count, plural, one {# Fluss} other {# Flüsse}}",
       "postureNoCounter": "ohne Zähler",
+      "postureNoCounterHint": "Die von der Richtlinie erlaubten Flüsse werden nicht protokolliert, ihre Treffer werden daher nicht gezählt.",
       "postureAwaitingDecision": "warten auf eine Entscheidung",
       "postureBlockedIn": "in {zones}",
       "postureBlockedOut": "ausgehend von {zones}",
       "postureBlockedNone": "keiner verworfen",
       "postureServicesTitle": "Top-Dienste nach Treffern",
+      "postureServicesShown": "{shown, number} von {total, number} Diensten",
+      "postureServicesAll": "Alle beobachteten Flüsse",
       "postureColService": "Dienst",
       "postureColFlows": "Flüsse",
       "postureColHits": "Treffer",
@@ -9397,54 +9400,31 @@
     }
   },
   "deployWizard": {
-    "bannerTitle": "Cluster-Firewall nicht konfiguriert",
-    "bannerDescription": "Ihr Cluster hat keine Firewall-Regeln und die Firewall ist deaktiviert. Erstellen Sie grundlegende Regeln, bevor Sie die Firewall aktivieren, um den Verbindungsverlust zu vermeiden.",
-    "bannerButton": "Firewall bereitstellen",
     "dialogTitle": "Cluster-Firewall-Bereitstellung",
     "stepAnalysis": "Analyse",
-    "stepPreview": "Vorschau",
-    "stepApply": "Anwenden",
     "stepActivate": "Aktivieren",
     "stepDone": "Fertig",
     "analysisTitle": "aktuell cluster state",
     "analysisNodes": "{count} Nodes detected",
     "analysisFirewallOff": "Cluster firewall is deaktiviert",
-    "analysisNoRules": "Keine Cluster-Firewall-Regeln konfiguriert",
-    "analysisPolicyAccept": "Standard-Policy: ACCEPT (gesamter Verkehr erlaubt)",
-    "analysisWarning": "Das Aktivieren der Firewall mit einer DROP-Policy ohne Whitelist-Regeln unterbricht die Cluster-Kommunikation (Corosync, Ceph, Migrationen…). Dieser Assistent erstellt zuerst die grundlegenden Regeln.",
-    "previewTitle": "Rules to be erstellend",
-    "previewDescription": "Die folgenden {count} Regeln werden der Cluster-Firewall hinzugefügt, um wesentliche Proxmox-Dienste freizugeben.",
-    "previewService": "Dienst",
-    "previewProtocol": "Protokoll",
-    "previewPorts": "Ports",
-    "previewDirection": "Richtung",
-    "previewAction": "Aktion",
-    "applyTitle": "Regeln werden angewendet",
-    "applyCreating": "Regel wird erstellt: {service}",
-    "applySuccess": "Rule erstellend: {service}",
-    "applyError": "fehlgeschlagen to erstellen rule: {service}",
-    "applyComplete": "All {count} rules erstellend erfolgreich!",
-    "applyPartial": "{success} of {total} rules created. {failed} failed.",
+    "analysisNodesReading": "Firewall der Knoten wird gelesen…",
+    "analysisNodesOff": "Die Firewall jedes Knotens ist aus: Das Einschalten der Cluster-Firewall filtert nur die Gäste",
+    "analysisNodesFollow": "{count, plural, one {1 Knoten schaltet seine eigene Firewall mit dem Cluster ein: {nodes}} other {# Knoten schalten ihre eigene Firewall mit dem Cluster ein: {nodes}}}",
+    "analysisInfo": "Dieser Assistent schaltet die Cluster-Firewall ein, die die Firewall der Gäste und die Mikrosegmentierung benötigen. Auf den Knoten schreibt er nichts: keine Regel, keine Eingangsrichtlinie.",
+    "analysisNodesWarning": "Auf {nodes} ist die Knoten-Firewall nicht ausgeschaltet (enable: 0): Proxmox schaltet sie mit der Cluster-Firewall ein und filtert den Knoten mit den Regeln seines Administrators. ProxCenter fügt keine hinzu: Prüfen Sie, dass die Weboberfläche (8006) und SSH (22) erreichbar bleiben, oder schalten Sie die Knoten-Firewall aus.",
+    "analysisNodesUnknown": "Die Firewall von {nodes} konnte nicht gelesen werden: Prüfen Sie sie, bevor Sie die Cluster-Firewall einschalten.",
     "activateTitle": "Firewall aktivieren",
-    "activateEnableFirewall": "Cluster-Firewall aktivieren",
-    "activateSetDrop": "Set inbound policy to ablegen",
-    "activateWarning": "Das Aktivieren der DROP-Policy bedeutet, dass der gesamte eingehende Verkehr, der nicht explizit durch eine Regel erlaubt ist, blockiert wird. Die im vorherigen Schritt erstellten Regeln stellen sicher, dass Cluster-Dienste erreichbar bleiben.",
+    "activateDescription": "Die Cluster-Firewall wird eingeschaltet. Sonst ändert sich nichts: Regeln, Richtlinien und die Firewall der Knoten bleiben unverändert.",
+    "activateFailed": "Die Cluster-Firewall konnte nicht eingeschaltet werden. Versuchen Sie es erneut oder schalten Sie sie unter Firewall > Optionen ein.",
     "activateButton": "Aktivieren",
     "activateSkip": "Vorerst überspringen",
     "activating": "Wird aktiviert...",
     "doneTitle": "Bereitstellung abgeschlossen!",
-    "doneRulesCreated": "{count} cluster rules erstellend",
     "doneFirewallEnabled": "Cluster firewall aktiviert",
     "doneFirewallNotEnabled": "Cluster-Firewall nicht aktiviert (manuelle Aktivierung erforderlich)",
-    "donePolicyDrop": "Inbound policy set to ablegen",
-    "donePolicyAccept": "Eingehende Richtlinie bleibt ACCEPT",
-    "doneViewRules": "Regeln anzeigen",
     "doneClose": "Schließen",
     "next": "Weiter",
-    "cancel": "Abbrechen",
-    "customAdd": "Hinzufügen",
-    "customComment": "Beschreibung",
-    "customCommentPlaceholder": "e.g. HTTPS, Überwachung…"
+    "cancel": "Abbrechen"
   },
   "firewall": {
     "type": "Typ",
@@ -12829,31 +12809,42 @@
       "infoObjects": "Die Mikrosegmentierungsobjekte bleiben erhalten; Fortsetzen aktiviert die Cluster-Firewall wieder und wendet die Richtlinie erneut an",
       "infoUse": "Nutzen Sie dies, wenn die Segmentierung etwas blockiert, das sie nicht blockieren soll",
       "resumeInfoReenable": "Aktiviert die Cluster-Firewall wieder und wendet dann die letzte Revision erneut an",
-      "resumeInfoSocle": "Abgelehnt, wenn die Verwaltungsregeln (SSH 22, Web 8006) fehlen: Beheben Sie dies zuerst im Bereitstellungsassistenten des Dashboards",
-      "openWizard": "Bereitstellungsassistenten öffnen",
+      "resumeInfoSocle": "Abgelehnt, wenn ein Knoten mit eingeschalteter Firewall die Weboberfläche (8006) und SSH (22) nicht zulässt: zuerst in der Firewall dieses Knotens erlauben oder sie ausschalten",
       "clusterFirewallOff": "Cluster-Firewall deaktiviert",
       "notDeployed": "Nichts bereitgestellt",
       "socleUncovered": "Von den Regeln nicht akzeptierte Adressen: {ips}",
       "socleUncoveredNodes": "Von den Regeln nicht akzeptierte Adressen: {ips} (auf {nodes})"
     },
     "pending": {
-      "noCount": "Nicht angewendete Änderungen",
-      "viewPlan": "Plan anzeigen",
+      "noCount": "Änderungen noch nicht angewendet.",
+      "viewPlan": "Prüfen und anwenden",
       "prefixed": "{prefix}: {text}",
-      "whatWillChange": "Was sich ändert: {list}",
+      "whatWillChange": "Noch nicht angewendet: {list}.",
       "zones": {
         "added": "{count, plural, one {# Zone hinzugefügt} other {# Zonen hinzugefügt}}",
         "changed": "{count, plural, one {# Zone geändert} other {# Zonen geändert}}",
         "removed": "{count, plural, one {# Zone entfernt} other {# Zonen entfernt}}"
+      },
+      "zonesNamed": {
+        "added": "{count, plural, one {Zone {names} hinzugefügt} other {Zonen {names} hinzugefügt}}",
+        "changed": "{count, plural, one {Zone {names} geändert} other {Zonen {names} geändert}}",
+        "removed": "{count, plural, one {Zone {names} entfernt} other {Zonen {names} entfernt}}"
       },
       "flows": {
         "added": "{count, plural, one {# Fluss hinzugefügt} other {# Flüsse hinzugefügt}}",
         "changed": "{count, plural, one {# Fluss geändert} other {# Flüsse geändert}}",
         "removed": "{count, plural, one {# Fluss entfernt} other {# Flüsse entfernt}}"
       },
+      "flowsNamed": {
+        "added": "Fluss {flow} hinzugefügt",
+        "changed": "Fluss {flow} geändert",
+        "removed": "Fluss {flow} entfernt"
+      },
       "members": "{count, plural, one {# Mitgliedsänderung} other {# Mitgliedsänderungen}}",
+      "membersTo": "{count, plural, one {# Gast nach {zone}} other {# Gäste nach {zone}}}",
       "tagPrefix": "Tag-Präfix geändert",
-      "whatWillChangeInline": "was sich ändert: {list}",
+      "whatWillChangeInline": "noch nicht angewendet: {list}.",
+      "untilApplied": "In Proxmox ändert sich nichts, bis der Plan angewendet wird.",
       "applying": "Wird angewendet: {list}",
       "applyingInline": "wird angewendet: {list}",
       "applyingNoCount": "Änderungen werden angewendet"
@@ -12891,7 +12882,7 @@
       "NETWORK": "ProxCenter ist nicht erreichbar. Prüfen Sie Ihre Netzwerkverbindung.",
       "CHECK_PENDING": "Eine Prüfung ist bereits eingereiht: die Engine startet sie bei ihrem nächsten Durchlauf.",
       "generic": "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
-      "SOCLE_MISSING": "Die Verwaltungsregeln (SSH 22, Web 8006) fehlen, daher wurde die Cluster-Firewall nicht wieder aktiviert. Fügen Sie sie mit dem Bereitstellungsassistenten hinzu und setzen Sie dann fort.",
+      "SOCLE_MISSING": "Ein Knoten mit eingeschalteter Firewall lässt die Weboberfläche (8006) und SSH (22) nicht zu, daher wurde die Cluster-Firewall nicht wieder eingeschaltet. Erlauben Sie sie in der Firewall dieses Knotens oder schalten Sie sie aus, und setzen Sie dann fort.",
       "NOT_DEPLOYED": "Es ist noch nichts bereitgestellt: wenden Sie zuerst einen Plan an, der Notfallstopp wirkt auf eine bereitgestellte Richtlinie."
     },
     "policy": {
@@ -13232,6 +13223,13 @@
       "nothing": "Nichts zu ändern: Proxmox entspricht bereits dem Entwurf.",
       "clusterGroup": "Cluster-Objekte",
       "stepCount": "{count, plural, one {# Schritt} other {# Schritte}}",
+      "stepState": {
+        "waiting": "Wartet",
+        "running": "Wird geschrieben",
+        "done": "Erledigt",
+        "failed": "Fehlgeschlagen",
+        "notRun": "Nicht ausgeführt"
+      },
       "collisions": "Blockiert: Diese Proxmox-Objekte tragen unsere Namen, gehören aber nicht uns. Benennen Sie sie um oder entfernen Sie sie: {names}",
       "foreignRules": "Von Hand in unseren Sicherheitsgruppen hinzugefügte Regeln bleiben erhalten und werden nicht angetastet: {names}",
       "unread": "{count, plural, one {# Gast konnte nicht gelesen werden und wird} other {# Gäste konnten nicht gelesen werden und werden}} beim nächsten Durchlauf behandelt: {names}",
@@ -13486,6 +13484,10 @@
       "acceptOutZoneTip": "Fügt den Fluss {from} → {to} hinzu: Er erlaubt auch den eingehenden Verkehr von {to} aus {from}.",
       "zoneBanner": "Vorschläge für Zone {zone} · {count, plural, one {# nicht abgedeckter Treffer} other {# nicht abgedeckte Treffer}} in 24 h",
       "zoneBannerNoCount": "Vorschläge für Zone {zone}",
+      "serviceBanner": "Gefiltert nach dem Dienst {service} ({ports})",
+      "serviceBannerClear": "Alle Dienste anzeigen",
+      "sourceBanner": "Gefiltert nach Flüssen, deren Quelle in keiner Zone liegt",
+      "sourceBannerClear": "Alle Quellen anzeigen",
       "dialog": {
         "open": "Einzelheiten",
         "openFor": "Details des Flusses von {source} nach {destination}",
@@ -13654,6 +13656,12 @@
       "zoomIn": "Vergrößern",
       "zoomOut": "Verkleinern",
       "fitView": "Karte an die Ansicht anpassen",
+      "isolate": {
+        "only": "Nur die Flüsse von {name}",
+        "all": "Alle Flüsse",
+        "showAll": "Alle Flüsse anzeigen",
+        "showOnly": "Nur dessen Flüsse"
+      },
       "a11y": {
         "nodeDescription": "Drücken Sie Eingabe oder Leertaste, um die Details zu öffnen.",
         "nodeDescriptionKeyboard": "Drücken Sie Eingabe oder Leertaste, um die Details zu öffnen.",
@@ -13775,6 +13783,7 @@
       "checking": "Cluster wird geprüft...",
       "runAgain": "Erneut prüfen",
       "openWizard": "Bereitstellungsassistent öffnen",
+      "raiseLogRate": "Während der Beobachtung anheben",
       "busy": "Eine Anwendung läuft, versuchen Sie es gleich noch einmal.",
       "noClient": "Für diese Verbindung ist kein Proxmox-Client verfügbar.",
       "readFailed": "Proxmox konnte nicht gelesen werden: {error}",
@@ -13787,7 +13796,7 @@
         "cluster_firewall": {
           "title": "Cluster-Firewall",
           "pass": "Die Cluster-Firewall ist aktiv.",
-          "off": "Die Cluster-Firewall ist aus. Der Bereitstellungsassistent fügt die Verwaltungsregeln hinzu und schaltet sie dann ein.",
+          "off": "Die Cluster-Firewall ist aus. Der Bereitstellungsassistent schaltet sie ein, ohne etwas auf den Knoten zu schreiben.",
           "heldByStop": "Cluster-Firewall vom Notfallstopp deaktiviert gehalten: Heben Sie den Stopp auf, um sie wieder zu aktivieren"
         },
         "socle_rules": {
@@ -13804,9 +13813,10 @@
         },
         "log_ratelimit": {
           "title": "Protokoll-Ratenlimit",
-          "default": "PVE protokolliert mit der Standardrate ({rate}), die Beobachtung verpasst daher Flüsse. Erhöhen Sie sie in den Einstellungen.",
+          "default": "PVE protokolliert mit seiner Standardrate ({rate}), daher entgehen der Beobachtung Flüsse.",
           "pass": "PVE protokolliert bis zu {rate}.",
-          "disabled": "PVE begrenzt das Firewall-Protokoll nicht."
+          "disabled": "PVE begrenzt das Firewall-Protokoll nicht.",
+          "planned": "Wird auf {rate} angehoben, solange eine Zone beobachtet wird, danach zurückgesetzt (Einstellungen)."
         },
         "self_in_zone": {
           "title": "ProxCenter-Adresse",
@@ -14046,6 +14056,8 @@
       "title": "Vollständige Prüfung",
       "runningText": "Vollständige Prüfung läuft",
       "queued": "Warten auf die Engine (bis zu 60 s)",
+      "queuedFor": "Seit {seconds, number} s in der Warteschlange: Die Engine startet sie beim nächsten Durchlauf, spätestens in 60 s",
+      "queuedLate": "Die Engine beendet einen anderen Vorgang auf diesem Cluster: Die Prüfung folgt",
       "inProgress": "Läuft, {seconds, number} s vergangen",
       "progress": "{calls, plural, one {# API-Aufruf} other {# API-Aufrufe}}, {writes, plural, one {# Schreibvorgang} other {# Schreibvorgänge}}, {seconds, number} s",
       "doneSummary": "Geprüft in {seconds, number} s mit {calls, plural, one {# API-Aufruf} other {# API-Aufrufen}}",
@@ -14119,7 +14131,12 @@
         "failed": "fehlgeschlagen",
         "notRun": "nicht ausgeführt"
       },
-      "runAgain": "Erneut ausführen"
+      "runAgain": "Erneut ausführen",
+      "stages": {
+        "title": "Was die Prüfung tut",
+        "ips": "IP-Adressen der Mitglieder",
+        "guests": "Gäste erneut gelesen, mit der Richtlinie verglichen, Abweichungen behoben"
+      }
     },
     "trafficLens": {
       "connection": "Verbindung",

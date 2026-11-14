@@ -9,7 +9,7 @@ import type { MicrosegLogNode } from '@/lib/microseg/types'
 
 import { STATE_AMBER, STATE_GREEN, STATE_GREY, STATE_RED } from './dashboardColors'
 import type { BlockPhase } from './dashboardModel'
-import type { ProtectedRunning } from './dashboardPosture'
+import type { ProtectedRunning, ZonesOutbound } from './dashboardPosture'
 import { deniesInbound } from './dashboardModel'
 import LogNodeLines from './microseg/LogNodeLines'
 import { NOW_REFRESH_MS, useNow } from './microseg/useNow'
@@ -27,6 +27,8 @@ type Props = {
   stopHoldsFirewall: boolean
   /** undefined while the status is read, null when it could not be. */
   zones: { enforced: number; total: number } | null | undefined
+  /** The zones that block and that observe their outbound traffic; null or absent while the policy is not read. */
+  zonesOutbound?: ZonesOutbound | null
   /** null until the coverage route measured the guests; `total` above `running` when it asked a sample only. */
   guests: ProtectedRunning | null
   /** undefined while the status is read. */
@@ -121,10 +123,16 @@ export default function PostureChips(props: Props) {
 
   let zonesChip = <ChipSkeleton testId='chip-zones-loading' />
   if (zones !== undefined) {
-    const label = zones ? t('postureChipZones', zones) : t('postureChipZonesUnknown')
+    const out = props.zonesOutbound
+    let label = t('postureChipZonesUnknown')
+    let tip: string | undefined
+    if (zones && out && zones.total > 0) {
+      label = t('postureChipZonesOut', { ...zones, blocked: out.blocked })
+      tip = t('postureChipZonesTip', { ...zones, blocked: out.blocked, observed: out.observed, off: Math.max(0, zones.total - out.blocked - out.observed) })
+    } else if (zones) label = t('postureChipZones', zones)
     let color = STATE_GREY
     if (zones && zones.total > 0) color = zones.enforced > 0 ? STATE_GREEN : STATE_AMBER
-    zonesChip = <PostureChip testId='chip-zones' color={color} label={label} onClick={props.onOpenMicroseg} />
+    zonesChip = <PostureChip testId='chip-zones' color={color} label={label} tip={tip} onClick={props.onOpenMicroseg} />
   }
 
   let guestsColor = STATE_GREY

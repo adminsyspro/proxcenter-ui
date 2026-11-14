@@ -41,8 +41,8 @@ describe('feedback while a run writes Proxmox', () => {
     await chooseState('web', 'Observe')
 
     expect(await screen.findByText(/being applied/i)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'View plan' })).toBeNull()
-    expect(screen.queryByText(/^What will change|^Unapplied changes/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Review and apply' })).toBeNull()
+    expect(screen.queryByText(/^Not applied yet|^Changes not applied yet/)).toBeNull()
 
     pendingNow = false
     await act(async () => { finish(done()) })

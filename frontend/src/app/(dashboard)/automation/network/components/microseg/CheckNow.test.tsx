@@ -95,10 +95,14 @@ describe('Check window', () => {
     renderTab()
 
     const dialog = await openCheck()
-    expect(within(dialog).getByText('Waiting for the engine (up to 60 s)')).toBeTruthy()
+    expect(await within(dialog).findByText(/^(Waiting for the engine \(up to 60 s\)|Queued for \d+ s: .*)$/)).toBeTruthy()
     await waitFor(() => expect(calls('POST /check')).toHaveLength(1))
     expect(calls('POST /check')[0][1]).toMatchObject({ method: 'POST', body: '{}' })
     await waitFor(() => expect(checkButton().textContent).toBe('Check requested'))
+    // In the queue: how long it has waited (asked at 10:00:00, now 10:00:1x) and what it will do, both stages waiting.
+    expect(await within(dialog).findByText(/^Queued for 1\d s: the engine starts it at its next pass, within 60 s$/)).toBeTruthy()
+    const stagesOf = () => [...within(dialog).getByTestId('check-stages').querySelectorAll('[data-stage]')].map(e => `${e.getAttribute('data-stage')}:${e.querySelector('[data-step-state]')?.getAttribute('data-step-state')}`)
+    expect(stagesOf()).toEqual(['ips:waiting', 'guests:waiting'])
     // The queue is read through the shared status of the tab, every 5 s: one read, not one per poller.
     const statusReads = calls('GET /status').length
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
@@ -111,6 +115,8 @@ describe('Check window', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
     expect(await within(dialog).findByText(/^In progress, \d+ s elapsed$/)).toBeTruthy()
     expect(within(dialog).getByText('The steps show once the run has ended.')).toBeTruthy()
+    // The run is found: the addresses are collected, the guests are being read.
+    expect(stagesOf()).toEqual(['ips:done', 'guests:running'])
     expect(calls('GET /runs/old')).toHaveLength(0)
     // The run is followed in the strip like the others.
     expect(screen.getAllByText('Full check in progress').length).toBeGreaterThan(0)
@@ -178,6 +184,25 @@ describe('Check window', () => {
     expect(within(observation).getByText('The firewall logs were not read during this check.')).toBeTruthy()
     expect(within(dialog).queryByText('No new event in the firewall logs.')).toBeNull()
     expect(within(dialog).getByText('No step: there was nothing to write.')).toBeTruthy()
+  })
+
+  it('says the engine is busy once the check has waited past the minute, and shows the guests read by the run', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date('2026-11-03T10:01:30Z') })
+    let pending = false
+    let listed: MicrosegRun[] = []
+    const reading = runOf('f3', 'full', '2026-11-03T10:01:40Z', { status: 'running', api_calls: 40, result: { progress: { phase: 'reading', done: 14, total: 33 } } as unknown as MicrosegRunResult })
+    mock.routes['POST /check'] = () => { pending = true; return reply(202, { queued: true, requested_at: REQUESTED }) }
+    mock.routes['GET /status'] = () => reply(200, statusWith(pending))
+    mock.routes['GET /runs?limit=10'] = () => reply(200, { runs: listed, limit: 10, offset: 0 })
+    mock.routes['GET /runs/f3'] = () => reply(200, reading)
+    renderTab()
+
+    const dialog = await openCheck()
+    expect(await within(dialog).findByText('The engine is finishing another operation on this cluster: the check comes next')).toBeTruthy()
+    pending = false
+    listed = [reading]
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+    expect(await within(dialog).findByText('reading Proxmox, 14 / 33 guests')).toBeTruthy()
   })
 
   it('opens in the queue on a 409 CHECK_PENDING and follows the next full run, not an older one', async () => {

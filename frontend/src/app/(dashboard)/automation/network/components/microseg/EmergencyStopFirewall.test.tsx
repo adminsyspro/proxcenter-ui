@@ -77,18 +77,18 @@ describe('the resume dialog', () => {
     const dialog = await screen.findByRole('dialog')
 
     expect(within(dialog).getByText('Re-enables the cluster firewall, then re-applies the last revision')).toBeTruthy()
-    expect(within(dialog).getByText('Refused if the management rules (SSH 22, web 8006) are missing: fix them in the Dashboard deployment wizard first')).toBeTruthy()
+    expect(within(dialog).getByText("Refused if a node whose own firewall is on does not let the web UI (8006) and SSH (22) in: allow them in that node's firewall, or turn it off, first")).toBeTruthy()
     expect(within(dialog).queryByRole('button', { name: 'Open the deployment wizard' })).toBeNull()
   })
 
-  it('keeps the dialog open on a SOCLE_MISSING refusal, with the message, the server wording and a way to the wizard', async () => {
+  it('keeps the dialog open on a SOCLE_MISSING refusal, with the message and the server wording', async () => {
     mock.routes['POST /emergency-stop'] = () => reply(409, { code: 'SOCLE_MISSING', error: 'cluster firewall not re-enabled: rule SSH 22 missing' })
     renderConfigured()
     fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Resume' }))
 
-    expect(await within(dialog).findByText(/The management rules \(SSH 22, web 8006\) are missing, so the cluster firewall was not re-enabled/)).toBeTruthy()
+    expect(await within(dialog).findByText(/does not let the web UI \(8006\) and SSH \(22\) in, so the cluster firewall was not re-enabled/)).toBeTruthy()
     expect(within(dialog).getByText('cluster firewall not re-enabled: rule SSH 22 missing')).toBeTruthy()
     expect(screen.getByRole('dialog')).toBe(dialog)
     expect(JSON.parse(calls('POST /emergency-stop')[0][1]!.body as string)).toEqual({ on: false })
@@ -149,15 +149,15 @@ describe('the resume dialog', () => {
     expect(within(dialog).getByText('Addresses the rules do not accept: 10.42.0.250 (on pve1)')).toBeTruthy()
   })
 
-  it('opens the deployment wizard from the refusal and closes the dialog', async () => {
+  it('offers no wizard on the refusal: the wizard writes nothing on the nodes, the refusal says what to do there', async () => {
     mock.routes['POST /emergency-stop'] = () => reply(409, { code: 'SOCLE_MISSING', error: 'x' })
     renderConfigured()
     fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Resume' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Open the deployment wizard' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Resume' }))
 
-    expect(await screen.findByRole('dialog', { name: 'Deployment wizard' })).toBeTruthy()
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Resume micro-segmentation?' })).toBeNull())
+    expect(await within(dialog).findByText(/Allow them in that node's firewall, or turn it off, then resume/)).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: 'Open the deployment wizard' })).toBeNull()
   })
 
   it('offers no wizard button when the page gives no wizard, but still explains the refusal', async () => {

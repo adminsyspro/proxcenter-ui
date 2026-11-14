@@ -76,6 +76,11 @@ function tickIndexes(count: number): number[] {
   return [...new Set([0, 1, 2, 3, 4].map(k => Math.round((k * (count - 1)) / 4)))]
 }
 
+/** The last time label ends on the last bucket instead of being centred on it, where the edge of the chart cut it. */
+export function tickAnchor(index: number, count: number): 'middle' | 'end' {
+  return count > 1 && index === count - 1 ? 'end' : 'middle'
+}
+
 /** The breakdown of one bucket in the tooltip: a dot, a group, its value, for each group with a value. */
 function TipRows({ series, counts, value }: { series: PostureTimeline['series']; counts: Record<string, number>; value: (n: number) => string }) {
   const nameOf = useSliceName()
@@ -160,7 +165,7 @@ function Areas({ timeline, below = null, measured, unit, height = TIMELINE_HEIGH
           </g>
         ))}
         {tickIndexes(buckets.length).map(i => (
-          <text key={i} x={xs[i]} y={height - 4} textAnchor='middle' fontSize={10} fill={theme.palette.text.secondary}>{clock(buckets[i].start)}</text>
+          <text key={i} x={xs[i]} y={height - 4} textAnchor={tickAnchor(i, buckets.length)} fontSize={10} fill={theme.palette.text.secondary}>{clock(buckets[i].start)}</text>
         ))}
         {hovered && (
           <line data-testid='timeline-guide' x1={guideX} x2={guideX} y1={TOP} y2={TOP + box.height} stroke={theme.palette.text.secondary} strokeWidth={1} strokeDasharray='3 3' pointerEvents='none' />

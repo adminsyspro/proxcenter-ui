@@ -7,6 +7,7 @@ import {
   EXTERNAL_ID, NODE_H, NODE_W, OUTSIDE_ID, addAllowedPairs, addPair, cellCenters, comparePairs, outsideEgressOf, placeBoundary, placePairs,
   zoneColumns, zoneNodeId, type Cell, type MapEdgeKind, type MapInput, type Pair, type Placement, type ZoneGraph, type ZoneNodeData,
 } from './zoneGraph'
+import { foldColumns } from './zoneLayout'
 
 /** The box of a zone: its name on the first line, its state and member count on the second. */
 export const BOX_W = 190
@@ -68,7 +69,7 @@ export function buildCompactGraph({ zones, flows, suggestions, members = null, u
   addObservedZonePairs(pairs, suggestions, known)
   const ordered = [...pairs.values()].sort(comparePairs)
 
-  const grid = boxGrid(columns, ordered.some(p => p.source === EXTERNAL_ID), ordered.some(p => p.target === OUTSIDE_ID))
+  const grid = foldColumns(boxGrid(columns, ordered.some(p => p.source === EXTERNAL_ID), ordered.some(p => p.target === OUTSIDE_ID)), COMPACT_COL_GAP, COMPACT_ROW_GAP)
   const centers = cellCenters(grid, COMPACT_COL_GAP, COMPACT_ROW_GAP)
 
   const inside = insideCounts(suggestions, known)

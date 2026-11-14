@@ -21,8 +21,6 @@ type Props = {
   policy: MicrosegPolicy
   controls: MicrosegControls
   onOpenPlan?: () => void
-  /** Opens the deployment wizard, where the management rules a refused resume asks for are added (absent: no wizard here). */
-  onOpenWizard?: () => void
 }
 
 /**
@@ -31,7 +29,7 @@ type Props = {
  * nothing is drawn, not even an empty strip (UA27). The Emergency stop button is in the sub-tabs row; the engine
  * state and the coverage are on the page's Dashboard tab. The confirmation dialog is always mounted here.
  */
-export default function MicrosegBanner({ connectionId, policy, controls, onOpenPlan, onOpenWizard }: Props) {
+export default function MicrosegBanner({ connectionId, policy, controls, onOpenPlan }: Props) {
   const t = useTranslations()
   const { canWrite } = useMicrosegWrite()
   const format = useFormatter()
@@ -154,7 +152,6 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
         error={dialogError ? t(microsegErrorKeyOf(dialogError)) : null}
         errorDetail={refusalLines.length > 0 ? null : dialogError?.serverMessage}
         errorLines={refusalLines}
-        extraAction={dialogError && onOpenWizard ? { label: t('microsegPilot.stop.openWizard'), onClick: () => { controls.close(); onOpenWizard() } } : undefined}
         onConfirm={controls.run}
         onCancel={controls.close}
       />

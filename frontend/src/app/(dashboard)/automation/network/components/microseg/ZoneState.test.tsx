@@ -87,7 +87,7 @@ describe('zone state', () => {
     expect(await within(dialog).findByText(/^Apply or discard your \d+ pending changes? first\.$/)).toBeTruthy()
     expect((within(dialog).getByRole('button', { name: 'Observe' }) as HTMLButtonElement).disabled).toBe(true)
 
-    fireEvent.click(within(dialog).getByRole('button', { name: 'View plan' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Review and apply' }))
     expect(await screen.findByRole('dialog', { name: 'Micro-segmentation plan' })).toBeTruthy()
     expect(screen.queryByRole('dialog', { name: 'Observe zone web?' })).toBeNull()
     expect(calls('POST /zones/zw/state')).toHaveLength(0)
@@ -192,7 +192,7 @@ describe('enforcing a zone', () => {
     expect(await within(dialog).findByText(/Nothing would have been blocked/)).toBeTruthy()
     expect(within(dialog).getByText('The state change is applied to Proxmox right away, as a new revision.')).toBeTruthy()
     expect((within(dialog).getByRole('button', { name: 'Enforce' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(within(dialog).getByRole('button', { name: 'View plan' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Review and apply' })).toBeTruthy()
   })
 
   it('sends nothing when the dialog is cancelled', async () => {
@@ -251,7 +251,7 @@ describe('outbound state of a zone in its panel', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'Reopen outbound' }))
     const dialog = await screen.findByRole('dialog', { name: 'Reopen outbound of zone web?' })
     expect(await within(dialog).findByText(/^Apply or discard your \d+ pending changes? first\.$/)).toBeTruthy()
-    expect(within(dialog).getByRole('button', { name: 'View plan' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Review and apply' })).toBeTruthy()
     expect((within(dialog).getByRole('button', { name: 'Reopen outbound' }) as HTMLButtonElement).disabled).toBe(true)
     expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
   })

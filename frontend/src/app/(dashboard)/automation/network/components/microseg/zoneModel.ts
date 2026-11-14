@@ -1,6 +1,17 @@
 import type { GuestRef, MicrosegFlow, MicrosegSuggestion, MicrosegZone, PendingMember } from '@/lib/microseg/types'
 
 /** A guest of the connection, as /api/v1/vms?connId= lists it. */
+const guestNames = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+/**
+ * Guests in the order a person reads a list: by name whatever the case ("app" before "Debian"), a number in a name
+ * by its value ("web2" before "web10"), the VMID between two guests of one name. The order of the inventory tree
+ * sorted by name.
+ */
+export function byGuestName(a: Pick<PolicyGuest, 'name' | 'vmid'>, b: Pick<PolicyGuest, 'name' | 'vmid'>): number {
+  return guestNames.compare(a.name ?? '', b.name ?? '') || a.vmid - b.vmid
+}
+
 export type PolicyGuest = {
   vmid: number
   name: string

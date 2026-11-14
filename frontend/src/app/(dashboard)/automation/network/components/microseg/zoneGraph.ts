@@ -9,7 +9,7 @@ import { flowService } from './FlowSummary'
 import { outboundFlowStatus, type OutboundFlowStatus } from './outboundStatus'
 import { placeEdges, type EdgeEnds, type Obstacle, type PlacedEdge } from './zoneGraphEdges'
 import type { Point } from './edgeGeometry'
-import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, byText, circleRadius, layerZones, memberSlots, orderLayers, slotPositions } from './zoneLayout'
+import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, byText, circleRadius, foldColumns, layerZones, memberSlots, orderLayers, slotPositions } from './zoneLayout'
 
 /** Size of the External and Outside boxes. */
 export const NODE_W = 200
@@ -454,8 +454,8 @@ export function buildZoneGraph({ zones, flows, suggestions, members = null, unzo
   addObservedPairs(pairs, suggestions, known, books)
   const ordered = [...pairs.values()].sort(comparePairs)
 
-  // Grid: longest-path layer as the column, barycenter order as the row.
-  const grid = buildGrid(columns, groups, ordered.some(p => p.source === EXTERNAL_ID), ordered.some(p => p.target === OUTSIDE_ID))
+  // Grid: longest-path layer as the column, barycenter order as the row; the columns of a map too tall to read are folded.
+  const grid = foldColumns(buildGrid(columns, groups, ordered.some(p => p.source === EXTERNAL_ID), ordered.some(p => p.target === OUTSIDE_ID)), COL_GAP, ROW_GAP)
   const { nodes, obstacles, endShapes } = buildNodes(grid, cellCenters(grid), groups, outsideEgressOf(flows, known))
   return { nodes, edges: placePairs(ordered, endShapes, obstacles, unapplied) }
 }

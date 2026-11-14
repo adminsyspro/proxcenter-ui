@@ -115,7 +115,7 @@ describe('zone header actions', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Observe' }))
     const dialog = await screen.findByRole('dialog', { name: 'Observe zone web?' })
     expect(button(dialog, 'Observe').disabled).toBe(true)
-    expect(within(dialog).getByRole('button', { name: 'View plan' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Review and apply' })).toBeTruthy()
   })
 
   it('deletes the zone once confirmed, closes the panel and drops its circle', async () => {
@@ -276,13 +276,13 @@ describe('zone dialog, state rows and Outbound section', () => {
     expect(await screen.findByText(/web: outbound reopening in progress/)).toBeTruthy()
   })
 
-  it('refuses a state change while the draft was dirty before the dialog, with View plan and Discard, and writes nothing', async () => {
+  it('refuses a state change while the draft was dirty before the dialog, with Review and apply and Discard, and writes nothing', async () => {
     const dialog = await openEdit(web({ state: 'enforce', egress_state: 'enforce' }), true)
     pick(dialog, 'Outbound', 'Observing')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     const reopen = await screen.findByRole('dialog', { name: 'Reopen outbound of zone web?' })
     expect((within(reopen).getByRole('button', { name: 'Reopen outbound' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(within(reopen).getByRole('button', { name: 'View plan' })).toBeTruthy()
+    expect(within(reopen).getByRole('button', { name: 'Review and apply' })).toBeTruthy()
     expect(within(reopen).getByRole('button', { name: 'Discard changes' })).toBeTruthy()
     fireEvent.click(within(reopen).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Reopen outbound of zone web?' })).toBeNull())
@@ -291,7 +291,7 @@ describe('zone dialog, state rows and Outbound section', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     const disable = await screen.findByRole('dialog', { name: 'Disable zone web?' })
     expect((within(disable).getByRole('button', { name: 'Disable' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(within(disable).getByRole('button', { name: 'View plan' })).toBeTruthy()
+    expect(within(disable).getByRole('button', { name: 'Review and apply' })).toBeTruthy()
     expect(calls('PUT /zones/zw')).toHaveLength(0)
     expect(calls('POST /zones/zw/state')).toHaveLength(0)
     expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
@@ -458,13 +458,13 @@ describe('members', () => {
     expect(body(calls('POST /members')[0][1] as RequestInit)).toEqual({ version: 3, zone_id: '', guests: [{ node: 'pve1', type: 'qemu', vmid: 100 }] })
     const queued = await within(screen.getByRole('complementary', { name: 'Zone web' })).findByRole('listitem', { name: 'web-1' })
     expect(await within(queued).findByText('Pending removal')).toBeTruthy()
-    expect(await screen.findByText(/^What will change: .*1 member change$/)).toBeTruthy()
+    expect(await screen.findByText(/^Not applied yet: .*1 member change\.$/)).toBeTruthy()
 
     draftAfter({ pending_members: [], pending_changes: false })
     fireEvent.click(button(queued, 'Keep in zone'))
     await waitFor(() => expect(calls('POST /members')).toHaveLength(2))
     expect(body(calls('POST /members')[1][1] as RequestInit)).toEqual({ version: 4, clear: [{ type: 'qemu', vmid: 100 }] })
-    await waitFor(() => expect(screen.queryByText(/What will change/)).toBeNull())
+    await waitFor(() => expect(screen.queryByText(/Not applied yet/)).toBeNull())
     const kept = within(screen.getByRole('complementary', { name: 'Zone web' })).getByRole('listitem', { name: 'web-1' })
     expect(within(kept).queryByText('Pending removal')).toBeNull()
     expect(button(kept, 'Remove from zone')).toBeTruthy()

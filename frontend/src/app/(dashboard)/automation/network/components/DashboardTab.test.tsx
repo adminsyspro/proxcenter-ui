@@ -201,7 +201,8 @@ describe('DashboardTab: header chips', () => {
     renderDashboard({ enable: 1, policy_in: 'DROP' })
 
     expect((await screen.findByTestId('chip-cluster')).textContent).toBe('Cluster firewall ON · IN DROP')
-    expect((await screen.findByTestId('chip-zones')).textContent).toBe('Zones enforced 3 / 6')
+    // The draft of this test has no zone: none blocks its outbound.
+    expect((await screen.findByTestId('chip-zones')).textContent).toBe('Zones enforced 3 / 6 · outbound 0 / 6')
     await waitFor(() => expect(screen.getByTestId('chip-guests').textContent).toBe('Guests protected 30 / 33 running'))
     await waitFor(() => expect(screen.getByTestId('chip-check').textContent).toMatch(/^Last check .*2 minutes ago/))
   })
@@ -265,6 +266,18 @@ describe('DashboardTab: header chips', () => {
     expect(onOpenGuests).toHaveBeenCalledWith(undefined)
   })
 
+  it('adds the zones that block their outbound to the zones chip, the detail on hover', async () => {
+    stubReads({
+      status: { zones_by_state: { enforce: 1, observe: 2, disabled: 0 }, engine: { paused_until: null, held: false, last_log: null, cluster_firewall: 'enabled', last_runs: {} } },
+      policy: { ...POLICY, zones: [{ ...ZONES[0], egress_state: 'observe' }, { ...ZONES[1], egress_state: 'enforce' }, zone('zapp', 'app', 'observe', '#22c55e')] },
+    })
+    renderDashboard({ enable: 1, policy_in: 'DROP' })
+
+    await waitFor(() => expect(screen.getByTestId('chip-zones').textContent).toBe('Zones enforced 1 / 3 · outbound 1 / 3'))
+    fireEvent.mouseOver(screen.getByTestId('chip-zones'))
+    expect(await screen.findByText('Inbound: 1 of 3 zones block what the policy does not allow. Outbound: 1 block, 1 observe, 1 not controlled.')).toBeInTheDocument()
+  })
+
   it('computes the coverage again from the button next to the guests chip, then holds it 30 s', async () => {
     stubReads()
     renderDashboard({ enable: 1 })
@@ -315,7 +328,9 @@ describe('DashboardTab: traffic by zone', () => {
     expect(screen.getByTestId('donut-total').textContent).toBe('450')
     expect(screen.getByTestId('slice-zone:zweb')).toBeInTheDocument()
     expect(screen.getByTestId('chord-zone:zweb>zone:zdb')).toBeInTheDocument()
-    expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits of the pending observed flows · hits emitted per zone · unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)')
+    expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits emitted per zone')
+    // What the short caption leaves out is behind the information icon.
+    expect(screen.getByTestId('traffic-card-hint').getAttribute('aria-label')).toBe('hits of the pending observed flows · unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)')
   })
 
   it('highlights a slice when its legend row is hovered', async () => {
@@ -345,13 +360,14 @@ describe('DashboardTab: traffic by zone', () => {
     expect(fetchedUrls().filter(u => u === '/api/v1/vms?connId=conn-1')).toHaveLength(1)
     // The guest list is in: the caption no longer says the unknown sources hold the unzoned guests.
     expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits of the pending observed flows')
+    expect(screen.queryByTestId('traffic-card-hint')).toBeNull()
   })
 
   it('says the figures are those of the first 200 flows when the page is full', async () => {
     postureReads({ suggestions: Array.from({ length: 200 }, (_, i) => seen({ dport: String(1000 + i) })) })
     renderDashboard({ enable: 1 })
 
-    expect((await screen.findByTestId('traffic-card-caption')).textContent).toBe('hits of the first 200 pending observed flows · hits emitted per zone · unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)')
+    expect((await screen.findByTestId('traffic-card-hint')).getAttribute('aria-label')).toBe('hits of the first 200 pending observed flows · unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)')
   })
 
   it('says when there is no observed flow', async () => {
@@ -384,7 +400,8 @@ describe('DashboardTab: group by destination zone', () => {
     await waitFor(() => expect([...legend.querySelectorAll('[data-testid^="legend-"]')].filter(e => !e.getAttribute('data-testid')!.endsWith('-members')).map(e => e.getAttribute('data-testid'))).toEqual(['legend-zone:zdb', 'legend-zone:zweb']))
     expect(within(legend).getByTestId('legend-zone:zdb').textContent).toContain('300')
     expect(screen.getByText('Traffic by destination zone')).toBeTruthy()
-    expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits of the pending observed flows · hits received per zone')
+    expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits received per zone')
+    expect(screen.getByTestId('traffic-card-hint').getAttribute('aria-label')).toBe('hits of the pending observed flows')
     await waitFor(() => expect(within(screen.getByTestId('timeline')).getAllByTestId(/^area-/).map(a => a.getAttribute('data-testid'))).toEqual(['area-zone:zdb', 'area-zone:zweb']))
     expect(fetchedUrls().some(u => u.startsWith('/api/v1/vms?'))).toBe(false)
     expect(window.localStorage.getItem('proxcenter.microseg.postureGroupBy')).toBe('dstzone')
@@ -692,7 +709,81 @@ describe('DashboardTab: observed traffic distribution and top services', () => {
 
     const table = await screen.findByTestId('services-table')
     const rows = within(table).getAllByRole('row').slice(1).map(r => r.textContent)
-    expect(rows).toEqual(['PostgreSQL1300Not covered', 'SSH1100Not covered', 'HTTPS150Blocked', 'node-exporter1no counterAllowed'])
+    expect(rows).toEqual(['PostgreSQL1300Would be blocked', 'SSH1100Would be blocked', 'HTTPS150Blocked', 'node-exporter1no counterAllowed'])
+  })
+
+  it('opens what a figure counts: a tile of flows, the name of a service, one of its statuses', async () => {
+    postureReads()
+    const onOpenMicroseg = vi.fn()
+    renderDashboard({ enable: 1 }, { onOpenMicroseg })
+
+    fireEvent.click(await screen.findByTestId('tile-would-block'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { kind: 'would_block' })
+    fireEvent.click(screen.getByTestId('tile-blocked'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { kind: 'blocked' })
+    fireEvent.click(screen.getByTestId('tile-allowed'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('policy')
+    fireEvent.click(screen.getByTestId('tile-unknown'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { source: 'unknown' })
+    // The east-west share is not a list of flows the Observation can be filtered on: nothing to open.
+    expect(screen.getByTestId('tile-east-west').tagName).toBe('DIV')
+
+    fireEvent.click(screen.getByTestId('service-open-SSH'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { service: { label: 'SSH', tokens: ['tcp/22'] }, kind: undefined })
+    fireEvent.click(within(screen.getByTestId('service-HTTPS')).getByTestId('service-part-blocked'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { service: { label: 'HTTPS', tokens: ['tcp/443'] }, kind: 'blocked' })
+    // A service the policy only allows has no observed flow to list: its status opens the Policy, its name nothing.
+    expect(screen.queryByTestId('service-open-node-exporter')).toBeNull()
+    fireEvent.click(within(screen.getByTestId('service-node-exporter')).getByTestId('service-part-allowed'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('policy')
+  })
+
+  it('opens the observed flows of a zone, or of the unknown sources, from the legend of the donut', async () => {
+    postureReads()
+    const onOpenMicroseg = vi.fn()
+    renderDashboard({ enable: 1 }, { onOpenMicroseg })
+
+    fireEvent.click(await screen.findByTestId('open-legend-zone:zweb'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { zoneId: 'zweb' })
+    fireEvent.click(screen.getByTestId('open-legend-external'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { source: 'unknown' })
+  })
+
+  it('says why the allowed flows have no counter, on hover', async () => {
+    postureReads()
+    renderDashboard({ enable: 1 })
+
+    fireEvent.mouseOver(within(await screen.findByTestId('tile-allowed')).getByText('no counter'))
+    expect(await screen.findByText('The flows the policy allows are not logged, so their hits are not counted.')).toBeInTheDocument()
+  })
+
+  it('links to every observed flow under the services, and says how many services the table leaves out', async () => {
+    postureReads({ suggestions: Array.from({ length: 11 }, (_, i) => seen({ dport: String(40000 + i), hits: 100 - i })) })
+    const onOpenMicroseg = vi.fn()
+    renderDashboard({ enable: 1 }, { onOpenMicroseg })
+
+    const footer = await screen.findByTestId('services-footer')
+    // 11 observed ports and the allowed node-exporter: 12 services, 8 shown.
+    expect(footer.textContent).toContain('8 of 12 services')
+    fireEvent.click(within(footer).getByTestId('services-all'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation')
+  })
+
+  it('says nothing of the services left out when the table shows them all', async () => {
+    postureReads()
+    renderDashboard({ enable: 1 })
+
+    const footer = await screen.findByTestId('services-footer')
+    expect(footer.textContent).toBe('All observed flows')
+  })
+
+  it('writes the hits of each status in a service seen under two of them', async () => {
+    postureReads({ suggestions: [seen({ dport: '22', hits: 2000 }), seen({ dport: '22', hits: 300, kind: 'blocked', src_ip: '10.9.9.9' })] })
+    renderDashboard({ enable: 1 })
+
+    const row = await screen.findByTestId('service-SSH')
+    expect(within(row).getByTestId('service-part-not_covered').textContent).toBe('Would be blocked · 2K')
+    expect(within(row).getByTestId('service-part-blocked').textContent).toBe('Blocked · 300')
   })
 })
 
@@ -799,18 +890,13 @@ describe('DashboardTab: To do', () => {
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
-  it('says when no cluster rule lets the administration in', async () => {
-    stubReads()
-    renderDashboard({ enable: 1 }, { clusterRules: [{ pos: 0, type: 'in', action: 'ACCEPT', proto: 'tcp', dport: '8006', enable: 1 }] })
-
-    expect((await screen.findByTestId('todo-managementRules')).textContent).toContain('(port 22)')
-  })
-
-  it('names both administration ports in words when neither is let in', async () => {
+  it('says nothing of the rules that let the administration reach the nodes: ProxCenter leaves the nodes\' firewall alone', async () => {
     stubReads()
     renderDashboard({ enable: 1 }, { clusterRules: [] })
 
-    expect((await screen.findByTestId('todo-managementRules')).textContent).toContain('(ports 8006 and 22)')
+    await screen.findByTestId('chip-cluster')
+    await waitFor(() => expect(screen.queryByText(/administration/)).not.toBeInTheDocument())
+    expect(screen.queryByTestId('todo-managementRules')).not.toBeInTheDocument()
   })
 
   it('flags an explicit inbound ACCEPT policy and leads to the cluster options', async () => {

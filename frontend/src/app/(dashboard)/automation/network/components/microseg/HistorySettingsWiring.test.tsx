@@ -37,7 +37,7 @@ const FIREWALL = { clusterOptions: null, clusterRules: [], nodesList: ['pve1'], 
 
 const PREFLIGHT_FAIL = {
   checks: [
-    { id: 'cluster_firewall', status: 'pass' },
+    { id: 'cluster_firewall', status: 'fail', fix: 'enable_cluster_firewall' },
     { id: 'socle_rules', status: 'fail', fix: 'socle', detail: { web: false, ssh: false } },
   ],
 }
@@ -67,7 +67,7 @@ describe('preflight', () => {
     expect(calls('GET /preflight')).toHaveLength(1)
   })
 
-  it('opens the deployment wizard from a failed socle check, and checks again when the wizard is done', async () => {
+  it('opens the deployment wizard from the cluster firewall check, and checks again when the wizard is done', async () => {
     mock.routes['GET /preflight'] = () => reply(200, PREFLIGHT_FAIL)
     window.localStorage.setItem('microseg.subTab', 'policy')
     renderConfigured()
@@ -89,7 +89,7 @@ describe('preflight', () => {
     renderConfigured({ firewall: undefined })
     fireEvent.click(await screen.findByRole('button', { name: 'Pre-flight checks' }))
     const dialog = await screen.findByRole('dialog', { name: 'Pre-flight checks' })
-    await within(dialog).findByRole('listitem', { name: 'Management access: failed' })
+    await within(dialog).findByRole('listitem', { name: 'Cluster firewall: failed' })
     expect(within(dialog).queryByRole('button', { name: 'Open the deployment wizard' })).toBeNull()
   })
 })

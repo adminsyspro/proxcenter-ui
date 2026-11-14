@@ -9326,7 +9326,6 @@
       "todoNothing": "Nada que hacer",
       "todoUnavailable": "No disponible mientras no se puedan leer los datos del cortafuegos",
       "todoFirewallOff": "Cortafuegos del clúster desactivado",
-      "todoManagementRules": "Ninguna regla del clúster permite la administración ({count, plural, one {puerto {ports}} other {puertos {ports}}})",
       "todoPolicyIn": "Política de entrada ACCEPT: entra todo lo que ninguna regla descarta",
       "todoUnprotected": "{count, plural, one {# invitado sin cortafuegos} other {# invitados sin cortafuegos}}",
       "todoUnzoned": "{count, plural, one {# invitado en marcha en ninguna zona} other {# invitados en marcha en ninguna zona}}",
@@ -9347,6 +9346,8 @@
       "postureChipClusterUnknown": "Cortafuegos del clúster no disponible",
       "postureChipStopped": "Parada de emergencia activa",
       "postureChipZones": "Zonas en bloqueo {enforced, number} / {total, number}",
+      "postureChipZonesOut": "Zonas en bloqueo {enforced, number} / {total, number} · salida {blocked, number} / {total, number}",
+      "postureChipZonesTip": "Entrada: {enforced, number} de {total, number} zonas bloquean lo que la política no permite. Salida: {blocked, number} en bloqueo, {observed, number} en observación, {off, number} sin controlar.",
       "postureChipZonesUnknown": "Zonas en bloqueo -",
       "postureChipGuests": "Invitados protegidos {protected, number} / {running, number} en ejecución",
       "postureChipGuestsSampled": "Invitados protegidos {protected, number} / {running, number} medidos · {total, number} en ejecución",
@@ -9381,14 +9382,16 @@
       "postureAllowed": "Permitido",
       "postureWouldBlock": "Se bloquearía",
       "postureBlocked": "Bloqueado",
-      "postureNotCovered": "No cubierto",
       "postureFlows": "{count, plural, one {# flujo} other {# flujos}}",
       "postureNoCounter": "sin contador",
+      "postureNoCounterHint": "Los flujos que la política permite no se registran, por lo que sus ocurrencias no se cuentan.",
       "postureAwaitingDecision": "en espera de una decisión",
       "postureBlockedIn": "en {zones}",
       "postureBlockedOut": "saliente desde {zones}",
       "postureBlockedNone": "ninguno descartado",
       "postureServicesTitle": "Servicios principales por coincidencias",
+      "postureServicesShown": "{shown, number} de {total, number} servicios",
+      "postureServicesAll": "Todos los flujos observados",
       "postureColService": "Servicio",
       "postureColFlows": "Flujos",
       "postureColHits": "Coincidencias",
@@ -9450,54 +9453,31 @@
     }
   },
   "deployWizard": {
-    "bannerTitle": "Firewall de clúster no configurado",
-    "bannerDescription": "Su clúster no tiene reglas de firewall y el firewall está deshabilitado. Despliegue reglas esenciales antes de activar el firewall para evitar perder conectividad.",
-    "bannerButton": "Desplegar firewall",
     "dialogTitle": "Despliegue de firewall de clúster",
     "stepAnalysis": "Análisis",
-    "stepPreview": "Vista previa",
-    "stepApply": "Aplicar",
     "stepActivate": "Activar",
     "stepDone": "Completado",
     "analysisTitle": "Estado actual del clúster",
     "analysisNodes": "{count} nodos detectados",
     "analysisFirewallOff": "El firewall de clúster está deshabilitado",
-    "analysisNoRules": "No hay reglas de firewall de clúster configuradas",
-    "analysisPolicyAccept": "Política predeterminada: ACCEPT (todo el tráfico permitido)",
-    "analysisWarning": "Activar el firewall con una política DROP sin reglas de whitelist romperá la comunicación del clúster (Corosync, Ceph, migraciones…). Este asistente creará primero las reglas esenciales.",
-    "previewTitle": "Reglas que se crearán",
-    "previewDescription": "Las siguientes {count} reglas se añadirán al firewall de clúster para permitir servicios esenciales de Proxmox en la whitelist.",
-    "previewService": "Servicio",
-    "previewProtocol": "Protocolo",
-    "previewPorts": "Puertos",
-    "previewDirection": "Dirección",
-    "previewAction": "Acción",
-    "applyTitle": "Aplicando reglas",
-    "applyCreating": "Creando regla: {service}",
-    "applySuccess": "Regla creada: {service}",
-    "applyError": "No se pudo crear la regla: {service}",
-    "applyComplete": "¡Todas las {count} reglas se crearon correctamente!",
-    "applyPartial": "{success} de {total} reglas creadas. {failed} fallidas.",
+    "analysisNodesReading": "Leyendo el cortafuegos de los nodos…",
+    "analysisNodesOff": "El cortafuegos de cada nodo está desactivado: activar el cortafuegos del clúster solo filtra los invitados",
+    "analysisNodesFollow": "{count, plural, one {1 nodo activa su propio cortafuegos con el clúster: {nodes}} other {# nodos activan su propio cortafuegos con el clúster: {nodes}}}",
+    "analysisInfo": "Este asistente activa el cortafuegos del clúster, que necesitan el cortafuegos de los invitados y la microsegmentación. No escribe nada en los nodos: ni reglas ni política de entrada.",
+    "analysisNodesWarning": "En {nodes}, el cortafuegos del nodo no está desactivado (enable: 0): Proxmox lo activa con el del clúster y filtra el nodo con las reglas de su administrador. ProxCenter no añade ninguna: compruebe que la interfaz web (8006) y SSH (22) siguen accesibles, o desactive el cortafuegos del nodo.",
+    "analysisNodesUnknown": "No se pudo leer el cortafuegos de {nodes}: compruébelo antes de activar el cortafuegos del clúster.",
     "activateTitle": "Activar firewall",
-    "activateEnableFirewall": "Habilitar firewall de clúster",
-    "activateSetDrop": "Establecer política entrante en DROP",
-    "activateWarning": "Habilitar la política DROP significa que todo el tráfico entrante que no esté permitido explícitamente por una regla será bloqueado. Las reglas creadas en el paso anterior garantizan que los servicios del clúster sigan siendo accesibles.",
+    "activateDescription": "Se activa el cortafuegos del clúster. Nada más cambia: las reglas, las políticas y el cortafuegos de los nodos quedan como están.",
+    "activateFailed": "No se pudo activar el cortafuegos del clúster. Inténtelo de nuevo o actívelo en Cortafuegos > Opciones.",
     "activateButton": "Activar",
     "activateSkip": "Omitir por ahora",
     "activating": "Activando...",
     "doneTitle": "¡Despliegue completado!",
-    "doneRulesCreated": "{count} reglas de clúster creadas",
     "doneFirewallEnabled": "Firewall de clúster habilitado",
     "doneFirewallNotEnabled": "Firewall de clúster no habilitado (se necesita activación manual)",
-    "donePolicyDrop": "Política entrante establecida en DROP",
-    "donePolicyAccept": "La política entrante permanece en ACCEPT",
-    "doneViewRules": "Ver reglas",
     "doneClose": "Cerrar",
     "next": "Siguiente",
-    "cancel": "Cancelar",
-    "customAdd": "Añadir",
-    "customComment": "Descripción",
-    "customCommentPlaceholder": "p. ej., HTTPS, Monitoring…"
+    "cancel": "Cancelar"
   },
   "firewall": {
     "type": "Tipo",
@@ -13258,31 +13238,42 @@
       "infoObjects": "Los objetos de microsegmentación se conservan; Reanudar reactiva el cortafuegos de clúster y vuelve a aplicar la política",
       "infoUse": "Úselo cuando la segmentación bloquee algo que no debería",
       "resumeInfoReenable": "Reactiva el cortafuegos de clúster y después vuelve a aplicar la última revisión",
-      "resumeInfoSocle": "Se rechaza si faltan las reglas de administración (SSH 22, web 8006): corríjalas antes en el asistente de despliegue del panel",
-      "openWizard": "Abrir el asistente de despliegue",
+      "resumeInfoSocle": "Se rechaza si un nodo con su cortafuegos activo no deja entrar la interfaz web (8006) y SSH (22): permítalos en el cortafuegos de ese nodo, o desactívelo, antes",
       "clusterFirewallOff": "Cortafuegos de clúster desactivado",
       "notDeployed": "Nada desplegado",
       "socleUncovered": "Direcciones que las reglas no aceptan: {ips}",
       "socleUncoveredNodes": "Direcciones que las reglas no aceptan: {ips} (en {nodes})"
     },
     "pending": {
-      "noCount": "Cambios sin aplicar",
-      "viewPlan": "Ver el plan",
+      "noCount": "Cambios aún sin aplicar.",
+      "viewPlan": "Revisar y aplicar",
       "prefixed": "{prefix}: {text}",
-      "whatWillChange": "Lo que va a cambiar: {list}",
+      "whatWillChange": "Aún sin aplicar: {list}.",
       "zones": {
         "added": "{count, plural, one {# zona añadida} other {# zonas añadidas}}",
         "changed": "{count, plural, one {# zona modificada} other {# zonas modificadas}}",
         "removed": "{count, plural, one {# zona eliminada} other {# zonas eliminadas}}"
+      },
+      "zonesNamed": {
+        "added": "{count, plural, one {zona {names} añadida} other {zonas {names} añadidas}}",
+        "changed": "{count, plural, one {zona {names} modificada} other {zonas {names} modificadas}}",
+        "removed": "{count, plural, one {zona {names} eliminada} other {zonas {names} eliminadas}}"
       },
       "flows": {
         "added": "{count, plural, one {# flujo añadido} other {# flujos añadidos}}",
         "changed": "{count, plural, one {# flujo modificado} other {# flujos modificados}}",
         "removed": "{count, plural, one {# flujo eliminado} other {# flujos eliminados}}"
       },
+      "flowsNamed": {
+        "added": "flujo {flow} añadido",
+        "changed": "flujo {flow} modificado",
+        "removed": "flujo {flow} eliminado"
+      },
       "members": "{count, plural, one {# cambio de miembro} other {# cambios de miembros}}",
+      "membersTo": "{count, plural, one {# invitado a {zone}} other {# invitados a {zone}}}",
       "tagPrefix": "prefijo de etiquetas modificado",
-      "whatWillChangeInline": "lo que va a cambiar: {list}",
+      "whatWillChangeInline": "aún sin aplicar: {list}.",
+      "untilApplied": "Nada cambia en Proxmox hasta que se aplique el plan.",
       "applying": "Aplicación en curso: {list}",
       "applyingInline": "aplicación en curso: {list}",
       "applyingNoCount": "Aplicando los cambios"
@@ -13320,7 +13311,7 @@
       "NETWORK": "No se puede contactar con ProxCenter. Compruebe su conexión de red.",
       "CHECK_PENDING": "Ya hay una comprobación en cola: el motor la inicia en su próxima pasada.",
       "generic": "Algo salió mal. Inténtelo de nuevo.",
-      "SOCLE_MISSING": "Faltan las reglas de administración (SSH 22, web 8006), por lo que no se reactivó el cortafuegos de clúster. Añádalas con el asistente de despliegue y reanude.",
+      "SOCLE_MISSING": "Un nodo con su cortafuegos activo no deja entrar la interfaz web (8006) y SSH (22), por lo que no se reactivó el cortafuegos del clúster. Permítalos en el cortafuegos de ese nodo, o desactívelo, y reanude.",
       "NOT_DEPLOYED": "Aún no hay nada desplegado: aplique antes un plan, la parada de emergencia actúa sobre una política desplegada."
     },
     "policy": {
@@ -13661,6 +13652,13 @@
       "nothing": "Nada que cambiar: Proxmox ya coincide con el borrador.",
       "clusterGroup": "Objetos del clúster",
       "stepCount": "{count, plural, one {# paso} other {# pasos}}",
+      "stepState": {
+        "waiting": "En espera",
+        "running": "Escribiendo",
+        "done": "Hecho",
+        "failed": "Error",
+        "notRun": "No ejecutado"
+      },
       "collisions": "Bloqueado: estos objetos de Proxmox usan nuestros nombres sin ser nuestros, renómbrelos o elimínelos: {names}",
       "foreignRules": "Las reglas añadidas a mano en nuestros grupos de seguridad se conservan, sin tocarlas: {names}",
       "unread": "{count, plural, one {# invitado no se pudo leer y se tratará} other {# invitados no se pudieron leer y se tratarán}} en la próxima pasada: {names}",
@@ -13915,6 +13913,10 @@
       "acceptOutZoneTip": "Añade el flujo {from} → {to}: también permite la entrada de {to} desde {from}.",
       "zoneBanner": "Sugerencias para la zona {zone} · {count, plural, one {# impacto sin cubrir} other {# impactos sin cubrir}} en 24 h",
       "zoneBannerNoCount": "Sugerencias para la zona {zone}",
+      "serviceBanner": "Filtrado por el servicio {service} ({ports})",
+      "serviceBannerClear": "Mostrar todos los servicios",
+      "sourceBanner": "Filtrado por los flujos cuyo origen no está en ninguna zona",
+      "sourceBannerClear": "Mostrar todos los orígenes",
       "dialog": {
         "open": "Detalles",
         "openFor": "Detalles del flujo de {source} a {destination}",
@@ -14083,6 +14085,12 @@
       "zoomIn": "Acercar",
       "zoomOut": "Alejar",
       "fitView": "Ajustar el mapa a la vista",
+      "isolate": {
+        "only": "Solo los flujos de {name}",
+        "all": "Todos los flujos",
+        "showAll": "Mostrar todos los flujos",
+        "showOnly": "Solo sus flujos"
+      },
       "a11y": {
         "nodeDescription": "Pulse Intro o Espacio para abrir sus detalles.",
         "nodeDescriptionKeyboard": "Pulse Intro o Espacio para abrir sus detalles.",
@@ -14204,6 +14212,7 @@
       "checking": "Comprobando el clúster...",
       "runAgain": "Repetir",
       "openWizard": "Abrir el asistente de despliegue",
+      "raiseLogRate": "Elevar durante la observación",
       "busy": "Hay una aplicación en curso, inténtelo de nuevo en un momento.",
       "noClient": "No hay ningún cliente de Proxmox disponible para esta conexión.",
       "readFailed": "No se pudo leer Proxmox: {error}",
@@ -14216,7 +14225,7 @@
         "cluster_firewall": {
           "title": "Cortafuegos del clúster",
           "pass": "El cortafuegos del clúster está activado.",
-          "off": "El cortafuegos del clúster está desactivado. El asistente de despliegue añade las reglas de administración y luego lo activa.",
+          "off": "El cortafuegos del clúster está desactivado. El asistente de despliegue lo activa sin escribir nada en los nodos.",
           "heldByStop": "Cortafuegos de clúster mantenido desactivado por la parada de emergencia: levante la parada para reactivarlo"
         },
         "socle_rules": {
@@ -14233,9 +14242,10 @@
         },
         "log_ratelimit": {
           "title": "Límite de tasa del registro",
-          "default": "PVE registra a su tasa por defecto ({rate}), así que la observación pierde flujos. Súbala en los ajustes.",
+          "default": "PVE registra a su tasa por defecto ({rate}), por lo que la observación pierde flujos.",
           "pass": "PVE registra hasta {rate}.",
-          "disabled": "PVE no limita el registro del cortafuegos."
+          "disabled": "PVE no limita el registro del cortafuegos.",
+          "planned": "Se eleva a {rate} mientras se observa una zona y luego se restablece (ajustes)."
         },
         "self_in_zone": {
           "title": "Dirección de ProxCenter",
@@ -14475,6 +14485,8 @@
       "title": "Comprobación completa",
       "runningText": "Comprobación completa en curso",
       "queued": "Esperando al motor (hasta 60 s)",
+      "queuedFor": "En cola desde hace {seconds, number} s: el motor la inicia en su próxima pasada, en 60 s como máximo",
+      "queuedLate": "El motor está terminando otra operación en este clúster: la comprobación va después",
       "inProgress": "En curso, {seconds, number} s transcurridos",
       "progress": "{calls, plural, one {# llamada API} other {# llamadas API}}, {writes, plural, one {# escritura} other {# escrituras}}, {seconds, number} s",
       "doneSummary": "Comprobado en {seconds, number} s con {calls, plural, one {# llamada API} other {# llamadas API}}",
@@ -14548,7 +14560,12 @@
         "failed": "fallido",
         "notRun": "no ejecutado"
       },
-      "runAgain": "Volver a ejecutar"
+      "runAgain": "Volver a ejecutar",
+      "stages": {
+        "title": "Qué hace la comprobación",
+        "ips": "Direcciones IP de los miembros",
+        "guests": "Invitados releídos y comparados con la política, desviaciones corregidas"
+      }
     },
     "trafficLens": {
       "connection": "Conexión",

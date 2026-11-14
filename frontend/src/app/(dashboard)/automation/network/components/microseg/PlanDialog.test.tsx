@@ -23,7 +23,7 @@ afterEach(() => {
 const applyButton = (dialog: HTMLElement) => within(dialog).getByRole('button', { name: 'Apply' }) as HTMLButtonElement
 
 describe('opening the plan', () => {
-  it('opens from View plan, asks for a plan and shows progress while it computes', async () => {
+  it('opens from Review and apply, asks for a plan and shows progress while it computes', async () => {
     let finish: (r: unknown) => void = () => undefined
     const pending = new Promise(resolve => { finish = resolve })
     mock.routes['GET /runs/p1'] = async () => reply(200, await pending)

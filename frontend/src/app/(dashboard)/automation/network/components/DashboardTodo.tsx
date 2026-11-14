@@ -19,7 +19,6 @@ type Props = {
 const SEVERITY: Record<TodoKind, string> = {
   stopHeld: STATE_RED,
   firewallOff: STATE_RED,
-  managementRules: STATE_AMBER,
   policyIn: STATE_AMBER,
   unprotected: STATE_AMBER,
   unzoned: STATE_AMBER,
@@ -29,7 +28,6 @@ const SEVERITY: Record<TodoKind, string> = {
 const ICON: Record<TodoKind, string> = {
   stopHeld: 'ri-alarm-warning-line',
   firewallOff: 'ri-shield-cross-line',
-  managementRules: 'ri-key-2-line',
   policyIn: 'ri-arrow-down-line',
   unprotected: 'ri-computer-line',
   unzoned: 'ri-shape-line',
@@ -39,7 +37,6 @@ const ICON: Record<TodoKind, string> = {
 const ACTION: Record<TodoKind, string> = {
   stopHeld: 'todoResume',
   firewallOff: 'todoOpenWizard',
-  managementRules: 'todoOpenWizard',
   policyIn: 'todoOpenOptions',
   unprotected: 'todoShowThem',
   unzoned: 'todoOpenDrifts',
@@ -54,11 +51,6 @@ function useLineText() {
     switch (item.kind) {
       case 'stopHeld': return t('stopHeldTitle')
       case 'firewallOff': return t('todoFirewallOff')
-      case 'managementRules': {
-        const ports = (item.ports ?? []).map(String)
-        // "ports 8006 and 22", in the words of the locale.
-        return t('todoManagementRules', { count: ports.length, ports: format.list(ports, { type: 'conjunction' }) })
-      }
       case 'policyIn': return t('todoPolicyIn')
       case 'unprotected': return t('todoUnprotected', { count: item.count ?? 0 })
       case 'unzoned': return t('todoUnzoned', { count: item.count ?? 0 })

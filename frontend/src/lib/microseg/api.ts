@@ -104,11 +104,18 @@ export type ListSuggestionsParams = PageParams & {
   status?: SuggestionStatus
   zone?: string
   direction?: FlowDirection
+  /** Keeps the flows of these services, each "proto" or "proto/dport" (20 at most). */
+  service?: string[]
+  /** "unknown" keeps the flows whose source is in no zone. */
+  source?: 'unknown'
 }
 
-function query(params: Record<string, string | number | undefined> = {}): string {
+function query(params: Record<string, string | number | string[] | undefined> = {}): string {
   const qs = new URLSearchParams()
-  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') qs.set(k, String(v))
+  for (const [k, v] of Object.entries(params)) {
+    if (Array.isArray(v)) for (const one of v) qs.append(k, one)
+    else if (v !== undefined && v !== '') qs.set(k, String(v))
+  }
   const s = qs.toString()
   return s ? `?${s}` : ''
 }

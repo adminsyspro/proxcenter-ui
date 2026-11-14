@@ -9326,7 +9326,6 @@
       "todoNothing": "Rien à faire",
       "todoUnavailable": "Indisponible tant que les données du pare-feu ne peuvent pas être lues",
       "todoFirewallOff": "Pare-feu du cluster désactivé",
-      "todoManagementRules": "Aucune règle du cluster n'ouvre l'administration ({count, plural, one {port {ports}} other {ports {ports}}})",
       "todoPolicyIn": "Politique entrante ACCEPT : tout ce qu'aucune règle ne bloque entre",
       "todoUnprotected": "{count, plural, one {# invité sans pare-feu} other {# invités sans pare-feu}}",
       "todoUnzoned": "{count, plural, one {# invité en marche dans aucune zone} other {# invités en marche dans aucune zone}}",
@@ -9347,6 +9346,8 @@
       "postureChipClusterUnknown": "Pare-feu de cluster indisponible",
       "postureChipStopped": "Arrêt d'urgence actif",
       "postureChipZones": "Zones en blocage {enforced, number} / {total, number}",
+      "postureChipZonesOut": "Zones en blocage {enforced, number} / {total, number} · sortie {blocked, number} / {total, number}",
+      "postureChipZonesTip": "Entrée : {enforced, number} zones sur {total, number} bloquent ce que la politique n'autorise pas. Sortie : {blocked, number} en blocage, {observed, number} en observation, {off, number} non contrôlées.",
       "postureChipZonesUnknown": "Zones en blocage -",
       "postureChipGuests": "Invités protégés {protected, number} / {running, number} en marche",
       "postureChipGuestsSampled": "Invités protégés {protected, number} / {running, number} mesurés · {total, number} en marche",
@@ -9381,14 +9382,16 @@
       "postureAllowed": "Autorisé",
       "postureWouldBlock": "Serait bloqué",
       "postureBlocked": "Bloqué",
-      "postureNotCovered": "Non couvert",
       "postureFlows": "{count, plural, one {# flux} other {# flux}}",
       "postureNoCounter": "sans compteur",
+      "postureNoCounterHint": "Les flux autorisés par la politique ne sont pas journalisés : leurs occurrences ne sont pas comptées.",
       "postureAwaitingDecision": "en attente d'une décision",
       "postureBlockedIn": "dans {zones}",
       "postureBlockedOut": "en sortie de {zones}",
       "postureBlockedNone": "aucun rejeté",
       "postureServicesTitle": "Principaux services par occurrences",
+      "postureServicesShown": "{shown, number} services sur {total, number}",
+      "postureServicesAll": "Tous les flux observés",
       "postureColService": "Service réseau",
       "postureColFlows": "Flux",
       "postureColHits": "Occurrences",
@@ -9450,54 +9453,31 @@
     }
   },
   "deployWizard": {
-    "bannerTitle": "Firewall du cluster non configuré",
-    "bannerDescription": "Votre cluster n'a aucune règle firewall et le firewall est désactivé. Déployez les règles essentielles avant d'activer le firewall pour éviter de perdre la connectivité.",
-    "bannerButton": "Déployer le Firewall",
-    "dialogTitle": "Déploiement du Firewall Cluster",
+    "dialogTitle": "Déploiement du pare-feu du cluster",
     "stepAnalysis": "Analyse",
-    "stepPreview": "Aperçu",
-    "stepApply": "Application",
     "stepActivate": "Activation",
     "stepDone": "Terminé",
     "analysisTitle": "État actuel du cluster",
     "analysisNodes": "{count} nœuds détectés",
-    "analysisFirewallOff": "Le firewall cluster est désactivé",
-    "analysisNoRules": "Aucune règle firewall cluster configurée",
-    "analysisPolicyAccept": "Policy par défaut : ACCEPT (tout le trafic autorisé)",
-    "analysisWarning": "Activer le firewall avec une policy DROP sans règles whitelist coupera la communication du cluster (Corosync, Ceph, migrations…). Cet assistant va d'abord créer les règles essentielles.",
-    "previewTitle": "Règles à créer",
-    "previewDescription": "Les {count} règles suivantes seront ajoutées au firewall cluster pour autoriser les services Proxmox essentiels.",
-    "previewService": "Service",
-    "previewProtocol": "Protocole",
-    "previewPorts": "Ports",
-    "previewDirection": "Direction",
-    "previewAction": "Action",
-    "applyTitle": "Application des règles",
-    "applyCreating": "Création de la règle : {service}",
-    "applySuccess": "Règle créée : {service}",
-    "applyError": "Échec de création : {service}",
-    "applyComplete": "Les {count} règles ont été créées avec succès !",
-    "applyPartial": "{success} règles créées sur {total}. {failed} en échec.",
-    "activateTitle": "Activer le firewall",
-    "activateEnableFirewall": "Activer le firewall cluster",
-    "activateSetDrop": "Mettre la policy entrante en DROP",
-    "activateWarning": "Activer la policy DROP signifie que tout le trafic entrant non explicitement autorisé par une règle sera bloqué. Les règles créées à l'étape précédente garantissent que les services cluster restent accessibles.",
+    "analysisFirewallOff": "Le pare-feu du cluster est désactivé",
+    "analysisNodesReading": "Lecture du pare-feu des nœuds…",
+    "analysisNodesOff": "Le pare-feu de chaque nœud est désactivé : activer le pare-feu du cluster ne filtre que les invités",
+    "analysisNodesFollow": "{count, plural, one {1 nœud active son propre pare-feu avec le cluster : {nodes}} other {# nœuds activent leur propre pare-feu avec le cluster : {nodes}}}",
+    "analysisInfo": "Cet assistant active le pare-feu du cluster, dont ont besoin le pare-feu des invités et la micro-segmentation. Il n'écrit rien sur les nœuds : ni règle, ni politique entrante.",
+    "analysisNodesWarning": "Sur {nodes}, le pare-feu du nœud n'est pas désactivé (enable: 0) : Proxmox l'active avec celui du cluster et filtre le nœud selon les règles posées par son administrateur. ProxCenter n'en ajoute aucune : vérifiez que l'interface web (8006) et SSH (22) restent joignables, ou désactivez le pare-feu du nœud.",
+    "analysisNodesUnknown": "Le pare-feu de {nodes} n'a pas pu être lu : vérifiez-le avant d'activer le pare-feu du cluster.",
+    "activateTitle": "Activer le pare-feu du cluster",
+    "activateDescription": "Le pare-feu du cluster est activé. Rien d'autre ne change : les règles, les politiques et le pare-feu des nœuds restent tels quels.",
+    "activateFailed": "Le pare-feu du cluster n'a pas pu être activé. Réessayez, ou activez-le dans Pare-feu > Options.",
     "activateButton": "Activer",
     "activateSkip": "Passer pour le moment",
     "activating": "Activation...",
     "doneTitle": "Déploiement terminé !",
-    "doneRulesCreated": "{count} règles cluster créées",
-    "doneFirewallEnabled": "Firewall cluster activé",
-    "doneFirewallNotEnabled": "Firewall cluster non activé (activation manuelle nécessaire)",
-    "donePolicyDrop": "Policy entrante définie sur DROP",
-    "donePolicyAccept": "Policy entrante reste en ACCEPT",
-    "doneViewRules": "Voir les règles",
+    "doneFirewallEnabled": "Pare-feu du cluster activé",
+    "doneFirewallNotEnabled": "Pare-feu du cluster non activé (activation manuelle nécessaire)",
     "doneClose": "Fermer",
     "next": "Suivant",
-    "cancel": "Annuler",
-    "customAdd": "Ajouter",
-    "customComment": "Description",
-    "customCommentPlaceholder": "ex. HTTPS, Monitoring…"
+    "cancel": "Annuler"
   },
   "firewall": {
     "type": "Type",
@@ -13259,31 +13239,42 @@
       "infoObjects": "Les objets de micro-segmentation restent en place ; Reprendre réactive le pare-feu de cluster et réapplique la politique",
       "infoUse": "À utiliser quand la segmentation bloque quelque chose qu'elle ne devrait pas",
       "resumeInfoReenable": "Réactive le pare-feu de cluster, puis réapplique la dernière révision",
-      "resumeInfoSocle": "Refusé si les règles d'administration (SSH 22, web 8006) sont absentes : corrigez-les d'abord dans l'assistant de déploiement du tableau de bord",
-      "openWizard": "Ouvrir l'assistant de déploiement",
+      "resumeInfoSocle": "Refusé si un nœud dont le pare-feu est actif ne laisse pas entrer l'interface web (8006) et SSH (22) : autorisez-les dans le pare-feu de ce nœud, ou désactivez-le, d'abord",
       "clusterFirewallOff": "Pare-feu de cluster désactivé",
       "notDeployed": "Rien de déployé",
       "socleUncovered": "Adresses que les règles n'acceptent pas : {ips}",
       "socleUncoveredNodes": "Adresses que les règles n'acceptent pas : {ips} (sur {nodes})"
     },
     "pending": {
-      "noCount": "Changements non appliqués",
-      "viewPlan": "Voir le plan",
+      "noCount": "Changements pas encore appliqués.",
+      "viewPlan": "Vérifier et appliquer",
       "prefixed": "{prefix} : {text}",
-      "whatWillChange": "Ce qui va changer : {list}",
+      "whatWillChange": "Pas encore appliqué : {list}.",
       "zones": {
         "added": "{count, plural, one {# zone ajoutée} other {# zones ajoutées}}",
         "changed": "{count, plural, one {# zone modifiée} other {# zones modifiées}}",
         "removed": "{count, plural, one {# zone supprimée} other {# zones supprimées}}"
+      },
+      "zonesNamed": {
+        "added": "{count, plural, one {zone {names} ajoutée} other {zones {names} ajoutées}}",
+        "changed": "{count, plural, one {zone {names} modifiée} other {zones {names} modifiées}}",
+        "removed": "{count, plural, one {zone {names} supprimée} other {zones {names} supprimées}}"
       },
       "flows": {
         "added": "{count, plural, one {# flux ajouté} other {# flux ajoutés}}",
         "changed": "{count, plural, one {# flux modifié} other {# flux modifiés}}",
         "removed": "{count, plural, one {# flux supprimé} other {# flux supprimés}}"
       },
+      "flowsNamed": {
+        "added": "flux {flow} ajouté",
+        "changed": "flux {flow} modifié",
+        "removed": "flux {flow} supprimé"
+      },
       "members": "{count, plural, one {# changement de membre} other {# changements de membres}}",
+      "membersTo": "{count, plural, one {# invité vers {zone}} other {# invités vers {zone}}}",
       "tagPrefix": "préfixe des tags modifié",
-      "whatWillChangeInline": "ce qui va changer : {list}",
+      "whatWillChangeInline": "pas encore appliqué : {list}.",
+      "untilApplied": "Rien ne change dans Proxmox tant que le plan n'est pas appliqué.",
       "applying": "Application en cours : {list}",
       "applyingInline": "application en cours : {list}",
       "applyingNoCount": "Application des changements en cours"
@@ -13321,7 +13312,7 @@
       "NETWORK": "ProxCenter est injoignable. Vérifiez votre connexion réseau.",
       "CHECK_PENDING": "Une vérification est déjà en file d'attente : le moteur la lance à son prochain passage.",
       "generic": "Une erreur est survenue. Réessayez.",
-      "SOCLE_MISSING": "Les règles d'administration (SSH 22, web 8006) sont absentes : le pare-feu de cluster n'a pas été réactivé. Ajoutez-les avec l'assistant de déploiement, puis reprenez.",
+      "SOCLE_MISSING": "Un nœud dont le pare-feu est actif ne laisse pas entrer l'interface web (8006) et SSH (22) : le pare-feu du cluster n'a pas été réactivé. Autorisez-les dans le pare-feu de ce nœud, ou désactivez-le, puis reprenez.",
       "NOT_DEPLOYED": "Rien n'est déployé : appliquez d'abord un plan, l'arrêt d'urgence agit sur une politique déployée."
     },
     "policy": {
@@ -13662,6 +13653,13 @@
       "nothing": "Rien à modifier : Proxmox correspond déjà au brouillon.",
       "clusterGroup": "Objets du cluster",
       "stepCount": "{count, plural, one {# étape} other {# étapes}}",
+      "stepState": {
+        "waiting": "En attente",
+        "running": "En cours d'écriture",
+        "done": "Fait",
+        "failed": "Échec",
+        "notRun": "Non exécuté"
+      },
       "collisions": "Bloqué : ces objets Proxmox portent nos noms sans être les nôtres, renommez-les ou supprimez-les : {names}",
       "foreignRules": "Les règles ajoutées à la main dans nos groupes de sécurité sont conservées, sans y toucher : {names}",
       "unread": "{count, plural, one {# invité n'a pas pu être lu et sera traité} other {# invités n'ont pas pu être lus et seront traités}} au prochain passage : {names}",
@@ -13916,6 +13914,10 @@
       "acceptOutZoneTip": "Ajoute le flux {from} → {to} : il autorise aussi l'entrée de {to} depuis {from}.",
       "zoneBanner": "Suggestions pour la zone {zone} · {count, plural, one {# occurrence non couverte} other {# occurrences non couvertes}} en 24 h",
       "zoneBannerNoCount": "Suggestions pour la zone {zone}",
+      "serviceBanner": "Filtré sur le service {service} ({ports})",
+      "serviceBannerClear": "Afficher tous les services",
+      "sourceBanner": "Filtré sur les flux dont la source n'est dans aucune zone",
+      "sourceBannerClear": "Afficher toutes les sources",
       "dialog": {
         "open": "Détails",
         "openFor": "Détails du flux de {source} vers {destination}",
@@ -14084,6 +14086,12 @@
       "zoomIn": "Zoom avant",
       "zoomOut": "Zoom arrière",
       "fitView": "Ajuster la carte à la vue",
+      "isolate": {
+        "only": "Flux de {name} uniquement",
+        "all": "Tous les flux",
+        "showAll": "Afficher tous les flux",
+        "showOnly": "Seulement ses flux"
+      },
       "a11y": {
         "nodeDescription": "Appuyez sur Entrée ou Espace pour ouvrir ses détails.",
         "nodeDescriptionKeyboard": "Appuyez sur Entrée ou Espace pour ouvrir ses détails.",
@@ -14205,6 +14213,7 @@
       "checking": "Vérification du cluster...",
       "runAgain": "Relancer",
       "openWizard": "Ouvrir l'assistant de déploiement",
+      "raiseLogRate": "Relever pendant l'observation",
       "busy": "Une application est en cours, réessayez dans un instant.",
       "noClient": "Aucun client Proxmox n'est disponible pour cette connexion.",
       "readFailed": "Proxmox n'a pas pu être lu : {error}",
@@ -14217,7 +14226,7 @@
         "cluster_firewall": {
           "title": "Pare-feu du cluster",
           "pass": "Le pare-feu du cluster est activé.",
-          "off": "Le pare-feu du cluster est désactivé. L'assistant de déploiement ajoute les règles d'administration, puis l'active.",
+          "off": "Le pare-feu du cluster est désactivé. L'assistant de déploiement l'active, sans rien écrire sur les nœuds.",
           "heldByStop": "Pare-feu de cluster maintenu désactivé par l'arrêt d'urgence : levez l'arrêt pour le réactiver"
         },
         "socle_rules": {
@@ -14234,9 +14243,10 @@
         },
         "log_ratelimit": {
           "title": "Limite du débit de journal",
-          "default": "PVE journalise à son débit par défaut ({rate}), l'observation manque donc des flux. Relevez-le dans les réglages.",
+          "default": "PVE journalise à son débit par défaut ({rate}) : l'observation manque des flux.",
           "pass": "PVE journalise jusqu'à {rate}.",
-          "disabled": "PVE ne limite pas le journal du pare-feu."
+          "disabled": "PVE ne limite pas le journal du pare-feu.",
+          "planned": "Relevée à {rate} pendant qu'une zone est observée, puis remise à sa valeur (réglages)."
         },
         "self_in_zone": {
           "title": "Adresse de ProxCenter",
@@ -14476,6 +14486,8 @@
       "title": "Vérification complète",
       "runningText": "Vérification complète en cours",
       "queued": "En attente du moteur (jusqu'à 60 s)",
+      "queuedFor": "En file d'attente depuis {seconds, number} s : le moteur la démarre à sa prochaine passe, dans 60 s au plus",
+      "queuedLate": "Le moteur termine une autre opération sur ce cluster : la vérification suit",
       "inProgress": "En cours, {seconds, number} s écoulées",
       "progress": "{calls, plural, one {# appel API} other {# appels API}}, {writes, plural, one {# écriture} other {# écritures}}, {seconds, number} s",
       "doneSummary": "Vérifié en {seconds, number} s avec {calls, plural, one {# appel API} other {# appels API}}",
@@ -14549,7 +14561,12 @@
         "failed": "échec",
         "notRun": "non exécuté"
       },
-      "runAgain": "Relancer"
+      "runAgain": "Relancer",
+      "stages": {
+        "title": "Ce que fait la vérification",
+        "ips": "Adresses IP des membres",
+        "guests": "Invités relus et comparés à la politique, écarts réparés"
+      }
     },
     "trafficLens": {
       "connection": "Connexion",

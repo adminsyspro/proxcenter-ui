@@ -163,5 +163,20 @@ export function heldByStop(check: PreflightCheck): boolean {
 
 /** Both fixes the orchestrator names are done by the deployment wizard (it enables the cluster firewall last). */
 export function opensWizard(check: PreflightCheck): boolean {
-  return check.status !== 'pass' && !heldByStop(check) && (check.fix === 'socle' || check.fix === 'enable_cluster_firewall')
+  return check.status !== 'pass' && !heldByStop(check) && check.fix === 'enable_cluster_firewall'
+}
+
+/** What the pre-flight button sets: 20 log lines a second per node, bursts of 50, measured on the lab while observing. */
+export const RECOMMENDED_OBSERVE_LOG_RATE = 'enable=1,rate=20/second,burst=50'
+
+/**
+ * The rate the engine will raise PVE's log to while a zone is observed, when the log rate check warns and the settings
+ * hold one: the `rate` of `observe_log_rate_limit` ("20/second"). Null when the check does not warn or the settings
+ * leave the log rate alone (the engine then never touches it).
+ */
+export function raisesLogRate(check: PreflightCheck, observe: string | undefined): string | null {
+  if (check.id !== 'log_ratelimit' || check.status !== 'warn' || !observe) return null
+  const parts = new Map(observe.split(',').map(p => p.trim().split('=') as [string, string | undefined]))
+  if (parts.get('enable') === '0') return null
+  return parts.get('rate') ?? null
 }

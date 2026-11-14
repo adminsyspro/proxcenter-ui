@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { FirewallRule } from '@/lib/api/firewall'
-
-import { dashboardPhase, deniesInbound, missingManagementPorts, todoItems } from './dashboardModel'
-
-const rule = (over: Partial<FirewallRule>): FirewallRule => ({ pos: 0, type: 'in', action: 'ACCEPT', enable: 1, ...over })
+import { dashboardPhase, deniesInbound, todoItems } from './dashboardModel'
 
 describe('deniesInbound', () => {
   it('takes DROP and REJECT for a deny, ACCEPT not', () => {
@@ -14,36 +10,15 @@ describe('deniesInbound', () => {
   })
 })
 
-describe('missingManagementPorts', () => {
-  it('finds the web UI and SSH in cluster rules, by port list, range or macro', () => {
-    expect(missingManagementPorts([rule({ proto: 'tcp', dport: '8006' }), rule({ macro: 'SSH' })], [])).toEqual([])
-    expect(missingManagementPorts([rule({ proto: 'tcp', dport: '22,8000:8010' })], [])).toEqual([])
-  })
-
-  it('reports what no enabled inbound ACCEPT lets in', () => {
-    expect(missingManagementPorts([], [])).toEqual([8006, 22])
-    expect(missingManagementPorts([rule({ proto: 'tcp', dport: '8006', enable: 0 }), rule({ dport: '22', action: 'DROP' })], [])).toEqual([8006, 22])
-    expect(missingManagementPorts([rule({ proto: 'udp', dport: '8006' }), rule({ type: 'out', dport: '22' })], [])).toEqual([8006, 22])
-  })
-
-  it('reads the rules of an enabled security group the cluster references', () => {
-    const groups = [{ group: 'mgmt', rules: [rule({ proto: 'tcp', dport: '8006' }), rule({ proto: 'tcp', dport: '22' })] }]
-
-    expect(missingManagementPorts([rule({ type: 'group', action: 'mgmt' })], groups)).toEqual([])
-    expect(missingManagementPorts([rule({ type: 'group', action: 'mgmt', enable: 0 })], groups)).toEqual([8006, 22])
-  })
-})
-
 describe('todoItems', () => {
-  const clean = { firewallOn: true, stopped: false, stopHoldsFirewall: false, policyIn: 'DROP', missingManagement: [], unprotected: 0, unzoned: 0, pendingFlows: { count: 0, more: false } }
+  const clean = { firewallOn: true, stopped: false, stopHoldsFirewall: false, policyIn: 'DROP', unprotected: 0, unzoned: 0, pendingFlows: { count: 0, more: false } }
 
   it('is empty when there is nothing to do', () => {
     expect(todoItems(clean)).toEqual([])
   })
 
   it('lists every line, most urgent first, with its figure', () => {
-    expect(todoItems({ ...clean, missingManagement: [22], policyIn: 'ACCEPT', unprotected: 29, unzoned: 13, pendingFlows: { count: 100, more: true } })).toEqual([
-      { kind: 'managementRules', ports: [22] },
+    expect(todoItems({ ...clean, policyIn: 'ACCEPT', unprotected: 29, unzoned: 13, pendingFlows: { count: 100, more: true } })).toEqual([
       { kind: 'policyIn' },
       { kind: 'unprotected', count: 29 },
       { kind: 'unzoned', count: 13 },
@@ -55,7 +30,6 @@ describe('todoItems', () => {
     expect(todoItems({ ...clean, firewallOn: false })).toEqual([{ kind: 'firewallOff' }])
     expect(todoItems({ ...clean, firewallOn: false, stopped: true, stopHoldsFirewall: true })).toEqual([{ kind: 'stopHeld' }])
     expect(todoItems({ ...clean, firewallOn: false, stopped: true })).toEqual([])
-    expect(todoItems({ ...clean, stopped: true, missingManagement: [8006] })).toEqual([])
   })
 
   it('asks nothing of an inbound REJECT policy', () => {

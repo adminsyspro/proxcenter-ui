@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Box, FormControl, InputLabel, MenuItem, Select, Skeleton, Stack, Tooltip, Typography, alpha, useTheme } from '@mui/material'
+import { Box, FormControl, InputLabel, Link, MenuItem, Select, Skeleton, Stack, Tooltip, Typography, alpha, useTheme } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
@@ -23,6 +23,10 @@ type Props = {
   addresses: boolean
   /** Shown under the donut (the time chart). */
   footer?: React.ReactNode
+  /** Opens the observed flows of a zone (its name in the legend). */
+  onOpenZone?: (zoneId: string) => void
+  /** Opens the observed flows whose source is in no zone (the unknown and unzoned groups of the sources). */
+  onOpenUnknown?: () => void
 }
 
 const R = 118
@@ -109,10 +113,14 @@ function Donut({ traffic, active, onActive, nameOf }: { traffic: PostureTraffic;
   )
 }
 
+/** The legend stops here on a wide card: the figures of a row stay next to its name. */
+const LEGEND_MAX_WIDTH = 560
+
 /** One legend row: dot, group, hits, guests, zone state. One line. */
-function LegendRow({ slice, name, hint, active, onActive }: { slice: PostureSlice; name: string; hint?: string; active: boolean; onActive: (key: string | null) => void }) {
+function LegendRow({ slice, name, hint, active, onActive, onOpen }: { slice: PostureSlice; name: string; hint?: string; active: boolean; onActive: (key: string | null) => void; onOpen?: () => void }) {
   const t = useTranslations('networkPage.dashboard')
   const format = useFormatter()
+  const label = <Typography variant='body2' noWrap sx={{ fontWeight: 600 }}>{name}</Typography>
   return (
     <Box
       component='li'
@@ -125,9 +133,13 @@ function LegendRow({ slice, name, hint, active, onActive }: { slice: PostureSlic
       sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1, py: 0.5, borderRadius: 1, minWidth: 0, bgcolor: active ? alpha(slice.color, 0.1) : 'transparent', outline: 'none' }}
     >
       <Box sx={objectDotSx(slice.color)} />
-      <Tooltip title={hint ?? name}>
-        <Typography variant='body2' noWrap sx={{ fontWeight: 600, flex: '1 1 auto', minWidth: 0 }}>{name}</Typography>
-      </Tooltip>
+      <Box sx={{ flex: '1 1 auto', minWidth: 0, display: 'flex' }}>
+        <Tooltip title={hint ?? name}>
+          {onOpen
+            ? <Link component='button' type='button' color='inherit' underline='hover' onClick={onOpen} data-testid={`open-legend-${slice.key}`} sx={{ minWidth: 0, maxWidth: '100%', textAlign: 'left' }}>{label}</Link>
+            : <Box sx={{ minWidth: 0, maxWidth: '100%' }}>{label}</Box>}
+        </Tooltip>
+      </Box>
       <Typography variant='body2' sx={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{format.number(slice.hits)}</Typography>
       <Typography variant='caption' color='text.secondary' sx={{ flexShrink: 0, width: 36, textAlign: 'right' }}>{`${Math.round(slice.percent)}%`}</Typography>
       {slice.members !== null && (
@@ -155,18 +167,19 @@ function TrafficSkeleton() {
  * "Traffic by zone" of the Posture Dashboard: a donut of the hits of the pending observed flows per source zone, per
  * destination zone (the zone that logged them), or per VLAN / node of the destination guest, chords between the groups that exchange traffic, and its legend.
  */
-export default function TrafficByZone({ phase, traffic, groupBy, onGroupBy, truncated, addresses, footer }: Props) {
+export default function TrafficByZone({ phase, traffic, groupBy, onGroupBy, truncated, addresses, footer, onOpenZone, onOpenUnknown }: Props) {
   const t = useTranslations('networkPage.dashboard')
   const [active, setActive] = useState<string | null>(null)
   const nameOf = useSliceName()
 
   const base = truncated ? t('postureTrafficCaptionFirst', { count: POSTURE_SUGGESTIONS_LIMIT }) : t('postureTrafficCaption')
-  const parts = [base]
   const direction = DIRECTION_NOTE[groupBy]
-  if (direction) parts.push(t(direction))
+  // One short line after the title (which way the hits are counted, else what they are); the rest behind the icon.
+  const caption = direction ? t(direction) : base
+  const notes = direction ? [base] : []
   // Until the guest list is read (a VLAN or node grouping), a source in no zone cannot be told from an unknown one.
-  if (!addresses && groupBy === 'zone') parts.push(t('postureUnknownIncludesUnzoned'))
-  const caption = parts.join(' · ')
+  if (!addresses && groupBy === 'zone') notes.push(t('postureUnknownIncludesUnzoned'))
+  const hint = notes.length > 0 ? notes.join(' · ') : undefined
   const select = (
     <FormControl size='small' sx={{ minWidth: 140 }}>
       <InputLabel shrink id='posture-group-by'>{t('postureGroupBy')}</InputLabel>
@@ -190,12 +203,18 @@ export default function TrafficByZone({ phase, traffic, groupBy, onGroupBy, trun
   else if (traffic.total === 0) body = <Typography variant='body2' color='text.secondary' data-testid='traffic-empty'>{t('postureNoTraffic')}</Typography>
   else {
     const externalHint = addresses ? undefined : t('postureExternalHint')
+    // A zone opens its observed flows; grouped by source, the groups in no zone open the flows of the unknown sources.
+    const openOf = (s: PostureSlice) => {
+      if (s.kind === 'zone' && s.zone && onOpenZone) return () => onOpenZone(s.zone!.id)
+      if (groupBy === 'zone' && (s.kind === 'external' || s.kind === 'unzoned')) return onOpenUnknown
+      return undefined
+    }
     body = (
       <Box sx={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
         <Donut traffic={traffic} active={active} onActive={setActive} nameOf={nameOf} />
-        <Box component='ul' data-testid='traffic-legend' sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: 0.5, flex: '1 1 260px', minWidth: 0 }}>
+        <Box component='ul' data-testid='traffic-legend' sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: 0.5, flex: '1 1 260px', minWidth: 0, maxWidth: LEGEND_MAX_WIDTH }}>
           {traffic.slices.map(s => (
-            <LegendRow key={s.key} slice={s} name={nameOf(s)} hint={s.kind === 'external' ? externalHint : undefined} active={active === s.key} onActive={setActive} />
+            <LegendRow key={s.key} slice={s} name={nameOf(s)} hint={s.kind === 'external' ? externalHint : undefined} active={active === s.key} onActive={setActive} onOpen={openOf(s)} />
           ))}
         </Box>
       </Box>
@@ -203,7 +222,7 @@ export default function TrafficByZone({ phase, traffic, groupBy, onGroupBy, trun
   }
 
   return (
-    <PostureCard testId='traffic-card' title={t(TITLE[groupBy])} caption={caption} action={select}>
+    <PostureCard testId='traffic-card' title={t(TITLE[groupBy])} caption={caption} hint={hint} action={select}>
       {body}
       {footer && <Box sx={{ mt: 1, pt: 2, borderTop: 1, borderColor: 'divider' }}>{footer}</Box>}
     </PostureCard>

@@ -9326,7 +9326,6 @@
       "todoNothing": "无待办事项",
       "todoUnavailable": "无法读取防火墙数据时不可用",
       "todoFirewallOff": "集群防火墙已关闭",
-      "todoManagementRules": "没有集群规则放行管理访问（{count, plural, other {端口 {ports}}}）",
       "todoPolicyIn": "入站策略为 ACCEPT：任何未被规则丢弃的流量都会进入",
       "todoUnprotected": "{count, plural, other {# 个客户机没有防火墙}}",
       "todoUnzoned": "{count, plural, other {# 个运行中的客户机不在任何区域}}",
@@ -9347,6 +9346,8 @@
       "postureChipClusterUnknown": "集群防火墙不可用",
       "postureChipStopped": "紧急停止已启用",
       "postureChipZones": "强制执行的区域 {enforced, number} / {total, number}",
+      "postureChipZonesOut": "强制执行的区域 {enforced, number} / {total, number} · 出站 {blocked, number} / {total, number}",
+      "postureChipZonesTip": "入站：{total, number} 个区域中有 {enforced, number} 个阻断策略未允许的流量。出站：{blocked, number} 个阻断，{observed, number} 个观察，{off, number} 个未控制。",
       "postureChipZonesUnknown": "强制执行的区域 -",
       "postureChipGuests": "受保护的客户机 {protected, number} / {running, number} 运行中",
       "postureChipGuestsSampled": "受保护的客户机 {protected, number} / {running, number} 已测量 · {total, number} 运行中",
@@ -9381,14 +9382,16 @@
       "postureAllowed": "已允许",
       "postureWouldBlock": "将被阻止",
       "postureBlocked": "已阻止",
-      "postureNotCovered": "未覆盖",
       "postureFlows": "{count, plural, other {# 个流量}}",
       "postureNoCounter": "无计数器",
+      "postureNoCounterHint": "策略允许的流量不会被记录，因此不统计其命中次数。",
       "postureAwaitingDecision": "等待决定",
       "postureBlockedIn": "在 {zones} 中",
       "postureBlockedOut": "{zones} 的出站",
       "postureBlockedNone": "无丢弃",
       "postureServicesTitle": "按命中次数排列的主要服务",
+      "postureServicesShown": "{total, number} 个服务中的 {shown, number} 个",
+      "postureServicesAll": "所有观察到的流量",
       "postureColService": "服务",
       "postureColFlows": "流量",
       "postureColHits": "命中",
@@ -9450,54 +9453,31 @@
     }
   },
   "deployWizard": {
-    "bannerTitle": "集群防火墙未配置",
-    "bannerDescription": "您的集群没有防火墙规则且防火墙已禁用。请在激活防火墙之前部署基本规则，以避免丢失连接。",
-    "bannerButton": "部署防火墙",
     "dialogTitle": "集群防火墙部署",
     "stepAnalysis": "分析",
-    "stepPreview": "预览",
-    "stepApply": "应用",
     "stepActivate": "激活",
     "stepDone": "完成",
     "analysisTitle": "当前集群状态",
     "analysisNodes": "检测到 {count} 个节点",
     "analysisFirewallOff": "集群防火墙已禁用",
-    "analysisNoRules": "未配置集群防火墙规则",
-    "analysisPolicyAccept": "默认策略：ACCEPT（允许所有流量）",
-    "analysisWarning": "在没有白名单规则的情况下使用 DROP 策略激活防火墙将中断集群通信（Corosync、Ceph、迁移…）。此向导将首先创建基本规则。",
-    "previewTitle": "将要创建的规则",
-    "previewDescription": "以下 {count} 条规则将添加到集群防火墙，以白名单方式允许 Proxmox 基本服务。",
-    "previewService": "服务",
-    "previewProtocol": "协议",
-    "previewPorts": "端口",
-    "previewDirection": "方向",
-    "previewAction": "操作",
-    "applyTitle": "正在应用规则",
-    "applyCreating": "正在创建规则：{service}",
-    "applySuccess": "规则已创建：{service}",
-    "applyError": "规则创建失败：{service}",
-    "applyComplete": "所有 {count} 条规则创建成功！",
-    "applyPartial": "已创建 {success}/{total} 条规则。{failed} 条失败。",
+    "analysisNodesReading": "正在读取节点防火墙…",
+    "analysisNodesOff": "所有节点的防火墙均已关闭：启用集群防火墙只会过滤来宾",
+    "analysisNodesFollow": "{count, plural, other {# 个节点会随集群一起启用自身防火墙：{nodes}}}",
+    "analysisInfo": "此向导会启用集群防火墙，来宾防火墙和微分段都需要它。它不会在节点上写入任何内容：既不写规则，也不改入站策略。",
+    "analysisNodesWarning": "在 {nodes} 上，节点防火墙未关闭（不是 enable: 0）：Proxmox 会随集群防火墙一起启用它，并按其管理员设置的规则过滤该节点。ProxCenter 不会添加任何规则：请确认 Web 界面 (8006) 和 SSH (22) 仍可访问，或关闭该节点的防火墙。",
+    "analysisNodesUnknown": "无法读取 {nodes} 的防火墙：请在启用集群防火墙之前检查。",
     "activateTitle": "激活防火墙",
-    "activateEnableFirewall": "启用集群防火墙",
-    "activateSetDrop": "将入站策略设为 DROP",
-    "activateWarning": "启用 DROP 策略意味着所有未被规则明确允许的入站流量将被阻止。上一步创建的规则确保集群服务保持可访问。",
+    "activateDescription": "将启用集群防火墙。其他一切不变：规则、策略和节点防火墙保持原样。",
+    "activateFailed": "无法启用集群防火墙。请重试，或在 防火墙 > 选项 中启用。",
     "activateButton": "激活",
     "activateSkip": "暂时跳过",
     "activating": "激活中...",
     "doneTitle": "部署完成！",
-    "doneRulesCreated": "已创建 {count} 条集群规则",
     "doneFirewallEnabled": "集群防火墙已启用",
     "doneFirewallNotEnabled": "集群防火墙未启用（需要手动激活）",
-    "donePolicyDrop": "入站策略已设为 DROP",
-    "donePolicyAccept": "入站策略保持 ACCEPT",
-    "doneViewRules": "查看规则",
     "doneClose": "关闭",
     "next": "下一步",
-    "cancel": "取消",
-    "customAdd": "添加",
-    "customComment": "描述",
-    "customCommentPlaceholder": "例如：HTTPS、监控…"
+    "cancel": "取消"
   },
   "firewall": {
     "type": "类型",
@@ -13258,31 +13238,42 @@
       "infoObjects": "微分段对象保持不变；恢复时会重新启用集群防火墙并重新应用策略",
       "infoUse": "当分段阻止了不应阻止的流量时使用",
       "resumeInfoReenable": "重新启用集群防火墙，然后重新应用最新修订",
-      "resumeInfoSocle": "如果缺少管理规则（SSH 22、Web 8006）将被拒绝：请先在仪表板的部署向导中修复",
-      "openWizard": "打开部署向导",
+      "resumeInfoSocle": "如果某个自身防火墙已启用的节点不允许 Web 界面 (8006) 和 SSH (22) 进入，则会被拒绝：请先在该节点防火墙中允许它们，或将其关闭",
       "clusterFirewallOff": "集群防火墙已禁用",
       "notDeployed": "尚未部署任何内容",
       "socleUncovered": "规则未接受的地址：{ips}",
       "socleUncoveredNodes": "规则未接受的地址：{ips}（{nodes}）"
     },
     "pending": {
-      "noCount": "未应用的更改",
-      "viewPlan": "查看计划",
+      "noCount": "更改尚未应用。",
+      "viewPlan": "检查并应用",
       "prefixed": "{prefix}：{text}",
-      "whatWillChange": "将要更改的内容：{list}",
+      "whatWillChange": "尚未应用：{list}。",
       "zones": {
         "added": "{count, plural, other {新增 # 个区域}}",
         "changed": "{count, plural, other {更改 # 个区域}}",
         "removed": "{count, plural, other {删除 # 个区域}}"
+      },
+      "zonesNamed": {
+        "added": "{count, plural, other {新增区域 {names}}}",
+        "changed": "{count, plural, other {更改区域 {names}}}",
+        "removed": "{count, plural, other {删除区域 {names}}}"
       },
       "flows": {
         "added": "{count, plural, other {新增 # 条流量规则}}",
         "changed": "{count, plural, other {更改 # 条流量规则}}",
         "removed": "{count, plural, other {删除 # 条流量规则}}"
       },
+      "flowsNamed": {
+        "added": "新增流量规则 {flow}",
+        "changed": "更改流量规则 {flow}",
+        "removed": "删除流量规则 {flow}"
+      },
       "members": "{count, plural, other {# 项成员更改}}",
+      "membersTo": "{count, plural, other {# 个来宾加入 {zone}}}",
       "tagPrefix": "标签前缀已更改",
-      "whatWillChangeInline": "将要更改的内容：{list}",
+      "whatWillChangeInline": "尚未应用：{list}。",
+      "untilApplied": "在应用计划之前，Proxmox 中不会有任何更改。",
       "applying": "正在应用：{list}",
       "applyingInline": "正在应用：{list}",
       "applyingNoCount": "正在应用更改"
@@ -13320,7 +13311,7 @@
       "NETWORK": "无法连接到 ProxCenter。请检查网络连接。",
       "CHECK_PENDING": "已有一次检查在排队：引擎会在下一轮运行时启动它。",
       "generic": "出了点问题。请重试。",
-      "SOCLE_MISSING": "缺少管理规则（SSH 22、Web 8006），因此未重新启用集群防火墙。请使用部署向导添加后再恢复。",
+      "SOCLE_MISSING": "某个自身防火墙已启用的节点不允许 Web 界面 (8006) 和 SSH (22) 进入，因此未重新启用集群防火墙。请在该节点防火墙中允许它们，或将其关闭，然后恢复。",
       "NOT_DEPLOYED": "尚未部署任何内容：请先应用计划，紧急停止作用于已部署的策略。"
     },
     "policy": {
@@ -13661,6 +13652,13 @@
       "nothing": "无需更改：Proxmox 已与草稿一致。",
       "clusterGroup": "集群对象",
       "stepCount": "{count, plural, one {# 个步骤} other {# 个步骤}}",
+      "stepState": {
+        "waiting": "等待中",
+        "running": "正在写入",
+        "done": "已完成",
+        "failed": "失败",
+        "notRun": "未执行"
+      },
       "collisions": "已阻止：以下 Proxmox 对象使用了我们的名称但并非我们创建，请重命名或删除：{names}",
       "foreignRules": "手动添加到我们安全组中的规则将被保留，不会被改动：{names}",
       "unread": "{count, plural, one {# 个客户机无法读取，将在下一轮处理} other {# 个客户机无法读取，将在下一轮处理}}：{names}",
@@ -13915,6 +13913,10 @@
       "acceptOutZoneTip": "添加流 {from} → {to}：同时允许 {from} 到 {to} 的入站流量。",
       "zoneBanner": "{zone} 区域的建议 · 24 小时内 {count, plural, other {# 次未覆盖命中}}",
       "zoneBannerNoCount": "{zone} 区域的建议",
+      "serviceBanner": "已按服务 {service} 筛选（{ports}）",
+      "serviceBannerClear": "显示所有服务",
+      "sourceBanner": "已筛选来源不在任何区域内的流量",
+      "sourceBannerClear": "显示所有来源",
       "dialog": {
         "open": "详情",
         "openFor": "从 {source} 到 {destination} 的流量详情",
@@ -14083,6 +14085,12 @@
       "zoomIn": "放大",
       "zoomOut": "缩小",
       "fitView": "使地图适应视图",
+      "isolate": {
+        "only": "仅显示 {name} 的流量",
+        "all": "所有流量",
+        "showAll": "显示所有流量",
+        "showOnly": "仅显示其流量"
+      },
       "a11y": {
         "nodeDescription": "按 Enter 键或空格键打开其详细信息。",
         "nodeDescriptionKeyboard": "按 Enter 键或空格键打开其详细信息。",
@@ -14204,6 +14212,7 @@
       "checking": "正在检查集群...",
       "runAgain": "重新检查",
       "openWizard": "打开部署向导",
+      "raiseLogRate": "观察期间提高",
       "busy": "正在应用，请稍后重试。",
       "noClient": "此连接没有可用的 Proxmox 客户端。",
       "readFailed": "无法读取 Proxmox：{error}",
@@ -14216,7 +14225,7 @@
         "cluster_firewall": {
           "title": "集群防火墙",
           "pass": "集群防火墙已开启。",
-          "off": "集群防火墙已关闭。部署向导会先添加管理规则，再将其开启。",
+          "off": "集群防火墙已关闭。部署向导会启用它，且不会在节点上写入任何内容。",
           "heldByStop": "集群防火墙被紧急停止保持关闭：解除停止以重新启用"
         },
         "socle_rules": {
@@ -14233,9 +14242,10 @@
         },
         "log_ratelimit": {
           "title": "日志速率限制",
-          "default": "PVE 以默认速率（{rate}）记录日志，观察会漏掉部分流量。请在设置中调高。",
+          "default": "PVE 以默认速率（{rate}）记录日志，因此观察会遗漏流量。",
           "pass": "PVE 最多记录 {rate}。",
-          "disabled": "PVE 不限制防火墙日志。"
+          "disabled": "PVE 不限制防火墙日志。",
+          "planned": "在观察区域期间提高到 {rate}，之后恢复原值（设置）。"
         },
         "self_in_zone": {
           "title": "ProxCenter 地址",
@@ -14475,6 +14485,8 @@
       "title": "完整检查",
       "runningText": "完整检查进行中",
       "queued": "等待引擎（最多 60 秒）",
+      "queuedFor": "已排队 {seconds, number} 秒：引擎会在下一次巡检时启动，最多 60 秒",
+      "queuedLate": "引擎正在完成此集群上的另一项操作：检查将随后进行",
       "inProgress": "进行中，已用 {seconds, number} 秒",
       "progress": "{calls, plural, other {# 次 API 调用}}，{writes, plural, other {# 次写入}}，{seconds, number} 秒",
       "doneSummary": "用时 {seconds, number} 秒完成检查，{calls, plural, other {# 次 API 调用}}",
@@ -14548,7 +14560,12 @@
         "failed": "失败",
         "notRun": "未运行"
       },
-      "runAgain": "重新运行"
+      "runAgain": "重新运行",
+      "stages": {
+        "title": "检查的内容",
+        "ips": "成员的 IP 地址",
+        "guests": "重新读取来宾并与策略比较，修复偏差"
+      }
     },
     "trafficLens": {
       "connection": "连接",

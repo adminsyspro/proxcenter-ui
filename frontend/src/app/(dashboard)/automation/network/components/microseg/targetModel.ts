@@ -5,7 +5,7 @@ import {
   UNZONED_ID, bareIp, guestNodeId, moreNodeId, zoneNodeId, type FlowFilters, type MapEdgeData, type ZoneGraph,
 } from './zoneGraph'
 import { byText } from './zoneLayout'
-import { guestKey, type PolicyGuest, type ZoneMember } from './zoneModel'
+import { byGuestName, guestKey, type PolicyGuest, type ZoneMember } from './zoneModel'
 
 /** The most guests the target picker lists for one search: typing narrows it. */
 export const MAX_OPTIONS = 50
@@ -42,7 +42,7 @@ export function targetCandidates(guests: PolicyGuest[], membersByZone: ReadonlyM
   return guests
     .filter(g => g.status === 'running')
     .map(g => ({ key: guestKey(g), vmid: g.vmid, name: g.name, type: g.type, node: g.node, status: g.status, ips: g.ips ?? [], zoneId: zoneOf.get(guestKey(g)) ?? null }))
-    .sort((a, b) => byText(a.name, b.name) || a.vmid - b.vmid)
+    .sort(byGuestName)
 }
 
 /** A guest matches a search on its name (anywhere), its VMID or one of its addresses (from the start), any case. */

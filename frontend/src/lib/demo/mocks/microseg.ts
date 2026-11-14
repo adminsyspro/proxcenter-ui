@@ -69,10 +69,14 @@ export function microsegGuestOverlay(vmid: number, tags: unknown): { tags: strin
 
 const hourBucket = (now: number) => now - (now % HOUR)
 
-// Outbound filtering: the app zone observes the local network and Internet, the others are off.
-const egressOf = (z: DemoZone, now: number) => z.name === 'app'
-  ? { egress_state: 'observe', egress_mode: 'all', egress_observe_since: new Date(hourBucket(now) - 2 * DAY).toISOString() }
-  : { egress_state: 'off', egress_mode: 'local', egress_observe_since: null }
+// Outbound filtering: the app zone observes the local network and Internet, the db zone blocks what leaves it towards
+// the local network, the others are off.
+function egressOf(z: DemoZone, now: number) {
+  if (z.name === 'app') return { egress_state: 'observe', egress_mode: 'all', egress_observe_since: new Date(hourBucket(now) - 2 * DAY).toISOString() }
+  if (z.name === 'db') return { egress_state: 'enforce', egress_mode: 'local', egress_observe_since: new Date(hourBucket(now) - 6 * DAY).toISOString() }
+
+  return { egress_state: 'off', egress_mode: 'local', egress_observe_since: null }
+}
 
 function zoneRows(now: number) {
   return ZONES.map(z => ({
@@ -163,6 +167,13 @@ const SUGGESTIONS: SuggestionSeed[] = [
   { id: 'demo-sugg-7', direction: 'out', kind: 'would_block', status: 'pending', src: { zone: 'app', vmid: 151 }, dst: { ip: '10.20.90.12' }, proto: 'tcp', dport: '3128', hits: 240, firstHours: 36, lastHours: 0 },
   { id: 'demo-sugg-8', direction: 'out', kind: 'would_block', status: 'pending', src: { zone: 'app', vmid: 152 }, dst: { ip: '151.101.1.69' }, proto: 'tcp', dport: '443', hits: 88, firstHours: 30, lastHours: 1 },
   { id: 'demo-sugg-9', direction: 'out', kind: 'would_block', status: 'pending', src: { zone: 'app', vmid: 155 }, dst: { aggregate: '0.0.0.0/0' }, proto: 'tcp', dport: '443', hits: 5120, firstHours: 44, lastHours: 0 },
+  // What the db zone, whose outbound is blocked, was stopped from reaching: a backup target that was never declared.
+  { id: 'demo-sugg-10', direction: 'out', kind: 'blocked', status: 'pending', src: { zone: 'db', vmid: 113 }, dst: { ip: '10.20.90.40' }, proto: 'tcp', dport: '22', hits: 64, firstHours: 18, lastHours: 1 },
+  // More of what the monitoring zone, still observed, would lose: the dashboard and the map read from these.
+  { id: 'demo-sugg-11', kind: 'would_block', status: 'pending', src: { ip: '192.168.1.57' }, dst: { zone: 'monitoring', vmid: 131 }, proto: 'tcp', dport: '3000', hits: 870, firstHours: 40, lastHours: 0 },
+  { id: 'demo-sugg-12', kind: 'would_block', status: 'pending', src: { ip: '192.168.1.92' }, dst: { zone: 'monitoring', vmid: 133 }, proto: 'tcp', dport: '9090', hits: 415, firstHours: 38, lastHours: 0 },
+  { id: 'demo-sugg-13', kind: 'would_block', status: 'pending', src: { zone: 'app', vmid: 153 }, dst: { zone: 'monitoring', vmid: 134 }, proto: 'tcp', dport: '3100', hits: 2260, firstHours: 45, lastHours: 0 },
+  { id: 'demo-sugg-14', kind: 'would_block', status: 'pending', src: { zone: 'web', vmid: 102 }, dst: { zone: 'monitoring', vmid: 134 }, proto: 'tcp', dport: '3100', hits: 1180, firstHours: 45, lastHours: 0 },
 ]
 
 /** The destination of a seed: a guest of a zone, an address outside the zones, or the aggregate of many destinations. */
@@ -302,9 +313,137 @@ const page = (params: URLSearchParams, fallbackLimit: number, max: number) => {
   return { limit, offset }
 }
 
+/** A number in [0, 1) that only depends on its two seeds: the same bucket of the same flow always reads the same. */
+function noise(a: number, b: number): number {
+  const x = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453
+
+  return x - Math.floor(x)
+}
+
+/** What one pending observed flow is in the history and in the events: the zone that logged it, the zone it came from, its verdict. */
+function flowSeries() {
+  return SUGGESTIONS.filter(s => s.status === 'pending').map((s, index) => {
+    const src = 'zone' in s.src ? s.src : null
+    const dst = 'zone' in s.dst ? s.dst : null
+    const out = s.direction === 'out'
+
+    return {
+      seed: s, index, out,
+      // Inbound: the destination zone logged it. Outbound: the emitting zone did, and "src_zone" is where it went.
+      zone: out ? src?.zone ?? '' : dst?.zone ?? '',
+      srcZone: out ? dst?.zone ?? '' : src?.zone ?? '',
+      // Hits per hour, from the total of the flow over the time it was seen.
+      perHour: s.hits / Math.max(1, s.firstHours - s.lastHours),
+    }
+  }).filter(f => f.zone)
+}
+
+const TRAFFIC_MAX_BUCKETS = 2_100
+
+/**
+ * GET /traffic: the history of the pending observed flows per bucket. Each flow follows its own day curve (a phase
+ * of its own), with a noise that depends on the bucket only, so the chart scrolls instead of being redrawn.
+ */
+function traffic(params: URLSearchParams, now: number) {
+  const step = Math.max(Number(params.get('step')) || 300, 60)
+  const to = Number.isNaN(Date.parse(params.get('to') ?? '')) ? now : Date.parse(params.get('to')!)
+  const asked = Number.isNaN(Date.parse(params.get('from') ?? '')) ? to - HOUR : Date.parse(params.get('from')!)
+  const from = Math.max(asked, to - TRAFFIC_MAX_BUCKETS * step * 1000)
+  const direction = params.get('direction')
+  const series = flowSeries().filter(f => !direction || (f.out ? 'out' : 'in') === direction)
+  const buckets: Record<string, unknown>[] = []
+
+  for (let at = from - (from % (step * 1000)); at < to; at += step * 1000) {
+    if (at > now) break
+    const n = at / (step * 1000)
+
+    for (const f of series) {
+      const day = 0.65 + 0.35 * Math.sin((2 * Math.PI * at) / DAY + f.index * 1.7)
+      const expected = f.perHour * (step / 3600) * day * (0.75 + 0.5 * noise(n, f.index))
+      // A rare flow (a few hits an hour) is rounded up in some buckets and down in the others, so it still shows.
+      const hits = Math.floor(expected + noise(n + 0.5, f.index + 11))
+
+      if (hits > 0) buckets.push({ at: new Date(at).toISOString(), zone: f.zone, src_zone: f.srcZone, verdict: f.seed.kind, hits, ...(f.out ? { direction: 'out' } : {}) })
+    }
+  }
+
+  return { step, from: new Date(from).toISOString(), to: new Date(to).toISOString(), buckets }
+}
+
+const EVENTS_RING = 240
+
+/** GET /events: the last flows the engine read, newest first, one every few seconds, taken in turn from the pending flows. */
+function events(params: URLSearchParams, now: number) {
+  const limit = Math.min(Math.max(Number(params.get('limit')) || 200, 1), 1_000)
+  const zone = params.get('zone') ?? ''
+  const verdict = params.get('verdict') ?? ''
+  const q = (params.get('q') ?? '').toLowerCase()
+  // The paging cursor (`before_seq`) and the time filter (`before`), as the orchestrator reads them.
+  const beforeSeq = Number(params.get('before_seq')) || Infinity
+  const beforeTime = Date.parse(params.get('before') ?? '') || Infinity
+  const series = flowSeries()
+  const head = Math.floor(now / 15_000)
+  const rows = []
+
+  for (let k = 0; k < EVENTS_RING; k++) {
+    const f = series[(head - k) % series.length]
+    const s = f.seed
+    const guestOf = (f.out ? s.src : s.dst) as { zone: string; vmid: number }
+    const dst = destinationOf(s.dst)
+    const srcIp = 'zone' in s.src ? ipOf(s.src.vmid, zoneByName(s.src.zone).octet) : s.src.ip
+    const ref = guestRef(guestOf.vmid)
+
+    rows.push({
+      seq: head - k, ts: new Date((head - k) * 15_000).toISOString(), node: ref.node, vmid: ref.vmid, type: ref.type,
+      guest: GUESTS[guestOf.vmid]?.name ?? `${ref.type}/${ref.vmid}`, zone: f.zone, src_zone: f.srcZone, src_ip: srcIp, dst_ip: dst.ip,
+      proto: s.proto, dport: s.dport, verdict: s.kind, ...(f.out ? { direction: 'out' } : {}),
+    })
+  }
+
+  const kept = rows.filter(e => (
+    e.seq < beforeSeq && Date.parse(e.ts) < beforeTime && (!zone || e.zone === zone || e.src_zone === zone) && (!verdict || e.verdict === verdict) &&
+    (!q || [e.guest, e.src_ip, e.dst_ip, e.proto, String(e.dport), e.zone, e.src_zone].some(v => v.toLowerCase().includes(q)))
+  ))
+  const page = kept.slice(0, limit)
+
+  return { events: page, truncated: kept.length > page.length, oldest: page.length > 0 ? page[page.length - 1].ts : null }
+}
+
+/**
+ * GET /api/v1/firewall/coverage/{connection}: one row per guest of the inventory. A member of a zone the engine
+ * manages is filtered by Proxmox; the guest of the "NIC firewall off" drift has its options on and its NIC flag off;
+ * one guest in four of the others has no firewall, which is what the "To do" list of the Dashboard counts.
+ */
+function coverage(now: number) {
+  const nicOff = new Set(DRIFTS.filter(d => d.kind === 'nic_firewall_off').map(d => d.guest.vmid))
+  const rows = Object.entries(GUESTS).map(([id, g]) => {
+    const vmid = Number(id)
+    const zone = zoneOfGuest.get(vmid)
+    const managed = !!zone && zone.state !== 'disabled'
+    const optionsEnabled = managed || vmid % 4 !== 0
+    const nicFirewall = optionsEnabled && !nicOff.has(vmid)
+
+    return {
+      type: g.type, node: g.node, vmid: String(vmid), name: g.name, status: g.running ? 'running' : 'stopped',
+      tags: zone ? [`${TAG_PREFIX}${zone.name}`] : [],
+      enabled: optionsEnabled && nicFirewall, optionsEnabled, nicFirewall, options: null,
+      vlans: zone ? [zone.octet] : vmid === UNZONED.vmid ? [UNZONED.octet] : [],
+    }
+  })
+  const enabled = rows.filter(r => r.enabled).length
+
+  return {
+    total: rows.length, measured: rows.length, enabled, disabled: rows.length - enabled, unknown: 0, sampled: false, partial: false,
+    computedAt: new Date(now - 4 * 60_000).toISOString(), computing: false, guests: rows,
+  }
+}
+
 export const MICROSEG_MOCKS: DemoMockMap = {}
 
-const ROUTE = /^\/api\/v1\/firewall\/microseg\/[^/]+\/(policy|status|drifts|preflight|suggestions|runs|revisions)(?:\/([^/]+))?$/
+const ROUTE = /^\/api\/v1\/firewall\/microseg\/[^/]+\/(policy|status|drifts|preflight|suggestions|runs|revisions|traffic|events)(?:\/([^/]+))?$/
+
+/** The guest coverage the Dashboard reads (its chips, its "To do" list, the groupings by VLAN and node): same guests, same zones. */
+const COVERAGE_ROUTE = /^\/api\/v1\/firewall\/coverage\/[^/]+$/
 
 const WRITE_ROUTE = /^\/api\/v1\/firewall\/microseg\/[^/]+\//
 
@@ -314,6 +453,8 @@ export const resolveMicrosegMock: DemoMockResolver = (method, cleanPath, url) =>
       ? new Response(JSON.stringify({ code: 'FORBIDDEN', error: 'Action disabled in demo mode' }), { status: 403, headers: { 'Content-Type': 'application/json' } })
       : null
   }
+
+  if (COVERAGE_ROUTE.test(cleanPath)) return coverage(Date.now())
 
   const match = ROUTE.exec(cleanPath)
 
@@ -339,6 +480,8 @@ export const resolveMicrosegMock: DemoMockResolver = (method, cleanPath, url) =>
 
       return { runs: RUNS.slice(offset, offset + limit).map(r => runRow(r, now)), limit, offset }
     }
+    case 'traffic': return traffic(url.searchParams, now)
+    case 'events': return events(url.searchParams, now)
     default: {
       const params = url.searchParams
       const { limit, offset } = page(params, 50, 200)
@@ -346,10 +489,15 @@ export const resolveMicrosegMock: DemoMockResolver = (method, cleanPath, url) =>
       const stat = params.get('status')
       const zone = params.get('zone')
       const direction = params.get('direction')
+      // What a figure of the Dashboard opens the Observation list on: the ports of a service, the sources in no zone.
+      const services = params.getAll('service')
+      const unknownSource = params.get('source') === 'unknown'
 
       const rows = SUGGESTIONS.map(s => suggestionRow(s, now)).filter(s => (
         (!kind || s.kind === kind) && (!stat || s.status === stat) && (!zone || s.src_zone_id === zone || s.dst_zone_id === zone) &&
-        (!direction || (s.direction ?? 'in') === direction)
+        (!direction || (s.direction ?? 'in') === direction) &&
+        (services.length === 0 || services.includes(s.dport ? `${s.proto}/${s.dport}` : s.proto)) &&
+        (!unknownSource || s.src_zone_id === '')
       ))
 
       return { suggestions: rows.slice(offset, offset + limit), limit, offset }

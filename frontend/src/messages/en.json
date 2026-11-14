@@ -9326,7 +9326,6 @@
       "todoNothing": "Nothing to do",
       "todoUnavailable": "Not available while the firewall data cannot be read",
       "todoFirewallOff": "Cluster firewall off",
-      "todoManagementRules": "No cluster rule lets the administration in ({count, plural, one {port {ports}} other {ports {ports}}})",
       "todoPolicyIn": "Inbound policy ACCEPT: whatever no rule drops comes in",
       "todoUnprotected": "{count, plural, one {# guest without firewall} other {# guests without firewall}}",
       "todoUnzoned": "{count, plural, one {# running guest in no zone} other {# running guests in no zone}}",
@@ -9347,6 +9346,8 @@
       "postureChipClusterUnknown": "Cluster firewall not available",
       "postureChipStopped": "Emergency stop active",
       "postureChipZones": "Zones enforced {enforced, number} / {total, number}",
+      "postureChipZonesOut": "Zones enforced {enforced, number} / {total, number} · outbound {blocked, number} / {total, number}",
+      "postureChipZonesTip": "Inbound: {enforced, number} of {total, number} zones block what the policy does not allow. Outbound: {blocked, number} block, {observed, number} observe, {off, number} not controlled.",
       "postureChipZonesUnknown": "Zones enforced -",
       "postureChipGuests": "Guests protected {protected, number} / {running, number} running",
       "postureChipGuestsSampled": "Guests protected {protected, number} / {running, number} measured · {total, number} running",
@@ -9381,14 +9382,16 @@
       "postureAllowed": "Allowed",
       "postureWouldBlock": "Would be blocked",
       "postureBlocked": "Blocked",
-      "postureNotCovered": "Not covered",
       "postureFlows": "{count, plural, one {# flow} other {# flows}}",
       "postureNoCounter": "no counter",
+      "postureNoCounterHint": "The flows the policy allows are not logged, so their hits are not counted.",
       "postureAwaitingDecision": "awaiting a decision",
       "postureBlockedIn": "in {zones}",
       "postureBlockedOut": "outbound from {zones}",
       "postureBlockedNone": "none dropped",
       "postureServicesTitle": "Top services by hits",
+      "postureServicesShown": "{shown, number} of {total, number} services",
+      "postureServicesAll": "All observed flows",
       "postureColService": "Service",
       "postureColFlows": "Flows",
       "postureColHits": "Hits",
@@ -9450,54 +9453,31 @@
     }
   },
   "deployWizard": {
-    "bannerTitle": "Cluster firewall not configured",
-    "bannerDescription": "Your cluster has no firewall rules and the firewall is disabled. Deploy essential rules before activating the firewall to avoid losing connectivity.",
-    "bannerButton": "Deploy Firewall",
     "dialogTitle": "Cluster Firewall Deployment",
     "stepAnalysis": "Analysis",
-    "stepPreview": "Preview",
-    "stepApply": "Apply",
     "stepActivate": "Activate",
     "stepDone": "Done",
     "analysisTitle": "Current cluster state",
     "analysisNodes": "{count} nodes detected",
     "analysisFirewallOff": "Cluster firewall is disabled",
-    "analysisNoRules": "No cluster firewall rules configured",
-    "analysisPolicyAccept": "Default policy: ACCEPT (all traffic allowed)",
-    "analysisWarning": "Activating the firewall with a DROP policy without whitelist rules will break cluster communication (Corosync, Ceph, migrations…). This wizard will create the essential rules first.",
-    "previewTitle": "Rules to be created",
-    "previewDescription": "The following {count} rules will be added to the cluster firewall to whitelist essential Proxmox services.",
-    "previewService": "Service",
-    "previewProtocol": "Protocol",
-    "previewPorts": "Ports",
-    "previewDirection": "Direction",
-    "previewAction": "Action",
-    "applyTitle": "Applying rules",
-    "applyCreating": "Creating rule: {service}",
-    "applySuccess": "Rule created: {service}",
-    "applyError": "Failed to create rule: {service}",
-    "applyComplete": "All {count} rules created successfully!",
-    "applyPartial": "{success} of {total} rules created. {failed} failed.",
+    "analysisNodesReading": "Reading the firewall of the nodes…",
+    "analysisNodesOff": "The firewall of every node is off: turning the cluster firewall on filters the guests only",
+    "analysisNodesFollow": "{count, plural, one {1 node turns its own firewall on with the cluster: {nodes}} other {# nodes turn their own firewall on with the cluster: {nodes}}}",
+    "analysisInfo": "This wizard turns the cluster firewall on, which the guests' firewalls and the micro-segmentation need. It writes nothing on the nodes: no rule, no inbound policy.",
+    "analysisNodesWarning": "On {nodes}, the node's own firewall is not set to off (enable: 0), so Proxmox turns it on with the cluster firewall and filters the node with the rules its admin set up. ProxCenter adds none: check that the web UI (8006) and SSH (22) stay reachable, or set the node's firewall to off.",
+    "analysisNodesUnknown": "The firewall of {nodes} could not be read: check it before turning the cluster firewall on.",
     "activateTitle": "Activate firewall",
-    "activateEnableFirewall": "Enable cluster firewall",
-    "activateSetDrop": "Set inbound policy to DROP",
-    "activateWarning": "Enabling DROP policy means all inbound traffic not explicitly allowed by a rule will be blocked. The rules created in the previous step ensure cluster services remain accessible.",
+    "activateDescription": "The cluster firewall is turned on. Nothing else changes: the rules, the policies and the nodes' firewalls stay as they are.",
+    "activateFailed": "The cluster firewall could not be turned on. Try again, or turn it on in Firewalling > Options.",
     "activateButton": "Activate",
     "activateSkip": "Skip for now",
     "activating": "Activating...",
     "doneTitle": "Deployment complete!",
-    "doneRulesCreated": "{count} cluster rules created",
     "doneFirewallEnabled": "Cluster firewall enabled",
     "doneFirewallNotEnabled": "Cluster firewall not enabled (manual activation needed)",
-    "donePolicyDrop": "Inbound policy set to DROP",
-    "donePolicyAccept": "Inbound policy remains ACCEPT",
-    "doneViewRules": "View rules",
     "doneClose": "Close",
     "next": "Next",
-    "cancel": "Cancel",
-    "customAdd": "Add",
-    "customComment": "Description",
-    "customCommentPlaceholder": "e.g. HTTPS, Monitoring…"
+    "cancel": "Cancel"
   },
   "firewall": {
     "type": "Type",
@@ -13258,31 +13238,42 @@
       "infoObjects": "The micro-segmentation objects stay in place; Resume re-enables the cluster firewall and re-applies the policy",
       "infoUse": "Use it when the segmentation blocks something it should not",
       "resumeInfoReenable": "Re-enables the cluster firewall, then re-applies the last revision",
-      "resumeInfoSocle": "Refused if the management rules (SSH 22, web 8006) are missing: fix them in the Dashboard deployment wizard first",
-      "openWizard": "Open the deployment wizard",
+      "resumeInfoSocle": "Refused if a node whose own firewall is on does not let the web UI (8006) and SSH (22) in: allow them in that node's firewall, or turn it off, first",
       "clusterFirewallOff": "Cluster firewall disabled",
       "notDeployed": "Nothing deployed",
       "socleUncovered": "Addresses the rules do not accept: {ips}",
       "socleUncoveredNodes": "Addresses the rules do not accept: {ips} (on {nodes})"
     },
     "pending": {
-      "noCount": "Unapplied changes",
-      "viewPlan": "View plan",
+      "noCount": "Changes not applied yet.",
+      "viewPlan": "Review and apply",
       "prefixed": "{prefix}: {text}",
-      "whatWillChange": "What will change: {list}",
+      "whatWillChange": "Not applied yet: {list}.",
       "zones": {
         "added": "{count, plural, one {# zone added} other {# zones added}}",
         "changed": "{count, plural, one {# zone changed} other {# zones changed}}",
         "removed": "{count, plural, one {# zone removed} other {# zones removed}}"
+      },
+      "zonesNamed": {
+        "added": "{count, plural, one {zone {names} added} other {zones {names} added}}",
+        "changed": "{count, plural, one {zone {names} changed} other {zones {names} changed}}",
+        "removed": "{count, plural, one {zone {names} removed} other {zones {names} removed}}"
       },
       "flows": {
         "added": "{count, plural, one {# flow added} other {# flows added}}",
         "changed": "{count, plural, one {# flow changed} other {# flows changed}}",
         "removed": "{count, plural, one {# flow removed} other {# flows removed}}"
       },
+      "flowsNamed": {
+        "added": "flow {flow} added",
+        "changed": "flow {flow} changed",
+        "removed": "flow {flow} removed"
+      },
       "members": "{count, plural, one {# member change} other {# member changes}}",
+      "membersTo": "{count, plural, one {# guest to {zone}} other {# guests to {zone}}}",
       "tagPrefix": "tag prefix changed",
-      "whatWillChangeInline": "what will change: {list}",
+      "whatWillChangeInline": "not applied yet: {list}.",
+      "untilApplied": "Nothing changes in Proxmox until you apply the plan.",
       "applying": "Being applied: {list}",
       "applyingInline": "being applied: {list}",
       "applyingNoCount": "Changes being applied"
@@ -13320,7 +13311,7 @@
       "NETWORK": "ProxCenter cannot be reached. Check your network connection.",
       "CHECK_PENDING": "A check is already queued: the engine starts it at its next pass.",
       "generic": "Something went wrong. Try again.",
-      "SOCLE_MISSING": "The management rules (SSH 22, web 8006) are missing, so the cluster firewall was not re-enabled. Add them with the deployment wizard, then resume.",
+      "SOCLE_MISSING": "A node whose own firewall is on does not let the web UI (8006) and SSH (22) in, so the cluster firewall was not re-enabled. Allow them in that node's firewall, or turn it off, then resume.",
       "NOT_DEPLOYED": "Nothing is deployed yet: apply a plan first, the emergency stop acts on a deployed policy."
     },
     "policy": {
@@ -13661,6 +13652,13 @@
       "nothing": "Nothing to change: Proxmox already matches the draft.",
       "clusterGroup": "Cluster objects",
       "stepCount": "{count, plural, one {# step} other {# steps}}",
+      "stepState": {
+        "waiting": "Waiting",
+        "running": "Being written",
+        "done": "Done",
+        "failed": "Failed",
+        "notRun": "Not run"
+      },
       "collisions": "Blocked: these Proxmox objects use our names without being ours, rename or remove them: {names}",
       "foreignRules": "Rules added by hand in our security groups are kept, not touched: {names}",
       "unread": "{count, plural, one {# guest} other {# guests}} could not be read, they will be handled on the next pass: {names}",
@@ -13915,6 +13913,10 @@
       "acceptOutZoneTip": "Adds the flow {from} → {to}: it also allows {to}'s inbound from {from}.",
       "zoneBanner": "Suggestions for zone {zone} · {count, plural, one {# uncovered hit} other {# uncovered hits}} in 24 h",
       "zoneBannerNoCount": "Suggestions for zone {zone}",
+      "serviceBanner": "Filtered on the service {service} ({ports})",
+      "serviceBannerClear": "Show every service",
+      "sourceBanner": "Filtered on the flows whose source is in no zone",
+      "sourceBannerClear": "Show every source",
       "dialog": {
         "open": "Details",
         "openFor": "Details of the flow from {source} to {destination}",
@@ -14083,6 +14085,12 @@
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
       "fitView": "Fit the map to the view",
+      "isolate": {
+        "only": "Flows of {name} only",
+        "all": "All flows",
+        "showAll": "Show all flows",
+        "showOnly": "Only its flows"
+      },
       "a11y": {
         "nodeDescription": "Press enter or space to open its details.",
         "nodeDescriptionKeyboard": "Press enter or space to open its details.",
@@ -14204,6 +14212,7 @@
       "checking": "Checking the cluster...",
       "runAgain": "Run again",
       "openWizard": "Open the deployment wizard",
+      "raiseLogRate": "Raise while observing",
       "busy": "An apply is running, retry in a moment.",
       "noClient": "No Proxmox client is available for this connection.",
       "readFailed": "Proxmox could not be read: {error}",
@@ -14216,7 +14225,7 @@
         "cluster_firewall": {
           "title": "Cluster firewall",
           "pass": "The cluster firewall is on.",
-          "off": "The cluster firewall is off. The deployment wizard adds the management rules, then turns it on.",
+          "off": "The cluster firewall is off. The deployment wizard turns it on, without writing anything on the nodes.",
           "heldByStop": "Cluster firewall held off by the emergency stop: lift the stop to re-enable it"
         },
         "socle_rules": {
@@ -14233,9 +14242,10 @@
         },
         "log_ratelimit": {
           "title": "Log rate limit",
-          "default": "PVE logs at its default rate ({rate}), so the observation misses flows. Raise it in the settings.",
+          "default": "PVE logs at its default rate ({rate}), so the observation misses flows.",
           "pass": "PVE logs up to {rate}.",
-          "disabled": "PVE does not limit the firewall log."
+          "disabled": "PVE does not limit the firewall log.",
+          "planned": "Raised to {rate} while a zone is observed, then set back (settings)."
         },
         "self_in_zone": {
           "title": "ProxCenter address",
@@ -14475,6 +14485,8 @@
       "title": "Full check",
       "runningText": "Full check in progress",
       "queued": "Waiting for the engine (up to 60 s)",
+      "queuedFor": "Queued for {seconds, number} s: the engine starts it at its next pass, within 60 s",
+      "queuedLate": "The engine is finishing another operation on this cluster: the check comes next",
       "inProgress": "In progress, {seconds, number} s elapsed",
       "progress": "{calls, plural, one {# API call} other {# API calls}}, {writes, plural, one {# write} other {# writes}}, {seconds, number} s",
       "doneSummary": "Checked in {seconds, number} s with {calls, plural, one {# API call} other {# API calls}}",
@@ -14548,7 +14560,12 @@
         "failed": "failed",
         "notRun": "not run"
       },
-      "runAgain": "Run again"
+      "runAgain": "Run again",
+      "stages": {
+        "title": "What the check does",
+        "ips": "IP addresses of the members",
+        "guests": "Guests read again and compared with the policy, drifts repaired"
+      }
     },
     "trafficLens": {
       "connection": "Connection",

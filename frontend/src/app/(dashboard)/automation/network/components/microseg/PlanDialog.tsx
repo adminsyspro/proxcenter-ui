@@ -12,6 +12,7 @@ import ApplyResult from './ApplyResult'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PlanNotices, { Notice } from './PlanNotices'
 import PlanSteps from './PlanSteps'
+import { stepStates, stepsWithOutcome } from './planStepStates'
 import RunProgress from './RunProgress'
 import { ONE_LINE_SX, isVersionConflict } from './dialogParts'
 import type { TrackedRun } from './microsegTabTypes'
@@ -88,6 +89,8 @@ function PlanBody({ connectionId, policy, reloadPolicy, startRun, onClose }: Bod
   const state = planState(run, policy.version, policy.pending_changes, conflict)
   const { steps } = state
   const canApply = state.applicable && !state.stale && !busy && !applyRunId
+  // Where each step of the plan stands in its application; null when the application is not that of the plan shown.
+  const applied = applyRunId ? stepStates(steps, applyRun.run) : null
 
   const recomputeButton = <WriteTip><Button color='inherit' size='small' disabled={!canWrite} onClick={recompute}>{t('recompute')}</Button></WriteTip>
 
@@ -127,7 +130,9 @@ function PlanBody({ connectionId, policy, reloadPolicy, startRun, onClose }: Bod
         {applyRunId && (
           <>
             <RunProgress run={applyRun.run} error={applyRun.error} runningText={t('applying')} />
-            {applyRun.run && applyRun.done && <ApplyResult run={applyRun.run} guests={guests} />}
+            {applyRun.run && applyRun.done && <ApplyResult run={applyRun.run} guests={guests} hideSteps={!!applied} />}
+            {/* The plan stays on screen while it is applied: each step gets its check as the engine writes it. */}
+            {applied && <PlanSteps steps={stepsWithOutcome(steps, applyRun.run)} guests={guests} states={applied} />}
           </>
         )}
       </DialogContent>

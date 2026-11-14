@@ -205,27 +205,32 @@ describe('demo micro-segmentation', () => {
 })
 
 describe('demo micro-segmentation, outbound', () => {
-  it('puts the app zone in outbound observe over the local network and the internet, the others off', async () => {
+  it('puts the app zone in outbound observe over the local network and the internet, the db zone in outbound blocking, the others off', async () => {
     const { zones } = await demoGet(`${BASE}/policy`)
     const app = zones.find((z: any) => z.name === 'app')
+    const db = zones.find((z: any) => z.name === 'db')
 
     expect(app).toMatchObject({ egress_state: 'observe', egress_mode: 'all' })
     expect(Date.parse(app.egress_observe_since)).toBeLessThanOrEqual(Date.now())
-    for (const z of zones.filter((x: any) => x.name !== 'app')) {
+    // A zone that blocks its outbound: what the zones chip of the Dashboard counts ("outbound 1 / 5").
+    expect(db).toMatchObject({ state: 'enforce', egress_state: 'enforce', egress_mode: 'local' })
+    for (const z of zones.filter((x: any) => x.name !== 'app' && x.name !== 'db')) {
       expect(z.egress_state ?? 'off', z.name).toBe('off')
       expect(z.egress_observe_since ?? null, z.name).toBeNull()
     }
   })
 
-  it('serves 3 outbound suggestions, one of them the aggregate, and filters by direction', async () => {
+  it('serves 4 outbound suggestions, one of them the aggregate and one blocked, and filters by direction', async () => {
     const policy = await demoGet(`${BASE}/policy`)
-    const app = policy.zones.find((z: any) => z.name === 'app').id
+    const emitters = ['app', 'db'].map(name => policy.zones.find((z: any) => z.name === name).id)
     const out = (await demoGet(`${BASE}/suggestions?direction=out`)).suggestions
     const inbound = (await demoGet(`${BASE}/suggestions?direction=in`)).suggestions
     const all = (await demoGet(`${BASE}/suggestions`)).suggestions
 
-    expect(out).toHaveLength(3)
-    expect(out.every((s: any) => s.direction === 'out' && s.src_zone_id === app && s.src_key === app)).toBe(true)
+    expect(out).toHaveLength(4)
+    expect(out.every((s: any) => s.direction === 'out' && emitters.includes(s.src_zone_id) && s.src_key === s.src_zone_id)).toBe(true)
+    // Only the zone whose outbound is blocked has a blocked outbound flow.
+    expect(out.filter((s: any) => s.kind === 'blocked').map((s: any) => s.src_zone_id)).toEqual([emitters[1]])
     expect(out.filter((s: any) => s.dst_key === '0.0.0.0/0' || s.dst_key === '::/0')).toHaveLength(1)
     expect(out.every((s: any) => s.dst_zone_id === '' && s.dst_key !== '')).toBe(true)
     expect(inbound.every((s: any) => (s.direction ?? 'in') === 'in')).toBe(true)
@@ -241,5 +246,101 @@ describe('demo micro-segmentation, outbound', () => {
     for (const n of log_nodes) {
       expect(Object.keys(n).sort((a, b) => a.localeCompare(b))).toEqual(['full_pages_24h', 'lag_seconds', 'lines_last', 'lines_per_min_15m', 'node'])
     }
+  })
+
+  it('filters the suggestions on the ports of a service and on the sources in no zone, as the Dashboard opens the Observation list', async () => {
+    const all = (await demoGet(`${BASE}/suggestions?status=pending&limit=200`)).suggestions
+    const loki = (await demoGet(`${BASE}/suggestions?status=pending&service=tcp%2F3100`)).suggestions
+    const two = (await demoGet(`${BASE}/suggestions?status=pending&service=tcp%2F3100&service=tcp%2F22`)).suggestions
+    const unknown = (await demoGet(`${BASE}/suggestions?status=pending&source=unknown`)).suggestions
+
+    expect(loki.length).toBeGreaterThan(0)
+    expect(loki.every((s: any) => s.proto === 'tcp' && s.dport === '3100')).toBe(true)
+    expect(two.length).toBeGreaterThan(loki.length)
+    expect(two.every((s: any) => ['3100', '22'].includes(s.dport))).toBe(true)
+    expect(unknown.length).toBeGreaterThan(0)
+    expect(unknown.every((s: any) => s.src_zone_id === '')).toBe(true)
+    expect(unknown.length).toBeLessThan(all.length)
+  })
+
+  it('serves the traffic history the time charts read: buckets on the step, zones by name, both directions, the same on a second read', async () => {
+    const to = new Date(Math.floor(Date.now() / 300_000) * 300_000)
+    const from = new Date(to.getTime() - 3_600_000)
+    const path = `${BASE}/traffic?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&step=300`
+    const first = await demoGet(path)
+    const { zones } = await demoGet(`${BASE}/policy`)
+    const names = new Set(zones.map((z: any) => z.name))
+
+    expect(first).toMatchObject({ step: 300, from: from.toISOString(), to: to.toISOString() })
+    expect(new Set(first.buckets.map((b: any) => b.at)).size).toBe(12)
+    for (const b of first.buckets) {
+      expect(Date.parse(b.at) % 300_000).toBe(0)
+      expect(names.has(b.zone), b.zone).toBe(true)
+      expect(b.src_zone === '' || names.has(b.src_zone), b.src_zone).toBe(true)
+      expect(['would_block', 'blocked']).toContain(b.verdict)
+      expect(b.hits).toBeGreaterThan(0)
+    }
+    expect(first.buckets.some((b: any) => b.direction === 'out')).toBe(true)
+    // The blocked flows are rare (a few hits an hour): a day of history holds them.
+    const day = await demoGet(`${BASE}/traffic?from=${encodeURIComponent(new Date(to.getTime() - 86_400_000).toISOString())}&to=${encodeURIComponent(to.toISOString())}&step=3600`)
+
+    expect(day.buckets.some((b: any) => b.verdict === 'blocked' && b.direction === 'out' && b.zone === 'db')).toBe(true)
+    expect(day.buckets.some((b: any) => b.verdict === 'blocked' && !b.direction)).toBe(true)
+    // A chart that scrolls: the past buckets do not change between two reads.
+    expect((await demoGet(path)).buckets).toEqual(first.buckets)
+    // The direction the zone panel asks for.
+    const out = await demoGet(`${path}&direction=out`)
+
+    expect(out.buckets.length).toBeGreaterThan(0)
+    expect(out.buckets.every((b: any) => b.direction === 'out')).toBe(true)
+  })
+
+  it('bounds the traffic history to seven days of five-minute buckets, whatever is asked', async () => {
+    const to = new Date()
+    const from = new Date(to.getTime() - 400 * 86_400_000)
+    const { buckets } = await demoGet(`${BASE}/traffic?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&step=300`)
+
+    expect(new Set(buckets.map((b: any) => b.at)).size).toBeLessThanOrEqual(2_101)
+  })
+
+  it('serves the events of the engine newest first, filtered by zone, verdict and text, and pages them by sequence', async () => {
+    const all = await demoGet(`${BASE}/events?limit=50`)
+
+    expect(all.events).toHaveLength(50)
+    expect(all.truncated).toBe(true)
+    expect(all.oldest).toBe(all.events[49].ts)
+    expect(all.events.every((e: any, i: number) => i === 0 || e.seq < all.events[i - 1].seq)).toBe(true)
+    for (const e of all.events.slice(0, 10)) expect(e).toMatchObject({ node: expect.any(String), vmid: expect.any(Number), guest: expect.any(String), zone: expect.any(String), proto: expect.any(String) })
+
+    const monitoring = (await demoGet(`${BASE}/events?zone=monitoring&limit=50`)).events
+    const blocked = (await demoGet(`${BASE}/events?verdict=blocked&limit=50`)).events
+    const port = (await demoGet(`${BASE}/events?q=3100&limit=50`)).events
+    const older = (await demoGet(`${BASE}/events?limit=10&before_seq=${all.events[9].seq}`)).events
+
+    expect(monitoring.length).toBeGreaterThan(0)
+    expect(monitoring.every((e: any) => e.zone === 'monitoring' || e.src_zone === 'monitoring')).toBe(true)
+    expect(blocked.length).toBeGreaterThan(0)
+    expect(blocked.every((e: any) => e.verdict === 'blocked')).toBe(true)
+    expect(port.every((e: any) => String(e.dport).includes('3100'))).toBe(true)
+    expect(older[0].seq).toBe(all.events[10].seq)
+  })
+
+  it('serves the guest coverage of the Dashboard: counts that add up, zone members filtered, the tags and VLANs the groupings read', async () => {
+    const c = await demoGet('/api/v1/firewall/coverage/demo-pve-cluster-001')
+    const vms = (await demoGet('/api/v1/vms?connId=demo-pve-cluster-001')).data.vms
+
+    expect(c.guests.length).toBe(c.total)
+    expect(c.enabled + c.disabled + c.unknown).toBe(c.total)
+    expect(c.disabled).toBeGreaterThan(0)
+    expect(c.computing).toBe(false)
+    expect(Number.isNaN(Date.parse(c.computedAt))).toBe(false)
+    const web = c.guests.filter((g: any) => g.tags.includes('zone-web'))
+
+    expect(web.length).toBe(5)
+    expect(web.every((g: any) => g.enabled === true && g.vlans.length === 1 && typeof g.vmid === 'string')).toBe(true)
+    // The guest of the "NIC firewall off" drift: options on, NIC flag off, so not filtered.
+    expect(c.guests.find((g: any) => g.vmid === '153')).toMatchObject({ optionsEnabled: true, nicFirewall: false, enabled: false })
+    // Same guests as the inventory the map reads.
+    expect(c.guests.every((g: any) => vms.some((v: any) => String(v.vmid) === g.vmid))).toBe(true)
   })
 })

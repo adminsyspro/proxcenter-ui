@@ -20,7 +20,7 @@ import { useVMFirewallRules } from '@/hooks/useVMFirewallRules'
 import { useHostFirewallRules } from '@/hooks/useHostFirewallRules'
 
 import DashboardTab, { type GuestFilter } from './components/DashboardTab'
-import type { MicrosegSubTab } from './components/microseg/microsegTabTypes'
+import type { MicrosegSubTab, ObservationFocus } from './components/microseg/microsegTabTypes'
 import RulesTab from './components/RulesTab'
 import ObjectsTab from './components/ObjectsTab'
 import SecurityGroupsPanel from './components/rules/SecurityGroupsPanel'
@@ -51,10 +51,12 @@ export default function NetworkAutomationPage() {
   // Set by a line of the Dashboard's "To do" list, for the tab it opens; dropped on any other tab change.
   const [guestFilter, setGuestFilter] = useState<GuestFilter | null>(null)
   const [microsegSubTab, setMicrosegSubTab] = useState<MicrosegSubTab | null>(link.sub)
+  const [observationFocus, setObservationFocus] = useState<ObservationFocus | null>(null)
   const changeTab = (tab: number) => {
     setActiveTab(tab)
     setGuestFilter(null)
     setMicrosegSubTab(null)
+    setObservationFocus(null)
   }
 
   // ── Connections ──
@@ -203,7 +205,7 @@ export default function NetworkAutomationPage() {
               onNavigateTab={changeTab}
               onNavigateRulesSubTab={setRulesSubTab}
               onOpenGuests={filter => { changeTab(TAB.firewalling); setRulesSubTab(2); setGuestFilter(filter ?? null) }}
-              onOpenMicroseg={subTab => { changeTab(TAB.microseg); setMicrosegSubTab(subTab ?? null) }}
+              onOpenMicroseg={(subTab, focus) => { changeTab(TAB.microseg); setMicrosegSubTab(subTab ?? null); setObservationFocus(focus ?? null) }}
             />
           )}
 
@@ -287,6 +289,7 @@ export default function NetworkAutomationPage() {
               connectionId={selectedConnection}
               connectionName={connections.find(c => c.id === selectedConnection)?.name}
               initialSubTab={microsegSubTab ?? undefined}
+              initialObservation={observationFocus}
               targetVm={linkedVm}
               firewall={{ clusterOptions, clusterRules, nodesList, firewallMode, onComplete: loadFirewallData }}
             />

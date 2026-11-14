@@ -8,7 +8,7 @@ import { within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
-import { calls, fetchMock, mock, policy, reply, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
+import { calls, fetchMock, mock, policy, reply, zone, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
 import { db, installFreshMocks, vm, web } from './policyTestKit'
 import { flowOf, node, pathOf, setup, SUGGESTIONS, wouldBlock } from './zoneMapTestKit'
 
@@ -60,18 +60,72 @@ describe('guests on the map', () => {
     expect(screen.getByTestId('edge-unprotected:guest:zw:qemu/100>guest:zd:qemu/200').getAttribute('aria-label')).toBe('web-1 (web) to db-1 (db): 1 unprotected flow')
   })
 
-  it('highlights the flows of a clicked guest without opening a panel', async () => {
+  it('shows only the flows of a clicked guest, without opening a panel', async () => {
     setup({ vms: withIps, flows: [flowOf('f1')], suggestions: [wouldBlock('s1', { src_ip: '10.0.0.1', dst_ip: '10.0.0.2' })] })
     const id = 'unprotected:guest:zw:qemu/100>guest:zd:qemu/200'
     await pathOf(id)
+    // web-2 has no flow: none is drawn while it is selected.
     fireEvent.click(await node('guest:zw:qemu/101'))
-    expect(dimmed(`edge-${id}`)).toBe(true)
+    await waitFor(() => expect(screen.queryByTestId(`edge-${id}`)).toBeNull())
     expect(dimmed('node-guest:zw:qemu/101')).toBe(false)
     fireEvent.click(await node('guest:zw:qemu/100'))
+    await pathOf(id)
     expect(dimmed(`edge-${id}`)).toBe(false)
-    expect(dimmed('edge-allowed:zone:zw>zone:zd')).toBe(true)
+    // The allowed flow goes zone to zone: it is not one of the guest's.
+    expect(screen.queryByTestId('edge-allowed:zone:zw>zone:zd')).toBeNull()
     expect(within(await node('guest:zw:qemu/100')).getByRole('button', { name: 'web-1, guest 100' }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.queryByRole('complementary')).toBeNull()
+  })
+
+  it('brings the other flows back, dimmed, on "Show all flows", and isolates again on "Only its flows"', async () => {
+    setup({ vms: withIps, flows: [flowOf('f1')], suggestions: [wouldBlock('s1', { src_ip: '10.0.0.1', dst_ip: '10.0.0.2' })] })
+    await pathOf('allowed:zone:zw>zone:zd')
+    expect(screen.queryByTestId('map-isolation')).toBeNull()
+    fireEvent.click(await node('guest:zw:qemu/100'))
+    const bar = await screen.findByTestId('map-isolation')
+    expect(bar.textContent).toContain('Flows of web-1 (web) only')
+    fireEvent.click(within(bar).getByRole('button', { name: 'Show all flows' }))
+    await pathOf('allowed:zone:zw>zone:zd')
+    expect(dimmed('edge-allowed:zone:zw>zone:zd')).toBe(true)
+    expect(screen.getByTestId('map-isolation').textContent).toContain('All flows')
+    fireEvent.click(within(screen.getByTestId('map-isolation')).getByRole('button', { name: 'Only its flows' }))
+    await waitFor(() => expect(screen.queryByTestId('edge-allowed:zone:zw>zone:zd')).toBeNull())
+  })
+})
+
+describe('a zone picked on a dense map', () => {
+  const app = () => zone('za', { name: 'app', color: '#f59e0b' })
+  const three = {
+    zones: [web(), db(), app()],
+    flows: [flowOf('f1'), flowOf('f2', { src_zone_id: 'za', dst_zone_id: 'zd' })],
+    suggestions: [wouldBlock('s1', { src_zone_id: 'za', dst_zone_id: 'zw' })],
+  }
+
+  it('draws the flows of the clicked zone only, its neighbours lit and the other zones dimmed', async () => {
+    setup(three)
+    await pathOf('allowed:zone:za>zone:zd')
+    fireEvent.click(await node('zone:zw'))
+    await waitFor(() => expect(screen.queryByTestId('edge-allowed:zone:za>zone:zd')).toBeNull())
+    expect(screen.getByTestId('edge-allowed:zone:zw>zone:zd')).toBeTruthy()
+    expect(screen.getByTestId('edge-unprotected:zone:za>zone:zw')).toBeTruthy()
+    expect(screen.getByTestId('map-isolation').textContent).toContain('Flows of web only')
+    for (const id of ['zone:zw', 'zone:zd', 'zone:za']) expect(dimmed(`node-${id}`)).toBe(false)
+  })
+
+  it('draws every flow again once the zone is no longer selected, and isolates the next zone picked', async () => {
+    setup(three)
+    await pathOf('allowed:zone:za>zone:zd')
+    fireEvent.click(await node('zone:zw'))
+    await waitFor(() => expect(screen.queryByTestId('edge-allowed:zone:za>zone:zd')).toBeNull())
+    fireEvent.click(within(screen.getByTestId('map-isolation')).getByRole('button', { name: 'Show all flows' }))
+    await pathOf('allowed:zone:za>zone:zd')
+    // "Show all flows" belongs to the zone it was asked for: another zone isolates its own.
+    fireEvent.click(await node('zone:zd'))
+    await waitFor(() => expect(screen.queryByTestId('edge-unprotected:zone:za>zone:zw')).toBeNull())
+    expect(screen.getByTestId('edge-allowed:zone:za>zone:zd')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /close/i }))
+    await pathOf('unprotected:zone:za>zone:zw')
+    expect(screen.queryByTestId('map-isolation')).toBeNull()
   })
 })
 

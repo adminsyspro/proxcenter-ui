@@ -6,8 +6,11 @@ import type { MicrosegTraffic } from '@/lib/microseg/types'
 
 const HOUR_MS = 3_600_000
 
-/** The Policy sub-tab reads the last 24 hours once, again every 5 minutes. */
-export const UNCOVERED_REFRESH_MS = 300_000
+/**
+ * The Policy sub-tab reads the last 24 hours, again every minute: the pace at which the engine reads the log and adds
+ * to the history (orchestrator database, no Proxmox call), so the figures of a zone just put in observation show up.
+ */
+export const UNCOVERED_REFRESH_MS = 60_000
 
 /** The 24 hours that end with the current hour, in hour steps: 24 buckets, the last one still growing. */
 export function hitsWindow(now: number): { from: number; to: number } {

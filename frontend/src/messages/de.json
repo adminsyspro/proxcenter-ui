@@ -13584,7 +13584,9 @@
         "sourceHits": "{count, plural, one {# Treffer} other {# Treffer}} von {from} zu Zone {to} auf {service}",
         "sourceHitsSampled": "{count, plural, one {# Treffer} other {# Treffer}} von {from} zu Zone {to} auf {service} (Beispielpaar gezeigt)",
         "countUnprotected": "{count, plural, one {# ungeschützter Fluss} other {# ungeschützte Flüsse}}",
-        "countBlocked": "{count, plural, one {# blockierter Fluss} other {# blockierte Flüsse}}"
+        "countBlocked": "{count, plural, one {# blockierter Fluss} other {# blockierte Flüsse}}",
+        "hitsTotal": "{count, plural, one {# Protokolleintrag} other {# Protokolleinträge}} insgesamt",
+        "noCounter": "Erlaubte Flüsse haben keinen Zähler: Proxmox protokolliert nicht, was es durchlässt"
       },
       "panel": {
         "label": "Zone {name}",

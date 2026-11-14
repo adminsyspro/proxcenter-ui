@@ -14013,7 +14013,9 @@
         "sourceHits": "{count, plural, one {# hit} other {# hits}} from {from} to zone {to} on {service}",
         "sourceHitsSampled": "{count, plural, one {# hit} other {# hits}} from {from} to zone {to} on {service} (sample pair shown)",
         "countUnprotected": "{count, plural, one {# unprotected flow} other {# unprotected flows}}",
-        "countBlocked": "{count, plural, one {# blocked flow} other {# blocked flows}}"
+        "countBlocked": "{count, plural, one {# blocked flow} other {# blocked flows}}",
+        "hitsTotal": "{count, plural, one {# log occurrence} other {# log occurrences}} in all",
+        "noCounter": "Allowed flows have no counter: Proxmox does not log what it lets through"
       },
       "panel": {
         "label": "Zone {name}",

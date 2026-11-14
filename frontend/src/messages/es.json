@@ -14013,7 +14013,9 @@
         "sourceHits": "{count, plural, one {# coincidencia} other {# coincidencias}} de {from} a la zona {to} en {service}",
         "sourceHitsSampled": "{count, plural, one {# coincidencia} other {# coincidencias}} de {from} a la zona {to} en {service} (se muestra un par de ejemplo)",
         "countUnprotected": "{count, plural, one {# flujo sin protección} other {# flujos sin protección}}",
-        "countBlocked": "{count, plural, one {# flujo bloqueado} other {# flujos bloqueados}}"
+        "countBlocked": "{count, plural, one {# flujo bloqueado} other {# flujos bloqueados}}",
+        "hitsTotal": "{count, plural, one {# ocurrencia} other {# ocurrencias}} en el registro en total",
+        "noCounter": "Los flujos permitidos no tienen contador: Proxmox no registra lo que deja pasar"
       },
       "panel": {
         "label": "Zona {name}",

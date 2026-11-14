@@ -31,7 +31,7 @@ const seen = (id: string, over: Partial<MicrosegSuggestion> = {}): MicrosegSugge
 type EdgeData = MapEdgeData & { dimmed?: boolean }
 
 const edgeData = (kind: MapEdgeKind, over: Partial<EdgeData> = {}): EdgeData => ({
-  kind, services: ['tcp/22', 'tcp/443'], label: 'tcp/22, 443', count: 1, flows: [] as MicrosegFlow[], observed: [], draft: false,
+  kind, services: ['tcp/22', 'tcp/443'], label: 'tcp/22, 443', count: 1, hits: null, flows: [] as MicrosegFlow[], observed: [], draft: false,
   fromGroup: 'zone:zw', toGroup: 'zone:zd', path: 'M0 0 L400 0', points: [{ x: 0, y: 0 }, { x: 400, y: 0 }],
   label_x: 200, label_y: 0, label_w: 150, label_h: 22, small: false, particle: false, color: '#2e7d32', ...over,
 })

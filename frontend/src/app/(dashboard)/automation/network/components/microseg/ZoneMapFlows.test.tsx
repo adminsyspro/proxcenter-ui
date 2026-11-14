@@ -56,7 +56,7 @@ describe('guests on the map', () => {
     setup({ vms: withIps, suggestions: [wouldBlock('s1', { src_ip: '10.0.0.1', dst_ip: '10.0.0.2', dport: '5432' })] })
     const path = await pathOf('unprotected:guest:zw:qemu/100>guest:zd:qemu/200')
     expect(path.getAttribute('data-dash')).not.toBe('')
-    expect(await screen.findByText('PostgreSQL')).toBeTruthy()
+    expect(await screen.findByText('PostgreSQL · 3')).toBeTruthy()
     expect(screen.getByTestId('edge-unprotected:guest:zw:qemu/100>guest:zd:qemu/200').getAttribute('aria-label')).toBe('web-1 (web) to db-1 (db): 1 unprotected flow')
   })
 

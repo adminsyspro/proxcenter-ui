@@ -14014,7 +14014,9 @@
         "sourceHits": "{count, plural, one {# occurrence} other {# occurrences}} de {from} vers la zone {to} sur {service}",
         "sourceHitsSampled": "{count, plural, one {# occurrence} other {# occurrences}} de {from} vers la zone {to} sur {service} (paire d'exemple affichée)",
         "countUnprotected": "{count, plural, one {# flux non protégé} other {# flux non protégés}}",
-        "countBlocked": "{count, plural, one {# flux bloqué} other {# flux bloqués}}"
+        "countBlocked": "{count, plural, one {# flux bloqué} other {# flux bloqués}}",
+        "hitsTotal": "{count, plural, one {# occurrence} other {# occurrences}} dans le journal au total",
+        "noCounter": "Les flux autorisés n'ont pas de compteur : Proxmox ne journalise pas ce qu'il laisse passer"
       },
       "panel": {
         "label": "Zone {name}",

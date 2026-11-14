@@ -468,3 +468,18 @@ describe('outbound flows to Outside', () => {
     expect(g.edges.filter(e => e.target === 'outside').map(e => data(e).kind).sort()).toEqual(['allowed', 'outside'])
   })
 })
+
+describe('the occurrences of an edge', () => {
+  it('sums the log occurrences of an observed edge and has none on an allowed one', async () => {
+    const { edgeHits } = await import('./zoneGraph')
+    const seen = (hits: number) => ({ hits }) as unknown as import('@/lib/microseg/types').MicrosegSuggestion
+    expect(edgeHits({ kind: 'blocked', observed: [seen(158), seen(1415)] })).toBe(1573)
+    expect(edgeHits({ kind: 'unprotected', observed: [] })).toBe(0)
+    expect(edgeHits({ kind: 'allowed', observed: [] })).toBeNull()
+  })
+
+  it('sizes the label for the occurrences as the page writes them, compact', async () => {
+    const { shortHits } = await import('./zoneGraph')
+    expect([shortHits(3), shortHits(999), shortHits(1415), shortHits(25_300), shortHits(2_400_000)]).toEqual(['3', '999', '1.4K', '25K', '2.4M'])
+  })
+})

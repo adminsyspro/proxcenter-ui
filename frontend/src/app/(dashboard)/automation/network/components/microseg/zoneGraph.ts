@@ -75,6 +75,11 @@ export type MapEdgeData = {
   /** The label: the ports grouped per protocol. */
   label: string
   count: number
+  /**
+   * The log occurrences of the observed flows of the edge, summed (shown after its services); null on an allowed edge:
+   * PVE does not log what it lets through, so it has no counter.
+   */
+  hits: number | null
   /** The allowed flows of the edge (allowed and outside edges). */
   flows: MicrosegFlow[]
   /** The observed flows of the edge (unprotected and blocked edges). */
@@ -400,6 +405,28 @@ function dashStyle(dash: string | undefined, draft: boolean): Pick<CSSProperties
   return { strokeDasharray: dash, strokeLinecap: draft ? 'round' : undefined }
 }
 
+/** The log occurrences of an observed edge, summed; null on an allowed one. */
+export function edgeHits(p: Pick<Pair, 'kind' | 'observed'>): number | null {
+  return isObserved(p.kind) ? p.observed.reduce((sum, s) => sum + (s.hits ?? 0), 0) : null
+}
+
+/**
+ * The occurrences as the label shows them, to size the label before the page formats them (`compact` notation: "158",
+ * "1.4K"): the same length, whatever the language.
+ */
+export function shortHits(hits: number): string {
+  if (hits < 1000) return String(hits)
+  if (hits < 1_000_000) return `${(hits / 1000).toFixed(hits < 10_000 ? 1 : 0)}K`
+  return `${(hits / 1_000_000).toFixed(1)}M`
+}
+
+/** The text an edge label is sized for: its services, and the occurrences of an observed edge. */
+function labelText(p: Pair): string {
+  const services = groupServices([...p.services])
+  const hits = edgeHits(p)
+  return hits === null ? services : `${services} · ${shortHits(hits)}`
+}
+
 function toEdge(p: Pair, place: PlacedEdge, endShapes: Map<string, EdgeEnds>, unapplied: ReadonlySet<string> | null): Edge {
   const observed = isObserved(p.kind)
   const draft = !!unapplied && p.flows.length > 0 && p.flows.every(f => unapplied.has(f.id))
@@ -419,6 +446,7 @@ function toEdge(p: Pair, place: PlacedEdge, endShapes: Map<string, EdgeEnds>, un
       services: [...p.services].sort(byText),
       label: groupServices([...p.services]),
       count: observed ? p.observed.length : p.flows.length,
+      hits: edgeHits(p),
       flows: [...p.flows].sort((a, b) => byText(a.id, b.id)),
       observed: [...p.observed].sort((a, b) => byText(a.id, b.id)),
       draft,
@@ -478,7 +506,7 @@ export function zoneColumns(zones: MicrosegZone[], flows: MicrosegFlow[]): { sor
 /** The edges of the pairs, in their order, each placed (lanes, bows, label) between the outlines of its ends. */
 export function placePairs(ordered: Pair[], endShapes: Map<string, EdgeEnds>, obstacles: Obstacle[], unapplied: ReadonlySet<string> | null): Edge[] {
   const placed = placeEdges(
-    ordered.map(p => ({ id: pairKey(p), source: p.source, target: p.target, label: groupServices([...p.services]), small: isObserved(p.kind) })),
+    ordered.map(p => ({ id: pairKey(p), source: p.source, target: p.target, label: labelText(p), small: isObserved(p.kind) })),
     endShapes,
     obstacles,
   )

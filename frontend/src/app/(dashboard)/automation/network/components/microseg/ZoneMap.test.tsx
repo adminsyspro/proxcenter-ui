@@ -61,6 +61,7 @@ describe('edges', () => {
     expect(path.getAttribute('data-dash')).toBe('')
     expect(path.getAttribute('data-stroke')).toBe('#2e7d32')
     expect(screen.getAllByTestId(/^edge-/)).toHaveLength(1)
+    // An allowed edge has no counter: PVE does not log what it lets through.
     expect(await screen.findByText('SSH, HTTPS · DNS')).toBeTruthy()
   })
 
@@ -69,7 +70,9 @@ describe('edges', () => {
     const path = await pathOf('unprotected:zone:zw>zone:zd')
     expect(path.getAttribute('data-dash')).not.toBe('')
     expect(path.getAttribute('data-stroke')).toBe('#e53935')
-    expect(await screen.findByText('SSH, HTTP')).toBeTruthy()
+    // An observed edge says how often its flows were logged: 3 + 3.
+    expect(await screen.findByText('SSH, HTTP · 6')).toBeTruthy()
+    expect(screen.getByTestId('flow-label-blocked:zone:zw>zone:zd').textContent).toBe('RDP · 3')
     const blocked = await pathOf('blocked:zone:zw>zone:zd')
     expect(blocked.getAttribute('data-dash')).toBe('')
     expect(blocked.getAttribute('data-stroke')).toBe('#1565c0')

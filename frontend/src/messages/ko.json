@@ -14013,7 +14013,9 @@
         "sourceHits": "{service}에서 {from}에서 영역 {to}(으)로 {count, plural, other {#회}}",
         "sourceHitsSampled": "{service}에서 {from}에서 영역 {to}(으)로 {count, plural, other {#회}} (예시 쌍 표시)",
         "countUnprotected": "{count, plural, other {보호되지 않은 흐름 #개}}",
-        "countBlocked": "{count, plural, other {차단된 흐름 #개}}"
+        "countBlocked": "{count, plural, other {차단된 흐름 #개}}",
+        "hitsTotal": "{count, plural, other {로그 발생 총 #회}}",
+        "noCounter": "허용된 흐름에는 카운터가 없습니다. Proxmox는 통과시키는 트래픽을 기록하지 않습니다"
       },
       "panel": {
         "label": "영역 {name}",

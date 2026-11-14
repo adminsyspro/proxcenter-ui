@@ -14013,7 +14013,9 @@
         "sourceHits": "从 {from} 到区域 {to} 在 {service} 上 {count, plural, other {# 次命中}}",
         "sourceHitsSampled": "从 {from} 到区域 {to} 在 {service} 上 {count, plural, other {# 次命中}}（显示示例对）",
         "countUnprotected": "{count, plural, other {# 个未受保护的流量}}",
-        "countBlocked": "{count, plural, other {# 个已阻止的流量}}"
+        "countBlocked": "{count, plural, other {# 个已阻止的流量}}",
+        "hitsTotal": "{count, plural, other {日志中共 # 次}}",
+        "noCounter": "允许的流量没有计数：Proxmox 不会记录其放行的流量"
       },
       "panel": {
         "label": "区域 {name}",

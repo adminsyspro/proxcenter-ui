@@ -13482,12 +13482,13 @@
           "ssh": "SSH",
           "snmp": "SNMP",
           "syslog": "Syslog",
-          "proxy": "Proxy HTTP"
+          "proxy": "Proxy HTTP",
+          "all": "Todos los protocolos"
         },
         "gatewayAllowed": "Ya permitido por un flujo del borrador",
         "gatewayFlowComment": "Puerta de enlace de la zona",
         "gatewayFirst": "Introduzca primero la puerta de enlace",
-        "gatewayServicesHint": "Elegir en la lista, o escribir un protocolo y sus puertos: tcp/8443, udp/5000:5010, icmp",
+        "gatewayServicesHint": "Elegir en la lista, o escribir un protocolo y sus puertos: tcp/8443, udp/5000:5010, icmp, any",
         "gatewayTypedInvalid": "Servicio no válido: tcp o udp con puertos (tcp/8443, udp/53,123, tcp/5000:5010), o icmp, icmpv6, any",
         "gatewayTypeHint": "Elegir o escribir un servicio",
         "gatewayAdd": "Añadir {service}"

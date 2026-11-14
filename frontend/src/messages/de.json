@@ -13053,12 +13053,13 @@
           "ssh": "SSH",
           "snmp": "SNMP",
           "syslog": "Syslog",
-          "proxy": "HTTP-Proxy"
+          "proxy": "HTTP-Proxy",
+          "all": "Alle Protokolle"
         },
         "gatewayAllowed": "Bereits durch einen Fluss des Entwurfs erlaubt",
         "gatewayFlowComment": "Gateway der Zone",
         "gatewayFirst": "Zuerst das Gateway eingeben",
-        "gatewayServicesHint": "In der Liste wählen oder ein Protokoll mit Ports eingeben: tcp/8443, udp/5000:5010, icmp",
+        "gatewayServicesHint": "In der Liste wählen oder ein Protokoll mit Ports eingeben: tcp/8443, udp/5000:5010, icmp, any",
         "gatewayTypedInvalid": "Kein Dienst: tcp oder udp mit Ports (tcp/8443, udp/53,123, tcp/5000:5010) oder icmp, icmpv6, any",
         "gatewayTypeHint": "Dienst wählen oder eingeben",
         "gatewayAdd": "{service} hinzufügen"

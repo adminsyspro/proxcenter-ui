@@ -13482,12 +13482,13 @@
           "ssh": "SSH",
           "snmp": "SNMP",
           "syslog": "Syslog",
-          "proxy": "HTTP 프록시"
+          "proxy": "HTTP 프록시",
+          "all": "모든 프로토콜"
         },
         "gatewayAllowed": "초안의 흐름이 이미 허용합니다",
         "gatewayFlowComment": "영역 게이트웨이",
         "gatewayFirst": "먼저 게이트웨이를 입력하세요",
-        "gatewayServicesHint": "목록에서 선택하거나 프로토콜과 포트를 입력하세요: tcp/8443, udp/5000:5010, icmp",
+        "gatewayServicesHint": "목록에서 선택하거나 프로토콜과 포트를 입력하세요: tcp/8443, udp/5000:5010, icmp, any",
         "gatewayTypedInvalid": "인식할 수 없는 서비스: 포트가 있는 tcp 또는 udp(tcp/8443, udp/53,123, tcp/5000:5010), 또는 icmp, icmpv6, any",
         "gatewayTypeHint": "서비스를 선택하거나 입력",
         "gatewayAdd": "{service} 추가"

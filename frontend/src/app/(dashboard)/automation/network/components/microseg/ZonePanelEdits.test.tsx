@@ -234,6 +234,7 @@ describe('zone dialog, state rows and Outbound section', () => {
     expect(option(/^DNS/).getAttribute('aria-disabled')).toBe('true')
     expect(option(/^DNS/).textContent).toContain('Already allowed by a flow of the draft')
     expect(option(/^SSH/).textContent).toContain('tcp/22')
+    expect(option(/^All protocols/).textContent).toContain('any')
     fireEvent.click(option(/^Ping/))
     fireEvent.click(option(/^HTTPS/))
     expect(value()).toBe('DNS, NTP, HTTPS')
@@ -247,14 +248,17 @@ describe('zone dialog, state rows and Outbound section', () => {
     fireEvent.change(field(), { target: { value: '9000' } })
     expect(within(await screen.findByRole('listbox')).getAllByRole('option').map(o => o.textContent)).toEqual(['Add tcp/9000', 'Add udp/9000'])
     fireEvent.keyDown(field(), { key: 'Enter' })
+    fireEvent.change(field(), { target: { value: 'any' } })
+    expect(within(await screen.findByRole('listbox')).getAllByRole('option').map(o => o.textContent)).toEqual(['All protocolsany'])
+    fireEvent.keyDown(field(), { key: 'Enter' })
     fireEvent.change(field(), { target: { value: 'udp/5000:5010' } })
     fireEvent.blur(field())
-    expect(value()).toBe('DNS, NTP, HTTPS, tcp/8443, tcp/9000, udp/5000:5010')
+    expect(value()).toBe('DNS, NTP, HTTPS, tcp/8443, tcp/9000, All protocols, udp/5000:5010')
     expect(within(dialog).queryByText(/^Not a service/)).toBeNull()
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
-    expect(onSave.mock.calls[0][0]).toMatchObject({ gateway: '10.30.0.1', gateway_services: ['ntp', 'https', 'tcp/8443', 'tcp/9000', 'udp/5000:5010'] })
+    expect(onSave.mock.calls[0][0]).toMatchObject({ gateway: '10.30.0.1', gateway_services: ['ntp', 'https', 'tcp/8443', 'tcp/9000', 'all', 'udp/5000:5010'] })
   })
 
   it('says the rows and the tooltips in French', async () => {

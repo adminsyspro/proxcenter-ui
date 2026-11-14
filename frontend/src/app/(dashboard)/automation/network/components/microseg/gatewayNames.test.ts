@@ -28,7 +28,7 @@ describe('gateway flows', () => {
     expect(gatewayServiceFlows('ntp', '10.30.0.1')).toEqual([{ proto: 'udp', dport: '123' }])
     expect(gatewayServiceFlows('ping', '10.30.0.1')).toEqual([{ proto: 'icmp', dport: '' }])
     expect(gatewayServiceFlows('ping', '2001:db8::1')).toEqual([{ proto: 'icmpv6', dport: '' }])
-    expect(GATEWAY_SERVICES.map(s => gatewayServicePorts(s, '10.30.0.1'))).toEqual(['udp/53, tcp/53', 'udp/123', 'icmp', 'tcp/80', 'tcp/443', 'tcp/22', 'udp/161', 'udp/514', 'tcp/3128'])
+    expect(GATEWAY_SERVICES.map(s => gatewayServicePorts(s, '10.30.0.1'))).toEqual(['udp/53, tcp/53', 'udp/123', 'icmp', 'tcp/80', 'tcp/443', 'tcp/22', 'udp/161', 'udp/514', 'tcp/3128', 'any'])
     expect(gatewayCidr('10.30.0.1')).toBe('10.30.0.1/32')
     expect(gatewayCidr('2001:db8::1')).toBe('2001:db8::1/128')
   })
@@ -43,6 +43,8 @@ describe('gateway flows', () => {
     expect(typedServiceCandidates('8443')).toEqual(['tcp/8443', 'udp/8443'])
     expect(typedServiceCandidates('5000:5010')).toEqual(['tcp/5000:5010', 'udp/5000:5010'])
     expect(typedServiceCandidates('dn')).toEqual([])
+    expect(typedServiceCandidates('any')).toEqual([])
+    expect(gatewayServiceFlows('all', '10.30.0.1')).toEqual([{ proto: 'any', dport: '' }])
   })
 
   it('takes an empty gateway or a plain address, refuses a prefix or a name', () => {

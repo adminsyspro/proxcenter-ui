@@ -34,9 +34,9 @@ export type ZoneFormValues = {
 
 /**
  * The services a zone may reach on its gateway, offered in the zone dialog: what a router or firewall usually serves
- * (name resolution, time, reachability, its web and SSH administration, SNMP, syslog, a web proxy).
+ * (name resolution, time, reachability, its web and SSH administration, SNMP, syslog, a web proxy), or everything.
  */
-export const GATEWAY_SERVICES = ['dns', 'ntp', 'ping', 'http', 'https', 'ssh', 'snmp', 'syslog', 'proxy'] as const
+export const GATEWAY_SERVICES = ['dns', 'ntp', 'ping', 'http', 'https', 'ssh', 'snmp', 'syslog', 'proxy', 'all'] as const
 export type GatewayService = (typeof GATEWAY_SERVICES)[number]
 
 /** Ticked for a zone that has no gateway yet: what a zone needs even with its outbound blocked. */
@@ -51,6 +51,7 @@ const GATEWAY_SERVICE_FLOWS: Record<Exclude<GatewayService, 'ping'>, { proto: st
   snmp: [{ proto: 'udp', dport: '161' }],
   syslog: [{ proto: 'udp', dport: '514' }],
   proxy: [{ proto: 'tcp', dport: '3128' }],
+  all: [{ proto: 'any', dport: '' }],
 }
 
 export const isGatewayService = (choice: string): choice is GatewayService => (GATEWAY_SERVICES as readonly string[]).includes(choice)
@@ -74,6 +75,8 @@ export function parseTypedService(text: string): { proto: string; dport: string 
  */
 export function typedServiceCandidates(text: string): string[] {
   const one = typedServiceText(text)
+  // "any" is the listed "All protocols", which the filter shows already.
+  if (one === 'any') return []
   if (one) return [one]
   const ports = text.trim().replace(/\s+/g, '')
   return ports && validPorts(ports) ? [`tcp/${ports}`, `udp/${ports}`] : []

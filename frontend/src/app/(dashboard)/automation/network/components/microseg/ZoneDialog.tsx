@@ -132,7 +132,9 @@ function GatewayRows({ values, zoneId, flows, disabled, error, set }: {
     const choices: string[] = []
     let refused = false
     for (const raw of next) {
-      const choice = isGatewayService(raw) ? raw : typedServiceText(raw)
+      const typed = isGatewayService(raw) ? raw : typedServiceText(raw)
+      // A typed "any" is the listed "All protocols".
+      const choice = typed === 'any' ? 'all' : typed
       if (!choice) refused = true
       else if (!choices.includes(choice) && !allowed.includes(choice as GatewayService)) choices.push(choice)
     }

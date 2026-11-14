@@ -13482,12 +13482,13 @@
           "ssh": "SSH",
           "snmp": "SNMP",
           "syslog": "Syslog",
-          "proxy": "HTTP 代理"
+          "proxy": "HTTP 代理",
+          "all": "所有协议"
         },
         "gatewayAllowed": "草稿中已有流允许",
         "gatewayFlowComment": "区域网关",
         "gatewayFirst": "请先输入网关",
-        "gatewayServicesHint": "从列表中选择，或输入协议及端口：tcp/8443、udp/5000:5010、icmp",
+        "gatewayServicesHint": "从列表中选择，或输入协议及端口：tcp/8443、udp/5000:5010、icmp、any",
         "gatewayTypedInvalid": "无法识别的服务：带端口的 tcp 或 udp（tcp/8443、udp/53,123、tcp/5000:5010），或 icmp、icmpv6、any",
         "gatewayTypeHint": "选择或输入服务",
         "gatewayAdd": "添加 {service}"

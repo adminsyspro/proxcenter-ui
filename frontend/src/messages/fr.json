@@ -13483,12 +13483,13 @@
           "ssh": "SSH",
           "snmp": "SNMP",
           "syslog": "Syslog",
-          "proxy": "Proxy HTTP"
+          "proxy": "Proxy HTTP",
+          "all": "Tous les protocoles"
         },
         "gatewayAllowed": "Déjà autorisé par un flux du brouillon",
         "gatewayFlowComment": "Passerelle de la zone",
         "gatewayFirst": "Saisir d'abord la passerelle",
-        "gatewayServicesHint": "Choisir dans la liste, ou saisir un protocole et ses ports : tcp/8443, udp/5000:5010, icmp",
+        "gatewayServicesHint": "Choisir dans la liste, ou saisir un protocole et ses ports : tcp/8443, udp/5000:5010, icmp, any",
         "gatewayTypedInvalid": "Service non reconnu : tcp ou udp avec ports (tcp/8443, udp/53,123, tcp/5000:5010), ou icmp, icmpv6, any",
         "gatewayTypeHint": "Choisir ou saisir un service",
         "gatewayAdd": "Ajouter {service}"

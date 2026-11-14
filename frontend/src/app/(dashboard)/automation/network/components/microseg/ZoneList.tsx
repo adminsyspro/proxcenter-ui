@@ -22,7 +22,7 @@ import { isEgressReady, pendingOutboundOf, zoneMembers, type PolicyGuest, type Z
 import { uncoveredSeriesOf, type UncoveredSeries } from './useZoneUncovered'
 import { MicrosegActionsSlot, SlotActions, WriteTip, useMicrosegWrite } from './microsegAccess'
 
-type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onAssign' | 'onRemoveMember' | 'removeBusy' | 'onAddFlow' | 'onEditFlow' | 'onDeleteFlow'>
+type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onSetEgress' | 'onAssign' | 'onRemoveMember' | 'removeBusy' | 'onAddFlow' | 'onEditFlow' | 'onDeleteFlow'>
   & Pick<ZoneCardProps, 'onOpenDrifts'> & {
   connectionId: string
   zones: MicrosegZone[]

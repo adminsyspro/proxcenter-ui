@@ -17,7 +17,7 @@ import ZoneDialog from './ZoneDialog'
 import { zoneGateOf } from './zoneGate'
 import type { ZoneFormValues } from './zoneForm'
 import ZoneList from './ZoneList'
-import { ZoneStateConfirm, useFlowEditor } from './ZonePanelActions'
+import { ZoneStateConfirm, useEgressChange, useFlowEditor } from './ZonePanelActions'
 import { useZoneUncovered } from './useZoneUncovered'
 import { usePendingChanges } from './usePendingChanges'
 import { useZoneEdits } from './useZoneEdits'
@@ -46,6 +46,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
   const removal = useDialogAction()
   const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
   const flowEditor = useFlowEditor(edits)
+  const egressChange = useEgressChange(edits)
   const { diff } = usePendingChanges(connectionId, policy)
   const uncovered = useZoneUncovered(connectionId)
 
@@ -96,6 +97,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         onEditFlow={flowEditor.edit}
         onDeleteFlow={flowEditor.remove}
         onSetState={onSetState}
+        onSetEgress={(zone, action) => { edits.clearMemberError(); egressChange.ask(zone, action) }}
         onAssign={setAssigning}
         onRemoveMember={ref => edits.changeMember(ref, '')}
         removeBusy={edits.memberBusy}
@@ -124,6 +126,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         />
       )}
       {changing && <ZoneStateConfirm zone={changing.zone} state={changing.state} edits={edits} onClose={() => setChanging(null)} />}
+      {egressChange.dialog}
       <MicrosegConfirmDialog
         open={deleting !== null}
         title={deleting ? t('delete.zoneTitle', { name: deleting.name }) : ''}

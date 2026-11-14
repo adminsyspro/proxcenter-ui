@@ -112,14 +112,17 @@ function FlowPreview({ zone, flows, zonesById }: { zone: MicrosegZone; flows: Mi
  * and the flows opened full width below the row of cards) and the actions, shown on hover or focus (always on touch).
  */
 export default function ZoneCard(props: ZoneCardProps) {
-  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onAssign, onAddFlow, drifts, onOpenDrifts, uncovered, egressReady = false } = props
+  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onSetEgress, onAssign, onAddFlow, drifts, onOpenDrifts, uncovered, egressReady = false } = props
   const t = useTranslations('microsegPilot.policy.zone')
   const ts = useTranslations('microsegPilot.overview.sections')
+  // The same words as in the zone panel of the map.
+  const tz = useTranslations('microsegPilot.overview.zonePanel')
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const { canWrite } = useMicrosegWrite()
   // While a run writes the state of this zone, the chip says so and no other state can be asked for.
   const changing = useRunsInProgress().zones.has(zone.id)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
+  const egress = zoneEgress(zone)
 
   return (
     <Box
@@ -134,7 +137,7 @@ export default function ZoneCard(props: ZoneCardProps) {
           <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '1 1 0', minWidth: NAME_MIN_WIDTH }} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 1, minWidth: 0 }}>
             <ZoneStateChip state={zone.state} busy={changing} onClick={canWrite && !changing ? setAnchor : undefined} />
-            <EgressChip state={zoneEgress(zone)} ready={egressReady} iconOnlyBelow={EGRESS_ICON_ONLY_BELOW} />
+            <EgressChip state={egress} ready={egressReady} iconOnlyBelow={EGRESS_ICON_ONLY_BELOW} />
             <DiffChip kind={diffKind} />
             {!!drifts && (
               <Chip
@@ -184,6 +187,16 @@ export default function ZoneCard(props: ZoneCardProps) {
               <i className='ri-toggle-line' />
             </IconButton>
           </WriteTip>
+          {onSetEgress && egress === 'observe' && (
+            <WriteTip title={tz('egressBlock')}>
+              <IconButton size='small' aria-label={tz('egressBlock')} disabled={!canWrite || changing} onClick={() => onSetEgress(zone, 'block')}><i className='ri-lock-line' /></IconButton>
+            </WriteTip>
+          )}
+          {onSetEgress && egress === 'enforce' && (
+            <WriteTip title={tz('egressReopen')}>
+              <IconButton size='small' aria-label={tz('egressReopen')} disabled={!canWrite || changing} onClick={() => onSetEgress(zone, 'reopen')}><i className='ri-lock-unlock-line' /></IconButton>
+            </WriteTip>
+          )}
           <WriteTip title={t('addFlowInto', { zone: zone.name })}>
             <IconButton size='small' aria-label={t('addFlowInto', { zone: zone.name })} disabled={!canWrite} onClick={() => onAddFlow(zone)}><i className='ri-route-line' /></IconButton>
           </WriteTip>

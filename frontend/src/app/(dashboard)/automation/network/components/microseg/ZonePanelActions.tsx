@@ -85,7 +85,41 @@ export function ZoneStateConfirm({ zone, state, edits, onClose }: { zone: Micros
   )
 }
 
-type ZoneDialogOpen = { kind: 'edit' } | { kind: 'delete' } | { kind: 'state'; state: ZoneState } | { kind: 'egress'; action: 'block' | 'reopen' } | null
+export type EgressAction = 'block' | 'reopen'
+
+/**
+ * Blocking or reopening the outbound of a zone, the same from the zone panel and from the Policy sub-tab. Blocking
+ * always asks (the readiness, the name when not ready). Reopening is one click; with pending changes in the draft
+ * it goes through the refusal, as the change applies the whole draft.
+ */
+export function useEgressChange(edits: ZoneEdits) {
+  const [change, setChange] = useState<{ zone: MicrosegZone; action: EgressAction } | null>(null)
+  const close = () => setChange(null)
+  const ask = (zone: MicrosegZone, action: EgressAction) => {
+    if (action === 'reopen' && !edits.pendingChanges.pending) {
+      edits.setZoneEgressState(zone, 'observe').catch(edits.reportError)
+      return
+    }
+    setChange({ zone, action })
+  }
+  const dialog = change ? (
+    <ZoneEgressDialog
+      connectionId={edits.connectionId}
+      zone={change.zone}
+      action={change.action}
+      readyAfterHours={edits.readyAfterHours}
+      gate={zoneGateOf(edits, close)}
+      onConfirm={async () => {
+        await edits.setZoneEgressState(change.zone, change.action === 'block' ? 'enforce' : 'observe')
+        close()
+      }}
+      onCancel={close}
+    />
+  ) : null
+  return { ask, dialog }
+}
+
+type ZoneDialogOpen = { kind: 'edit' } | { kind: 'delete' } | { kind: 'state'; state: ZoneState } | null
 
 /** Edit, state, delete and assign of the zone of the panel, one row of icons, with their dialogs. */
 export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted }: { zone: MicrosegZone; edits: ZoneEdits; onAssign: () => void; onDeleted: () => void }) {
@@ -94,6 +128,7 @@ export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted }: { zone: 
   const [open, setOpen] = useState<ZoneDialogOpen>(null)
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const removal = useDialogAction()
+  const egressChange = useEgressChange(edits)
   const close = () => setOpen(null)
 
   const save = async (values: ZoneFormValues) => {
@@ -107,40 +142,19 @@ export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted }: { zone: 
     }
   }
   const egress = zoneEgress(zone)
-  // Reopening is one click; with pending changes in the draft it goes through the refusal (the change applies the whole draft).
-  const reopenEgress = () => {
-    if (edits.pendingChanges.pending) {
-      setOpen({ kind: 'egress', action: 'reopen' })
-      return
-    }
-    edits.setZoneEgressState(zone, 'observe').catch(edits.reportError)
-  }
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
       <WriteIcon label={t('edit')} icon='ri-pencil-line' onClick={() => setOpen({ kind: 'edit' })} />
-      {egress === 'observe' && <WriteIcon label={t('egressBlock')} icon='ri-lock-line' onClick={() => setOpen({ kind: 'egress', action: 'block' })} />}
-      {egress === 'enforce' && <WriteIcon label={t('egressReopen')} icon='ri-lock-unlock-line' onClick={reopenEgress} />}
+      {egress === 'observe' && <WriteIcon label={t('egressBlock')} icon='ri-lock-line' onClick={() => egressChange.ask(zone, 'block')} />}
+      {egress === 'enforce' && <WriteIcon label={t('egressReopen')} icon='ri-lock-unlock-line' onClick={() => egressChange.ask(zone, 'reopen')} />}
       <WriteIcon label={t('changeState')} icon='ri-toggle-line' aria-haspopup='menu' onClick={e => setAnchor(e.currentTarget)} />
       <WriteIcon label={t('delete')} icon='ri-delete-bin-line' onClick={() => { removal.reset(); setOpen({ kind: 'delete' }) }} />
       <WriteIcon label={t('assign')} icon='ri-add-circle-line' onClick={onAssign} />
       <ZoneStateMenu zone={zone} anchor={anchor} onClose={() => setAnchor(null)} onPick={state => setOpen({ kind: 'state', state })} />
       {open?.kind === 'edit' && <ZoneDialog zone={zone} connectionId={edits.connectionId} readyAfterHours={edits.readyAfterHours} onSave={save} onClose={close} gate={zoneGateOf(edits, close)} />}
       {open?.kind === 'state' && <ZoneStateConfirm zone={zone} state={open.state} edits={edits} onClose={close} />}
-      {open?.kind === 'egress' && (
-        <ZoneEgressDialog
-          connectionId={edits.connectionId}
-          zone={zone}
-          action={open.action}
-          readyAfterHours={edits.readyAfterHours}
-          gate={zoneGateOf(edits, close)}
-          onConfirm={async () => {
-            await edits.setZoneEgressState(zone, open.action === 'block' ? 'enforce' : 'observe')
-            close()
-          }}
-          onCancel={close}
-        />
-      )}
+      {egressChange.dialog}
       <MicrosegConfirmDialog
         open={open?.kind === 'delete'}
         title={tp('delete.zoneTitle', { name: zone.name })}

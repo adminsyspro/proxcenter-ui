@@ -362,12 +362,57 @@ export function bucketXs(count: number, box: PlotBox): number[] {
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 
+type Point = readonly [number, number]
+
 /**
- * The stacked areas of the series, in their order (the first on the baseline): for each, the closed path of its band
- * and the line on its outer edge, straight segments from bucket to bucket. `invert` stacks downwards from the top of
- * the box (the lower half of a mirrored chart).
+ * The tangents of a monotone cubic through the points (Fritsch-Carlson, as d3's curveMonotoneX the inventory charts
+ * draw with): flat where the curve turns or rests, so it never overshoots a bucket's value.
  */
-export function areaPaths(timeline: Pick<PostureTimeline, 'buckets' | 'series' | 'max'>, box: PlotBox, invert = false): { key: string; area: string; line: string }[] {
+function monotoneTangents(points: readonly Point[]): number[] {
+  const n = points.length
+  const h = (i: number) => points[i + 1][0] - points[i][0]
+  const s = (i: number) => (h(i) ? (points[i + 1][1] - points[i][1]) / h(i) : 0)
+  const m = points.map(() => 0)
+  for (let i = 1; i < n - 1; i++) {
+    const s0 = s(i - 1)
+    const s1 = s(i)
+    if (s0 * s1 <= 0) continue
+    const p = (s0 * h(i) + s1 * h(i - 1)) / (h(i - 1) + h(i))
+    m[i] = (Math.sign(s0) + Math.sign(s1)) * Math.min(Math.abs(s0), Math.abs(s1), 0.5 * Math.abs(p))
+  }
+  if (n > 2) {
+    m[0] = (3 * s(0) - m[1]) / 2
+    m[n - 1] = (3 * s(n - 2) - m[n - 2]) / 2
+  }
+  return m
+}
+
+/**
+ * The segments of a smooth curve through the points, after its first point (" C ..."; two points are a straight
+ * segment). `reverse` draws the same curve from the last point back to the first, to close a band on it.
+ */
+export function smoothSegments(points: readonly Point[], reverse = false): string {
+  if (points.length < 2) return ''
+  if (points.length === 2) return ` L ${r2(points[reverse ? 0 : 1][0])} ${r2(points[reverse ? 0 : 1][1])}`
+  const m = monotoneTangents(points)
+  const segments = points.slice(1).map((end, k) => {
+    const start = points[k]
+    const third = (end[0] - start[0]) / 3
+    const c1: Point = [start[0] + third, start[1] + third * m[k]]
+    const c2: Point = [end[0] - third, end[1] - third * m[k + 1]]
+    const [a, b, to] = reverse ? [c2, c1, start] : [c1, c2, end]
+    return ` C ${r2(a[0])} ${r2(a[1])} ${r2(b[0])} ${r2(b[1])} ${r2(to[0])} ${r2(to[1])}`
+  })
+  return (reverse ? segments.reverse() : segments).join('')
+}
+
+/**
+ * The stacked areas of the series, in their order (the first on the baseline): for each, the closed path of its band,
+ * the line on its outer edge, a smooth monotone curve through the buckets like the inventory charts, and the y of that
+ * edge at each bucket (the hover dots). `invert` stacks downwards from the top of the box (the lower half of a
+ * mirrored chart).
+ */
+export function areaPaths(timeline: Pick<PostureTimeline, 'buckets' | 'series' | 'max'>, box: PlotBox, invert = false): { key: string; area: string; line: string; tops: number[] }[] {
   const { buckets, series, max } = timeline
   if (!buckets.length || max <= 0) return []
   const xs = bucketXs(buckets.length, box)
@@ -380,9 +425,13 @@ export function areaPaths(timeline: Pick<PostureTimeline, 'buckets' | 'series' |
     const lower = below.map(v => y(v))
     values.forEach((b, i) => { below[i] += b.counts[s.key] ?? 0 })
     const upper = below.map(v => y(v))
-    const top = xs.map((x, i) => `${r2(x)} ${r2(upper[i])}`)
-    const bottom = xs.map((x, i) => `${r2(x)} ${r2(lower[i])}`).reverse()
-    return { key: s.key, line: `M ${top.join(' L ')}`, area: `M ${top.join(' L ')} L ${bottom.join(' L ')} Z` }
+    const top = xs.map((x, i): Point => [x, upper[i]])
+    const bottom = xs.map((x, i): Point => [x, lower[i]])
+    const line = `M ${r2(top[0][0])} ${r2(top[0][1])}${smoothSegments(top)}`
+    const last = bottom[bottom.length - 1]
+    // The band closes along the edge of the band under it, the same curve drawn backwards.
+    const area = `${line} L ${r2(last[0])} ${r2(last[1])}${smoothSegments(bottom, true)} Z`
+    return { key: s.key, line, area, tops: upper.map(r2) }
   })
 }
 

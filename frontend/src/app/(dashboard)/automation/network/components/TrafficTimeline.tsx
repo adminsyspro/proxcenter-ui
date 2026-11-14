@@ -2,7 +2,7 @@
 
 import { paletteAlpha } from './paletteAlpha'
 import { useState } from 'react'
-import { Box, Chip, FormControl, Link, MenuItem, Paper, Select, Skeleton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Tooltip, Typography, useTheme } from '@mui/material'
+import { alpha, Box, Chip, FormControl, Link, MenuItem, Select, Skeleton, Tab, Tabs, ToggleButton, ToggleButtonGroup, Tooltip, Typography, useTheme } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
@@ -62,7 +62,9 @@ const BOTTOM = 20
 const FALLBACK_WIDTH = 600
 /** Past a day, the covered window is said in hours. */
 const DAY_MINUTES = 24 * 60
-const TIP_WIDTH = 220
+const TIP_WIDTH = 240
+/** The space between the hover guide and its card. */
+const TIP_GAP = 12
 const VERDICTS: readonly TimelineVerdict[] = ['all', 'would_block', 'blocked']
 const VERDICT_LABEL: Record<TimelineVerdict, string> = { all: 'postureTimelineAll', would_block: 'postureWouldBlock', blocked: 'postureBlocked' }
 const RANGE_LABEL: Record<TimelineRange, string> = { '1h': 'postureRange1h', '6h': 'postureRange6h', '24h': 'postureRange24h', '7d': 'postureRange7d' }
@@ -132,7 +134,9 @@ function Areas({ timeline, below = null, measured, unit, height = TIMELINE_HEIGH
   const hovered = hover === null ? null : buckets[hover]
   const hoveredBelow = hover === null || !below ? null : below.buckets[hover]
   const guideX = hover === null ? 0 : xs[buckets.length === 1 ? 0 : hover]
-  const tipLeft = Math.min(Math.max(0, guideX - TIP_WIDTH / 2), Math.max(0, width - TIP_WIDTH))
+  // Beside the guide, right of it while there is room, else left: the guide and the dots on the lines stay visible.
+  const rightOfGuide = guideX + TIP_GAP + TIP_WIDTH <= width
+  const tipLeft = Math.max(0, rightOfGuide ? guideX + TIP_GAP : guideX - TIP_GAP - TIP_WIDTH)
   const pointAt = (e: React.MouseEvent<SVGRectElement>) => {
     const rect = e.currentTarget.ownerSVGElement?.getBoundingClientRect()
     // Pointer x in the drawing's units (the SVG is scaled to 100 % until measured).
@@ -152,16 +156,15 @@ function Areas({ timeline, below = null, measured, unit, height = TIMELINE_HEIGH
         aria-label={unit === 'bytes' ? t('postureVolumeLabel') : t('postureTimelineLabel')}
         style={{ display: 'block' }}
       >
-        <line x1={box.left} x2={box.left + box.width} y1={TOP} y2={TOP} stroke={paletteAlpha(theme, 'text.primary', 0.08)} />
-        {below && <line x1={box.left} x2={box.left + box.width} y1={TOP + box.height} y2={TOP + box.height} stroke={paletteAlpha(theme, 'text.primary', 0.08)} />}
         <line data-testid='timeline-baseline' x1={box.left} x2={box.left + box.width} y1={baseline} y2={baseline} stroke={paletteAlpha(theme, 'text.primary', 0.3)} />
         <text x={LEFT - 6} y={TOP + 4} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary} data-testid='timeline-max'>{scaleText}</text>
         <text x={LEFT - 6} y={baseline + (below ? 3 : 0)} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary}>0</text>
         {below && <text x={LEFT - 6} y={TOP + box.height} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary} data-testid='timeline-max-below'>{scaleText}</text>}
         {layers.map(p => (
           <g key={p.id} data-testid={`area-${p.id}`}>
-            <path d={p.area} fill={p.colour} fillOpacity={0.75} stroke='none' />
-            <path d={p.line} fill='none' stroke={p.colour} strokeWidth={1.5} strokeLinejoin='round' />
+            {/* As the inventory charts: a light fill under a 2 px line. */}
+            <path d={p.area} fill={p.colour} fillOpacity={0.18} stroke='none' />
+            <path d={p.line} fill='none' stroke={p.colour} strokeWidth={2} strokeLinejoin='round' strokeLinecap='round' />
           </g>
         ))}
         {tickIndexes(buckets.length).map(i => (
@@ -170,6 +173,10 @@ function Areas({ timeline, below = null, measured, unit, height = TIMELINE_HEIGH
         {hovered && (
           <line data-testid='timeline-guide' x1={guideX} x2={guideX} y1={TOP} y2={TOP + box.height} stroke={theme.palette.text.secondary} strokeWidth={1} strokeDasharray='3 3' pointerEvents='none' />
         )}
+        {/* The value of each group at the hovered bucket, a dot on its line. */}
+        {hover !== null && layers.map(p => (
+          <circle key={p.id} data-testid='timeline-dot' cx={guideX} cy={p.tops[buckets.length === 1 ? 0 : hover]} r={3.5} fill={p.colour} stroke={theme.palette.background.paper} strokeWidth={1.5} pointerEvents='none' />
+        ))}
         <rect
           data-testid='timeline-overlay'
           x={box.left}
@@ -182,22 +189,32 @@ function Areas({ timeline, below = null, measured, unit, height = TIMELINE_HEIGH
         />
       </svg>
       {hovered && (
-        <Paper data-testid='timeline-tip' elevation={4} sx={{ position: 'absolute', top: 0, left: tipLeft, width: TIP_WIDTH, p: 1, pointerEvents: 'none', zIndex: 1 }}>
-          {below ? (
-            <>
-              <Typography variant='caption' component='div' sx={{ fontWeight: 700, mb: 0.5 }}>{span}</Typography>
-              <Typography variant='caption' component='div' sx={{ fontWeight: 600 }}>{`↓ ${t('postureDirectionIn')} · ${events(hovered.total)}`}</Typography>
+        // As the inventory charts' tooltip: a card, a tinted header (icon, what is measured, when), the values under it.
+        <Box
+          data-testid='timeline-tip'
+          sx={{
+            position: 'absolute', top: 0, left: tipLeft, width: TIP_WIDTH, pointerEvents: 'none', zIndex: 1, overflow: 'hidden',
+            bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
+          }}
+        >
+          <Box sx={{ px: 1.5, py: 0.75, bgcolor: alpha(theme.palette.primary.main, 0.1), borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+            <i className={unit === 'bytes' ? 'ri-exchange-line' : 'ri-pulse-line'} style={{ fontSize: 13, color: theme.palette.primary.main, flexShrink: 0 }} />
+            <Typography variant='caption' noWrap sx={{ fontWeight: 700, color: 'primary.main', minWidth: 0 }}>{events(below ? hovered.total + (hoveredBelow?.total ?? 0) : hovered.total)}</Typography>
+            <Typography variant='caption' noWrap sx={{ ml: 'auto', opacity: 0.6, flexShrink: 0 }}>{span}</Typography>
+          </Box>
+          <Box sx={{ px: 1.5, py: 0.75 }}>
+            {below ? (
+              <>
+                <Typography variant='caption' component='div' sx={{ fontWeight: 600 }}>{`↓ ${t('postureDirectionIn')} · ${events(hovered.total)}`}</Typography>
+                <TipRows series={timeline.series} counts={hovered.counts} value={value} />
+                <Typography variant='caption' component='div' sx={{ fontWeight: 600, mt: 0.5 }}>{`↑ ${t('postureDirectionOut')} · ${events(hoveredBelow?.total ?? 0)}`}</Typography>
+                <TipRows series={below.series} counts={hoveredBelow?.counts ?? {}} value={value} />
+              </>
+            ) : (
               <TipRows series={timeline.series} counts={hovered.counts} value={value} />
-              <Typography variant='caption' component='div' sx={{ fontWeight: 600, mt: 0.5 }}>{`↑ ${t('postureDirectionOut')} · ${events(hoveredBelow?.total ?? 0)}`}</Typography>
-              <TipRows series={below.series} counts={hoveredBelow?.counts ?? {}} value={value} />
-            </>
-          ) : (
-            <>
-              <Typography variant='caption' component='div' sx={{ fontWeight: 700, mb: 0.5 }}>{`${span} · ${events(hovered.total)}`}</Typography>
-              <TipRows series={timeline.series} counts={hovered.counts} value={value} />
-            </>
-          )}
-        </Paper>
+            )}
+          </Box>
+        </Box>
       )}
     </>
   )

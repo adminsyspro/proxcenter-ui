@@ -399,8 +399,23 @@ describe('stacked areas', () => {
   it('stacks one band per series in order, the first on the axis, a line on top of each', () => {
     const paths = areaPaths({ series, max: 4, buckets: [bucket(0, { a: 2, b: 2 }), bucket(1, { a: 1 })] }, box)
     expect(paths.map(p => p.key)).toEqual(['a', 'b'])
-    expect(paths[0]).toEqual({ key: 'a', line: 'M 25 5 L 75 7.5', area: 'M 25 5 L 75 7.5 L 75 10 L 25 10 Z' })
-    expect(paths[1]).toEqual({ key: 'b', line: 'M 25 0 L 75 7.5', area: 'M 25 0 L 75 7.5 L 75 7.5 L 25 5 Z' })
+    expect(paths[0]).toMatchObject({ key: 'a', line: 'M 25 5 L 75 7.5', area: 'M 25 5 L 75 7.5 L 75 10 L 25 10 Z' })
+    expect(paths[1]).toMatchObject({ key: 'b', line: 'M 25 0 L 75 7.5', area: 'M 25 0 L 75 7.5 L 75 7.5 L 25 5 Z' })
+  })
+
+  it('curves smoothly through three buckets or more, never past a value, flat where the traffic rests', () => {
+    const paths = areaPaths({ series: series.slice(0, 1), max: 4, buckets: [bucket(0, { a: 0 }), bucket(1, { a: 4 }), bucket(2, { a: 4 }), bucket(3, { a: 2 })] }, box)
+    const { line, area, tops } = paths[0]
+    expect(tops).toEqual([10, 0, 0, 5])
+    expect(line.startsWith('M 12.5 10 C ')).toBe(true)
+    expect(line.endsWith(' 87.5 5')).toBe(true)
+    // Every control point stays within the box: no overshoot above the top value nor under the axis.
+    const ys = line.replace(/^M /, '').split(/ C | /).map(Number).filter((_, i) => i % 2 === 1)
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(0)
+    expect(Math.max(...ys)).toBeLessThanOrEqual(10)
+    // The plateau between the second and third buckets is flat.
+    expect(line).toContain('C 45.83 0 54.17 0 62.5 0')
+    expect(area.endsWith(' 12.5 10 Z')).toBe(true)
   })
 
   it('draws nothing without a value, a single bucket as a flat band', () => {
@@ -427,7 +442,7 @@ describe('mirrored chart', () => {
   it('stacks the outbound side downwards from the baseline', () => {
     const paths = areaPaths({ series: [slice('a', 'zone', '#1', 'a')], max: 4, buckets: [bucket(0, { a: 2 }), bucket(1, { a: 4 })] }, { ...box, top: 10 }, true)
     // Baseline at y 10, a value of 2 out of 4 goes to y 15, 4 to y 20.
-    expect(paths[0]).toEqual({ key: 'a', line: 'M 25 15 L 75 20', area: 'M 25 15 L 75 20 L 75 10 L 25 10 Z' })
+    expect(paths[0]).toMatchObject({ key: 'a', line: 'M 25 15 L 75 20', area: 'M 25 15 L 75 20 L 75 10 L 25 10 Z' })
   })
 
   it('puts both sides on the same buckets and the same scale', () => {

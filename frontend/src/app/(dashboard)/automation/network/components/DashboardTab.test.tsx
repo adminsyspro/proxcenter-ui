@@ -435,6 +435,10 @@ describe('DashboardTab: traffic over time', () => {
     expect(tip.textContent).toContain('2 events')
     expect(tip.textContent).toContain('web')
     expect(tip.textContent).toContain('Unknown / External')
+    // A dot on each group's line at the hovered bucket, the card beside the guide (here left of it, at the right edge).
+    expect(screen.getAllByTestId('timeline-dot').length).toBeGreaterThanOrEqual(2)
+    const guideX = Number(screen.getByTestId('timeline-guide').getAttribute('x1'))
+    expect(Number.parseFloat(getComputedStyle(tip).left) + 240).toBeLessThanOrEqual(guideX)
     fireEvent.mouseLeave(screen.getByTestId('timeline-overlay'))
     expect(screen.queryByTestId('timeline-tip')).not.toBeInTheDocument()
   })

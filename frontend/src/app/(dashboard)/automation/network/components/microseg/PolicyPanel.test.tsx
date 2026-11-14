@@ -8,7 +8,7 @@ import { within } from '@testing-library/react'
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 import type { MicrosegFlow } from '@/lib/microseg/types'
 
-import { flow, mock, reply, revisionWithSnapshot, zone } from './microsegTestKit'
+import { calls, flow, mock, reply, revisionWithSnapshot, zone } from './microsegTestKit'
 import { db, setup, installFreshMocks, vm, web } from './policyTestKit'
 
 installFreshMocks()
@@ -78,7 +78,7 @@ describe('zone list', () => {
     expect(within(dialog).getByRole('combobox', { name: 'Destination zone' }).textContent).toContain('db')
   })
 
-  it('opens the details full width below the row: members and flows side by side, remembered for the zone', async () => {
+  it('opens the details full width below the row: the zone panel of the map, remembered for the zone', async () => {
     const out: MicrosegFlow = { ...flow('f1'), src_zone_id: 'zw', dst_zone_id: 'zd' }
     const view = setup({ zones: [web(), db()], flows: [out], vms: [vm(100, 'web-1', ['zone-web'])] })
     const card = await screen.findByRole('listitem', { name: 'web' })
@@ -91,12 +91,13 @@ describe('zone list', () => {
     expect(chevron.getAttribute('aria-controls')).toBe(details.id)
     expect(card.contains(details)).toBe(false)
     expect(getComputedStyle(details.parentElement as HTMLElement).gridColumn).toMatch(/^1\s*\/\s*-1$/)
-    const members = within(details).getByRole('region', { name: 'Members' })
-    const flowsColumn = within(details).getByRole('region', { name: 'Flows of the zone' })
-    expect(members.parentElement).toBe(flowsColumn.parentElement)
-    expect(await within(members).findByText('web-1')).toBeTruthy()
-    expect(within(flowsColumn).getByText('Outgoing flows')).toBeTruthy()
-    expect(within(flowsColumn).getByRole('button', { name: 'Edit flow' })).toBeTruthy()
+    // The zone panel of the map, laid out wide: the traffic of the zone, then its observed flows, members and flows.
+    expect(within(details).getByText('Observed traffic')).toBeTruthy()
+    expect(await within(details).findByRole('listitem', { name: 'web-1' })).toBeTruthy()
+    expect(within(details).getByText('Outgoing flows')).toBeTruthy()
+    expect(within(details).getByRole('button', { name: 'Edit flow' })).toBeTruthy()
+    // Its pending observed flows are read for the zone.
+    await waitFor(() => expect(calls('GET /suggestions?status=pending&zone=zw&limit=200')).toHaveLength(1))
     expect(JSON.parse(window.localStorage.getItem('microseg.policy.openCards.c1') ?? '[]')).toEqual(['zw'])
 
     view.unmount()

@@ -108,18 +108,20 @@ function SuggestionLine({ suggestion: s, zonesById, peers, busy, onResolve }: {
   )
 }
 
+type WorkProps = Omit<Props, 'onClose'> & {
+  /** The member errors show here; the Policy sub-tab says them above its zones already. */
+  memberErrors?: boolean
+}
+
 /**
- * The zone clicked on the map, as tall as the map with its body scrolling, in foldable sections (remembered per
- * browser): the observed traffic over time (the Dashboard's chart filtered on this zone, inbound or outbound, with a
- * one-line summary), its top sources (or destinations), the pending suggestions towards it (resolved as in
- * Observation), its members (ten per page; NIC firewall off and stopped told on each), the flows in and out, all
- * editable in place. A chip in the header says the zone's drifts and opens the Drifts sub-tab on them. The engine's
- * drifts are read once per selection (the Drifts sub-tab's key), no refresh on focus.
+ * What the zone panel shows, shared by the panel of the map and the details of a zone card on the Policy sub-tab: the
+ * observed traffic and its top sources, then the pending suggestions, the members and the flows in and out, all
+ * editable in place, with the bodies again for the expanded dialog.
  */
-export default function ZonePanel({
-  zone, members, membersKnown, flows, zonesById, edits, onClose, onAssign,
-  connectionId, version, suggestions, reloadPolicy, reloadSuggestions, onResolved, onOpenDrifts, partialLimit = null, peers,
-}: Props) {
+export function useZoneWork({
+  zone, members, membersKnown, flows, zonesById, edits, onAssign,
+  connectionId, version, suggestions, reloadPolicy, reloadSuggestions, onResolved, partialLimit = null, peers, memberErrors = true,
+}: WorkProps) {
   const t = useTranslations('microsegPilot.overview.panel')
   const tz = useTranslations('microsegPilot.overview.zonePanel')
   const tsec = useTranslations('microsegPilot.overview.sections')
@@ -147,37 +149,6 @@ export default function ZonePanel({
     const outcome = await resolve([id], action, prefixLen)
     if (outcome?.resolved) onResolved(action)
   }
-
-  const [expanded, setExpanded] = useState(false)
-
-  const header = (
-    <>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-        <i className='ri-shield-fill' style={{ fontSize: 18, color: zone.color || undefined }} />
-        <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
-        {!!signals?.count && (
-          <Chip
-            size='small'
-            color='warning'
-            variant='outlined'
-            data-testid='zone-drifts-chip'
-            icon={<i className='ri-error-warning-line' />}
-            label={tsec('drifts', { count: signals.count })}
-            onClick={onOpenDrifts ? () => onOpenDrifts(zone.id) : undefined}
-            sx={{ flexShrink: 0 }}
-          />
-        )}
-        <ZoneStateChip state={zone.state} />
-        <EgressChip state={egress} ready={egressReady} />
-        <IconButton size='small' aria-label={tz('expand')} onClick={() => setExpanded(true)}><i className='ri-fullscreen-line' /></IconButton>
-        <IconButton size='small' aria-label={t('close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
-      </Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, mt: 1 }}>
-        <TruncatedText text={zone.label} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
-        <ZoneHeaderActions zone={zone} edits={edits} onAssign={onAssign} onDeleted={onClose} />
-      </Box>
-    </>
-  )
 
   const trafficSections = (
     <>
@@ -214,7 +185,7 @@ export default function ZonePanel({
   )
   const membersBody = (size = POLICY_PAGE_SIZE) => (
     <>
-      {edits.memberError != null && <MicrosegErrorAlert error={edits.memberError} onClose={edits.clearMemberError} />}
+      {memberErrors && edits.memberError != null && <MicrosegErrorAlert error={edits.memberError} onClose={edits.clearMemberError} />}
       {!membersKnown && <Typography variant='body2' color='text.disabled'>{t('membersUnknown')}</Typography>}
       {membersKnown && members.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noMembers')}</Typography>}
       <PagedList items={members} size={size} render={rows => (
@@ -246,11 +217,59 @@ export default function ZonePanel({
     { id: 'outgoing', label: withCount(tz('subOutgoing'), outgoing.length), action: <ExpandAddButton label={tz('addFlow')} onClick={() => editor.create({ src_zone_id: zone.id })} />, content: outgoingBody },
   ]
 
+  return { trafficSections, dataSections, dataTabs, dialogs: editor.dialogs, signals, egress, egressReady }
+}
+
+/**
+ * The zone clicked on the map, as tall as the map with its body scrolling, in foldable sections (remembered per
+ * browser): the observed traffic over time (the Dashboard's chart filtered on this zone, inbound or outbound, with a
+ * one-line summary), its top sources (or destinations), the pending suggestions towards it (resolved as in
+ * Observation), its members (ten per page; NIC firewall off and stopped told on each), the flows in and out, all
+ * editable in place. A chip in the header says the zone's drifts and opens the Drifts sub-tab on them. The engine's
+ * drifts are read once per selection (the Drifts sub-tab's key), no refresh on focus.
+ */
+export default function ZonePanel(props: Props) {
+  const { zone, onClose, onAssign, edits, connectionId, onOpenDrifts } = props
+  const t = useTranslations('microsegPilot.overview.panel')
+  const tz = useTranslations('microsegPilot.overview.zonePanel')
+  const tsec = useTranslations('microsegPilot.overview.sections')
+  const { trafficSections, dataSections, dataTabs, dialogs, signals, egress, egressReady } = useZoneWork(props)
+  const [expanded, setExpanded] = useState(false)
+
+  const header = (
+    <>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+        <i className='ri-shield-fill' style={{ fontSize: 18, color: zone.color || undefined }} />
+        <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
+        {!!signals?.count && (
+          <Chip
+            size='small'
+            color='warning'
+            variant='outlined'
+            data-testid='zone-drifts-chip'
+            icon={<i className='ri-error-warning-line' />}
+            label={tsec('drifts', { count: signals.count })}
+            onClick={onOpenDrifts ? () => onOpenDrifts(zone.id) : undefined}
+            sx={{ flexShrink: 0 }}
+          />
+        )}
+        <ZoneStateChip state={zone.state} />
+        <EgressChip state={egress} ready={egressReady} />
+        <IconButton size='small' aria-label={tz('expand')} onClick={() => setExpanded(true)}><i className='ri-fullscreen-line' /></IconButton>
+        <IconButton size='small' aria-label={t('close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, mt: 1 }}>
+        <TruncatedText text={zone.label} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
+        <ZoneHeaderActions zone={zone} edits={edits} onAssign={onAssign} onDeleted={onClose} />
+      </Box>
+    </>
+  )
+
   return (
     <PanelFrame label={t('label', { name: zone.name })} width={400} header={header}>
       {trafficSections}
       {dataSections}
-      {editor.dialogs}
+      {dialogs}
       {expanded && (
         <ExpandDialog
           scope={{

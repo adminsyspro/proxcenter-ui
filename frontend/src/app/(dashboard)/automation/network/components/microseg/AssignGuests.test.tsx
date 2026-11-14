@@ -305,13 +305,13 @@ describe('queued removals and moves of tagged members', () => {
     setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])], pending_members: pendingRows, pending_changes: true })
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web()], pending_members: pendingRows, last_revision: REVISION_HEAD, pending_changes: pendingRows.length > 0 }))
     const row = await openDetails('web')
-    const member = (await within(row).findByText('web-1')).closest('div') as HTMLElement
+    const member = await within(row).findByRole('listitem', { name: 'web-1' })
     fireEvent.click(within(member).getByRole('button', { name: 'Remove from zone' }))
 
-    expect(await within(member).findByText('Pending removal')).toBeTruthy()
-    expect((within(member).getByRole('button', { name: 'Remove from zone' }) as HTMLButtonElement).disabled).toBe(true)
-    const other = (within(row).getByText('web-2')).closest('div') as HTMLElement
-    expect(within(other).queryByText('Pending removal')).toBeNull()
+    // The details are the zone panel of the map: a queued removal says so and offers to keep the member.
+    await waitFor(() => expect(within(row).getByRole('listitem', { name: 'web-1' }).textContent).toContain('Pending removal'))
+    expect(within(within(row).getByRole('listitem', { name: 'web-1' })).getByRole('button', { name: 'Keep in zone' })).toBeTruthy()
+    expect(within(row).getByRole('listitem', { name: 'web-2' }).textContent).not.toContain('Pending removal')
   })
 
   it('shows a tagged member queued for another zone as moving', async () => {

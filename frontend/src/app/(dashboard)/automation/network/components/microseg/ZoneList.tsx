@@ -16,6 +16,7 @@ import { useBoxSize } from './useBoxSize'
 import { useNow } from './useNow'
 import { SUGGESTIONS_LIMIT } from './useZoneReadiness'
 import ZoneCard, { RemovedZoneCard, ZoneCardDetails, type ZoneCardProps } from './ZoneCard'
+import type { ZoneWorkContext } from './ZoneWorkspace'
 import type { ZoneRowProps } from './ZoneRow'
 import { zoneDriftSignals } from './zonePanelModel'
 import { isEgressReady, pendingOutboundOf, zoneMembers, type PolicyGuest, type ZoneMember } from './zoneModel'
@@ -38,6 +39,8 @@ type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onSetEgr
   uncovered?: UncoveredSeries | null | 'failed'
   /** The observation window of the outbound readiness chip (the policy setting). */
   readyAfterHours?: number
+  /** What the details of a card need to show the zone panel of the map (writes, version, peers); absent: the plain lists. */
+  work?: ZoneWorkContext
 }
 
 /** The zones opened under their chevron, remembered per connection in this browser. */
@@ -84,7 +87,7 @@ export function cardColumns(width: number | undefined): number {
  * (struck through until the next apply), ten per page, "+" right of the title for a new zone. An opened card shows
  * its members and flows full width below its row. The drifts are read once (the engine's last full run, no Proxmox call).
  */
-export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests, guestsStatus, pendingMembers, diff, onAdd, onOpenDrifts, uncovered = 'failed', readyAfterHours, ...handlers }: Props) {
+export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests, guestsStatus, pendingMembers, diff, onAdd, onOpenDrifts, uncovered = 'failed', readyAfterHours, work, ...handlers }: Props) {
   const t = useTranslations('microsegPilot.policy')
   const inSlot = useContext(MicrosegActionsSlot) !== null
   const { canWrite } = useMicrosegWrite()
@@ -151,6 +154,7 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
         flowDiff={diff?.flows ?? null}
         open
         onToggle={() => toggle(item.zone.id)}
+        work={work}
         {...handlers}
       />
     </Box>

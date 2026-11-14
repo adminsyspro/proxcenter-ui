@@ -1,6 +1,6 @@
 'use client'
 
-import { useContext, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import { Box, Button } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -22,6 +22,7 @@ import { useZoneUncovered } from './useZoneUncovered'
 import { usePendingChanges } from './usePendingChanges'
 import { useZoneEdits } from './useZoneEdits'
 import { useZoneGuests } from './useZoneGuests'
+import { targetPeers } from './targetModel'
 
 type Editing<T> = { item: T | null } | null
 
@@ -49,6 +50,9 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
   const egressChange = useEgressChange(edits)
   const { diff } = usePendingChanges(connectionId, policy)
   const uncovered = useZoneUncovered(connectionId)
+  // The details of a zone card show the zone panel of the map: they write through the same edits.
+  const peers = useMemo(() => targetPeers(guests), [guests])
+  const work = useMemo(() => ({ connectionId, edits, version: policy.version, reloadPolicy, peers }), [connectionId, edits, policy.version, reloadPolicy, peers])
 
   const saveZone = (zone: MicrosegZone | null) => async (values: ZoneFormValues) => {
     await edits.saveZone(zone, values)
@@ -88,6 +92,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         pendingMembers={policy.pending_members}
         diff={diff}
         readyAfterHours={edits.readyAfterHours}
+        work={work}
         uncovered={uncovered.failed ? 'failed' : uncovered.series}
         onAdd={() => setZoneDialog({ item: null })}
         onEdit={zone => setZoneDialog({ item: zone })}

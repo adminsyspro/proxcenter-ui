@@ -18,6 +18,7 @@ import ZoneSparkline from './ZoneSparkline'
 import ZoneStateChip from './ZoneStateChip'
 import { useRunsInProgress } from './runsInProgress'
 import TruncatedText from './TruncatedText'
+import ZoneWorkspace, { type ZoneWorkContext } from './ZoneWorkspace'
 
 /** How many members and flows a card previews. */
 export const CARD_PREVIEW = 3
@@ -214,9 +215,11 @@ export default function ZoneCard(props: ZoneCardProps) {
 }
 
 /** The members and the flows of an opened card, full width below its row of cards. */
-export function ZoneCardDetails(props: ZoneRowProps) {
+export function ZoneCardDetails({ work, ...props }: ZoneRowProps & { work?: ZoneWorkContext }) {
   const { zone } = props
   const t = useTranslations('microsegPilot.policy.zone')
+  // With the context of the Policy sub-tab, the details are the zone panel of the map laid out wide.
+  if (work) return <ZoneWorkspace {...props} work={work} id={detailsId(zone.id)} />
   return (
     <Box
       component='section'

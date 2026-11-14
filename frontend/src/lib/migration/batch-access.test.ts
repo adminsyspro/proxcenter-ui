@@ -34,9 +34,36 @@ describe('batchWithJobs', () => {
     const prisma = prismaWith([job('j1', 4, 'completed'), job('j2', 2)])
     const out = await batchWithJobs(prisma, batch, [4, 1])
 
-    expect(prisma.migrationJob.findMany).toHaveBeenCalledWith({ where: { batchId: 'b1' }, omit: { config: true }, orderBy: [{ batchOrder: 'asc' }, { createdAt: 'asc' }] })
+    expect(prisma.migrationJob.findMany).toHaveBeenCalledWith({ where: { batchId: 'b1' }, orderBy: [{ batchOrder: 'asc' }, { createdAt: 'asc' }] })
     expect(out.jobs.map(j => [j.logOffset, j.logs.length, j.logCount])).toEqual([[4, 0, 4], [1, 1, 2]])
     expect(out.counts).toMatchObject({ completed: 1, running: 1 })
+  })
+
+  it('gives each manual job the interval it syncs at, its own or the setting of the source connection', async () => {
+    const prisma = {
+      migrationJob: { findMany: vi.fn(async () => [
+        { ...job('j1', 0), config: { cutoverMode: 'manual', syncIntervalSec: 300 }, suggestedSyncIntervalSec: 900 },
+        { ...job('j2', 0), config: { cutoverMode: 'manual' }, suggestedSyncIntervalSec: null },
+        { ...job('j3', 0), config: { cutoverMode: 'auto' } },
+      ]) },
+      connection: { findUnique: vi.fn(async () => ({ migrationSyncIntervalSec: 3600 })) },
+    } as any
+    const out = await batchWithJobs(prisma, { id: 'b1', sourceConnectionId: 'src' } as BatchRow)
+
+    expect(out.jobs.map((j: any) => [j.cutoverMode, j.syncIntervalSec, j.suggestedSyncIntervalSec, 'config' in j])).toEqual([
+      ['manual', 300, 900, false], ['manual', 3600, null, false], ['auto', undefined, undefined, false],
+    ])
+    expect(prisma.connection.findUnique).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads no connection for a batch without a manual job, and falls back to one minute when the read fails', async () => {
+    const auto = { migrationJob: { findMany: vi.fn(async () => [{ ...job('j1', 0), config: { cutoverMode: 'auto' } }]) }, connection: { findUnique: vi.fn() } } as any
+    await batchWithJobs(auto, { id: 'b1', sourceConnectionId: 'src' } as BatchRow)
+    expect(auto.connection.findUnique).not.toHaveBeenCalled()
+
+    const broken = { migrationJob: { findMany: vi.fn(async () => [{ ...job('j1', 0), config: { cutoverMode: 'manual' } }]) }, connection: { findUnique: vi.fn(async () => { throw new Error('down') }) } } as any
+    const out = await batchWithJobs(broken, { id: 'b1', sourceConnectionId: 'src' } as BatchRow)
+    expect((out.jobs[0] as any).syncIntervalSec).toBe(60)
   })
 
   it('sends every log whole when the counts are not one per job', async () => {

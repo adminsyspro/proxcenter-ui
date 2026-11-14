@@ -349,7 +349,12 @@ describe('warm copy network (roadmap#53)', () => {
     expect(await screen.findByText(DEFAULT_RE)).toBeInTheDocument()
     // The preflight was asked to probe the default adapter from the node (vCenter source: 902 only).
     await waitFor(() => expect(preflights.some(b => b.copyVmk === 'vmk0' && b.sourceVmId === 'vm-1' && b.copyAddress === undefined)).toBe(true))
-    expect(await screen.findByText(/Port 902 reachable from pve1/)).toBeInTheDocument()
+    // The explanation and the reachability verdict sit in the tooltip of the
+    // field, not under it: read once, they pushed the rest of the dialog down.
+    const help = (await screen.findAllByTestId('warm-copy-vmk-help'))[0] // MUI renders the label twice (label + notch legend)
+    await waitFor(() => expect(help).toHaveAttribute('aria-label', expect.stringMatching(/Port 902 reachable from pve1/)))
+    expect(help).toHaveAttribute('aria-label', expect.stringMatching(/tagged vSphereBackupNFC/))
+    expect(screen.queryByText(/tagged vSphereBackupNFC/)).toBeNull()
   })
 
   it('re-probes the chosen adapter, shows the unreachable verdict and blocks the launch', async () => {
@@ -371,11 +376,11 @@ describe('warm copy network (roadmap#53)', () => {
     await pickWarm()
     const select = await screen.findByTestId('warm-copy-vmk')
     await screen.findByText(DEFAULT_RE)
-    expect(await screen.findByText(/reads the source disks from 10\.42\.0\.21/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByTestId('warm-copy-vmk-help')[0]).toHaveAttribute('aria-label', expect.stringMatching(/reads the source disks from 10\.42\.0\.21/)))
     fireEvent.mouseDown(within(select.parentElement as HTMLElement).getByRole('combobox'))
     fireEvent.click(await screen.findByRole('option', { name: /vmk1\s+192\.168\.1\.103/ }))
     await waitFor(() => expect(preflights.some(b => b.copyVmk === 'vmk1' && b.sourceVmId === 'vm-3')).toBe(true))
-    expect(await screen.findByText(/Port 902 reachable from pve1/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByTestId('warm-copy-vmk-help')[0]).toHaveAttribute('aria-label', expect.stringMatching(/Port 902 reachable from pve1/)))
     await waitFor(() => expect(screen.getByTestId('migration-launch')).toBeEnabled())
   })
 
@@ -403,6 +408,64 @@ describe('warm copy network (roadmap#53)', () => {
     // The server reads the adapter's address from vSphere: the browser never sends one.
     expect(bodies[0]).not.toHaveProperty('copyAddress')
     expect(bodies[0].vms.map((v: any) => v.sourceVmId)).toEqual(['468', '469'])
+  })
+
+  const AUTO_CUTOVER = 'Automatic cutover'
+  const cutoverSwitch = () => (screen.getByText(AUTO_CUTOVER).closest('.MuiFormControlLabel-root') as HTMLElement).querySelector('input[type="checkbox"]') as HTMLInputElement
+  const bulkWarm = { hostType: 'vmware', connectionId: 'esxi-1', connectionName: 'ESXi1', vms: [{ vmid: '468', name: 'r53-src-1', status: 'poweredOn' }, { vmid: '469', name: 'r53-src-2', status: 'poweredOn' }] }
+  const captureBatches = (bodies: any[], sourceSetting: number | null = null) => server.use(
+    http.get(`*/api/v1/vmware/esxi-1/vms/468/copy-interfaces`, () => HttpResponse.json({ data: { ...IFACES, source: 'esxi' } })),
+    http.get('*/api/v1/migrations/sync-interval', () => HttpResponse.json({ data: { defaultSyncIntervalSec: sourceSetting ?? 60 } })),
+    http.post('*/api/v1/migrations/batches', async ({ request }) => { bodies.push(await request.json()); return HttpResponse.json({ data: { batchId: 'b1', jobIds: ['job-1', 'job-2'] } }) }),
+  )
+
+  it('sends the downtime budget of a warm batch left on automatic cutover', async () => {
+    const bodies: any[] = []
+    captureBatches(bodies)
+    renderWithProviders(<Harness bulk overrides={{ bulkMigHostInfo: bulkWarm, bulkMigSelected: new Set(['468', '469']) }} />)
+    await pickWarm()
+    await screen.findByTestId('warm-copy-vmk')
+    expect(cutoverSwitch().checked).toBe(true)
+    expect(screen.queryByTestId('warm-sync-interval')).toBeNull()
+    await waitFor(() => expect(screen.getByRole('button', { name: /migrate to proxmox/i })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: /migrate to proxmox/i }))
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).toMatchObject({ migrationType: 'warm', downtimeBudgetSec: 300 })
+    expect(bodies[0]).not.toHaveProperty('cutoverMode')
+    expect(bodies[0]).not.toHaveProperty('syncIntervalSec')
+  })
+
+  it('holds a warm batch for a manual cutover, showing the sync interval of the source and sending it only once changed', async () => {
+    const bodies: any[] = []
+    captureBatches(bodies, 900)
+    // The shared test SWRConfig skips the fetch on mount: this test needs the source connection read.
+    renderWithProviders(<SWRConfig value={{ revalidateOnMount: true }}><Harness bulk overrides={{ bulkMigHostInfo: bulkWarm, bulkMigSelected: new Set(['468', '469']) }} /></SWRConfig>)
+    await pickWarm()
+    await screen.findByTestId('warm-copy-vmk')
+    fireEvent.click(cutoverSwitch())
+    expect(cutoverSwitch().checked).toBe(false)
+    await waitFor(() => expect(screen.getByTestId('warm-sync-interval-value')).toHaveTextContent('15 min'), { timeout: 4000 })
+    fireEvent.change(screen.getByTestId('warm-sync-interval').querySelector('input[type="range"]') as HTMLInputElement, { target: { value: '6' } })
+    await waitFor(() => expect(screen.getByTestId('warm-sync-interval-value')).toHaveTextContent('1 h'))
+    await waitFor(() => expect(screen.getByRole('button', { name: /migrate to proxmox/i })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: /migrate to proxmox/i }))
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    // the downtime field stays with a manual cutover, as the target it aims at
+    expect(bodies[0]).toMatchObject({ migrationType: 'warm', cutoverMode: 'manual', syncIntervalSec: 3600, downtimeBudgetSec: 300 })
+  })
+
+  it('leaves the interval to the source connection when a manual warm batch does not touch it', async () => {
+    const bodies: any[] = []
+    captureBatches(bodies, 900)
+    renderWithProviders(<Harness bulk overrides={{ bulkMigHostInfo: bulkWarm, bulkMigSelected: new Set(['468', '469']) }} />)
+    await pickWarm()
+    await screen.findByTestId('warm-copy-vmk')
+    fireEvent.click(cutoverSwitch())
+    await waitFor(() => expect(screen.getByRole('button', { name: /migrate to proxmox/i })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: /migrate to proxmox/i }))
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0]).toMatchObject({ cutoverMode: 'manual' })
+    expect(bodies[0]).not.toHaveProperty('syncIntervalSec')
   })
 
   it('says so when the adapters cannot be read and keeps the launch possible', async () => {

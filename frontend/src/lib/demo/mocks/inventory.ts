@@ -1148,7 +1148,7 @@ function taskDetail(node: string, upid: string): any {
   }
 }
 
-// SharedTaskDetailDialog: the shared task of GET /tasks/shared plus its logs.
+// GET /tasks/shared/[id]: the shared task plus its logs (Task Center history).
 function sharedTaskDetail(id: string): any {
   if (id !== 'demo-shared-001') return null
   const now = Date.now()

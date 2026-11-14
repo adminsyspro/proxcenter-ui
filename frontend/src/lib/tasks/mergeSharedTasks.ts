@@ -11,6 +11,9 @@ export interface MergedPCTask extends PCTask {
   icon?: string
   /** Task Center job (rolling update, DRS, replication, Site Recovery). */
   orchestrator?: boolean
+  /** Source host and batch of a shared migration row: what reopens its dialog. */
+  sourceConnectionId?: string
+  batchId?: string | null
 }
 
 function statusFor(raw: string): PCTaskStatus {
@@ -34,6 +37,8 @@ function mapServerTask(st: SharedTask): MergedPCTask {
     rawStatus: st.status,
     startedByName: st.createdByName,
     jobId: st.id,
+    sourceConnectionId: st.sourceConnectionId,
+    batchId: st.batchId,
   }
 }
 

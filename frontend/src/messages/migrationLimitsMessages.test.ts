@@ -12,6 +12,7 @@ const locales: Record<string, any> = { en, fr, de, es, ko, 'zh-CN': zhCN }
 const settingsKeys = [
   'migrationLimits', 'migrationLimitsTargetInfo', 'migrationLimitsSourceInfo', 'migrationMaxParallel',
   'migrationMaxPerNode', 'migrationMaxPerSourceHost', 'migrationLimitsTargetCaption', 'migrationLimitsSourceCaption',
+  'migrationSyncIntervalTitle', 'migrationSyncIntervalInfo', 'migrationSyncInterval', 'migrationSyncIntervalCaption',
 ]
 
 describe('bulk migration limit messages', () => {
@@ -21,6 +22,11 @@ describe('bulk migration limit messages', () => {
         const v = messages.settings[k]
         expect(typeof v, k).toBe('string')
         expect(v.length, k).toBeGreaterThan(3)
+        expect(v, k).not.toContain('—')
+      }
+      for (const k of ['syncInterval', 'syncIntervalTooltip', 'bulkCutover', 'bulkCutoverTitle', 'bulkCutoverBody', 'bulkCutoverProjected', 'bulkCutoverConfirm', 'bulkCutoverSkipped']) {
+        const v = messages.inventoryPage.esxiMigration[k]
+        expect(typeof v, k).toBe('string')
         expect(v, k).not.toContain('—')
       }
       const caption = messages.inventoryPage.esxiMigration.bulkConcurrencyLimits

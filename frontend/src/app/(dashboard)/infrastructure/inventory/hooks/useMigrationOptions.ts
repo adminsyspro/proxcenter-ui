@@ -96,6 +96,10 @@ export function useMigrationOptions({
   // Warm only (#443). Off by default: the automatic budget stays the norm, and a
   // hold left on from an earlier run would park a migration nobody is watching.
   const [migManualCutover, setMigManualCutover] = useState(false)
+  // Warm with a manual cutover: seconds between two syncs of the hold. Null
+  // follows the source connection's setting; starts there every time, so an
+  // interval chosen for one wave never slows the syncs of the next.
+  const [migSyncIntervalSec, setMigSyncIntervalSec] = useState<number | null>(null)
   // Warm VMware only (#1000): default of the guest conversion at cutover. On
   // by default, the operator confirms or changes it in the "Cutover now"
   // dialog; an automatic cutover applies it as is.
@@ -148,6 +152,7 @@ export function useMigrationOptions({
     setMigConvertToQcow2(false)
     setMigCpuType(MIGRATION_CPU_TYPE_DEFAULT)
     setMigManualCutover(false)
+    setMigSyncIntervalSec(null)
     setMigConvertGuest(true)
     setMigEfiPreEnrolledKeys(true)
     setMigDowntimeBudget(String(DOWNTIME_BUDGET_DEFAULT_SEC))
@@ -181,6 +186,8 @@ export function useMigrationOptions({
     setMigCpuType,
     migManualCutover,
     setMigManualCutover,
+    migSyncIntervalSec,
+    setMigSyncIntervalSec,
     migConvertGuest,
     setMigConvertGuest,
     migEfiPreEnrolledKeys,

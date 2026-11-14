@@ -18,6 +18,7 @@ import { MIGRATION_CPU_TYPES, resolveMigrationCpuType } from "@/lib/migration/cp
 import { findTargetMacConflicts } from "@/lib/migration/mac-conflicts"
 import { parseHardwareOverrides, parseNicMappings, parseDiskMappings, parseMacPolicy, parseDiskOptions, parseNetworkMap, customMacs, isAcceptableCpuType } from "@/lib/migration/target-overrides"
 import { parseZeroRateLimit, ZERO_RATE_LIMIT_MIN_MBPS, ZERO_RATE_LIMIT_MAX_MBPS } from "@/lib/migration/warm/zero-rate"
+import { parseSyncInterval, SYNC_INTERVAL_MIN_SEC, SYNC_INTERVAL_MAX_SEC } from "@/lib/migration/warm/sync-interval"
 import { hasServerFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
 import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
@@ -223,6 +224,15 @@ export async function validateMigrationRequest(
     cutoverMode = body.cutoverMode
   }
 
+  // Warm with a manual cutover: seconds between two delta passes of the hold.
+  // Absent means the setting of the source connection, resolved by the engine
+  // at each pass (lib/migration/warm/sync-interval-source). Accepted and
+  // ignored on an automatic cutover, whose passes follow one another.
+  const syncIntervalSec = parseSyncInterval(body.syncIntervalSec)
+  if (syncIntervalSec === null) {
+    return bad(`syncIntervalSec must be an integer between ${SYNC_INTERVAL_MIN_SEC} and ${SYNC_INTERVAL_MAX_SEC} seconds`)
+  }
+
   // Optional virt-v2v root filesystem (`--root`). Only used by the cold
   // virt-v2v pipelines, and only needed for a genuine multi-boot guest: the
   // pipeline resolves the common SLES/openSUSE snapper case on its own.
@@ -356,7 +366,7 @@ export async function validateMigrationRequest(
       // Warm-only options (vddkLibdir, downtimeBudgetSec) are persisted here so a
       // retry — which rebuilds the config from job.config — keeps them instead of
       // silently reverting to the defaults.
-      config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }), ...(convertGuest !== undefined && { convertGuest }), ...(zeroRateLimitMBps !== undefined && { zeroRateLimitMBps }), ...(copyVmk && { copyVmk }),
+      config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }), ...(syncIntervalSec !== undefined && { syncIntervalSec }), ...(convertGuest !== undefined && { convertGuest }), ...(zeroRateLimitMBps !== undefined && { zeroRateLimitMBps }), ...(copyVmk && { copyVmk }),
         // Review-step overrides (#317), persisted so a retry keeps the same
         // hardware, NIC layout and disk placement.
         ...(hardware && { hardware }), ...(nics && { nics }), ...(disks && { disks }),

@@ -28,6 +28,14 @@ export interface SharedTask {
   kind: "migration"
   label: string
   sourceVmName: string | null
+  /**
+   * What reopens the dialog the run was started from (lib/migration/migrationJobOpen):
+   * the Inventory page of its source host, its source VM, and its batch when it
+   * belongs to a bulk migration.
+   */
+  sourceConnectionId: string
+  sourceVmId: string
+  batchId: string | null
   targetNode: string
   targetVmid: number | null
   status: string
@@ -113,6 +121,9 @@ export function toSharedTask(
     kind: "migration",
     label: `${vm} (${srcType} -> Proxmox)`,
     sourceVmName: job.sourceVmName ?? null,
+    sourceConnectionId: job.sourceConnectionId,
+    sourceVmId: job.sourceVmId,
+    batchId: job.batchId ?? null,
     targetNode: job.targetNode,
     targetVmid: job.targetVmid ?? null,
     status: job.status,

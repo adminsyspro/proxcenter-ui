@@ -72,6 +72,9 @@ model Connection {
   migrationMaxParallel      Int?
   migrationMaxPerNode       Int?
   migrationMaxPerSourceHost Int?
+  // Seconds between two delta passes of a warm migration waiting for a manual
+  // cutover out of this source (VMware, XCP-ng); null = 60.
+  migrationSyncIntervalSec  Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -348,6 +351,17 @@ model MigrationJob {
   // `status = "cancelled"`, which is the durable signal.
   cutoverRequestedAt       DateTime? @map("cutover_requested_at")
   forcePowerOffRequestedAt DateTime? @map("force_poweroff_requested_at")
+  // Set while a warm job waiting for a manual cutover sleeps between two delta
+  // passes: it then holds no batch slot and counts against no migration limit,
+  // and takes its place back before the next pass (lib/migration/warm/hold-slot).
+  holdIdleAt               DateTime? @map("hold_idle_at")
+  // Interval between two syncs the engine suggests for this waiting job, from
+  // the syncs it measured (lib/migration/warm/sync-interval). Null until two
+  // syncs of the hold have run.
+  suggestedSyncIntervalSec Int?      @map("suggested_sync_interval_sec")
+  // What those syncs measured (change rate, copy rate, fixed costs), so the
+  // cutover can be estimated for any interval (CutoverMeasure).
+  syncMeasure              Json?     @map("sync_measure")
   rootChoice               String?   @map("root_choice")
 
   error            String?

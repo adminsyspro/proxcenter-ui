@@ -79,7 +79,7 @@ import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/Migrate
 import { effectiveMigrationLimits } from '@/lib/migration/migration-limits'
 import { BULK_MIG_CONCURRENCY_MIN, bulkTargetNodes, bulkTempBytesRequired, bulkVmDiskBytes, clampBulkConcurrency } from '../bulkMigrationConfig'
 import { countExtVmPower, isSourcePaused, isSourcePoweredOn } from '../extVmList'
-import { bulkBatchFromPayload, bulkRowsFromBatch, countBulkJobs, fetchBulkBatch, isTerminalJobStatus, orderBulkJobs, type BulkMigBatch, type BulkMigJobRow } from '../bulkJobList'
+import { bulkBatchFromPayload, bulkJobsAwaitingCutover, bulkJobsWithSyncInterval, bulkRowsFromBatch, countBulkJobs, fetchBulkBatch, isTerminalJobStatus, orderBulkJobs, type BulkMigBatch, type BulkMigJobRow } from '../bulkJobList'
 import { pageOf } from '@/lib/paging'
 import { STICKY_PAGER_SX } from '@/components/ui/PagedRows'
 import { migrateGuestAndWait, migrationFailureText, runInBatches } from '@/lib/migration/guestMigrateClient'
@@ -100,8 +100,13 @@ import { parseNodeId, parseVmId, HOTPLUG_DEVICES, LXC_FEATURES, canEditLxcFeatur
 import { AllVmItem, HostItem } from '../InventoryTree'
 import { PlayArrowIcon, StopIcon, PowerSettingsNewIcon } from './IconWrappers'
 import { StatusIcon } from './TreeIcons'
-import { vsanBlocksMigrationType, vsanBlocksDirectEsxiRun, requiredTempBytes, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_PRESETS, DOWNTIME_BUDGET_DEFAULT_SEC, DOWNTIME_BUDGET_MIN_SEC, DOWNTIME_BUDGET_MAX_SEC, downtimeBudgetIndex, formatDowntimeBudget } from './migrationGuards'
+import { warmCutoverPayload, vsanBlocksMigrationType, vsanBlocksDirectEsxiRun, requiredTempBytes, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_PRESETS, DOWNTIME_BUDGET_DEFAULT_SEC, DOWNTIME_BUDGET_MIN_SEC, DOWNTIME_BUDGET_MAX_SEC, downtimeBudgetIndex, formatDowntimeBudget } from './migrationGuards'
+import { SYNC_INTERVAL_STEPS_SEC, formatSyncInterval, syncIntervalStepIndex } from '@/lib/migration/warm/sync-interval'
 import WarmCutoverButton from './WarmCutoverButton'
+import BulkCutoverDialog from './BulkCutoverDialog'
+import SyncIntervalButton from './SyncIntervalButton'
+import SyncIntervalDialog from './SyncIntervalDialog'
+import SyncIntervalSlider from './SyncIntervalSlider'
 import ForcePowerOffButton from './ForcePowerOffButton'
 import RootChoiceButton from './RootChoiceButton'
 import { statusChipLabelKey, isWaitDisplayKey } from './migrationWaitDisplay'
@@ -342,6 +347,9 @@ export interface InventoryDialogsProps {
   migConvertToQcow2: boolean
   migManualCutover: boolean
   setMigManualCutover: (v: boolean) => void
+  /** Seconds between two syncs of a manual warm hold; null follows the source connection. Optional so older callers keep the default. */
+  migSyncIntervalSec?: number | null
+  setMigSyncIntervalSec?: (v: number | null) => void
   migConvertGuest: boolean
   setMigConvertGuest: (v: boolean) => void
   migEfiPreEnrolledKeys: boolean
@@ -598,6 +606,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     migCpuType, setMigCpuType,
     migStep, setMigStep, migHardware, setMigHardware, migNics, setMigNics,
     migManualCutover, setMigManualCutover,
+    migSyncIntervalSec, setMigSyncIntervalSec,
     migConvertGuest, setMigConvertGuest, migEfiPreEnrolledKeys, setMigEfiPreEnrolledKeys,
     migDowntimeBudget, setMigDowntimeBudget,
     migZeroRateLimit, setMigZeroRateLimit,
@@ -1530,10 +1539,23 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
   ) : !migTargetStorage ? (
     <FormHelperText>{t('inventoryPage.esxiMigration.selectStorage')}</FormHelperText>
   ) : null
-  // #663: the budget only governs the automatic decision, so a run held for the
-  // operator ignores it and the field is hidden rather than shown inert.
-  const showDowntimeBudget = migType === 'warm' && !migManualCutover
+  // #663: the budget only governs the automatic decision. On a run held for
+  // the operator the same field reads as the downtime aimed at: nothing
+  // switches on it, the suggested sync interval and the cutover estimate are
+  // measured against it.
+  const showDowntimeBudget = migType === 'warm'
+  const downtimeLabel = t(migManualCutover ? 'inventoryPage.esxiMigration.downtimeTarget' : 'inventoryPage.esxiMigration.downtimeBudget')
   const downtimeBudgetInvalid = showDowntimeBudget && !isDowntimeBudgetValid(migDowntimeBudget)
+  // The source connection carries the default interval between two syncs of a
+  // manual warm hold (Settings > Connections). It is read through a migration
+  // route: the operator may not hold the right to open the connection itself.
+  const { data: sourceSyncInterval } = useSWR<{ data?: { defaultSyncIntervalSec?: number | null } } | null>(
+    migType === 'warm' && migManualCutover && migSourceConnId ? `/api/v1/migrations/sync-interval?sourceConnectionId=${encodeURIComponent(migSourceConnId)}` : null,
+    (url: string) => fetch(url).then(r => (r.ok ? r.json() : null)),
+    { revalidateOnFocus: false },
+  )
+  const sourceDefaultSyncIntervalSec = sourceSyncInterval?.data?.defaultSyncIntervalSec ?? null
+  const syncIntervalIndex = syncIntervalStepIndex(migSyncIntervalSec ?? sourceDefaultSyncIntervalSec)
 
   // roadmap#45: the thick zeroing cap only applies where zeroing happens, a
   // thick LVM target. Empty keeps the cap of the target PVE connection
@@ -1735,11 +1757,34 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
     label: [30, 300, 1800, 21600, 86400].includes(sec) ? formatDowntimeBudget(sec) : undefined,
   }))
 
-  const renderDowntimeBudgetField = () => showDowntimeBudget && (
-    <Box sx={{ px: 0.5 }}>
+  // Warm with a manual cutover: how often the waiting migration syncs again.
+  // Each sync snapshots the source VM, so this is what a waiting wave costs
+  // the source platform. The slider opens on the source connection's setting
+  // and only a value the operator picked is sent with the migration.
+  const renderSyncIntervalField = () => migType === 'warm' && migManualCutover && (
+    <Box sx={{ px: 0.5 }} data-testid="warm-sync-interval">
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
-        <Typography variant="body2">{t('inventoryPage.esxiMigration.downtimeBudget')}</Typography>
-        <MuiTooltip title={t('inventoryPage.esxiMigration.downtimeBudgetTooltip')} arrow placement="top" slotProps={tooltipSlotProps}>
+        <Typography variant="body2">{t('inventoryPage.esxiMigration.syncInterval')}</Typography>
+        <MuiTooltip title={t('inventoryPage.esxiMigration.syncIntervalTooltip')} arrow placement="top" slotProps={tooltipSlotProps}>
+          <i className="ri-question-line" style={{ fontSize: 14, opacity: 0.6 }} />
+        </MuiTooltip>
+        <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }} data-testid="warm-sync-interval-value">
+          {formatSyncInterval(SYNC_INTERVAL_STEPS_SEC[syncIntervalIndex])}
+        </Typography>
+      </Box>
+      <SyncIntervalSlider
+        valueSec={SYNC_INTERVAL_STEPS_SEC[syncIntervalIndex]}
+        onChange={seconds => setMigSyncIntervalSec?.(seconds)}
+        label={t('inventoryPage.esxiMigration.syncInterval')}
+      />
+    </Box>
+  )
+
+  const renderDowntimeBudgetField = () => showDowntimeBudget && (
+    <Box sx={{ px: 0.5 }} data-testid="warm-downtime-budget">
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+        <Typography variant="body2">{downtimeLabel}</Typography>
+        <MuiTooltip title={t(migManualCutover ? 'inventoryPage.esxiMigration.downtimeTargetTooltip' : 'inventoryPage.esxiMigration.downtimeBudgetTooltip')} arrow placement="top" slotProps={tooltipSlotProps}>
           <i className="ri-question-line" style={{ fontSize: 14, opacity: 0.6 }} />
         </MuiTooltip>
         <Typography variant="body2" fontWeight={700} sx={{ ml: 'auto' }}>
@@ -1761,7 +1806,7 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
             valueLabelDisplay="auto"
             valueLabelFormat={(i: number) => formatDowntimeBudget(DOWNTIME_BUDGET_PRESETS[i])}
             getAriaValueText={(i: number) => formatDowntimeBudget(DOWNTIME_BUDGET_PRESETS[i])}
-            aria-label={t('inventoryPage.esxiMigration.downtimeBudget')}
+            aria-label={downtimeLabel}
           />
         </Box>
         {/* The slider walks a curated scale; this is how a value between two of
@@ -1827,15 +1872,37 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
 
   // Warm VMware only (roadmap#53): which VMkernel adapter of the source host the
   // NFC copy goes through. Empty keeps the host default (its vSphereBackupNFC
-  // adapter, else management). The helper carries the reachability verdict of
-  // the node preflight for the adapter in effect.
+  // adapter, else management).
   const copyVnicLabel = (v: CopyVnic) => `${v.device}  ${v.address}${v.services.length ? `  (${v.services.join(', ')})` : ''}`
+  // What the adapter choice means, and the reachability verdict of the node
+  // preflight once it is in: explanation read once, so it lives in the tooltip
+  // of the label. Only what needs acting on (loading, failure, closed port)
+  // stays under the field.
+  const copyVmkHelp = (() => {
+    if (!showCopyVmk || !copyIfaces) return ''
+    const base = copyIfaces.source === 'vcenter'
+      ? t('inventoryPage.esxiMigration.copyVmkHelpVcenter', { host: copyIfaces.hostName })
+      : t('inventoryPage.esxiMigration.copyVmkHelpEsxi', { host: copyIfaces.hostName })
+    const reach = warmPreflightCurrent?.copy?.ok && copyVnic && warmPreflightCurrent.copy.address === copyVnic.address
+      ? ` ${t('inventoryPage.esxiMigration.copyVmkReachable', { node: migTargetNode, ports: Object.keys(warmPreflightCurrent.copy.ports).join(', ') })}`
+      : ''
+    return `${base}${reach}`
+  })()
   const renderCopyVmkSelect = () => showCopyVmk && (
     <TextField
       select
       fullWidth
       size="small"
-      label={t('inventoryPage.esxiMigration.copyVmk')}
+      label={
+        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+          {t('inventoryPage.esxiMigration.copyVmk')}
+          {copyVmkHelp && (
+            <MuiTooltip title={copyVmkHelp} arrow placement="top" slotProps={tooltipSlotProps}>
+              <i className="ri-question-line" aria-label={copyVmkHelp} data-testid="warm-copy-vmk-help" style={{ fontSize: 14, opacity: 0.6, pointerEvents: 'auto', cursor: 'help' }} />
+            </MuiTooltip>
+          )}
+        </Box>
+      }
       value={copyIfaces ? migCopyVmk : ''}
       onChange={e => setMigCopyVmk(e.target.value)}
       disabled={!copyIfaces}
@@ -1854,13 +1921,7 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
             ...(closed.length ? [t('inventoryPage.esxiMigration.copyVmkUnreachable', { address: warmCopyUnreachable.address, ports: closed.join(', ') })] : []),
           ].join(' ')
         }
-        const reach = warmPreflightCurrent?.copy?.ok && copyVnic && warmPreflightCurrent.copy.address === copyVnic.address
-          ? ` ${t('inventoryPage.esxiMigration.copyVmkReachable', { node: migTargetNode, ports: Object.keys(warmPreflightCurrent.copy.ports).join(', ') })}`
-          : ''
-        const base = copyIfaces.source === 'vcenter'
-          ? t('inventoryPage.esxiMigration.copyVmkHelpVcenter', { host: copyIfaces.hostName })
-          : t('inventoryPage.esxiMigration.copyVmkHelpEsxi', { host: copyIfaces.hostName })
-        return `${base}${reach}`
+        return undefined
       })()}
       // The empty value shows "Host default: …": keep the label on the border above it.
       slotProps={{ htmlInput: { 'data-testid': 'warm-copy-vmk' }, select: { displayEmpty: true }, inputLabel: { shrink: true } }}
@@ -2166,6 +2227,20 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
     setBulkStartError(null)
     setBulkBatchError(null)
   }, [bulkMigOpen])
+  // Group cutover of the batch: the VMs waiting for their cutover, read from
+  // the rows the dialog already polls.
+  const [bulkCutoverOpen, setBulkCutoverOpen] = useState(false)
+  const bulkAwaitingCutover = React.useMemo(() => bulkJobsAwaitingCutover(bulkMigJobs), [bulkMigJobs])
+  const [bulkSyncIntervalOpen, setBulkSyncIntervalOpen] = useState(false)
+  const bulkWithSyncInterval = React.useMemo(() => bulkJobsWithSyncInterval(bulkMigJobs), [bulkMigJobs])
+  const refreshBulkBatch = async () => {
+    if (!bulkMigBatch) return
+    const snap = await fetchBulkBatch(bulkMigBatch.id)
+    if (snap) {
+      setBulkMigBatch(bulkBatchFromPayload(snap))
+      setBulkMigJobs(bulkRowsFromBatch(snap.jobs))
+    }
+  }
   const runBulkBatchAction = async (action: 'pause' | 'resume' | 'cancel-queued') => {
     if (!bulkMigBatch) return
     const batchId = bulkMigBatch.id
@@ -2262,15 +2337,11 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
           ...(isVmwareSource && migStep === 'review' && reviewNics && { nics: reviewNics }),
           // Disk profile (ui#1331), every source: only departures from the defaults travel.
           ...(diskOptions && { diskOptions }),
-          // Warm only, and single-VM only: the switch is hidden
-          // everywhere else, so the payload is gated on the type too
-          // rather than trusting the UI state.
-          ...(migType === 'warm' && migManualCutover && { cutoverMode: 'manual' as const }),
+          // Warm only: the switch is hidden everywhere else, so the payload
+          // is gated on the type too rather than trusting the UI state.
+          ...warmCutoverPayload({ migType, manualCutover: migManualCutover, downtimeBudget: migDowntimeBudget, syncIntervalSec: migSyncIntervalSec, defaultSyncIntervalSec: sourceDefaultSyncIntervalSec }),
           // Guest conversion default (#1000), warm VMware only like the switch.
           ...(migType === 'warm' && (isVmwareSource || esxiMigrateVm?.hostType === 'xcpng') && { convertGuest: migConvertGuest }),
-          ...(migType === 'warm' && !migManualCutover && migDowntimeBudget.trim() !== '' && {
-            downtimeBudgetSec: Number(migDowntimeBudget.trim()),
-          }),
           // Thick zeroing cap (roadmap#45); empty keeps the global default.
           ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && {
             zeroRateLimitMBps: Number(migZeroRateLimit.trim()),
@@ -3875,6 +3946,9 @@ return
                       ) : undefined,
                     }}
                   />
+                  {/* What the chosen node still needs for a warm run, or that it
+                      is ready: it speaks of the target, so it sits with it. */}
+                  {renderWarmReadiness()}
                 </Stack>
               </Box>
               </Stack>
@@ -4355,6 +4429,7 @@ return
                   {renderConvertGuestSwitch(esxiMigrateVm?.hostType)}
                   {renderConvertGuestReadiness()}
                   {renderDowntimeBudgetField()}
+                  {renderSyncIntervalField()}
                   {renderZeroRateLimitField()}
                   {renderCopyVmkSelect()}
                   {renderIntegrityNote(esxiMigrateVm?.hostType)}
@@ -4397,8 +4472,6 @@ return
                   {migrationInfoText()}
                 </Typography>
               </Box>
-
-              {renderWarmReadiness()}
             </Stack>
           )}
 
@@ -4730,6 +4803,7 @@ return
                   {/* Same control as the VM panel. The operator who started the
                       run is looking at this dialog, so the switchover has to be
                       reachable from here and not only from the inventory. */}
+                  <SyncIntervalButton job={migJob} size="medium" />
                   <WarmCutoverButton job={migJob} size="medium" />
                   <ForcePowerOffButton job={migJob} size="medium" />
                   <RootChoiceButton job={migJob} size="medium" />
@@ -5492,7 +5566,10 @@ return
                 )}
 
                 {renderBulkConcurrencyField()}
+                {renderAutomaticCutoverSwitch()}
                 {renderConvertGuestSwitch(bulkMigHostInfo?.hostType)}
+                {renderDowntimeBudgetField()}
+                {renderSyncIntervalField()}
                 {renderNfcConcurrencyField(bulkMigHostInfo?.hostType === 'vcenter')}
                 {renderZeroRateLimitField()}
                 {renderCopyVmkSelect()}
@@ -5654,8 +5731,9 @@ return
                       {!allDone && (
                         <Typography component="span" fontSize={12} fontWeight={600} sx={{ opacity: 0.6 }} data-testid="bulk-job-counts">
                           {' · '}{isPaused
-                            ? t('inventoryPage.esxiMigration.batchPaused', { running: jobCounts.active, queued: jobCounts.queued })
-                            : t('inventoryPage.esxiMigration.bulkJobsInFlight', { running: jobCounts.active, queued: jobCounts.queued })}
+                            ? t('inventoryPage.esxiMigration.batchPaused', { running: jobCounts.active - bulkAwaitingCutover.length, queued: jobCounts.queued })
+                            : t('inventoryPage.esxiMigration.bulkJobsInFlight', { running: jobCounts.active - bulkAwaitingCutover.length, queued: jobCounts.queued })}
+                          {bulkAwaitingCutover.length > 0 && <span data-testid="bulk-waiting-count">{', '}{t('inventoryPage.esxiMigration.bulkJobsWaiting', { waiting: bulkAwaitingCutover.length })}</span>}
                         </Typography>
                       )}
                     </Typography>
@@ -5672,6 +5750,16 @@ return
                         {isPaused && (
                           <Button size="small" variant="text" disabled={bulkBatchBusy} startIcon={<i className="ri-play-line" />} onClick={() => runBulkBatchAction('resume')} sx={{ textTransform: 'none', fontSize: 11, minWidth: 0, py: 0, px: 1 }}>
                             {t('inventoryPage.esxiMigration.resumeBatch')}
+                          </Button>
+                        )}
+                        {bulkWithSyncInterval.length > 0 && (
+                          <Button size="small" variant="text" disabled={bulkBatchBusy} startIcon={<i className="ri-timer-line" />} onClick={() => setBulkSyncIntervalOpen(true)} sx={{ textTransform: 'none', fontSize: 12 }} data-testid="bulk-batch-sync-interval">
+                            {t('inventoryPage.esxiMigration.syncIntervalChange')}
+                          </Button>
+                        )}
+                        {bulkAwaitingCutover.length > 0 && (
+                          <Button size="small" variant="text" color="warning" disabled={bulkBatchBusy} startIcon={<i className="ri-swap-box-line" />} onClick={() => setBulkCutoverOpen(true)} sx={{ textTransform: 'none', fontSize: 12 }} data-testid="bulk-batch-cutover">
+                            {t('inventoryPage.esxiMigration.bulkCutover', { count: bulkAwaitingCutover.length })}
                           </Button>
                         )}
                         {jobCounts.queued > 0 && (
@@ -6046,6 +6134,9 @@ return
                         ...(bulkNetworkMap && (bulkMigHostInfo.hostType === 'vmware' || isVcenterBulk) && { networkMap: bulkNetworkMap }),
                         // VMkernel adapter of the copy (roadmap#53), ESXi-direct batches only.
                         ...(showCopyVmk && migCopyVmk && copyVnic && { copyVmk: migCopyVmk }),
+                        // Cutover of the batch: automatic with its downtime budget, or held
+                        // for the operator, each VM syncing at the chosen interval meanwhile.
+                        ...warmCutoverPayload({ migType: bulkJobMigrationType(migType, { coldOnly: isHypervBulk || isNutanixBulk, vcenter: isVcenterBulk }), manualCutover: migManualCutover, downtimeBudget: migDowntimeBudget, syncIntervalSec: migSyncIntervalSec, defaultSyncIntervalSec: sourceDefaultSyncIntervalSec }),
                         concurrency: bulkConcurrency,
                         vms,
                       }),
@@ -6096,6 +6187,28 @@ return
           )}
         </DialogActions>
       </Dialog>
+
+      {/* Group cutover of the bulk batch: the VMs waiting for it, all or a selection. */}
+      {bulkMigBatch && (
+        <BulkCutoverDialog
+          open={bulkCutoverOpen}
+          batchId={bulkMigBatch.id}
+          jobs={bulkAwaitingCutover.map(j => ({ jobId: j.jobId, name: j.name, projectedDowntimeSec: j.projectedDowntimeSec }))}
+          onClose={() => setBulkCutoverOpen(false)}
+          onDone={() => { void refreshBulkBatch() }}
+        />
+      )}
+
+      {/* Sync interval of the VMs of the bulk batch that wait for a manual cutover. */}
+      {bulkMigBatch && (
+        <SyncIntervalDialog
+          open={bulkSyncIntervalOpen}
+          batchId={bulkMigBatch.id}
+          jobs={bulkWithSyncInterval.map(j => ({ jobId: j.jobId, name: j.name, syncIntervalSec: j.syncIntervalSec, suggestedSyncIntervalSec: j.suggestedSyncIntervalSec, measure: j.syncMeasure }))}
+          onClose={() => setBulkSyncIntervalOpen(false)}
+          onDone={() => { void refreshBulkBatch() }}
+        />
+      )}
 
       {/* Cancel the queued jobs of the bulk batch: started ones carry on. */}
       <Dialog open={bulkCancelConfirmOpen} onClose={() => setBulkCancelConfirmOpen(false)} maxWidth="xs" fullWidth>

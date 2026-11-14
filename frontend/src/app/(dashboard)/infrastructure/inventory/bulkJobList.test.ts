@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { bulkBatchFromPayload, bulkJobState, bulkRowsFromBatch, countBulkJobs, migrationChipLabelKey, migrationChipTone, orderBulkJobs } from './bulkJobList'
+import { bulkBatchFromPayload, bulkJobState, bulkJobsAwaitingCutover, bulkJobsWithSyncInterval, bulkRowsFromBatch, countBulkJobs, migrationChipLabelKey, migrationChipTone, orderBulkJobs } from './bulkJobList'
 
 const jobs = [
   { vmid: 'a', status: 'completed' },
@@ -152,5 +152,49 @@ describe('bulk batch follow-up helpers (roadmap#53)', () => {
     // No new line: the row keeps its log.
     const idle = bulkRowsFromBatch([{ id: 'j1', sourceVmId: 'vm-1', status: 'full_copy', logs: [], logOffset: 3 }], next)
     expect(idle[0].logs).toHaveLength(3)
+  })
+})
+
+describe('bulkJobsAwaitingCutover', () => {
+  const job = (id: string, status: string, extra: Record<string, unknown> = {}) => ({ id, sourceVmId: id, sourceVmName: id, status, ...extra })
+
+  it('keeps the hold and its projection on the rows of a batch read', () => {
+    const rows = bulkRowsFromBatch([
+      job('a', 'delta_sync', { projectedDowntimeSec: 95, cutoverMode: 'manual' }),
+      job('b', 'delta_sync', { projectedDowntimeSec: 80, cutoverMode: 'auto' }),
+    ] as any)
+    expect(rows[0]).toMatchObject({ manualHold: true, projectedDowntimeSec: 95 })
+    expect(rows[1].manualHold).toBeUndefined()
+  })
+
+  it('lists the VMs held for a manual cutover once a first sync gave a projection, and the ones at the operator gate', () => {
+    const rows = bulkRowsFromBatch([
+      job('held', 'delta_sync', { projectedDowntimeSec: 95, cutoverMode: 'manual' }),
+      job('first-pass', 'delta_sync', { projectedDowntimeSec: null, cutoverMode: 'manual' }),
+      job('auto', 'delta_sync', { projectedDowntimeSec: 80, cutoverMode: 'auto' }),
+      job('gate', 'awaiting_cutover', { projectedDowntimeSec: 900, cutoverMode: 'auto' }),
+      job('copy', 'full_copy', { cutoverMode: 'manual' }),
+      job('done', 'completed', { cutoverMode: 'manual' }),
+    ] as any)
+    expect(bulkJobsAwaitingCutover(rows).map(r => r.jobId)).toEqual(['held', 'gate'])
+  })
+})
+
+describe('sync interval of a batch', () => {
+  it('carries the interval and the suggestion of the manual jobs only', () => {
+    const rows = bulkRowsFromBatch([
+      { id: 'a', sourceVmId: 'vm-a', status: 'delta_sync', cutoverMode: 'manual', syncIntervalSec: 300, suggestedSyncIntervalSec: 900 },
+      { id: 'b', sourceVmId: 'vm-b', status: 'delta_sync', cutoverMode: 'manual', syncIntervalSec: 60, suggestedSyncIntervalSec: null },
+      { id: 'c', sourceVmId: 'vm-c', status: 'delta_sync', cutoverMode: 'auto', syncIntervalSec: 60, suggestedSyncIntervalSec: 900 },
+    ])
+
+    expect(rows.map(r => [r.syncIntervalSec, r.suggestedSyncIntervalSec])).toEqual([[300, 900], [60, undefined], [undefined, undefined]])
+  })
+
+  it('offers the change for the manual jobs that are not over, queued ones included', () => {
+    const row = (jobId: string, status: string, manualHold = true) => ({ vmid: jobId, name: jobId, jobId, status, progress: 0, manualHold })
+    const rows = [row('queued', 'queued'), row('copy', 'full_copy'), row('hold', 'delta_sync'), row('cut', 'cutover'), row('done', 'completed'), row('auto', 'delta_sync', false)]
+
+    expect(bulkJobsWithSyncInterval(rows).map(r => r.jobId)).toEqual(['queued', 'copy', 'hold'])
   })
 })

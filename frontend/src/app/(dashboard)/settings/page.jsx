@@ -546,6 +546,8 @@ function ConnectionsTab() {
       }),
       // Bulk migration limit of a VMware source, per ESXi host (ui#1332), Enterprise only
       ...(addConnType === 'vmware' && migrationAvailable && { migrationMaxPerSourceHost: formData.migrationMaxPerSourceHost }),
+      // Sync interval of a warm migration waiting for a manual cutover, VMware and XCP-ng sources
+      ...((addConnType === 'vmware' || addConnType === 'xcpng') && migrationAvailable && { migrationSyncIntervalSec: formData.migrationSyncIntervalSec }),
       // Provider-only create-with-owner: own the connection by an MSP tenant
       ...(!editingConn?.id && formData.ownerTenantId && { ownerTenantId: formData.ownerTenantId }),
     }

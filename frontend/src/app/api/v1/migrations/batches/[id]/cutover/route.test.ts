@@ -73,6 +73,17 @@ describe("POST /api/v1/migrations/batches/[id]/cutover", () => {
     })
   })
 
+  it("leaves a migration whose copy is under test, and says why", async () => {
+    h.jobs = [
+      { id: "j-hold", sourceVmName: "web-3", status: "delta_sync" },
+      { id: "j-test", sourceVmName: "web-6", status: "delta_sync", testRequest: null, testState: { phase: "running", testVmid: 9001 } },
+    ]
+    const data = (await readJson<any>(await cutover())).data
+    expect(data.requested).toEqual(["j-hold"])
+    expect(data.skipped).toEqual([{ jobId: "j-test", sourceVmName: "web-6", status: "delta_sync", error: "Stop the running test before the cutover" }])
+    expect(signal).not.toHaveBeenCalledWith("j-test")
+  })
+
   it("limits the cutover to the selected migrations", async () => {
     const res = await cutover({ jobIds: ["j-gate", "j-copy"] })
 

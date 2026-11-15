@@ -4,7 +4,7 @@ import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { migrateScope, scopedJobWhere } from "@/lib/migration/authorize"
 import { cancelMigrationJob } from "@/lib/migration/pipeline"
-import { cancelWarmMigrationJob } from "@/lib/migration/warm/warm-pipeline"
+import { cancelWarmMigrationJob, requestCancelRemovesTarget } from "@/lib/migration/warm/warm-pipeline"
 import { cancelV2vMigrationJob } from "@/lib/migration/v2v-pipeline"
 import { cancelXcpngMigrationJob } from "@/lib/migration/xcpng-pipeline"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -13,10 +13,12 @@ export const runtime = "nodejs"
 
 /**
  * POST /api/v1/migrations/[id]/cancel
- * Cancel a running migration
+ * Cancel a running migration. `{ removeTarget: true }` also removes what a
+ * warm migration already copied on the target (VM and volumes), which a
+ * failure keeps (#612); without it the copy stays, as before.
  */
 async function handlePost(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -48,13 +50,17 @@ async function handlePost(
     // modules than this handler does: every run mirrors its own status back
     // into its cancel set (lib/migration/operator-signals), so a cancel no
     // longer leaves the transfer running behind a row that reads "cancelled".
+    const body = await req.json().catch(() => null)
+    const removeTarget = body?.removeTarget === true
+    // Before the cancel: the cleanup the cancel triggers reads it.
+    if (removeTarget) requestCancelRemovesTarget(id)
     cancelMigrationJob(id)
     cancelWarmMigrationJob(id)
     cancelV2vMigrationJob(id)
     cancelXcpngMigrationJob(id)
     await prisma.migrationJob.update({
       where: { id },
-      data: { status: "cancelled", currentStep: "cancelled", completedAt: new Date() },
+      data: { status: "cancelled", currentStep: "cancelled", completedAt: new Date(), ...(removeTarget ? { cancelRemovesTarget: true } : {}) },
     })
 
     return NextResponse.json({ data: { status: "cancelled" } })

@@ -5,7 +5,6 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { reserveTargetVmid } from "../reserve-target-vmid"
 import { releaseVmids } from "../vmid-reservation"
 import { isFileBasedStorage } from "@/lib/proxmox/storage"
-import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import {
   xapiLogin, xapiLogout, xapiKeepAlive, xapiGetVmConfig, xapiVmRefByUuid, xapiNbdEnabled, xapiManagementNetworkUuid,
   xapiEnableCbt, xapiDisableCbt, xapiSnapshotVm, xapiGetNbdInfo, xapiListChangedBlocks, xapiDestroySnapshot,
@@ -17,8 +16,8 @@ import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { splitCreds, xcpngSubTypeOf } from "@/lib/xcpng/source"
 import { isWindowsXoVm, mapXoToPveConfig } from "../xcpngConfigMapper"
 import { diskDriveOptions } from "../target-overrides"
-import { virtioDevices } from "../configMapper"
-import { volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
+import { virtioDevices, type PveVmCreateParams } from "../configMapper"
+import { type AllocatedVolume } from "../pvesm-alloc"
 import { getNodeSshEndpointForMigration } from "../pve-tasks"
 import { startJobHeartbeat } from "../job-heartbeat"
 import { decideNextPass, type ConvergenceConfig } from "./convergence"
@@ -27,19 +26,20 @@ import type { Extent } from "./extents"
 import type { WarmMigrationConfig } from "./types"
 import {
   registerJob, unregisterJob, acquireVmLock, releaseVmLock, updateJob, updateJobLive, appendLog, appendStep, readJobConfig,
-  isCancelled, isCutoverRequested, awaitOperatorCutover, runDeltaPassWithRetry,
+  isCancelled, cancelRemovesTarget, isCutoverRequested, awaitOperatorCutover, runDeltaPassWithRetry,
 } from "./job-control"
 import {
   applyExtentsWithProgress, checksumDiskWindows, scaleWarmProgress, warmFinalTransfer, APPLY_INACTIVITY_MS, PROGRESS_LOG_INTERVAL_MS,
   type PassWindow, type PassProgress,
 } from "./apply"
 import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
-import { awaitNextHoldPass, describeHoldInterval } from "./hold-wait"
+import { awaitNextHoldPass, describeHoldInterval, type HoldTest } from "./hold-wait"
+import { runMigrationTest } from "./migration-test"
 import { catchUpBeforeCutover } from "./catch-up"
 import { resolveWarmZeroRateLimit } from "./zero-rate-target"
 import { sweepOrphanReaders } from "./orphan-readers"
 import { cleanShutdownAndConfirm, isXapiGuestAgentMissing, type PowerOffOps } from "./power-off"
-import { attachDisksAndBoot, removeTargetVmOnFailure, unmapTargetVolumes, verifySampledFirstBlock } from "./finish"
+import { attachDisksAndBoot, releaseTargetVolumes, removeTargetVmOnFailure, unmapTargetVolumes, verifySampledFirstBlock } from "./finish"
 import { startXapiReader, stopXapiReader, readAllocatedExtents, type XapiReaderHandle } from "./xapi-reader"
 import { checkNbdNodePreflight } from "./xcpng-node-preflight"
 import { startSessionKeepAlive } from "./session-keepalive"
@@ -194,6 +194,48 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       zeroRateLimitMBps: await resolveWarmZeroRateLimit(config.zeroRateLimitMBps, config.targetConnectionId),
     })
     for (const [k, dev] of devByKey) targetDev.set(k, dev)
+
+    // What the guest conversion gets and the VM the guest boots as, at
+    // cutover and in a test of the waiting copy (migration-test.ts).
+    const isWindows = isWindowsXoVm(vmConfig)
+    const conversionInput = () => ({
+      name: vmConfig.name, firmware: (vmConfig.firmware === "uefi" ? "efi" : "bios") as "efi" | "bios", isWindows, guestOs: vmConfig.guestOS,
+      memoryMB: vmConfig.memoryMB,
+      // A netfront VIF is eth<device> in the guest, enX<device> under
+      // systemd 253 and later (Debian 13, measured on the lab).
+      nics: guestNicsFromNets(pveParams.nets, i => {
+        const device = [...vmConfig.networks].sort((a, b) => Number(a.device) - Number(b.device))[i]?.device
+        return /^\d+$/.test(device ?? "") ? [`eth${device}`, `enX${device}`] : []
+      }),
+    })
+    const bootParamsFor = (converted: boolean): PveVmCreateParams => converted
+      ? mapXoToPveConfig(vmConfig, targetVmid!, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, { guestConverted: true, macPolicy: config.macPolicy })
+      : pveParams
+    const driveOptsFor = (p: PveVmCreateParams) => (_i: number, slot: string) => diskDriveOptions({ slot, storageType: storageInfo?.type, scsihw: p.scsihw, profile: config.diskOptions })
+    const wantsConversion = async () => {
+      const latest = await readJobConfig(jobId).catch(() => ({} as Record<string, any>))
+      return typeof latest.convertGuest === "boolean" ? latest.convertGuest : config.convertGuest !== false
+    }
+    const migrationTest: HoldTest = {
+      run: async () => {
+        const convert = await wantsConversion()
+        await runMigrationTest({
+          jobId, pveConn, targetConnectionId: config.targetConnectionId, node: config.targetNode, nodeIp,
+          devices: vmConfig.disks.map(d => targetDev.get(d.position) ?? ""),
+          conversion: convert ? conversionInput() : null,
+          paramsFor: bootParamsFor,
+          driveOpts: (i, slot, p) => driveOptsFor(p)(i, slot),
+          // Converted or not, Windows keeps the Xen PV drivers that stop it off Xen (xen-pv-drivers.ts).
+          ...(isWindows && {
+            prepareBoot: async (overlay: string) => {
+              const pv = await neutralizeXenPvDrivers({ connectionId: config.targetConnectionId, nodeIp, disk: overlay, format: "qcow2" })
+              const line = xenPvLogLine(pv)
+              await appendLog(jobId, `Test: ${line.msg}`, line.level)
+            },
+          }),
+        })
+      },
+    }
 
     /** Expose a VDI on the node through an nbdkit-nbd reader pinned to the host certificate XAPI handed us. */
     const readerFor = async (vdiRef: string, tag: string): Promise<XapiReaderHandle> => {
@@ -376,7 +418,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
         await updateJob(jobId, "delta_sync", { currentStep: `delta_${pass + 1}`, projectedDowntimeSec: decision.projectedDowntimeSec, progress: Math.round(deltaWindow.rangeEnd) })
         if (decision.action === "cutover") break
         if (decision.action === "operator-gate") { await awaitOperatorCutover(jobId, decision.projectedDowntimeSec, budget, maxPasses, { floorSec: cfg.shutdownSec + cfg.bootSec }); operatorCutover = true; break }
-        if (cutoverMode === "manual" && !(await awaitNextHoldPass(jobId, config, { durationSec: dsec, deltaBytes: r.bytes, throughputBytesPerSec: copyRateBytesPerSec, budgetSec: budget, fixedDowntimeSec: cfg.shutdownSec + cfg.bootSec + verifySec }))) { await appendLog(jobId, "Operator requested cutover: proceeding to final delta", "info"); operatorCutover = true; break }
+        if (cutoverMode === "manual" && !(await awaitNextHoldPass(jobId, config, { durationSec: dsec, deltaBytes: r.bytes, throughputBytesPerSec: copyRateBytesPerSec, budgetSec: budget, fixedDowntimeSec: cfg.shutdownSec + cfg.bootSec + verifySec }, migrationTest))) { await appendLog(jobId, "Operator requested cutover: proceeding to final delta", "info"); operatorCutover = true; break }
         pass++
       }
 
@@ -449,28 +491,20 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
 
     // ── guest conversion (#1000): the operator's latest choice, read back from
     // the job row (the "Cutover now" dialog writes it there), else the launch value ──
-    const latest = await readJobConfig(jobId).catch(() => ({} as Record<string, any>))
-    const convertGuest = typeof latest.convertGuest === "boolean" ? latest.convertGuest : config.convertGuest !== false
+    const convertGuest = await wantsConversion()
     let bootParams = pveParams
     let converted = false
     if (convertGuest) {
       await updateJob(jobId, "verify", { currentStep: "guest_conversion", progress: 98 })
       await appendStep(jobId, "conversion", "Guest conversion")
       const result = await convertGuestAtCutover({
-        jobId, connectionId: config.targetConnectionId, nodeIp,
-        name: vmConfig.name, firmware: vmConfig.firmware === "uefi" ? "efi" : "bios", isWindows: isWindowsXoVm(vmConfig), guestOs: vmConfig.guestOS,
-        memoryMB: vmConfig.memoryMB, devices: vmConfig.disks.map(d => targetDev.get(d.position) ?? ""),
-        // A netfront VIF is eth<device> in the guest, enX<device> under
-        // systemd 253 and later (Debian 13, measured on the lab).
-        nics: guestNicsFromNets(pveParams.nets, i => {
-          const device = [...vmConfig.networks].sort((a, b) => Number(a.device) - Number(b.device))[i]?.device
-          return /^\d+$/.test(device ?? "") ? [`eth${device}`, `enX${device}`] : []
-        }),
+        jobId, connectionId: config.targetConnectionId, nodeIp, ...conversionInput(),
+        devices: vmConfig.disks.map(d => targetDev.get(d.position) ?? ""),
         log: (msg, level) => appendLog(jobId, msg, level), isCancelled: () => isCancelled(jobId),
       })
       if (result.converted) {
         converted = true
-        bootParams = mapXoToPveConfig(vmConfig, targetVmid, config.targetStorage, config.networkBridge, config.vlanTag, config.cpuType, { guestConverted: true, macPolicy: config.macPolicy })
+        bootParams = bootParamsFor(true)
         const os = result.os ? ` (${result.os})` : ""
         await appendLog(jobId, `Guest converted in ${result.seconds ?? 0}s${os}: VirtIO drivers installed; the target boots from VirtIO SCSI with VirtIO NICs`, "success")
         for (const line of result.notes ?? []) await appendLog(jobId, line.msg, line.level)
@@ -503,7 +537,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       allocatedVolumes, startAfterMigration: config.startAfterMigration, convertDisksToQcow2: config.convertDisksToQcow2 === true, targetStorage: config.targetStorage,
       ...(bootParams !== pveParams && { nets: bootParams.nets }),
       // ui#1331: the job profile, else discard on a thin storage and iothread on SCSI.
-      driveOpts: (_i, slot) => diskDriveOptions({ slot, storageType: storageInfo?.type, scsihw: bootParams.scsihw, profile: config.diskOptions }),
+      driveOpts: driveOptsFor(bootParams),
     })
     await updateJob(jobId, "completed", { progress: 100, ...warmFinalTransfer(vmConfig.disks.map(d => d.sizeBytes), copiedBytes) })
     await appendLog(jobId, "Warm migration complete", "success").catch(() => {})
@@ -531,14 +565,12 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
         }
       }
     }
-    // Free the target volumes that never held a complete copy; keep the ones that do (#612).
-    await unmapTargetVolumes(config.targetConnectionId, nodeIp, allocatedVolumes)
-    for (const v of volumesToFree(allocatedVolumes)) {
-      if (nodeIp) await executeSSH(config.targetConnectionId, nodeIp, `pvesm free ${shellEscape(v.volumeId)} 2>/dev/null`, PVESM_FREE_TIMEOUT_MS).catch(() => {})
-    }
-    for (const v of volumesToKeep(allocatedVolumes)) await appendLog(jobId, `Kept target volume ${v.volumeId}: it holds a completed copy of the source disk. Remove it manually from the storage if you do not want it.`, "warn").catch(() => {})
+    // Free the target volumes that never held a complete copy; keep the ones that do
+    // (#612), unless the operator cancelled and asked to remove the copy on the target.
+    const removeCopies = cancelRemovesTarget(jobId)
+    await releaseTargetVolumes({ jobId, connectionId: config.targetConnectionId, nodeIp, allocatedVolumes, removeCopies })
     if (createdVmid != null && pveConn) {
-      await removeTargetVmOnFailure({ jobId, pveConn, node: config.targetNode, vmid: createdVmid, allocatedVolumes })
+      await removeTargetVmOnFailure({ jobId, pveConn, node: config.targetNode, vmid: createdVmid, allocatedVolumes, removeCopies })
     }
     await restoreSourceCbt()
     throw err

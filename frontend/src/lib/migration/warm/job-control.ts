@@ -10,6 +10,11 @@ const cutoverRequests = new Set<string>()
 // for. Set when the guest refuses to shut down and the operator chooses to stop
 // the source hard rather than wait the deadline out (#614).
 const forcePowerOffRequests = new Set<string>()
+// A test of the waiting copy asked for, and a request to stop it (migration-test.ts).
+const testRequests = new Set<string>()
+const testStopRequests = new Set<string>()
+// The operator cancelled and asked to remove the copy on the target.
+const cancelRemovesTargetJobs = new Set<string>()
 const jobPrisma = new Map<string, any>()
 // At most one warm job per source VM in-flight. Concurrent warm runs against the
 // same VM would interleave snapshots and dd-seek writes (target corruption), so a
@@ -29,10 +34,16 @@ export async function registerJob(jobId: string, prisma: any): Promise<void> {
   jobPrisma.set(jobId, prisma)
   cutoverRequests.delete(jobId)
   forcePowerOffRequests.delete(jobId)
+  clearWarmTest(jobId)
+  cancelRemovesTargetJobs.delete(jobId)
   await startOperatorSignalWatch(prisma, jobId, signals => {
+    // Before the cancel itself: the cleanup the cancel triggers reads it.
+    if (signals.cancelRemovesTarget) cancelRemovesTargetJobs.add(jobId)
     if (signals.cancelled) cancelledJobs.add(jobId)
     if (signals.cutover) cutoverRequests.add(jobId)
     if (signals.forcePowerOff) forcePowerOffRequests.add(jobId)
+    if (signals.test) testRequests.add(jobId)
+    if (signals.testStop) testStopRequests.add(jobId)
   })
 }
 
@@ -41,8 +52,10 @@ export function unregisterJob(jobId: string): void {
   stopOperatorSignalWatch(jobId)
   jobPrisma.delete(jobId)
   cancelledJobs.delete(jobId)
+  cancelRemovesTargetJobs.delete(jobId)
   cutoverRequests.delete(jobId)
   forcePowerOffRequests.delete(jobId)
+  clearWarmTest(jobId)
 }
 
 /** Claim the per-source-VM lock; false when another warm run already holds it. */
@@ -57,6 +70,10 @@ export function releaseVmLock(vmKey: string): void { activeWarmVms.delete(vmKey)
 /** Cooperative cancel signal for a warm job (called by the cancel route). */
 export function cancelWarmMigrationJob(jobId: string) { cancelledJobs.add(jobId) }
 export function isCancelled(jobId: string): boolean { return cancelledJobs.has(jobId) }
+/** The cancel to come also removes the copy on the target (called by the cancel route, before the cancel). */
+export function requestCancelRemovesTarget(jobId: string) { cancelRemovesTargetJobs.add(jobId) }
+/** The job was cancelled, and the operator asked to remove what was copied on the target. */
+export function cancelRemovesTarget(jobId: string): boolean { return cancelledJobs.has(jobId) && cancelRemovesTargetJobs.has(jobId) }
 
 /** Cooperative "cutover now" signal for a warm job (called by the cutover route). */
 export function requestWarmCutover(jobId: string) { cutoverRequests.add(jobId) }
@@ -65,6 +82,21 @@ export function requestWarmCutover(jobId: string) { cutoverRequests.add(jobId) }
 export function requestWarmForcePowerOff(jobId: string) { forcePowerOffRequests.add(jobId) }
 
 export function isForcePowerOffRequested(jobId: string): boolean { return forcePowerOffRequests.has(jobId) }
+
+/** Operator asked the waiting migration to boot a test VM (called by the test route). */
+export function requestWarmTest(jobId: string) { testRequests.add(jobId) }
+export function isTestRequested(jobId: string): boolean { return testRequests.has(jobId) }
+/** Operator asked the running test to stop. */
+export function requestWarmTestStop(jobId: string) { testStopRequests.add(jobId) }
+export function isTestStopRequested(jobId: string): boolean { return testStopRequests.has(jobId) }
+/**
+ * Forget both test signals once a test ended. The engine clears the row
+ * first: the mirror would otherwise put them back on its next read.
+ */
+export function clearWarmTest(jobId: string) {
+  testRequests.delete(jobId)
+  testStopRequests.delete(jobId)
+}
 
 /** Test seam, mirrors __isCutoverRequestedForTest. */
 export function __isForcePowerOffRequestedForTest(jobId: string): boolean { return isForcePowerOffRequested(jobId) }
@@ -125,6 +157,24 @@ export async function readJobConfig(id: string): Promise<Record<string, any>> {
   const job = await prisma?.migrationJob.findUnique({ where: { id }, select: { config: true } })
   const config = job?.config
   return config && typeof config === "object" && !Array.isArray(config) ? config as Record<string, any> : {}
+}
+
+/**
+ * Write what a test of the waiting copy reports (migration-test.ts), whatever
+ * the job's status: a test ended by a cancellation still has to say so on a
+ * row the cancel route already made terminal. Only test fields go through
+ * here, never the status.
+ */
+export async function updateJobTestFields(id: string, data: { testState?: unknown; testRequest?: null; testStopRequestedAt?: null }) {
+  const prisma = jobPrisma.get(id)
+  await prisma.migrationJob.updateMany({ where: { id }, data })
+}
+
+/** The test the operator asked for, as the route wrote it on the row (migration-test-state.ts parses it). */
+export async function readJobTestRequest(id: string): Promise<unknown> {
+  const prisma = jobPrisma.get(id)
+  const job = await prisma?.migrationJob.findUnique({ where: { id }, select: { testRequest: true } })
+  return job?.testRequest ?? null
 }
 
 export async function appendLog(id: string, msg: string, level: LogEntry["level"] = "info", extra: Partial<LogEntry> = {}) {

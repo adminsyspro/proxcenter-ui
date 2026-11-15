@@ -17,6 +17,7 @@
  * on. The target VM is never touched: it may hold hours of copied data (#612);
  * the job log says where it is so the operator decides.
  */
+import { Prisma } from "@prisma/client"
 import { prisma as globalPrisma } from "@/lib/db/prisma"
 import { decryptSecret } from "@/lib/crypto/secret"
 import { soapConsolidateVmDisks, soapLogin, soapLogout, soapWaitForConsolidation } from "@/lib/vmware/soap"
@@ -28,6 +29,8 @@ import { getNodeSshEndpointForMigration } from "@/lib/migration/pve-tasks"
 import { sweepWarmSnapshots } from "./warm-pipeline"
 import { sweepOrphanReaders } from "./orphan-readers"
 import { unmapTargetVolumes } from "./finish"
+import { removeTestVm } from "./migration-test"
+import { readTestState } from "./migration-test-state"
 import { executeSSH } from "@/lib/ssh/exec"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 import type { AllocatedVolume } from "@/lib/migration/pvesm-alloc"
@@ -229,6 +232,23 @@ export async function cleanupOrphanedWarmSource(jobId: string, deps: WarmOrphanC
       })
     } catch (e: any) {
       lines.push({ msg: `Could not stop the copy reader of this run on ${job.targetNode} (${e?.message || e}); the next warm job on that node will.`, level: "warn" })
+    }
+    // A test VM boots on overlays backed by the copy (migration-test.ts): it
+    // goes first, as it holds the copy's devices open.
+    const test = readTestState(job.testState)
+    if (test?.testVmid && test.phase !== "ended" && test.phase !== "failed") {
+      try {
+        const pveConn = await getConnectionById(job.targetConnectionId, job.tenantId)
+        const removal = await removeTestVm({ pveConn, node: job.targetNode, vmid: test.testVmid, jobId: job.id, connectionId: job.targetConnectionId, nodeIp, overlays: test.overlays ?? [] })
+        if (!removal.removed) throw new Error(removal.reason)
+        await prisma.migrationJob.update({
+          where: { id: job.id },
+          data: { testState: { ...test, phase: "ended", reason: "the server restarted", endedAt: now().toISOString() } as any, testRequest: Prisma.DbNull, testStopRequestedAt: null },
+        })
+        lines.push({ msg: `Test VM ${test.testVmid} removed after the server restarted`, level: "info" })
+      } catch (e: any) {
+        lines.push({ msg: `Could not remove test VM ${test.testVmid} on ${job.targetNode} (${e?.message || e}): delete it in Proxmox, with its disks`, level: "warn" })
+      }
     }
     if (nodeIp && job.targetVmid) {
       await unmapTargetRbd({ connectionId: job.targetConnectionId, nodeIp, node: job.targetNode, vmid: job.targetVmid, logs: job.logs }, lines)

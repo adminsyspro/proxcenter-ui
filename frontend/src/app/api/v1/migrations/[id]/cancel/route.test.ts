@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   cancelWarmMigrationJob: vi.fn(),
   cancelV2vMigrationJob: vi.fn(),
   cancelXcpngMigrationJob: vi.fn(),
+  requestCancelRemovesTarget: vi.fn(),
 }))
 
 vi.mock("@/lib/tenant", () => ({
@@ -33,6 +34,7 @@ vi.mock("@/lib/migration/pipeline", () => ({
 
 vi.mock("@/lib/migration/warm/warm-pipeline", () => ({
   cancelWarmMigrationJob: h.cancelWarmMigrationJob,
+  requestCancelRemovesTarget: h.requestCancelRemovesTarget,
 }))
 
 vi.mock("@/lib/migration/v2v-pipeline", () => ({
@@ -53,6 +55,7 @@ beforeEach(() => {
   h.cancelWarmMigrationJob.mockReset()
   h.cancelV2vMigrationJob.mockReset()
   h.cancelXcpngMigrationJob.mockReset()
+  h.requestCancelRemovesTarget.mockReset()
 })
 
 describe("POST /api/v1/migrations/[id]/cancel", () => {
@@ -73,6 +76,25 @@ describe("POST /api/v1/migrations/[id]/cancel", () => {
         completedAt: expect.any(Date),
       },
     })
+  })
+
+  it("records on the row and signals that the target goes with the cancel when asked", async () => {
+    const res = await callRoute(POST, { params: { id: "job-1" }, method: "POST", body: { removeTarget: true } })
+
+    expect(res.status).toBe(200)
+    expect(h.requestCancelRemovesTarget).toHaveBeenCalledWith("job-1")
+    expect(h.requestCancelRemovesTarget.mock.invocationCallOrder[0]).toBeLessThan(h.cancelWarmMigrationJob.mock.invocationCallOrder[0])
+    expect(h.migrationJobUpdate).toHaveBeenCalledWith({
+      where: { id: "job-1" },
+      data: { status: "cancelled", currentStep: "cancelled", completedAt: expect.any(Date), cancelRemovesTarget: true },
+    })
+  })
+
+  it("keeps the target of a cancel that did not ask, as before (#612)", async () => {
+    await callRoute(POST, { params: { id: "job-1" }, method: "POST", body: { removeTarget: false } })
+
+    expect(h.requestCancelRemovesTarget).not.toHaveBeenCalled()
+    expect(h.migrationJobUpdate.mock.calls[0][0].data).not.toHaveProperty("cancelRemovesTarget")
   })
 
   it("returns the RBAC response when cancellation is forbidden", async () => {

@@ -4,7 +4,7 @@
  * source connection's, what the job log says meanwhile, and which interval the
  * syncs measured so far suggest.
  */
-import { appendLog, readJobConfig, updateJobFields } from "./job-control"
+import { appendLog, clearWarmTest, readJobConfig, updateJobFields } from "./job-control"
 import { holdBetweenPasses } from "./hold-slot"
 import { estimateCutover, formatSyncDuration, formatSyncInterval, suggestSyncIntervalSec, type CutoverMeasure } from "./sync-interval"
 import { resolveSyncIntervalSec } from "./sync-interval-source"
@@ -103,15 +103,23 @@ async function recordPass(jobId: string, state: HoldState, pass: HoldPassStats, 
   await updateJobFields(jobId, { suggestedSyncIntervalSec, syncMeasure, projectedDowntimeSec }).catch(() => {})
 }
 
+/** The test of the waiting copy, run by the pipeline that owns the copy (migration-test.ts). */
+export interface HoldTest {
+  /** Boots the test VM, waits for its end and removes it; throws only "Migration cancelled". */
+  run: () => Promise<void>
+}
+
 /**
  * Sleep until the next delta pass of a manual hold. The interval is read again
  * from the job's row and its source connection during the sleep, so a change
  * made in Settings or on the waiting migration itself takes effect without
  * waiting for the sleep to end. `pass` is what the pass that just ended
- * measured. True when the next pass may run, false when the operator asked for
+ * measured. A test the operator asks for meanwhile runs through `test`, and a
+ * pass follows it at once, to catch up on what changed while the syncs were
+ * paused. True when the next pass may run, false when the operator asked for
  * the cutover; throws on cancellation.
  */
-export async function awaitNextHoldPass(jobId: string, config: HoldConfig, pass?: HoldPassStats): Promise<boolean> {
+export async function awaitNextHoldPass(jobId: string, config: HoldConfig, pass?: HoldPassStats, test?: HoldTest): Promise<boolean> {
   const state = stateOf(jobId)
   let known: number | undefined
   // The row is read rather than the config the pipeline started with: the
@@ -133,16 +141,30 @@ export async function awaitNextHoldPass(jobId: string, config: HoldConfig, pass?
       await warnSlowSync(jobId, state, pass.durationSec, intervalSec)
       await recordPass(jobId, state, pass, intervalSec)
     }
-    next = await holdBetweenPasses(jobId, readInterval, {
+    const opts = {
       onWaitForSlot: () => appendLog(jobId, "Next sync is waiting for a free migration slot: the limits of the target cluster, of its node or of the source host are reached, or VMs of a bulk migration are still queued.", "info"),
       onWaitForCutoverSlot: () => appendLog(jobId, "Cutover requested: waiting for its turn, as many cutovers as the node or the source host allows are already running. The source VM stays up meanwhile.", "info"),
-    })
+    }
+    let held = await holdBetweenPasses(jobId, readInterval, opts)
+    while (held === "test") {
+      if (test) await test.run()
+      else await declineTest(jobId)
+      held = await holdBetweenPasses(jobId, 0, { ...opts, afterIdle: true })
+    }
+    next = held
   } catch (err) {
     holds.delete(jobId)
     throw err
   }
   if (next !== "pass") holds.delete(jobId)
   return next === "pass"
+}
+
+/** A test asked of a pipeline that cannot run one: said in the log and dropped, so the hold goes on. */
+async function declineTest(jobId: string): Promise<void> {
+  await appendLog(jobId, "A test was requested, but this migration cannot run one", "warn").catch(() => {})
+  await updateJobFields(jobId, { testRequest: null, testStopRequestedAt: null, testState: { phase: "failed", reason: "not supported by this migration" } }).catch(() => {})
+  clearWarmTest(jobId)
 }
 
 /** The interval a hold starts with, for the job log ("15 min", "2 h"). */

@@ -4,6 +4,7 @@
 
 import { mergeJobLogs } from '@/lib/migration/jobLogs'
 import { parseCutoverMeasure, type CutoverMeasure } from '@/lib/migration/warm/sync-interval'
+import { isTestActive } from '@/lib/migration/warm/migration-test-state'
 
 const measureOf = (job: { syncMeasure?: unknown }) => parseCutoverMeasure(job.syncMeasure)
 
@@ -114,6 +115,8 @@ export interface BulkMigJobRow {
   suggestedSyncIntervalSec?: number
   /** What those syncs measured, the cutover is estimated from it. */
   syncMeasure?: CutoverMeasure
+  /** A test VM runs on the copy of this waiting job (migration-test.ts). */
+  inTest?: boolean
 }
 
 /** A job as GET /api/v1/migrations/batches/[id] returns it (the fields read here). */
@@ -138,6 +141,8 @@ export interface BatchJobPayload {
   syncIntervalSec?: number | null
   suggestedSyncIntervalSec?: number | null
   syncMeasure?: unknown
+  testRequest?: unknown
+  testState?: unknown
 }
 
 export interface BatchPayload {
@@ -176,8 +181,19 @@ export function bulkRowsFromBatch(jobs: BatchJobPayload[], previous: BulkMigJobR
       ...(j.cutoverMode === 'manual' && measureOf(j) ? { syncMeasure: measureOf(j)! } : {}),
       ...(j.bytesTransferred != null && Number.isFinite(Number(j.bytesTransferred)) ? { bytesTransferred: Number(j.bytesTransferred) } : {}),
       ...(j.transferSpeed ? { transferSpeed: j.transferSpeed } : {}),
+      ...(!isTerminalJobStatus(j.status) && isTestActive(j) ? { inTest: true } : {}),
     }
   })
+}
+
+/** Colours and label of a bulk job row: done, failed, cancelled, queued (or paused), under test or running. */
+export function bulkJobRowTone(s: { isDone: boolean; isFailed: boolean; isCancelled: boolean; isQueued: boolean; isPaused: boolean; inTest?: boolean }): { line: string; chipBg: string; chipColor: string; labelKey?: string } {
+  if (s.isDone) return { line: 'success.main', chipBg: 'success.main', chipColor: 'success.contrastText', labelKey: 'completed' }
+  if (s.isFailed) return { line: 'error.main', chipBg: 'error.main', chipColor: 'error.contrastText', labelKey: 'failed' }
+  if (s.isCancelled) return { line: 'divider', chipBg: 'action.disabled', chipColor: 'common.white', labelKey: 'cancelled' }
+  if (s.isQueued) return { line: 'divider', chipBg: 'action.disabled', chipColor: 'common.white', labelKey: s.isPaused ? 'paused' : 'queued' }
+  if (s.inTest) return { line: 'divider', chipBg: 'info.main', chipColor: 'info.contrastText', labelKey: 'testRowLabel' }
+  return { line: 'divider', chipBg: 'primary.main', chipColor: 'primary.contrastText' }
 }
 
 /** The log lines each row already shows, in batch order: the `logsAfter` of the next read. */

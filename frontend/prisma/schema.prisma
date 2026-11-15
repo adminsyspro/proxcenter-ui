@@ -363,6 +363,14 @@ model MigrationJob {
   // cutover can be estimated for any interval (CutoverMeasure).
   syncMeasure              Json?     @map("sync_measure")
   rootChoice               String?   @map("root_choice")
+  // Test of a waiting warm migration (lib/migration/warm/migration-test):
+  // the operator's request (storage, network, time limit), a request to stop
+  // it, and what the engine reports while it runs (test VM, overlay size).
+  testRequest              Json?     @map("test_request")
+  testStopRequestedAt      DateTime? @map("test_stop_requested_at")
+  testState                Json?     @map("test_state")
+  // The operator cancelled and asked to remove what was copied on the target.
+  cancelRemovesTarget      Boolean   @default(false) @map("cancel_removes_target")
 
   error            String?
 

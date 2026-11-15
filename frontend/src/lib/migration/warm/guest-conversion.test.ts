@@ -6,7 +6,7 @@ import { executeSSH } from "@/lib/ssh/exec"
 import { virtV2vBackportProbe } from "../virt-v2v-backport"
 import {
   buildCommitScript, buildConversionScript, buildConversionXml, canKeepTrimsOut, conversionDir, conversionNotAppliedMessage, conversionPreflightCommand,
-  convertGuestAtCutover, describeWindowsStaticIps, missingConversionPrereqs, nbdChainFunctions, parseConversionOutcome, virtV2vSupportOf, windowsStaticIpArgs,
+  buildOverlayScript, convertGuestAtCutover, convertGuestForTest, describeWindowsStaticIps, testConversionDir, missingConversionPrereqs, nbdChainFunctions, parseConversionOutcome, virtV2vSupportOf, windowsStaticIpArgs,
   GUEST_CONVERSION_ESTIMATE_SEC,
 } from "./guest-conversion"
 
@@ -137,7 +137,7 @@ describe("buildConversionScript", () => {
   })
 
   it("schedules the data disks online after a successful run, on the overlays once the NBD chains are down (lab 22/10)", () => {
-    const lines = buildConversionScript("job-1", ["/dev/rbd3", "/dev/rbd4"], "<nbd/>", undefined, [], "<file/>", true).split("\n")
+    const lines = buildConversionScript("job-1", ["/dev/rbd3", "/dev/rbd4"], "<nbd/>", undefined, [], "<file/>", { onlineDisks: true }).split("\n")
     const at = (re: RegExp) => lines.findIndex(l => re.test(l))
     const customize = at(/virt-customize --no-network --format qcow2 -a "\$D\/disk0\.qcow2"/)
     expect(at(/^if \[ "\$RC" = 0 \]; then$/)).toBeGreaterThan(at(/^nbd_chain_down$/))
@@ -553,5 +553,73 @@ describe("Windows static IPv4 (#1000 follow-up)", () => {
     expect(lines[0].msg).toBe("Guest network: the static IPv4 configuration of 00:50:56:aa:00:01 (10.0.0.5/24, DNS 10.0.0.53 1.1.1.1) is set again on the new adapter at the first boot")
     expect(lines[1].msg).toContain("2 more static IPv4 address(es)")
     expect(describeWindowsStaticIps([ip("00:50:56:aa:00:01")], [])).toEqual([])
+  })
+})
+
+describe("conversion on the overlays of a migration test", () => {
+  const ssh = vi.mocked(executeSSH)
+  const ok = (output = "") => ({ success: true, output })
+  const paths = ["/mnt/x/images/9001/vm-9001-test-0.qcow2", "/mnt/x/images/9001/vm-9001-test-1.qcow2"]
+  const xml = buildConversionXml({ name: "w22", firmware: "bios", overlays: paths })
+
+  it("creates each overlay at its test path, on top of its replicated volume", () => {
+    const script = buildConversionScript("j1", ["/dev/a", "/dev/b"], xml, undefined, [], undefined, { overlayPaths: paths })
+    expect(script).toContain("qemu-img create -q -f qcow2 -b '/dev/a' -F raw '/mnt/x/images/9001/vm-9001-test-0.qcow2'")
+    expect(script).toContain("qemu-img create -q -f qcow2 -b '/dev/b' -F raw '/mnt/x/images/9001/vm-9001-test-1.qcow2'")
+    expect(script).toContain("mkdir -p '/mnt/x/images/9001'")
+    expect(script.split("\n").filter(l => l.startsWith("qemu-img create")).some(l => l.includes('"$D/disk'))).toBe(false)
+  })
+
+  it("repairs the NTFS of a live Windows copy on the overlays before converting", () => {
+    const script = buildConversionScript("j1", ["/dev/a"], xml, undefined, [], undefined, { overlayPaths: paths.slice(0, 1), repairNtfs: true })
+    const lines = script.split("\n")
+    const repair = lines.findIndex(l => l.includes("ntfsfix"))
+    expect(repair).toBeGreaterThan(lines.findIndex(l => l.startsWith("qemu-img create")))
+    expect(repair).toBeLessThan(lines.findIndex(l => l.includes("virt-v2v-in-place")))
+    expect(lines[repair]).toContain("clearbadsectors:false")
+  })
+
+  it("leaves NTFS alone without the option, as at cutover", () => {
+    expect(buildConversionScript("j1", ["/dev/a"], xml)).not.toContain("ntfsfix")
+  })
+
+  it("links each working-dir overlay name to its test overlay, so the NBD chains, the pinning and the data-disk script reach it", () => {
+    const script = buildConversionScript("j1", ["/dev/a", "/dev/b"], xml, undefined, [], undefined, { onlineDisks: true, overlayPaths: paths })
+    const lines = script.split("\n")
+    const link0 = lines.indexOf(`ln -sfn '${paths[0]}' "$D/disk0.qcow2"`)
+    expect(link0).toBeGreaterThan(lines.findIndex(l => l.startsWith("qemu-img create")))
+    expect(lines).toContain(`ln -sfn '${paths[1]}' "$D/disk1.qcow2"`)
+    expect(link0).toBeLessThan(lines.findIndex(l => l.includes("virt-v2v-in-place")))
+  })
+
+  it("builds bare overlays, replacing a leftover file first", () => {
+    const script = buildOverlayScript(["/dev/a"], ["/p/a.qcow2"])
+    expect(script.indexOf("rm -f '/p/a.qcow2'")).toBeGreaterThanOrEqual(0)
+    expect(script.indexOf("rm -f '/p/a.qcow2'")).toBeLessThan(script.indexOf("qemu-img create -q -f qcow2 -b '/dev/a' -F raw '/p/a.qcow2'"))
+    expect(script).toContain("exit 90")
+  })
+
+  it("converts without ever writing the replicated volumes, and keeps the overlays", async () => {
+    ssh.mockReset()
+    ssh.mockImplementation(async (_c: string, _n: any, cmd: string) => {
+      if (cmd.startsWith("test -x")) return ok("v2v-in-place\nvirtio-win\nsrvany\nnbd-chain\n")
+      if (cmd.startsWith("nohup bash")) return ok("4242\n")
+      if (cmd.startsWith("cat ") && cmd.includes("/exit")) return ok("0")
+      if (cmd.startsWith("cat ") && cmd.includes("/nbd-fallback")) return ok("RUNNING")
+      if (cmd.startsWith("cat ") && cmd.includes("v2v.log")) return ok(msg("info", "This guest has virtio drivers installed."))
+      return ok()
+    })
+    const r = await convertGuestForTest({
+      jobId: "j1", connectionId: "c1", nodeIp: "10.0.0.1", name: "w22", firmware: "bios", isWindows: true,
+      devices: ["/dev/a", "/dev/b"], overlayPaths: paths, log: vi.fn(async () => {}), isCancelled: () => false, pollMs: 1,
+    })
+    expect(r.converted).toBe(true)
+    const all = ssh.mock.calls.map(c => String(c[2])).join("\n")
+    expect(all).not.toContain("qemu-img commit")
+    expect(all).toContain("ntfsfix")
+    expect(all).toContain(paths[1])
+    const removals = ssh.mock.calls.map(c => String(c[2])).filter(c => c.startsWith("rm -rf"))
+    expect(removals).toEqual([`rm -rf '${testConversionDir("j1")}'`])
+    expect(testConversionDir("j1")).toBe("/tmp/proxcenter-convert-j1-test")
   })
 })

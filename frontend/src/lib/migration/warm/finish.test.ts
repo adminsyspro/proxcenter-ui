@@ -10,7 +10,7 @@ vi.mock("@/lib/ssh/exec", async (importActual) => ({ ...(await importActual<type
 import { destroyPveVm } from "../pve-vm-config"
 import { appendLog } from "./job-control"
 import { executeSSH } from "@/lib/ssh/exec"
-import { removeTargetVmOnFailure, unmapTargetVolumes } from "./finish"
+import { releaseTargetVolumes, removeTargetVmOnFailure, unmapTargetVolumes } from "./finish"
 import type { AllocatedVolume } from "../pvesm-alloc"
 
 const conn = { baseUrl: "https://pve:8006" }
@@ -36,6 +36,15 @@ describe("removeTargetVmOnFailure (roadmap#57)", () => {
 
     expect(destroyPveVm).not.toHaveBeenCalled()
     expect(logs()[0][0]).toMatch(/^Kept target VM 113: it holds a completed copy of the source disk/)
+  })
+
+  it("removes the VM with its completed copy when the operator cancelled with the target removed", async () => {
+    vi.mocked(destroyPveVm).mockResolvedValue(undefined)
+
+    await removeTargetVmOnFailure({ jobId: "j", pveConn: conn, node: "pve1", vmid: 113, allocatedVolumes: [{ volumeId: "c:vm-113-disk-0", devicePath: "/dev/rbd1", copied: true }], removeCopies: true })
+
+    expect(destroyPveVm).toHaveBeenCalledWith(conn, "pve1", 113)
+    expect(logs()).toContainEqual(["Removed target VM 113 and the copy it held, as asked when cancelling", "warn"])
   })
 
   it("stays quiet when the VM is already gone", async () => {
@@ -127,5 +136,36 @@ describe("attachDisksAndBoot start after migration (discussion #1363)", () => {
     expect(volumes[0].attached).toBe(true)
     expect(logs()).toContainEqual([expect.stringContaining("VM 147 could not be started: getaddrinfo EAI_AGAIN"), "warn"])
     expect(logs().some(([m]) => m === "Target VM started")).toBe(false)
+  })
+})
+
+describe("releaseTargetVolumes", () => {
+  beforeEach(() => vi.mocked(executeSSH).mockReset().mockResolvedValue({ success: true, output: "" }))
+  const cmds = () => vi.mocked(executeSSH).mock.calls.map(c => c[2])
+  const vols = (): AllocatedVolume[] => [
+    { volumeId: "c:vm-1-disk-0", devicePath: "/dev/rbd2", rbdMapped: true, copied: true },
+    { volumeId: "c:vm-1-disk-1", devicePath: "/dev/rbd3" },
+  ]
+
+  it("unmaps, frees what holds no copy and says which copy it keeps (#612)", async () => {
+    await releaseTargetVolumes({ jobId: "j", connectionId: "conn", nodeIp: "10.0.0.1", allocatedVolumes: vols(), removeCopies: false })
+
+    expect(cmds()).toEqual(["rbd unmap '/dev/rbd2' 2>/dev/null", "pvesm free 'c:vm-1-disk-1' 2>/dev/null"])
+    expect(logs()).toEqual([["Kept target volume c:vm-1-disk-0: it holds a completed copy of the source disk. Remove it manually from the storage if you do not want it.", "warn"]])
+  })
+
+  it("frees the copies too when the operator cancelled with the target removed, and says so", async () => {
+    await releaseTargetVolumes({ jobId: "j", connectionId: "conn", nodeIp: "10.0.0.1", allocatedVolumes: vols(), removeCopies: true })
+
+    expect(cmds()).toEqual(["rbd unmap '/dev/rbd2' 2>/dev/null", "pvesm free 'c:vm-1-disk-0' 2>/dev/null", "pvesm free 'c:vm-1-disk-1' 2>/dev/null"])
+    expect(logs()).toEqual([["Removed target volume c:vm-1-disk-0, as asked when cancelling", "warn"]])
+  })
+
+  it("names a copy it could not remove", async () => {
+    vi.mocked(executeSSH).mockImplementation(async (_c, _n, cmd) => String(cmd).startsWith("pvesm free 'c:vm-1-disk-0'") ? { success: false, output: "", error: "volume is busy" } : { success: true, output: "" })
+
+    await releaseTargetVolumes({ jobId: "j", connectionId: "conn", nodeIp: "10.0.0.1", allocatedVolumes: vols(), removeCopies: true })
+
+    expect(logs()).toEqual([["Could not remove target volume c:vm-1-disk-0 (volume is busy): remove it from the storage", "warn"]])
   })
 })

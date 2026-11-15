@@ -124,6 +124,7 @@ import BackupDashboard from './BackupDashboard'
 import MigrationDashboard from './MigrationDashboard'
 import { ViewMode, AllVmItem, HostItem, PoolItem, PoolActions, TagItem, NodeIcon, ClusterIcon, StatusIcon } from './InventoryTree'
 import { isVdcPool } from './components/poolMembers'
+import CancelMigrationDialog from './components/CancelMigrationDialog'
 import NetworkDetailPanel from './components/NetworkDetailPanel'
 import TenantVnetDetailPanel from './TenantVnetDetailPanel'
 import TagManager from './components/TagManager'
@@ -445,10 +446,12 @@ export default function InventoryDetails({
   const [cancelMigBusy, setCancelMigBusy] = useState(false)
   // Resolves true once the orchestrator accepted the cancel. A refusal is
   // shown, and the confirmation stays open: the migration is still running.
-  const cancelVmMigration = async (jobId: string): Promise<boolean> => {
+  const cancelVmMigration = async (jobId: string, removeTarget = false): Promise<boolean> => {
     setCancelMigBusy(true)
     try {
-      const d = await requireOk<{ data?: any }>(`/api/v1/migrations/${jobId}/cancel`, { method: 'POST' })
+      const d = await requireOk<{ data?: any }>(`/api/v1/migrations/${jobId}/cancel`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removeTarget }),
+      })
       if (d?.data) setVmMigJob(d.data)
 
       return true
@@ -4844,48 +4847,18 @@ return vm?.isCluster ?? false
                   </DialogContent>
                 </Dialog>
 
-                {/* Same warning the migrate dialog shows: a target volume holding a
-                    completed copy survives the cancel, so the operator has to know
-                    before firing it. */}
-                <Dialog
+                {/* Same confirmation as the migrate dialog: what was copied on
+                    the target stays or goes with the cancel, the operator's choice. */}
+                <CancelMigrationDialog
                   open={!!cancelMigConfirm}
+                  job={vmMigJob}
+                  busy={cancelMigBusy}
                   onClose={() => setCancelMigConfirm(null)}
-                  maxWidth="xs"
-                  fullWidth
-                >
-                  <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
-                    <i className="ri-error-warning-line" style={{ fontSize: 20 }} />
-                    {t('inventoryPage.esxiMigration.cancelMigrationConfirmTitle')}
-                  </DialogTitle>
-                  <DialogContent>
-                    <Typography sx={{ mb: 1.5 }}>
-                      {t('inventoryPage.esxiMigration.cancelMigrationConfirmStop')}
-                    </Typography>
-                    <Alert severity="warning" sx={{ mb: 1.5 }}>
-                      {t('inventoryPage.esxiMigration.cancelMigrationConfirmVolumesKept')}
-                    </Alert>
-                    <Typography variant="body2" color="text.secondary">
-                      {t('inventoryPage.esxiMigration.cancelMigrationConfirmSourceUntouched')}
-                    </Typography>
-                  </DialogContent>
-                  <DialogActions sx={{ px: 3, pb: 2 }}>
-                    <Button onClick={() => setCancelMigConfirm(null)} color="inherit">
-                      {t('inventoryPage.esxiMigration.keepMigrating')}
-                    </Button>
-                    <Button
-                      variant="contained"
-                      color="error"
-                      disabled={cancelMigBusy}
-                      startIcon={cancelMigBusy ? <CircularProgress size={16} /> : undefined}
-                      onClick={async () => {
-                        if (!cancelMigConfirm) return
-                        if (await cancelVmMigration(cancelMigConfirm)) setCancelMigConfirm(null)
-                      }}
-                    >
-                      {t('inventoryPage.esxiMigration.cancelMigration')}
-                    </Button>
-                  </DialogActions>
-                </Dialog>
+                  onConfirm={async removeTarget => {
+                    if (!cancelMigConfirm) return
+                    if (await cancelVmMigration(cancelMigConfirm, removeTarget)) setCancelMigConfirm(null)
+                  }}
+                />
               </Stack>
             )
           })()}

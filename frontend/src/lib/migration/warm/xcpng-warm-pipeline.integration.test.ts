@@ -54,10 +54,13 @@ vi.mock("./hold-slot", async () => {
   return {
     holdBetweenPasses: async (jobId: string, interval: number | (() => Promise<number>)) => {
       const intervalSec = typeof interval === "number" ? interval : await interval()
+      if (control.isTestRequested(jobId)) { control.clearWarmTest(jobId); return "test" }
       return (await control.sleepUnlessCutover(jobId, intervalSec * 1000)) ? "pass" : "cutover"
     },
   }
 })
+// The test itself has its own tests (migration-test.test.ts): here only what the pipeline hands it.
+vi.mock("./migration-test", () => ({ runMigrationTest: vi.fn(async () => {}) }))
 vi.mock("./sync-interval-source", () => ({ resolveSyncIntervalSec: vi.fn(async (own?: number) => own ?? 60) }))
 vi.mock("@/lib/xcpng/xapi-client", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/xcpng/xapi-client")>()
@@ -94,8 +97,9 @@ import {
 import type { XoVmConfig } from "@/lib/xcpng/client"
 import type { Extent } from "./extents"
 import type { WarmMigrationConfig } from "./types"
-import { requestWarmCutover, requestWarmForcePowerOff, cancelWarmMigrationJob, acquireVmLock, releaseVmLock } from "./job-control"
+import { requestWarmCutover, requestWarmForcePowerOff, requestWarmTest, cancelWarmMigrationJob, requestCancelRemovesTarget, acquireVmLock, releaseVmLock } from "./job-control"
 import { runXcpngWarmMigration, XCPNG_SNAPSHOT_PREFIX } from "./xcpng-warm-pipeline"
+import { runMigrationTest } from "./migration-test"
 
 // ── Fixtures ──
 
@@ -579,6 +583,35 @@ describe("runXcpngWarmMigration CBT path", () => {
     expect(xapiLogout).toHaveBeenCalledTimes(1)
   })
 
+  it("runs a test asked during the hold on the copied volumes, then syncs at once and cuts over on request", { timeout: 20000 }, async () => {
+    const jobId = "xcp-it-test"
+    changedBlocks = [SMALL_DELTA, [], [], []]
+    vmConfig = { ...makeVmConfig(), guestOS: "Microsoft Windows Server 2022 Standard" }
+    let armed = false
+    hooks.onLog = msg => {
+      if (!armed && msg.startsWith("Delta pass 1:")) { armed = true; requestWarmTest(jobId); setTimeout(() => requestWarmCutover(jobId), 30_000) }
+    }
+
+    // The test prepares its boot overlay while it runs, as the real one does.
+    vi.mocked(runMigrationTest).mockImplementationOnce(async t => { await t.prepareBoot?.("/mnt/x/images/901/vm-901-test-0.qcow2") })
+
+    const err = await runToEnd(jobId, makeConfig({ cutoverMode: "manual", convertGuest: true }))
+
+    expect(err).toBeNull()
+    expect(runMigrationTest).toHaveBeenCalledTimes(1)
+    const t = vi.mocked(runMigrationTest).mock.calls[0][0]
+    expect(t).toMatchObject({ jobId, targetConnectionId: "conn-pve", node: "pve1" })
+    expect(t.devices).toEqual(["/dev/zvol/DatastoreVM/vm-900-disk-0"])
+    expect(t.conversion).toMatchObject({ name: "Debian13", firmware: "bios", isWindows: true, memoryMB: 1024 })
+    expect(t.paramsFor(true).scsihw).toBe("virtio-scsi-single")
+    // the Xen PV drivers of a Windows guest are disabled on the test's boot overlay, never on the copy
+    expect(sshCommands.some(c => c.includes("virt-win-reg --format=qcow2 '/mnt/x/images/901/vm-901-test-0.qcow2'"))).toBe(true)
+    expect(hasLog("Test: Xen PV drivers disabled")).toBe(true)
+    // the pass after the test ran before the cutover
+    expect(hasLog("Delta pass 2:")).toBe(true)
+    expect(prisma.row.status).toBe("completed")
+  })
+
   it("parks at the operator gate when the pass cap is reached over budget, then resumes on the request", { timeout: 20000 }, async () => {
     const jobId = "xcp-it-gate"
     changedBlocks = [SMALL_DELTA, []]
@@ -856,6 +889,19 @@ describe("runXcpngWarmMigration failure cleanup", () => {
     expect(hasLog("Kept target volume DatastoreVM:vm-900-disk-0: it holds a completed copy")).toBe(true)
     expect(pveSetVmConfig).not.toHaveBeenCalled()
     expect(xapiLogout).toHaveBeenCalledTimes(1)
+  })
+
+  it("frees the completed copy when the operator cancelled with the target removed", { timeout: 20000 }, async () => {
+    const jobId = "xcp-it-cancel-remove"
+    changedBlocks = [SMALL_DELTA, SMALL_DELTA, SMALL_DELTA]
+    hooks.onLog = msg => { if (msg.startsWith("Delta pass 1:")) { requestCancelRemovesTarget(jobId); cancelWarmMigrationJob(jobId) } }
+
+    const err = await runToEnd(jobId, makeConfig())
+
+    expect(err?.message).toBe("Migration cancelled")
+    expect(sshCommands).toContain("pvesm free 'DatastoreVM:vm-900-disk-0' 2>/dev/null")
+    expect(hasLog("Kept target volume")).toBe(false)
+    expect(hasLog("Removed target volume DatastoreVM:vm-900-disk-0, as asked when cancelling")).toBe(true)
   })
 
   it("names the snapshots it could not remove instead of failing silently", { timeout: 20000 }, async () => {

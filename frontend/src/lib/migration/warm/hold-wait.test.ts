@@ -6,11 +6,12 @@ const h = vi.hoisted(() => ({
   log: vi.fn(async (..._args: unknown[]) => {}),
   config: vi.fn(async (_id: string): Promise<Record<string, any>> => ({})),
   live: vi.fn(async (..._args: unknown[]) => {}),
+  clear: vi.fn(),
 }))
 
 vi.mock("./hold-slot", () => ({ holdBetweenPasses: h.hold }))
 vi.mock("./sync-interval-source", () => ({ resolveSyncIntervalSec: h.resolve }))
-vi.mock("./job-control", () => ({ appendLog: h.log, readJobConfig: h.config, updateJobFields: h.live }))
+vi.mock("./job-control", () => ({ appendLog: h.log, readJobConfig: h.config, updateJobFields: h.live, clearWarmTest: h.clear }))
 
 import { awaitNextHoldPass, describeHoldInterval, type HoldPassStats } from "./hold-wait"
 
@@ -26,6 +27,7 @@ beforeEach(() => {
   h.config.mockReset().mockResolvedValue({})
   h.log.mockClear()
   h.live.mockClear()
+  h.clear.mockClear()
 })
 afterEach(() => { vi.useRealTimers() })
 
@@ -55,6 +57,38 @@ describe("awaitNextHoldPass", () => {
     await awaitNextHoldPass("j1", { sourceConnectionId: "src" })
 
     expect(h.log).toHaveBeenCalledWith("j1", "Interval between two syncs changed from 15 min to 5 min.", "info")
+  })
+
+  it("runs the test the operator asked for, then syncs at once to catch up", async () => {
+    h.hold.mockReset().mockResolvedValueOnce("test").mockResolvedValueOnce("pass")
+    const run = vi.fn(async () => {})
+    await expect(awaitNextHoldPass("j1", { sourceConnectionId: "src" }, undefined, { run })).resolves.toBe(true)
+
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(h.hold).toHaveBeenCalledTimes(2)
+    expect(h.hold.mock.calls[1][1]).toBe(0)
+    // the place was given back for the test: a cutover asked meanwhile must take one
+    expect(h.hold.mock.calls[1][2]).toMatchObject({ afterIdle: true })
+  })
+
+  it("goes to the cutover when one is asked once the test is over", async () => {
+    h.hold.mockReset().mockResolvedValueOnce("test").mockResolvedValueOnce("cutover")
+    await expect(awaitNextHoldPass("j1", { sourceConnectionId: "src" }, undefined, { run: async () => {} })).resolves.toBe(false)
+  })
+
+  it("lets a cancellation during the test through", async () => {
+    h.hold.mockReset().mockResolvedValueOnce("test")
+    const run = vi.fn(async () => { throw new Error("Migration cancelled") })
+    await expect(awaitNextHoldPass("j1", { sourceConnectionId: "src" }, undefined, { run })).rejects.toThrow("Migration cancelled")
+  })
+
+  it("declines a test it cannot run, and says so", async () => {
+    h.hold.mockReset().mockResolvedValueOnce("test").mockResolvedValueOnce("pass")
+    await expect(awaitNextHoldPass("j1", { sourceConnectionId: "src" })).resolves.toBe(true)
+
+    expect(h.log).toHaveBeenCalledWith("j1", "A test was requested, but this migration cannot run one", "warn")
+    expect(h.live).toHaveBeenCalledWith("j1", { testRequest: null, testStopRequestedAt: null, testState: { phase: "failed", reason: "not supported by this migration" } })
+    expect(h.clear).toHaveBeenCalledWith("j1")
   })
 
   it("answers false when the operator asked for the cutover", async () => {

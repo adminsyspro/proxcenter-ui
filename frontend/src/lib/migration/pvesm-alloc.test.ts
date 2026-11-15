@@ -497,6 +497,25 @@ describe("volumesToKeep", () => {
   })
 })
 
+describe("cleanup of a migration cancelled with its target removed", () => {
+  const copied = { volumeId: "FC-HDC-01:vm-250-disk-1", devicePath: "/dev/x", copied: true }
+  const attached = { volumeId: "FC-HDC-01:vm-250-disk-2", devicePath: "/dev/y", copied: true, attached: true }
+
+  it("frees the completed copies too, but never an attached volume, which goes with the VM", () => {
+    expect(volumesToFree([copied, attached], { removeCopies: true })).toEqual([copied])
+  })
+
+  it("keeps nothing and lets the VM go", () => {
+    expect(volumesToKeep([copied, attached], { removeCopies: true })).toEqual([])
+    expect(keepTargetVm([copied, attached], { removeCopies: true })).toBe(false)
+  })
+
+  it("keeps the completed copies without the option (#612)", () => {
+    expect(volumesToFree([copied], { removeCopies: false })).toEqual([])
+    expect(keepTargetVm([copied], { removeCopies: false })).toBe(true)
+  })
+})
+
 describe("keepTargetVm (roadmap#57)", () => {
   it("lets cleanup remove a VM whose volumes hold no completed copy", () => {
     expect(keepTargetVm([{ volumeId: "s:vm-1-disk-0", devicePath: "/dev/x" }])).toBe(false)

@@ -113,6 +113,13 @@ describe('WarmCutoverButton', () => {
     expect(calls).toEqual([])
   })
 
+  it('is greyed out, with the reason, while a test of the copy runs', () => {
+    renderWithProviders(<WarmCutoverButton job={{ ...hold, testState: { phase: 'running', testVmid: 9001 } }} />)
+    const button = screen.getByRole('button', { name: CUTOVER_LABEL })
+    expect(button).toBeDisabled()
+    expect(screen.getByLabelText('Stop the running test before the cutover')).toBeInTheDocument()
+  })
+
   it('does not tell a manual hold that it fails to converge', () => {
     // The hold is waiting on purpose. The warning belongs to the automatic gate,
     // where the projection really did stay above the budget.

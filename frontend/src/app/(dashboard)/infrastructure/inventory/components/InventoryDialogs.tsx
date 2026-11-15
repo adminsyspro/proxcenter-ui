@@ -79,7 +79,7 @@ import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/Migrate
 import { effectiveMigrationLimits } from '@/lib/migration/migration-limits'
 import { BULK_MIG_CONCURRENCY_MIN, bulkTargetNodes, bulkTempBytesRequired, bulkVmDiskBytes, clampBulkConcurrency } from '../bulkMigrationConfig'
 import { countExtVmPower, isSourcePaused, isSourcePoweredOn } from '../extVmList'
-import { bulkBatchFromPayload, bulkJobsAwaitingCutover, bulkJobsWithSyncInterval, bulkRowsFromBatch, countBulkJobs, fetchBulkBatch, isTerminalJobStatus, orderBulkJobs, type BulkMigBatch, type BulkMigJobRow } from '../bulkJobList'
+import { bulkBatchFromPayload, bulkJobRowTone, bulkJobsAwaitingCutover, bulkJobsWithSyncInterval, bulkRowsFromBatch, countBulkJobs, fetchBulkBatch, isTerminalJobStatus, orderBulkJobs, type BulkMigBatch, type BulkMigJobRow } from '../bulkJobList'
 import { pageOf } from '@/lib/paging'
 import { STICKY_PAGER_SX } from '@/components/ui/PagedRows'
 import { migrateGuestAndWait, migrationFailureText, runInBatches } from '@/lib/migration/guestMigrateClient'
@@ -105,6 +105,9 @@ import { SYNC_INTERVAL_STEPS_SEC, formatSyncInterval, syncIntervalStepIndex } fr
 import WarmCutoverButton from './WarmCutoverButton'
 import BulkCutoverDialog from './BulkCutoverDialog'
 import SyncIntervalButton from './SyncIntervalButton'
+import MigrationTestButton from './MigrationTestButton'
+import CancelMigrationDialog from './CancelMigrationDialog'
+import MigrationTestBanner from './MigrationTestBanner'
 import SyncIntervalDialog from './SyncIntervalDialog'
 import SyncIntervalSlider from './SyncIntervalSlider'
 import ForcePowerOffButton from './ForcePowerOffButton'
@@ -134,15 +137,6 @@ const BULK_LIST_PER_PAGE = 10
 const BULK_WARN_NAMES = 5
 // Past this many VMs, the log filter is a list instead of one chip per VM.
 const BULK_LOG_CHIPS_MAX = 5
-
-/** Colours and label of a bulk job row: done, failed, cancelled, queued (or paused) or running. */
-function bulkJobRowTone(s: { isDone: boolean; isFailed: boolean; isCancelled: boolean; isQueued: boolean; isPaused: boolean }): { line: string; chipBg: string; chipColor: string; labelKey?: string } {
-  if (s.isDone) return { line: 'success.main', chipBg: 'success.main', chipColor: 'success.contrastText', labelKey: 'completed' }
-  if (s.isFailed) return { line: 'error.main', chipBg: 'error.main', chipColor: 'error.contrastText', labelKey: 'failed' }
-  if (s.isCancelled) return { line: 'divider', chipBg: 'action.disabled', chipColor: 'common.white', labelKey: 'cancelled' }
-  if (s.isQueued) return { line: 'divider', chipBg: 'action.disabled', chipColor: 'common.white', labelKey: s.isPaused ? 'paused' : 'queued' }
-  return { line: 'divider', chipBg: 'primary.main', chipColor: 'primary.contrastText' }
-}
 
 /** Migration type of a bulk job: Hyper-V and Nutanix are cold only, sshfs_boot is ESXi-direct only. */
 function bulkJobMigrationType(migType: string, s: { coldOnly: boolean; vcenter: boolean }): string {
@@ -2263,8 +2257,10 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
       setBulkBatchBusy(false)
     }
   }
-  const cancelMigrationJob = async () => {
-    const res = await fetch(`/api/v1/migrations/${migJobId}/cancel`, { method: 'POST' })
+  const cancelMigrationJob = async (removeTarget = false) => {
+    const res = await fetch(`/api/v1/migrations/${migJobId}/cancel`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removeTarget }),
+    })
     const d = await res.json().catch(() => ({}))
     if (d.data) setMigJob(d.data)
   }
@@ -4663,6 +4659,9 @@ return
                 <Alert severity="error" sx={{ fontSize: 12 }}>{migJob.error}</Alert>
               )}
 
+              {/* Test of the waiting copy (migration-test.ts) */}
+              <MigrationTestBanner job={migJob} />
+
               {/* Logs */}
               {migJob.logs?.length > 0 && (
                 <Box sx={{ position: 'relative' }}>
@@ -4804,6 +4803,7 @@ return
                       run is looking at this dialog, so the switchover has to be
                       reachable from here and not only from the inventory. */}
                   <SyncIntervalButton job={migJob} size="medium" />
+                  <MigrationTestButton job={migJob} size="medium" />
                   <WarmCutoverButton job={migJob} size="medium" />
                   <ForcePowerOffButton job={migJob} size="medium" />
                   <RootChoiceButton job={migJob} size="medium" />
@@ -4857,43 +4857,15 @@ return
       </Dialog>
 
       {/* Confirm Cancel Migration (data already copied) */}
-      <Dialog
+      <CancelMigrationDialog
         open={cancelMigConfirmOpen}
+        job={migJob}
         onClose={() => setCancelMigConfirmOpen(false)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
-          <i className="ri-error-warning-line" style={{ fontSize: 20 }} />
-          {t('inventoryPage.esxiMigration.cancelMigrationConfirmTitle')}
-        </DialogTitle>
-        <DialogContent>
-          <Typography sx={{ mb: 1.5 }}>
-            {t('inventoryPage.esxiMigration.cancelMigrationConfirmStop')}
-          </Typography>
-          <Alert severity="warning" sx={{ mb: 1.5 }}>
-            {t('inventoryPage.esxiMigration.cancelMigrationConfirmVolumesKept')}
-          </Alert>
-          <Typography variant="body2" color="text.secondary">
-            {t('inventoryPage.esxiMigration.cancelMigrationConfirmSourceUntouched')}
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setCancelMigConfirmOpen(false)}>
-            {t('inventoryPage.esxiMigration.keepMigrating')}
-          </Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={async () => {
-              setCancelMigConfirmOpen(false)
-              await cancelMigrationJob()
-            }}
-          >
-            {t('inventoryPage.esxiMigration.cancelMigration')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onConfirm={async removeTarget => {
+          setCancelMigConfirmOpen(false)
+          await cancelMigrationJob(removeTarget)
+        }}
+      />
 
       {/* Bulk Migration Dialog */}
       <Dialog open={bulkMigOpen} onClose={() => { if (!bulkMigStarting && bulkMigJobs.length === 0) setBulkMigOpen(false) }} maxWidth={bulkMigJobs.length === 0 ? 'md' : 'lg'} fullWidth>
@@ -5812,7 +5784,7 @@ return
                           const isCancelled = job.status === 'cancelled'
                           const isQueued = job.status === 'queued'
                           const isActive = !isDone && !isFailed && !isCancelled && !isQueued
-                          const rowTone = bulkJobRowTone({ isDone, isFailed, isCancelled, isQueued, isPaused })
+                          const rowTone = bulkJobRowTone({ isDone, isFailed, isCancelled, isQueued, isPaused, inTest: job.inTest })
                           return (
                             <Box key={job.vmid} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.75, borderBottom: '1px solid', borderColor: 'divider', '&:last-child': { borderBottom: 'none' } }}>
                               {/* Source hypervisor logo */}

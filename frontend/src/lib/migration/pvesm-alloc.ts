@@ -97,8 +97,17 @@ export function reserveVolumeSlot(allocatedVolumes: AllocatedVolume[]): Allocate
 }
 
 /**
+ * How failure cleanup treats the completed copies. `removeCopies` is set only
+ * when the operator cancelled and asked to remove the target: an explicit
+ * choice, never a failure, so #612 still holds for every failure.
+ */
+export interface CleanupOptions {
+  removeCopies?: boolean
+}
+
+/**
  * The volumes failure cleanup must free: registered, not attached to the VM, and
- * not holding a completed copy.
+ * not holding a completed copy (unless the operator asked, `CleanupOptions`).
  *
  * Skips slots whose allocation never started (no volume ID yet) so cleanup never
  * frees a name we did not create, and skips attached volumes, which are in
@@ -112,8 +121,8 @@ export function reserveVolumeSlot(allocatedVolumes: AllocatedVolume[]): Allocate
  * Both filters live in this module on purpose: the pipelines must never
  * re-implement the keep/free rule (and CI fails on duplicated pipeline code).
  */
-export function volumesToFree(allocatedVolumes: AllocatedVolume[]): AllocatedVolume[] {
-  return allocatedVolumes.filter(v => v.volumeId && !v.attached && !v.copied)
+export function volumesToFree(allocatedVolumes: AllocatedVolume[], opts: CleanupOptions = {}): AllocatedVolume[] {
+  return allocatedVolumes.filter(v => v.volumeId && !v.attached && (opts.removeCopies || !v.copied))
 }
 
 /**
@@ -123,7 +132,8 @@ export function volumesToFree(allocatedVolumes: AllocatedVolume[]): AllocatedVol
  * log exactly which volumes it kept and the operator knows what to remove
  * manually if the copy is not wanted (#612).
  */
-export function volumesToKeep(allocatedVolumes: AllocatedVolume[]): AllocatedVolume[] {
+export function volumesToKeep(allocatedVolumes: AllocatedVolume[], opts: CleanupOptions = {}): AllocatedVolume[] {
+  if (opts.removeCopies) return []
   return allocatedVolumes.filter(v => v.volumeId && v.copied && !v.attached)
 }
 
@@ -136,7 +146,8 @@ export function volumesToKeep(allocatedVolumes: AllocatedVolume[]): AllocatedVol
  * copy `volumesToKeep` protects (#612). Otherwise the VM is an empty shell that
  * only blocks the VMID of a retry (roadmap#57).
  */
-export function keepTargetVm(allocatedVolumes: AllocatedVolume[]): boolean {
+export function keepTargetVm(allocatedVolumes: AllocatedVolume[], opts: CleanupOptions = {}): boolean {
+  if (opts.removeCopies) return false
   return allocatedVolumes.some(v => v.volumeId && v.copied)
 }
 

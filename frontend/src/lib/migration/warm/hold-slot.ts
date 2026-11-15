@@ -29,7 +29,7 @@ import { lockLimitScope, sourceLimitScope, targetLimitScope } from "@/lib/migrat
 import { effectiveMigrationLimits, hasFreeSlot, sourceHostKey } from "@/lib/migration/migration-limits"
 import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
 
-import { isCancelled, isCutoverRequested, sleepUnlessCutover } from "./job-control"
+import { isCancelled, isCutoverRequested, isTestRequested } from "./job-control"
 
 const QUEUED_STATUS = "queued"
 
@@ -140,6 +140,11 @@ export interface HoldOptions {
   onWaitForSlot?: () => void | Promise<void>
   /** Called once when a requested cutover waits behind the cutovers already running. */
   onWaitForCutoverSlot?: () => void | Promise<void>
+  /**
+   * The job gave its place back before this call (a test ran meanwhile): a
+   * cutover asked now must take one under the limits, as after a sleep.
+   */
+  afterIdle?: boolean
 }
 
 /** A database error while a migration only waits is logged and read as "not now". */
@@ -167,18 +172,38 @@ async function takeCutoverSlot(jobId: string, retryMs: number, opts: HoldOptions
   }
 }
 
+/** What ended a sleep of the hold early: the operator's cutover or test, else nothing. */
+type Interruption = "cutover" | "test" | null
+
+/**
+ * Sleep `ms` in one-second slices, so the operator's cutover or test request
+ * is picked up within a second. A cutover wins over a test asked at the same
+ * time. Throws on cancellation, like every wait of the pipeline.
+ */
+async function sleepUnlessOperator(jobId: string, ms: number): Promise<Interruption> {
+  const until = Date.now() + ms
+  for (;;) {
+    if (isCancelled(jobId)) throw new Error("Migration cancelled")
+    if (isCutoverRequested(jobId)) return "cutover"
+    if (isTestRequested(jobId)) return "test"
+    if (Date.now() >= until) return null
+    await sleep(Math.max(1, Math.min(1000, until - Date.now())))
+  }
+}
+
 /**
  * Sleep the interval, counted from now. A reader is asked again every
  * `recheckMs`: an interval shortened meanwhile ends the sleep as soon as it is
- * over, a longer one extends it. False when a cutover was requested.
+ * over, a longer one extends it. What interrupted it, or null once it is over.
  */
-async function sleepInterval(jobId: string, interval: HoldInterval, firstSec: number, recheckMs: number): Promise<boolean> {
+async function sleepInterval(jobId: string, interval: HoldInterval, firstSec: number, recheckMs: number): Promise<Interruption> {
   const started = Date.now()
   let sec = firstSec
   for (;;) {
     const left = started + sec * 1000 - Date.now()
-    if (left <= 0) return true
-    if (!(await sleepUnlessCutover(jobId, typeof interval === "number" ? left : Math.min(left, recheckMs)))) return false
+    if (left <= 0) return null
+    const stop = await sleepUnlessOperator(jobId, typeof interval === "number" ? left : Math.min(left, recheckMs))
+    if (stop) return stop
     if (typeof interval !== "number") sec = await interval()
   }
 }
@@ -188,22 +213,31 @@ async function sleepInterval(jobId: string, interval: HoldInterval, firstSec: nu
  * the interval, take a place again. "pass" when the next pass may run,
  * "cutover" once the operator asked for it and the cutover has its place.
  * Throws on cancellation, like every wait of the pipeline. The job holds its
- * place again when this returns.
+ * place again when this returns, except on "test": the operator asked to boot
+ * a test VM on the copy (migration-test.ts), which copies nothing, so the job
+ * stays idle for it and comes back here once the test is over.
  */
-export async function holdBetweenPasses(jobId: string, interval: HoldInterval, opts: HoldOptions = {}): Promise<"pass" | "cutover"> {
+export async function holdBetweenPasses(jobId: string, interval: HoldInterval, opts: HoldOptions = {}): Promise<"pass" | "cutover" | "test"> {
   const retryMs = opts.reclaimRetryMs ?? HOLD_RECLAIM_RETRY_MS
   // A cutover asked during the pass that just ended: no reason to go idle.
-  if (isCutoverRequested(jobId)) return "cutover"
+  if (isCutoverRequested(jobId)) {
+    if (opts.afterIdle) await takeCutoverSlot(jobId, retryMs, opts)
+    return "cutover"
+  }
   const intervalSec = typeof interval === "number" ? interval : await interval()
   // A place that cannot be given back is simply kept for this sleep.
   const released = await quietly("giving the place back", jobId, async () => { await releaseHoldSlot(jobId); return true }, false)
   const yieldUntil = Date.now() + (1 + HOLD_QUEUE_YIELD_INTERVALS) * intervalSec * 1000
   try {
-    if (!(await sleepInterval(jobId, interval, intervalSec, opts.intervalRecheckMs ?? HOLD_INTERVAL_RECHECK_MS))) { await takeCutoverSlot(jobId, retryMs, opts); return "cutover" }
+    const slept = await sleepInterval(jobId, interval, intervalSec, opts.intervalRecheckMs ?? HOLD_INTERVAL_RECHECK_MS)
+    if (slept === "test") return "test"
+    if (slept === "cutover") { await takeCutoverSlot(jobId, retryMs, opts); return "cutover" }
     let told = false
     while (released && !(await quietly("taking the place back", jobId, () => reclaimHoldSlot(jobId, { yieldToQueue: Date.now() < yieldUntil }), false))) {
       if (!told) { told = true; await opts.onWaitForSlot?.() }
-      if (!(await sleepUnlessCutover(jobId, retryMs))) { await takeCutoverSlot(jobId, retryMs, opts); return "cutover" }
+      const waited = await sleepUnlessOperator(jobId, retryMs)
+      if (waited === "test") return "test"
+      if (waited === "cutover") { await takeCutoverSlot(jobId, retryMs, opts); return "cutover" }
     }
     if (isCancelled(jobId)) throw new Error("Migration cancelled")
     if (isCutoverRequested(jobId)) return "cutover"

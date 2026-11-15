@@ -4,6 +4,7 @@ import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProvide
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
 
 import SankeyChart from './SankeyChart'
+import { PAIRS, makeLens } from './lensTestKit'
 
 describe('SankeyChart', () => {
   afterEach(cleanup)
@@ -17,7 +18,7 @@ describe('SankeyChart', () => {
 
         return HttpResponse.json([
           { src_ip: '10.0.0.1', dst_ip: '10.0.0.2', bytes: 4096, packets: 4, protocol: 'tcp', dst_port: 443 },
-          { src_ip: '10.0.0.3', dst_ip: '10.0.0.2', bytes: 2048, packets: 2, protocol: 'udp', dst_port: 5555 },
+          { src_ip: '10.0.0.3', dst_ip: '10.0.0.2', bytes: 2048, packets: 2, protocol: 'udp', dst_port: 42555 },
         ])
       }),
     )
@@ -26,9 +27,22 @@ describe('SankeyChart', () => {
 
     expect(await screen.findByText('10.0.0.1')).toBeInTheDocument()
     expect(screen.getByText('HTTPS')).toBeInTheDocument()
-    expect(screen.getByText('5555/udp')).toBeInTheDocument()
+    expect(screen.getByText('udp/42555')).toBeInTheDocument()
     expect(screen.getByText('10.0.0.2')).toBeInTheDocument()
     expect(queries).toEqual(['?endpoint=ip-pairs&n=100'])
+  })
+
+  it('labels an ICMP flow with its protocol alone (no port 0)', async () => {
+    server.use(
+      http.get('*/api/v1/orchestrator/sflow', () => HttpResponse.json([
+        { src_ip: '10.0.0.1', dst_ip: '10.0.0.2', bytes: 100, packets: 1, protocol: 'icmp', dst_port: 0 },
+      ])),
+    )
+
+    renderWithProviders(<SankeyChart />)
+
+    expect(await screen.findByText('icmp')).toBeInTheDocument()
+    expect(screen.queryByText('icmp/0')).not.toBeInTheDocument()
   })
 
   it('leaves the loading state with no flow drawn when the endpoint fails', async () => {
@@ -101,5 +115,32 @@ describe('SankeyChart', () => {
     // answers. Wait for that reload so no request outlives the file: once MSW
     // is closed it would go to the real network and reject unhandled.
     await waitFor(() => expect(served).toHaveBeenCalledWith('nothing'))
+  })
+
+  it('shows the addresses alone when grouped by IP', async () => {
+    server.use(http.get('*/api/v1/orchestrator/sflow', () => HttpResponse.json([
+      { src_ip: '10.0.0.1', src_vmid: 101, src_name: 'web-01', dst_ip: '10.0.0.2', bytes: 4096, packets: 4, protocol: 'tcp', dst_port: 443 },
+    ])))
+
+    renderWithProviders(<SankeyChart groupBy="ip" />)
+
+    expect(await screen.findByText('10.0.0.1')).toBeInTheDocument()
+    expect(screen.queryByText('web-01 (10.0.0.1)')).not.toBeInTheDocument()
+  })
+
+  it('draws one node per zone in Zone mode, in the zone colour, the service column kept', async () => {
+    server.use(http.get('*/api/v1/orchestrator/sflow', () => HttpResponse.json(PAIRS)))
+
+    const { container } = renderWithProviders(<SankeyChart groupBy="zone" lens={makeLens()} />)
+
+    expect(await screen.findAllByText('web')).not.toHaveLength(0)
+    expect(screen.getAllByText('db').length).toBeGreaterThan(0)
+    expect(screen.getByText('Unzoned')).toBeInTheDocument()
+    expect(screen.getByText('Unknown / External')).toBeInTheDocument()
+    expect(screen.getByText('PostgreSQL')).toBeInTheDocument()
+    expect(screen.queryByText('10.0.0.1')).not.toBeInTheDocument()
+    const fills = Array.from(container.querySelectorAll('rect')).map(r => r.getAttribute('fill'))
+    expect(fills).toContain('#3b82f6')
+    expect(fills).toContain('#10b981')
   })
 })

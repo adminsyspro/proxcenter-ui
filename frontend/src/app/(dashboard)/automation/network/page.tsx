@@ -1,33 +1,36 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 
 import {
   Alert, Box, Card, FormControl, IconButton, InputLabel, MenuItem,
-  Select, Tab, Tabs, Typography, useTheme, alpha
+  Select, Tab, Tabs, useTheme, alpha
 } from '@mui/material'
 
 import { usePageTitle } from "@/contexts/PageTitleContext"
 import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import ProviderTenantGuard from '@/components/guards/ProviderTenantGuard'
 import { Features, useLicense } from '@/contexts/LicenseContext'
-import { useToast } from '@/contexts/ToastContext'
-import * as firewallAPI from '@/lib/api/firewall'
 import { usePVEConnections } from '@/hooks/useConnections'
+import { useSWRFetch } from '@/hooks/useSWRFetch'
 import { useFirewallData, Connection } from '@/hooks/useFirewallData'
 import { useVMFirewallRules } from '@/hooks/useVMFirewallRules'
 import { useHostFirewallRules } from '@/hooks/useHostFirewallRules'
 
-import StatCard from './components/StatCard'
-import DashboardTab from './components/DashboardTab'
+import DashboardTab, { type GuestFilter } from './components/DashboardTab'
+import type { MicrosegSubTab } from './components/microseg/microsegTabTypes'
 import RulesTab from './components/RulesTab'
 import ObjectsTab from './components/ObjectsTab'
 import SecurityGroupsPanel from './components/rules/SecurityGroupsPanel'
 import LoggingTab from './components/LoggingTab'
+import MicrosegTab from './components/microseg/MicrosegTab'
+import { MicrosegWriteContext, useCanManageMicroseg } from './components/microseg/microsegAccess'
+import { connectionOfVm, parseNetworkLink, pickConnection, readStoredConnection, storeConnection, TAB } from './networkLink'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN PAGE — 6 tabs: Dashboard, Firewalling, Aliases, IP Sets, Security Groups, Logging
+   MAIN PAGE, 7 tabs: Dashboard, Micro-segmentation, Firewalling, Logging, Security Groups, IP Sets, Aliases (order = NETWORK_TABS)
 ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function NetworkAutomationPage() {
@@ -35,31 +38,59 @@ export default function NetworkAutomationPage() {
   const { setPageInfo } = usePageTitle()
   const t = useTranslations()
   const { isEnterprise } = useLicense()
-  const { showToast } = useToast()
 
   // ── State ──
-  const [activeTab, setActiveTab] = useState(0)
+  // A link (?tab, ?sub, ?connection, ?vm) decides the tab, the sub-tab and the connection the page opens on; read once.
+  const params = useSearchParams()
+  const [link] = useState(() => parseNetworkLink(params))
+  const [activeTab, setActiveTab] = useState(link.tab ?? 0)
   const [rulesSubTab, setRulesSubTab] = useState(0)
-  const [selectedConnection, setSelectedConnection] = useState<string>('')
+  // The connection picked in the selector; until then the link's, the one remembered in the browser, or the first.
+  const [pickedConnection, setPickedConnection] = useState('')
+  const [storedConnection] = useState(readStoredConnection)
+  // Set by a line of the Dashboard's "To do" list, for the tab it opens; dropped on any other tab change.
+  const [guestFilter, setGuestFilter] = useState<GuestFilter | null>(null)
+  const [microsegSubTab, setMicrosegSubTab] = useState<MicrosegSubTab | null>(link.sub)
+  const changeTab = (tab: number) => {
+    setActiveTab(tab)
+    setGuestFilter(null)
+    setMicrosegSubTab(null)
+  }
 
   // ── Connections ──
   const { data: connectionsData } = usePVEConnections()
-  const connections: Connection[] = isEnterprise ? (connectionsData?.data || []) : []
+  const connections: Connection[] = useMemo(() => (isEnterprise ? (connectionsData?.data || []) : []), [isEnterprise, connectionsData])
+
+  // A ?vm= link without ?connection=: the connection holding that guest, from the inventory the app keeps cached
+  // server side (no Proxmox call when it is warm). Nothing is selected while it is read, so no other connection's
+  // data is computed meanwhile; a refusal or a guest found nowhere falls back to the usual choice.
+  const vmLookup = isEnterprise && link.vm !== null && !link.connection && !pickedConnection
+  const { data: inventory, error: inventoryError } = useSWRFetch(vmLookup ? '/api/v1/inventory' : null, { revalidateOnFocus: false, dedupingInterval: 60000 })
+  const vmConnection = vmLookup && inventory && link.vm !== null ? connectionOfVm(inventory, link.vm) : null
+  const waitingForVm = vmLookup && !inventory && !inventoryError
+  const selectedConnection = pickedConnection
+    || (waitingForVm ? '' : pickConnection(connections, [link.connection, vmConnection, storedConnection]))
+  // The live ?vm= (the Overview drops it from the address once the admin picks or clears a target).
+  const linkedVm = params?.get('vm') ?? null
 
   // ── Data hooks ──
   const {
     aliases, ipsets, securityGroups, clusterOptions, clusterRules,
-    nodeOptions, nodeRules, firewallMode, connectionInfo, nodesList,
+    nodeOptions, firewallMode, nodesList, nodeStatus,
     loading, loadError, reload: loadFirewallData, setClusterRules, setClusterOptions,
   } = useFirewallData(isEnterprise ? selectedConnection || null : null, isEnterprise)
 
   const {
-    vmFirewallData, loadingVMRules, vmRulesError, guestsNotScanned, loadVMFirewallData, reloadVMFirewallRules, setVMFirewallData,
+    vmFirewallData, loadingVMRules, vmRulesError, guestsNotScanned, loadVMFirewallData, loadGuestRules, reloadVMFirewallRules, setVMFirewallData,
   } = useVMFirewallRules(isEnterprise ? selectedConnection || null : null)
 
   const {
-    hostRulesByNode, loadingHostRules, hostRulesError, loadHostRules, reloadHostRulesForNode, setHostRulesByNode,
+    hostRulesByNode, hostRulesError, setHostRulesByNode,
   } = useHostFirewallRules(isEnterprise ? selectedConnection || null : null, nodesList)
+
+  // The firewall tabs write with node.manage on the connection, like the micro-segmentation: a read-only user sees
+  // every write control of Firewalling, Aliases, IP Sets and Security Groups disabled, with the reason (WriteTip).
+  const canWriteFirewall = useCanManageMicroseg(selectedConnection)
 
   // ── Derived values ──
   const currentOptions = firewallMode === 'cluster' ? clusterOptions : nodeOptions
@@ -68,177 +99,157 @@ export default function NetworkAutomationPage() {
   const firewallLoadError = [...new Set([loadError, hostRulesError, vmRulesError].filter(Boolean))].join(' · ')
 
   // ── Effects ──
+  // No summary strip or alert above the tabs any more: a broken backend must still leave a trace to diagnose.
+  useEffect(() => {
+    if (selectedConnection && firewallLoadError) console.error('Network security: firewall data could not be loaded:', firewallLoadError)
+  }, [selectedConnection, firewallLoadError])
+
   useEffect(() => {
     setPageInfo(t('network.title'), t('microseg.subtitle'), 'ri-shield-flash-fill')
     return () => setPageInfo('', '', '')
   }, [setPageInfo, t])
 
+  // The connection shown is remembered: a reopen of the page starts on it, not on the first connection.
   useEffect(() => {
-    if (connections.length > 0 && !selectedConnection) {
-      setSelectedConnection(connections[0].id)
-    }
-  }, [connections, selectedConnection])
+    if (selectedConnection) storeConnection(selectedConnection)
+  }, [selectedConnection])
 
   useEffect(() => {
     setVMFirewallData([])
     setHostRulesByNode({})
-  }, [selectedConnection])
+  }, [selectedConnection, setVMFirewallData, setHostRulesByNode])
 
-  // If standalone mode detected, switch away from Cluster sub-tab
-  useEffect(() => {
-    if (firewallMode === 'standalone' && activeTab === 1 && rulesSubTab === 0) {
-      setRulesSubTab(1)
-    }
-  }, [firewallMode, activeTab, rulesSubTab])
+  // A standalone node has no cluster firewall: Firewalling opens on its host rules instead.
+  const shownRulesSubTab = firewallMode === 'standalone' && rulesSubTab === 0 ? 1 : rulesSubTab
 
-  // Load VM rules when on Dashboard (tab 0), Firewalling > Cluster/VMs (tab 1,
-  // subTab 0 or 2), or Security Groups (tab 4) — that last tab counts, per
-  // group, the guests whose rules reference it, so without this it showed 0 VMs
-  // everywhere while the data had simply never been fetched.
+  // The guest list (firewall state, VLANs, tags) on Firewalling (tab 1: its guest sections and the VMs covered of its
+  // status bar) and Security Groups only: one request to the coverage route, computed and cached on the
+  // server with one Proxmox call per guest at most (UA44). A guest's rules are read when its section is opened,
+  // never for every guest on mount.
   useEffect(() => {
     if (isEnterprise && selectedConnection && !loadingVMRules && vmFirewallData.length === 0) {
-      if (activeTab === 0 || activeTab === 4 || (activeTab === 1 && (rulesSubTab === 0 || rulesSubTab === 2))) {
+      if (activeTab === TAB.groups || activeTab === TAB.firewalling) {
         void loadVMFirewallData()
       }
     }
-  }, [activeTab, rulesSubTab, selectedConnection, vmFirewallData.length, loadingVMRules, loadVMFirewallData])
+  }, [isEnterprise, activeTab, selectedConnection, vmFirewallData.length, loadingVMRules, loadVMFirewallData])
+
+  // The Aliases and IP Sets tabs are the same objects view on the same data.
+  const objectsProps = {
+    aliases, ipsets, selectedConnection, loading, loadError: firewallLoadError || null, reload: loadFirewallData,
+  }
 
   return (
     <ProviderTenantGuard>
     <EnterpriseGuard requiredFeature={Features.MICROSEGMENTATION} featureName="Microsegmentation / Firewall">
-      <Box sx={{ p: 3 }}>
+      <Box sx={{ minHeight: 'calc(100vh - 130px)', display: 'flex', flexDirection: 'column' }}>
 
-        {/* Connection Selector */}
-        <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            <FormControl size="small" sx={{ minWidth: 200 }}>
-              <InputLabel>{t('firewall.connection')}</InputLabel>
-              <Select value={selectedConnection} label={t('firewall.connection')} onChange={(e) => {
-                setSelectedConnection(e.target.value)
-                setVMFirewallData([])
-              }}>
-                {connections.map((c) => (
-                  <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <IconButton onClick={loadFirewallData} disabled={loading || !selectedConnection} size="small">
-              <i className={`ri-refresh-line ${loading ? 'animate-spin' : ''}`} />
-            </IconButton>
-          </Box>
-        </Box>
-
-        {!selectedConnection && (
+        {!selectedConnection && !waitingForVm && (
           <Alert severity="info" sx={{ mb: 3 }}>
             {t('networkPage.noPveConnection')}
           </Alert>
         )}
 
-        {selectedConnection && firewallLoadError && (
-          <Alert severity="error" sx={{ mb: 3 }}>
-            {t('networkPage.loadError', { error: firewallLoadError })}
-          </Alert>
-        )}
-
-        {/* Stats Grid */}
-        <Box sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
-          gap: 2, mb: 3, width: '100%'
-        }}>
-          <StatCard icon="ri-shield-check-line" label={t('firewall.securityGroups')} value={securityGroups.length} subvalue={t('networkPage.totalRules', { count: totalRules })} color="#22c55e" loading={loading} onClick={() => setActiveTab(4)} />
-          <StatCard icon="ri-database-2-line" label={t('firewall.ipSets')} value={ipsets.length} subvalue={`${totalIPSetEntries} ${t('networkPage.entries')}`} color="#3b82f6" loading={loading} onClick={() => setActiveTab(3)} />
-          <StatCard icon="ri-price-tag-3-line" label={t('firewall.aliases')} value={aliases.length} subvalue={t('networkPage.namedNetworks')} color="#8b5cf6" loading={loading} onClick={() => setActiveTab(2)} />
-          <StatCard icon="ri-cloud-line" label={t('network.clusterRules')} value={clusterRules.length} subvalue={clusterOptions?.enable === 1 ? t('network.firewallActive') : t('network.firewallInactive')} color={clusterOptions?.enable === 1 ? '#06b6d4' : '#94a3b8'} loading={loading} onClick={() => { setActiveTab(1); setRulesSubTab(0) }} />
-        </Box>
-
         {/* Main Content Card */}
-        <Card sx={{ background: alpha(theme.palette.background.paper, 0.8), backdropFilter: 'blur(10px)', border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 3 }}>
-          <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} variant="scrollable" scrollButtons="auto" sx={{ px: 2, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+        <MicrosegWriteContext.Provider value={canWriteFirewall}>
+        <Card sx={{ background: alpha(theme.palette.background.paper, 0.8), backdropFilter: 'blur(10px)', border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+          <Tabs value={activeTab} onChange={(_, v) => changeTab(v)} variant="scrollable" scrollButtons="auto" sx={{ px: 2, flex: '1 1 460px', minWidth: 0 }}>
             <Tab icon={<i className="ri-dashboard-line" />} iconPosition="start" label={t('firewall.dashboard')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-shield-keyhole-line" />} iconPosition="start" label={t('microsegPilot.tab.title')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-shield-flash-line" />} iconPosition="start" label={t('networkPage.tabFirewalling')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
-            <Tab icon={<i className="ri-price-tag-3-line" />} iconPosition="start" label={t('networkPage.tabAliases')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
-            <Tab icon={<i className="ri-database-2-line" />} iconPosition="start" label={t('networkPage.tabIpSets')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
-            <Tab icon={<i className="ri-shield-check-line" />} iconPosition="start" label={t('networkPage.tabSecurityGroups')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-terminal-box-line" />} iconPosition="start" label={t('networkPage.tabLogging')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-shield-check-line" />} iconPosition="start" label={t('networkPage.tabSecurityGroups')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-database-2-line" />} iconPosition="start" label={t('networkPage.tabIpSets')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
+            <Tab icon={<i className="ri-price-tag-3-line" />} iconPosition="start" label={t('networkPage.tabAliases')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
           </Tabs>
+            {/* Connection selector: right end of the tabs row, below the tabs on a narrow width */}
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexShrink: 0, ml: 'auto', px: 2, py: 1 }}>
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel>{t('firewall.connection')}</InputLabel>
+                <Select value={selectedConnection} label={t('firewall.connection')} onChange={(e) => {
+                  setPickedConnection(e.target.value)
+                  setVMFirewallData([])
+                }}>
+                  {connections.map((c) => (
+                    <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <IconButton onClick={loadFirewallData} disabled={loading || !selectedConnection} size="small">
+                <i className={`ri-refresh-line ${loading ? 'animate-spin' : ''}`} />
+              </IconButton>
+            </Box>
+          </Box>
 
-          {/* Tab 0: Dashboard */}
-          {activeTab === 0 && (
+          {/* Tab: Dashboard */}
+          {activeTab === TAB.dashboard && (
             <DashboardTab
               securityGroups={securityGroups}
               clusterOptions={clusterOptions}
               clusterRules={clusterRules}
               aliases={aliases}
               ipsets={ipsets}
-              vmFirewallData={vmFirewallData}
-              loadingVMRules={loadingVMRules}
               firewallMode={firewallMode}
               currentOptions={currentOptions}
               selectedConnection={selectedConnection}
+              connectionName={connections.find(c => c.id === selectedConnection)?.name}
               totalRules={totalRules}
               totalIPSetEntries={totalIPSetEntries}
               nodesList={nodesList}
+              loadError={firewallLoadError || null}
+              loading={loading}
               reload={loadFirewallData}
-              onNavigateTab={setActiveTab}
+              onNavigateTab={changeTab}
               onNavigateRulesSubTab={setRulesSubTab}
+              onOpenGuests={filter => { changeTab(TAB.firewalling); setRulesSubTab(2); setGuestFilter(filter ?? null) }}
+              onOpenMicroseg={subTab => { changeTab(TAB.microseg); setMicrosegSubTab(subTab ?? null) }}
             />
           )}
 
-          {/* Tab 1: Firewalling */}
-          {activeTab === 1 && (
+          {/* Tab: Firewalling */}
+          {activeTab === TAB.firewalling && (
             <RulesTab
-              activeSubTab={rulesSubTab}
+              activeSubTab={shownRulesSubTab}
               onSubTabChange={setRulesSubTab}
+              guestFilter={guestFilter}
+              onClearGuestFilter={() => setGuestFilter(null)}
               clusterRules={clusterRules}
               setClusterRules={setClusterRules}
               clusterOptions={clusterOptions}
               setClusterOptions={setClusterOptions}
               hostRulesByNode={hostRulesByNode}
+              setHostRulesByNode={setHostRulesByNode}
               nodesList={nodesList}
-              loadingHostRules={loadingHostRules}
-              loadHostRules={loadHostRules}
-              reloadHostRulesForNode={reloadHostRulesForNode}
+              nodeStatus={nodeStatus}
               vmFirewallData={vmFirewallData}
+              setVMFirewallData={setVMFirewallData}
               loadingVMRules={loadingVMRules}
               loadVMFirewallData={loadVMFirewallData}
-              reloadVMFirewallRules={reloadVMFirewallRules}
+              loadGuestRules={loadGuestRules}
               securityGroups={securityGroups}
               aliases={aliases}
               ipsets={ipsets}
               firewallMode={firewallMode}
-              totalRules={totalRules}
               selectedConnection={selectedConnection}
+              connectionName={connections.find(c => c.id === selectedConnection)?.name}
+              loadError={firewallLoadError || null}
               reload={loadFirewallData}
             />
           )}
 
-          {/* Tab 2: Aliases */}
-          {activeTab === 2 && (
-            <ObjectsTab
-              aliases={aliases}
-              ipsets={ipsets}
-              selectedConnection={selectedConnection}
-              loading={loading}
-              reload={loadFirewallData}
-              view="aliases"
-            />
+          {/* Tab: Aliases */}
+          {activeTab === TAB.aliases && (
+            <ObjectsTab {...objectsProps} view="aliases" />
           )}
 
-          {/* Tab 3: IP Sets */}
-          {activeTab === 3 && (
-            <ObjectsTab
-              aliases={aliases}
-              ipsets={ipsets}
-              selectedConnection={selectedConnection}
-              loading={loading}
-              reload={loadFirewallData}
-              view="ipsets"
-            />
+          {/* Tab: IP Sets */}
+          {activeTab === TAB.ipsets && (
+            <ObjectsTab {...objectsProps} view="ipsets" />
           )}
 
-          {/* Tab 4: Security Groups */}
-          {activeTab === 4 && (
+          {/* Tab: Security Groups */}
+          {activeTab === TAB.groups && (
             <SecurityGroupsPanel
               securityGroups={securityGroups}
               vmFirewallData={vmFirewallData}
@@ -251,13 +262,15 @@ export default function NetworkAutomationPage() {
               totalRules={totalRules}
               aliases={aliases}
               ipsets={ipsets}
+              loadError={firewallLoadError || null}
               reload={loadFirewallData}
+              loadGuestRules={loadGuestRules}
               reloadVMFirewallRules={reloadVMFirewallRules}
             />
           )}
 
-          {/* Tab 5: Logging (keyed: another connection starts from no element) */}
-          {activeTab === 5 && selectedConnection && (
+          {/* Tab: Logging (keyed: another connection starts from no element) */}
+          {activeTab === TAB.logging && selectedConnection && (
             <LoggingTab
               key={selectedConnection}
               selectedConnection={selectedConnection}
@@ -267,7 +280,20 @@ export default function NetworkAutomationPage() {
             />
           )}
 
+          {/* Tab: Micro-segmentation (keyed: another connection starts from no state) */}
+          {activeTab === TAB.microseg && (
+            <MicrosegTab
+              key={selectedConnection}
+              connectionId={selectedConnection}
+              connectionName={connections.find(c => c.id === selectedConnection)?.name}
+              initialSubTab={microsegSubTab ?? undefined}
+              targetVm={linkedVm}
+              firewall={{ clusterOptions, clusterRules, nodesList, firewallMode, onComplete: loadFirewallData }}
+            />
+          )}
+
         </Card>
+        </MicrosegWriteContext.Provider>
       </Box>
     </EnterpriseGuard>
     </ProviderTenantGuard>

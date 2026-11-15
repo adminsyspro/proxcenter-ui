@@ -85,7 +85,9 @@ vi.mock('@/lib/connections/getConnection', () => ({
 
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 
-vi.mock('@/lib/inventory/vmConfig', () => ({
+// The real parser stays (GET /api/v1/vms and the guest config cache use it since UA52); the config reads return [].
+vi.mock('@/lib/inventory/vmConfig', async (orig) => ({
+  ...(await orig<typeof import('@/lib/inventory/vmConfig')>()),
   enrichVmsWithConfig: async (_conn: any, mapped: any[]) => mapped,
 }))
 

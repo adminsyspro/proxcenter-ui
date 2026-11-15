@@ -189,29 +189,3 @@ describe('the ?type= selector', () => {
     })
   }
 })
-
-describe('query values sent to the orchestrator', () => {
-  it('GET microseg/analyze: the gateway offset stays one query value', async () => {
-    const { GET } = handlersOf(await import('./microseg/[connectionId]/analyze/route'))
-
-    orchestrator.get.mockResolvedValue({ data: {}, status: 200 })
-    const { NextRequest } = await import('next/server')
-
-    await (GET as any)(new NextRequest('http://test.local/_?gateway_offset=1%26dry_run%3Dfalse'), { params: Promise.resolve({ connectionId: C }) })
-    expect(orchestrator.get).toHaveBeenLastCalledWith('/firewall/microseg/conn-1/analyze?gateway_offset=1%26dry_run%3Dfalse')
-    await (GET as any)(new NextRequest('http://test.local/_'), { params: Promise.resolve({ connectionId: C }) })
-    expect(orchestrator.get).toHaveBeenLastCalledWith('/firewall/microseg/conn-1/analyze?gateway_offset=254')
-  })
-
-  it('GET microseg/vms: the network filter stays one query value', async () => {
-    const { GET } = handlersOf(await import('./microseg/[connectionId]/vms/route'))
-
-    orchestrator.get.mockResolvedValue({ data: {}, status: 200 })
-    const { NextRequest } = await import('next/server')
-
-    await (GET as any)(new NextRequest('http://test.local/_?network=10.0.0.0%2F24'), { params: Promise.resolve({ connectionId: C }) })
-    expect(orchestrator.get).toHaveBeenLastCalledWith('/firewall/microseg/conn-1/vms?network=10.0.0.0%2F24')
-    await (GET as any)(new NextRequest('http://test.local/_'), { params: Promise.resolve({ connectionId: C }) })
-    expect(orchestrator.get).toHaveBeenLastCalledWith('/firewall/microseg/conn-1/vms')
-  })
-})

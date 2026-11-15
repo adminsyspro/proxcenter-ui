@@ -17,12 +17,13 @@ const ORCHESTRATOR_LEADER_URL = process.env.ORCHESTRATOR_LEADER_URL || ORCHESTRA
 const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
 
 // Leader-only endpoints: DRS (/drs/*), metrics (/metrics/*), availability
-// (/availability/*, which reads the latest metrics sample) and the GPU
-// readings (/gpu/*, whose latest round lives in the leader's collector) read
-// or act on state that only the leader holds. Everything else stays on the
-// local orchestrator (ORCHESTRATOR_URL).
+// (/availability/*, which reads the latest metrics sample), the GPU readings
+// (/gpu/*, whose latest round lives in the leader's collector) and micro-
+// segmentation (/microseg/*, whose engine and run state live on the leader)
+// read or act on state that only the leader holds. Everything else stays on
+// the local orchestrator (ORCHESTRATOR_URL).
 function orchestratorBaseUrlForPath(path: string): string {
-  return /^\/(metrics|drs|availability|gpu)(\/|$|\?)/.test(path) ? ORCHESTRATOR_LEADER_URL : ORCHESTRATOR_URL
+  return /^\/(metrics|drs|availability|gpu|microseg)(\/|$|\?)/.test(path) ? ORCHESTRATOR_LEADER_URL : ORCHESTRATOR_URL
 }
 
 export interface OrchestratorRequestOptions {
@@ -38,17 +39,9 @@ export interface OrchestratorRequestOptions {
 export { OrchestratorPathError, orchestratorPath, orchestratorSegment }
 
 /**
- * Fait une requête vers le backend Go d'orchestration
+ * The headers of every orchestrator call: API key, current tenant and actor.
  */
-export async function orchestratorFetch<T>(
-  path: string,
-  options: OrchestratorRequestOptions = {}
-): Promise<T> {
-  const { method = 'GET', body, timeout = 30000 } = options
-
-  assertOrchestratorPath(path, { encodedSlash: options.encodedSlash })
-  const url = `${orchestratorBaseUrlForPath(path)}/api/v1${path}`
-
+async function orchestratorRequestHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   }
@@ -81,6 +74,23 @@ export async function orchestratorFetch<T>(
   // Left out outside a request, where the orchestrator names itself.
   Object.assign(headers, await actorHeaders())
 
+  return headers
+}
+
+/**
+ * Fait une requête vers le backend Go d'orchestration
+ */
+export async function orchestratorFetch<T>(
+  path: string,
+  options: OrchestratorRequestOptions = {}
+): Promise<T> {
+  const { method = 'GET', body, timeout = 30000 } = options
+
+  assertOrchestratorPath(path, { encodedSlash: options.encodedSlash })
+  const url = `${orchestratorBaseUrlForPath(path)}/api/v1${path}`
+
+  const headers = await orchestratorRequestHeaders()
+
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeout)
 
@@ -107,20 +117,70 @@ export async function orchestratorFetch<T>(
     return (await res.json()) as T
   } catch (error: any) {
     clearTimeout(timeoutId)
+    throw translateFetchFailure(error)
+  }
+}
 
-    if (error.name === 'AbortError') {
-      throw new Error('Orchestrator request timeout')
-    }
+/**
+ * The error to throw for a failed call to the orchestrator: a timeout, an
+ * unreachable orchestrator (tagged so API routes can avoid noisy logging) or
+ * the error itself.
+ */
+function translateFetchFailure(error: any): any {
+  if (error.name === 'AbortError') {
+    return new Error('Orchestrator request timeout')
+  }
 
-    // Tag connection errors so API routes can avoid noisy logging
-    const isConnError = error?.cause?.code === 'ECONNREFUSED' || error?.cause?.code === 'ENOTFOUND' || error?.message?.includes('fetch failed')
-    if (isConnError) {
-      const err: any = new Error('Orchestrator unavailable')
-      err.code = 'ORCHESTRATOR_UNAVAILABLE'
-      throw err
-    }
+  const isConnError = error?.cause?.code === 'ECONNREFUSED' || error?.cause?.code === 'ENOTFOUND' || error?.message?.includes('fetch failed')
 
-    throw error
+  if (isConnError) {
+    const err: any = new Error('Orchestrator unavailable')
+
+    err.code = 'ORCHESTRATOR_UNAVAILABLE'
+
+    return err
+  }
+
+  return error
+}
+
+export interface OrchestratorRelayOptions {
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  /** Sent as is: a relay does not re-serialise what the caller sent. */
+  body?: string
+  timeout?: number
+  /** Aborts the call when it fires (the caller's own request being dropped). */
+  signal?: AbortSignal
+}
+
+/**
+ * Like orchestratorFetch, but hands back the orchestrator's Response whatever
+ * its status (a 202, a 409 with its code, a 503), for the routes that relay
+ * the answer unchanged. Same path checks, headers and leader routing; a call
+ * that never got an answer throws as orchestratorFetch does.
+ */
+export async function orchestratorRelay(
+  path: string,
+  options: OrchestratorRelayOptions = {}
+): Promise<Response> {
+  const { method = 'GET', body, timeout = 30000, signal } = options
+
+  assertOrchestratorPath(path)
+  const url = `${orchestratorBaseUrlForPath(path)}/api/v1${path}`
+  const headers = await orchestratorRequestHeaders()
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeout)
+  const onCallerAbort = () => controller.abort()
+
+  if (signal?.aborted) controller.abort()
+  else signal?.addEventListener('abort', onCallerAbort, { once: true })
+
+  try {
+    return await fetch(url, { method, headers, body, signal: controller.signal, cache: 'no-store' })
+  } catch (error: any) {
+    throw translateFetchFailure(error)
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
 

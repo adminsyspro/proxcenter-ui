@@ -139,4 +139,35 @@ describe('PUT /api/v1/firewall/vms/[connectionId]/[node]/[vmType]/[vmid]/nic-fir
     expect(orchestrator.put).not.toHaveBeenCalled()
     expect(toggleVMNICFirewallMock).not.toHaveBeenCalled()
   })
+
+  it('sets the cached NIC flag of the guest once the toggle went through, with no config read (UA44)', async () => {
+    const totals = await import('@/lib/inventory/guestDiskTotals')
+    await totals.attachGuestDiskTotals(null, 'conn-1', [{ vmid: '101', type: 'qemu', node: 'pve1' }], {
+      onlineNodes: null,
+      fetchConfig: async () => ({ scsi0: 'local:vm-101-disk-0,size=1G', net0: 'virtio=AA:BB:CC:DD:EE:01,bridge=vmbr0' }),
+    })
+    expect(totals.peekGuestNicFirewall('conn-1', 'qemu', '101')).toBe(false)
+    orchestrator.put.mockResolvedValueOnce({ data: { status: 'updated' }, status: 200 })
+
+    const { PUT } = handlersOf(await import('./route'))
+    const res = await callRoute(PUT, { params: PARAMS, body: { enable: true }, method: 'PUT' })
+
+    expect(res.status).toBe(200)
+    expect(totals.peekGuestNicFirewall('conn-1', 'qemu', '101')).toBe(true)
+  })
+
+  it('reads a guest again through the coverage only when its config is not in the inventory cache (UA46)', async () => {
+    const totals = await import('@/lib/inventory/guestDiskTotals')
+    totals.resetGuestDiskTotals()
+    const coverage = await import('@/lib/firewall/guestCoverage')
+    const forget = vi.spyOn(coverage, 'forgetGuestCoverage')
+    orchestrator.put.mockResolvedValueOnce({ data: { status: 'updated' }, status: 200 })
+
+    const { PUT } = handlersOf(await import('./route'))
+    const res = await callRoute(PUT, { params: PARAMS, body: { enable: true }, method: 'PUT' })
+
+    expect(res.status).toBe(200)
+    expect(forget).toHaveBeenCalledWith('conn-1', { type: 'qemu', vmid: '101' })
+    forget.mockRestore()
+  })
 })

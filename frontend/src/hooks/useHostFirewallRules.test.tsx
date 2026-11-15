@@ -129,4 +129,56 @@ describe('useHostFirewallRules', () => {
 
     expect(getNodeRules).not.toHaveBeenCalled()
   })
+
+  it('never lets the late answer of the connection that was left write the rules of the new one', async () => {
+    let failOld!: (err: Error) => void
+    getNodeRules.mockImplementation((conn) => (conn === 'conn-a'
+      ? new Promise<FirewallRule[]>((_resolve, reject) => { failOld = reject })
+      : Promise.resolve([rule(0), rule(1)])))
+
+    const { result, rerender } = renderHook(({ id }: { id: string }) => useHostFirewallRules(id, ['pve1']), {
+      initialProps: { id: 'conn-a' },
+    })
+
+    let oldLoad!: Promise<void>
+
+    act(() => { oldLoad = result.current.loadHostRules() })
+    expect(result.current.loadingHostRules).toBe(true)
+
+    rerender({ id: 'conn-b' })
+    expect(result.current.loadingHostRules).toBe(false)
+
+    await act(async () => { await result.current.loadHostRules() })
+    expect(result.current.hostRulesByNode).toEqual({ pve1: [rule(0), rule(1)] })
+
+    await act(async () => {
+      failOld(new Error('HTTP 500 from conn-a'))
+      await oldLoad
+    })
+
+    expect(result.current.hostRulesByNode).toEqual({ pve1: [rule(0), rule(1)] })
+    expect(result.current.hostRulesError).toBeNull()
+    expect(result.current.loadingHostRules).toBe(false)
+  })
+
+  it('drops a single-node reload that answers after a connection switch', async () => {
+    let answerOld!: (rules: FirewallRule[]) => void
+    getNodeRules.mockImplementationOnce(() => new Promise<FirewallRule[]>(resolve => { answerOld = resolve }))
+
+    const { result, rerender } = renderHook(({ id }: { id: string }) => useHostFirewallRules(id, ['pve1']), {
+      initialProps: { id: 'conn-a' },
+    })
+
+    let reload!: Promise<void>
+
+    act(() => { reload = result.current.reloadHostRulesForNode('pve1') })
+    rerender({ id: 'conn-b' })
+
+    await act(async () => {
+      answerOld([rule(9)])
+      await reload
+    })
+
+    expect(result.current.hostRulesByNode).toEqual({})
+  })
 })

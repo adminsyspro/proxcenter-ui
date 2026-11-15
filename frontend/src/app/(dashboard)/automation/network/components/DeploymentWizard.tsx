@@ -1,5 +1,6 @@
 'use client'
 
+import { paletteAlpha } from './paletteAlpha'
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 
@@ -297,8 +298,8 @@ export default function DeploymentWizard({
       {/* Add custom rule form */}
       <Box sx={{
         display: 'flex', gap: 1, alignItems: 'flex-end', mb: 2, p: 1.5,
-        borderRadius: 1.5, border: `1px dashed ${alpha(theme.palette.divider, 0.3)}`,
-        bgcolor: alpha(theme.palette.divider, 0.02)
+        borderRadius: 1.5, border: `1px dashed ${paletteAlpha(theme, 'divider', 0.3)}`,
+        bgcolor: paletteAlpha(theme, 'divider', 0.02)
       }}>
         <FormControl size="small" sx={{ minWidth: 90 }}>
           <InputLabel>{t('previewProtocol')}</InputLabel>
@@ -352,7 +353,7 @@ export default function DeploymentWizard({
       )}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
         {allRules.map((rule, idx) => (
-          <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1, borderRadius: 1, bgcolor: alpha(theme.palette.divider, 0.04) }}>
+          <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1, borderRadius: 1, bgcolor: paletteAlpha(theme, 'divider', 0.04) }}>
             {ruleStatuses[idx] === 'pending' && (
               <i className="ri-time-line" style={{ fontSize: 18, color: theme.palette.text.disabled }} />
             )}

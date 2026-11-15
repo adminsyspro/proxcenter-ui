@@ -1,6 +1,5 @@
 // Request and response schemas of the firewall entries. The handlers forward
 // the body to the orchestrator (or to Proxmox directly): documentation only.
-import { STRINGS } from "./shared"
 
 const ENABLE_01 = { type: "integer", enum: [0, 1] }
 const LOG_LEVEL = { type: "string", enum: ["emerg", "alert", "crit", "err", "warning", "notice", "info", "debug", "nolog"] }
@@ -105,30 +104,6 @@ export const FIREWALL_REQUEST_SCHEMAS: Record<string, Record<string, unknown>> =
     required: ["group"],
     properties: { group: { type: "string" }, comment: { type: "string" } },
   },
-  FirewallMicrosegBaseGenerateRequest: {
-    type: "object",
-    properties: {
-      dry_run: { type: "boolean", description: "Only return the plan" },
-      networks: { ...STRINGS, description: "Network aliases (net-*) to cover; all when empty" },
-      gateway_offset: { type: "integer", description: "Host part of the gateway address (default 254)" },
-      create_gateways: { type: "boolean", description: "Also create the missing gw-* aliases" },
-    },
-  },
-  FirewallVmIsolateRequest: {
-    type: "object",
-    description: "Only these fields, spelled exactly, are forwarded; another type than the one documented is refused 400.",
-    properties: {
-      enable_firewall: { type: "boolean" },
-      set_policy_in_drop: { type: "boolean" },
-      set_policy_out_drop: { type: "boolean" },
-      apply_base_sgs: {
-        type: "boolean",
-        description: "Apply the sg-base-* group of each guest network, creating a missing one (and its gw-* alias). Refused to a vDC tenant token: 403",
-      },
-      additional_sgs: { ...STRINGS, description: "Other security groups to apply" },
-      enable_nic_fw: { type: "boolean", description: "Set firewall=1 on every NIC" },
-    },
-  },
   FirewallVmNicFirewallUpdateRequest: {
     type: "object",
     required: ["enable"],
@@ -175,33 +150,6 @@ export const FIREWALL_RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> 
           },
         },
       },
-    },
-  },
-  FirewallMicrosegBaseGenerateResponse: {
-    type: "object",
-    properties: {
-      created_aliases: STRINGS,
-      created_groups: STRINGS,
-      errors: STRINGS,
-      dry_run: { type: "boolean" },
-      plan: {
-        type: "array",
-        description: "Dry run only",
-        items: {
-          type: "object",
-          properties: { type: { type: "string", enum: ["alias", "security_group"] }, name: { type: "string" }, description: { type: "string" } },
-        },
-      },
-    },
-  },
-  FirewallVmIsolateResponse: {
-    type: "object",
-    properties: {
-      success: { type: "boolean" },
-      applied_sgs: STRINGS,
-      enabled_nics: STRINGS,
-      actions: STRINGS,
-      errors: STRINGS,
     },
   },
 }

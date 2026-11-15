@@ -72,8 +72,8 @@ export default function DeploymentWizard({ open, onClose, selectedConnection, no
   const [activateError, setActivateError] = useState(false)
   const [activated, setActivated] = useState(false)
   const nodeFirewalls = useNodeFirewalls(open, selectedConnection, nodesList)
-  const following = nodeFirewalls ? Object.entries(nodeFirewalls).filter(([, s]) => s === 'follows').map(([n]) => n).sort() : []
-  const unknown = nodeFirewalls ? Object.entries(nodeFirewalls).filter(([, s]) => s === 'unknown').map(([n]) => n).sort() : []
+  const following = nodeFirewalls ? Object.entries(nodeFirewalls).filter(([, s]) => s === 'follows').map(([n]) => n).sort((a, b) => a.localeCompare(b)) : []
+  const unknown = nodeFirewalls ? Object.entries(nodeFirewalls).filter(([, s]) => s === 'unknown').map(([n]) => n).sort((a, b) => a.localeCompare(b)) : []
 
   const handleClose = useCallback(() => {
     onClose()

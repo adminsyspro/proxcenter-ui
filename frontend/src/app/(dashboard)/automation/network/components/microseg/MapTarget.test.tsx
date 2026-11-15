@@ -359,4 +359,71 @@ describe('the target search of a user who cannot read the inventory (D9)', () =>
     await node('guest:zw:qemu/100')
     expect(calls(COVERAGE)).toHaveLength(0)
   })
+
+  describe('outbound observed flows', () => {
+    const out = (id: string, over = {}) => wouldBlock(id, { direction: 'out', src_ip: '10.0.0.1', dst_zone_id: '', dst_key: '203.0.113.10', dst_ip: '203.0.113.10', ...over })
+
+    it('chooses the prefix of an outbound network in the dialog and sends it', async () => {
+      mock.routes['POST /suggestions/resolve'] = () => reply(200, { version: 4 })
+      setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1')] })
+      await node('guest:zw:qemu/100')
+      await target('web-1')
+      const row = within(await panel('Guest web-1')).getByRole('listitem', { name: 'Outgoing, to 203.0.113.10' })
+      fireEvent.click(within(row).getByRole('button', { name: 'Accept as CIDR' }))
+      expect(calls('POST /suggestions/resolve')).toHaveLength(0)
+      fireEvent.click(within(await screen.findByRole('dialog', { name: 'Accept as a network' })).getByRole('button', { name: 'Accept' }))
+      await waitFor(() => expect(calls('POST /suggestions/resolve')).toHaveLength(1))
+      expect(body(calls('POST /suggestions/resolve')[0][1])).toEqual({ version: 3, ids: ['o1'], action: 'accept_cidr', prefix_len: 24 })
+    })
+
+    it('names the destination of the accept button by its address, never as a deleted zone, and gives many destinations no accept button', async () => {
+      setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1'), out('o2', { dst_key: '0.0.0.0/0', dst_ip: '' })] })
+      await node('guest:zw:qemu/100')
+      await target('web-1')
+      const aside = await panel('Guest web-1')
+      expect(within(aside).getByRole('button', { name: /^Accept as flow web → 203\.0\.113\.10 / })).toBeTruthy()
+      expect(within(aside).queryByRole('button', { name: /^Accept as flow web → Many destinations / })).toBeNull()
+      expect(within(aside).queryByRole('button', { name: /Deleted zone/ })).toBeNull()
+    })
+
+    it('lists the outbound flows of its zone in the panel of another member, marked as coming from the zone, its own first', async () => {
+      setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1', { hits: 9 }), out('o2', { src_ip: '10.0.0.3', dport: '443', hits: 1 })] })
+      await node('guest:zw:qemu/101')
+      await target('web-2')
+      const rows = within(await panel('Guest web-2')).getAllByRole('listitem')
+      expect(rows.map(r => r.getAttribute('data-suggestion'))).toEqual(['o2', 'o1'])
+      expect(within(rows[0]).queryByText('from zone web')).toBeNull()
+      expect(within(rows[1]).getByText('from zone web')).toBeTruthy()
+    })
+
+    it('adds the protocol to a service name two rows share for different protocols', async () => {
+      setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1', { proto: 'udp', dport: '53' }), out('o2', { proto: 'tcp', dport: '53' }), out('o3', { proto: 'tcp', dport: '22' })] })
+      await node('guest:zw:qemu/100')
+      await target('web-1')
+      const aside = await panel('Guest web-1')
+      expect(within(aside).getByText('DNS (udp)')).toBeTruthy()
+      expect(within(aside).getByText('DNS (tcp)')).toBeTruthy()
+      expect(within(aside).getByText('SSH')).toBeTruthy()
+    })
+
+    it('offers neither Accept nor a network for many destinations, only the hint', async () => {
+      setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1', { dst_key: '0.0.0.0/0', dst_ip: '' })] })
+      await node('guest:zw:qemu/100')
+      await target('web-1')
+      const row = within(await panel('Guest web-1')).getByRole('listitem')
+      expect(within(row).queryByRole('button', { name: 'Accept as CIDR' })).toBeNull()
+      expect(within(row).queryByRole('button', { name: /^Accept as flow/ })).toBeNull()
+      expect(within(row).getByRole('img', { name: 'Create a flow by hand to allow this service to any address.' })).toBeTruthy()
+    })
+
+    it('says in the Accept tooltip that an outbound flow to a zone also opens the inbound of that zone', async () => {
+      setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1', { dst_zone_id: 'zd', dst_key: 'zd', dst_ip: '10.0.0.9' })] })
+      await node('guest:zw:qemu/100')
+      await target('web-1')
+      const row = within(await panel('Guest web-1')).getByRole('listitem')
+      const accept = within(row).getByRole('button', { name: /^Accept as flow web → db / })
+      fireEvent.mouseOver(accept.parentElement as HTMLElement)
+      expect((await screen.findByRole('tooltip')).textContent).toMatch(/Adds the flow web → db: it also allows db's inbound from web\./)
+    })
+  })
 })

@@ -1,6 +1,6 @@
 /**
  * Shared fixtures of the plan dialog tests: plan and apply runs as GET /runs/{id}
- * answers them, and the tab opened on its "View plan" button.
+ * answers them, and the tab opened on its "Review and apply" button.
  */
 
 import { screen, fireEvent } from '@/__tests__/setup/renderWithProviders'
@@ -53,10 +53,10 @@ export function resetPlanMocks(plan: MicrosegRun = planRun()) {
   mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: VMS } })
 }
 
-/** Renders the tab and opens the plan window from the pending changes bar. */
+/** Renders the tab and opens the plan window from the pending changes bar, or from the first run guide when nothing is pending. */
 export async function openPlanDialog() {
   renderTab()
-  fireEvent.click(await screen.findByRole('button', { name: 'View plan' }))
+  fireEvent.click(await screen.findByRole('button', { name: /^(Review and apply|View plan)$/ }))
   return screen.findByRole('dialog', { name: 'Micro-segmentation plan' })
 }
 

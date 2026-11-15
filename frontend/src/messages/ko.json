@@ -9384,40 +9384,8 @@
     "loadErrorDetails": "자세히",
     "loadErrorHideDetails": "자세히 숨기기",
     "dashboard": {
-      "stopHeldTitle": "긴급 중지로 클러스터 방화벽이 꺼져 있음",
-      "coverageDefinition": "보호됨: 게스트 옵션과 네트워크 인터페이스 중 하나에서 방화벽이 켜져 있음(Proxmox가 적용하는 기준)",
-      "coverageSampled": "게스트가 {max, number}개를 넘으면 고르게 뽑은 표본만 측정합니다.",
-      "todoTitle": "할 일",
-      "todoNothing": "할 일 없음",
-      "todoUnavailable": "방화벽 데이터를 읽을 수 없는 동안에는 사용할 수 없음",
-      "todoFirewallOff": "클러스터 방화벽 꺼짐",
-      "todoManagementRules": "관리 접근을 허용하는 클러스터 규칙이 없음({count, plural, other {포트 {ports}}})",
-      "todoPolicyIn": "인바운드 정책 ACCEPT: 규칙이 차단하지 않는 모든 트래픽이 들어옵니다",
-      "todoUnprotected": "{count, plural, other {방화벽이 없는 게스트 #개}}",
-      "todoUnzoned": "{count, plural, other {어느 영역에도 없는 실행 중 게스트 #개}}",
-      "todoPendingFlows": "{count, plural, other {검토할 관찰된 흐름 #개}}",
-      "todoPendingFlowsMore": "검토할 관찰된 흐름 최소 {count, number}개",
-      "todoResume": "재개",
-      "todoOpenWizard": "마법사 열기",
-      "todoOpenOptions": "변경",
-      "todoShowThem": "보기",
-      "todoOpenDrifts": "드리프트 열기",
-      "todoOpenObservation": "검토",
       "filterUnprotected": "{count, plural, other {방화벽이 없는 게스트 #개}}",
       "filterClear": "모든 게스트 보기",
-      "postureChipCluster": "클러스터 방화벽 {state} · 인바운드 {policy}",
-      "postureChipHost": "호스트 방화벽 {state} · 인바운드 {policy}",
-      "postureOn": "켜짐",
-      "postureOff": "꺼짐",
-      "postureChipClusterUnknown": "클러스터 방화벽 정보 없음",
-      "postureChipStopped": "긴급 중지 활성",
-      "postureChipZones": "차단 중인 영역 {enforced, number} / {total, number}",
-      "postureChipZonesUnknown": "차단 중인 영역 -",
-      "postureChipGuests": "보호된 게스트 {protected, number} / 실행 중 {running, number}",
-      "postureChipGuestsSampled": "보호된 게스트 {protected, number} / 측정 {running, number} · 실행 중 {total, number}",
-      "postureChipGuestsUnknown": "보호된 게스트 -",
-      "postureChipLastCheck": "마지막 점검 {time}",
-      "postureChipNoCheck": "아직 점검 없음",
       "postureTrafficByZone": "영역별 트래픽",
       "postureTrafficByVlan": "VLAN별 트래픽",
       "postureTrafficByNode": "노드별 트래픽",
@@ -9431,6 +9399,7 @@
       "postureHits": "{count, plural, other {적중 #회}}",
       "postureMembers": "{count, plural, other {게스트 #개}}",
       "postureUnknownExternal": "알 수 없음 / 외부",
+      "postureOutside": "영역 밖",
       "postureUnzoned": "영역 없음",
       "postureOther": "기타",
       "postureNoVlan": "VLAN 없음",
@@ -9445,23 +9414,29 @@
       "postureAllowed": "허용됨",
       "postureWouldBlock": "차단될 예정",
       "postureBlocked": "차단됨",
-      "postureNotCovered": "적용 안 됨",
       "postureFlows": "{count, plural, other {흐름 #개}}",
       "postureNoCounter": "카운터 없음",
+      "postureNoCounterHint": "정책이 허용한 흐름은 로그에 기록되지 않으므로 발생 횟수가 집계되지 않습니다.",
       "postureAwaitingDecision": "결정 대기 중",
       "postureBlockedIn": "{zones}에서",
+      "postureBlockedOut": "{zones}에서 나가는 방향",
       "postureBlockedNone": "차단된 흐름 없음",
       "postureServicesTitle": "적중 수 기준 상위 서비스",
+      "postureServicesShown": "서비스 {total, number}개 중 {shown, number}개",
+      "postureServicesAll": "관찰된 모든 흐름",
       "postureColService": "서비스",
       "postureColFlows": "흐름",
       "postureColHits": "적중",
       "postureColStatus": "상태",
       "postureNoServices": "관찰되거나 허용된 서비스 없음",
+      "postureConversationsTitle": "주요 통신",
+      "postureConversationsCaption": "출발지에서 목적지로, 발생 횟수순",
+      "postureColSource": "출발지",
+      "postureColDestination": "목적지",
+      "postureColServices": "서비스",
+      "postureNoConversations": "검토할 관찰된 흐름이 없습니다",
+      "postureConversationsShown": "{total}개 중 {shown}개 통신",
       "postureUnknownIncludesUnzoned": "게스트 목록을 읽기 전까지 알 수 없는 출발지에는 영역 없는 게스트가 포함됩니다 (VLAN 또는 노드별 그룹화)",
-      "postureRefresh": "적용 범위 다시 계산",
-      "postureRefreshAgo": "{time} 계산됨 · 다시 계산",
-      "postureRefreshSoon": "{time} 계산됨 · 30초 이내의 새 수치",
-      "postureRefreshComputing": "적용 범위 계산 중",
       "postureTimelineTitle": "시간별 관찰 트래픽",
       "postureTimelineWindow": "포함 구간: {minutes, plural, other {최근 #분}} (오케스트레이터 메모리)",
       "postureTimelineVerdict": "판정",
@@ -9513,54 +9488,31 @@
     }
   },
   "deployWizard": {
-    "bannerTitle": "클러스터 방화벽이 구성되지 않았습니다",
-    "bannerDescription": "클러스터에 방화벽 규칙이 없고 방화벽이 비활성화되어 있습니다. 연결이 끊기지 않도록 방화벽을 활성화하기 전에 필수 규칙을 배포하세요.",
-    "bannerButton": "방화벽 배포",
     "dialogTitle": "클러스터 방화벽 배포",
     "stepAnalysis": "분석",
-    "stepPreview": "미리 보기",
-    "stepApply": "적용",
     "stepActivate": "활성화",
     "stepDone": "완료",
     "analysisTitle": "현재 클러스터 상태",
     "analysisNodes": "노드 {count}개 감지됨",
     "analysisFirewallOff": "클러스터 방화벽이 비활성화되어 있습니다",
-    "analysisNoRules": "구성된 클러스터 방화벽 규칙이 없습니다",
-    "analysisPolicyAccept": "기본 정책: ACCEPT (모든 트래픽 허용)",
-    "analysisWarning": "화이트리스트 규칙 없이 DROP 정책으로 방화벽을 활성화하면 클러스터 통신(Corosync, Ceph, 마이그레이션 등)이 중단됩니다. 이 마법사가 먼저 필수 규칙을 생성합니다.",
-    "previewTitle": "생성될 규칙",
-    "previewDescription": "필수 Proxmox 서비스를 화이트리스트에 추가하기 위해 다음 {count}개 규칙이 클러스터 방화벽에 추가됩니다.",
-    "previewService": "서비스",
-    "previewProtocol": "프로토콜",
-    "previewPorts": "포트",
-    "previewDirection": "방향",
-    "previewAction": "동작",
-    "applyTitle": "규칙 적용 중",
-    "applyCreating": "규칙 생성 중: {service}",
-    "applySuccess": "규칙 생성됨: {service}",
-    "applyError": "규칙 생성 실패: {service}",
-    "applyComplete": "{count}개 규칙이 모두 성공적으로 생성되었습니다!",
-    "applyPartial": "{total}개 중 {success}개 규칙이 생성되었습니다. {failed}개 실패.",
+    "analysisNodesReading": "노드 방화벽을 읽는 중…",
+    "analysisNodesOff": "모든 노드의 방화벽이 꺼져 있습니다. 클러스터 방화벽을 켜면 게스트만 필터링됩니다",
+    "analysisNodesFollow": "{count, plural, other {노드 #개가 클러스터와 함께 자체 방화벽을 켭니다: {nodes}}}",
+    "analysisInfo": "이 마법사는 게스트 방화벽과 마이크로 세그멘테이션에 필요한 클러스터 방화벽을 켭니다. 노드에는 규칙이나 인바운드 정책을 전혀 쓰지 않습니다.",
+    "analysisNodesWarning": "{nodes}에서는 노드 방화벽이 꺼져 있지 않으므로(enable: 0 아님) Proxmox가 클러스터 방화벽과 함께 이를 켜고 관리자가 설정한 규칙으로 노드를 필터링합니다. ProxCenter는 규칙을 추가하지 않습니다. 웹 UI(8006)와 SSH(22)에 계속 접근할 수 있는지 확인하거나 노드 방화벽을 끄십시오.",
+    "analysisNodesUnknown": "{nodes}의 방화벽을 읽을 수 없습니다. 클러스터 방화벽을 켜기 전에 확인하십시오.",
     "activateTitle": "방화벽 활성화",
-    "activateEnableFirewall": "클러스터 방화벽 활성화",
-    "activateSetDrop": "인바운드 정책을 DROP으로 설정",
-    "activateWarning": "DROP 정책을 활성화하면 규칙에서 명시적으로 허용되지 않은 모든 인바운드 트래픽이 차단됩니다. 이전 단계에서 생성한 규칙이 클러스터 서비스의 접근성을 보장합니다.",
+    "activateDescription": "클러스터 방화벽이 켜집니다. 그 외에는 아무것도 바뀌지 않습니다. 규칙, 정책, 노드 방화벽은 그대로 유지됩니다.",
+    "activateFailed": "클러스터 방화벽을 켤 수 없습니다. 다시 시도하거나 방화벽 > 옵션에서 켜십시오.",
     "activateButton": "활성화",
     "activateSkip": "지금은 건너뛰기",
     "activating": "활성화 중...",
     "doneTitle": "배포 완료!",
-    "doneRulesCreated": "클러스터 규칙 {count}개 생성됨",
     "doneFirewallEnabled": "클러스터 방화벽 활성화됨",
     "doneFirewallNotEnabled": "클러스터 방화벽이 활성화되지 않음 (수동 활성화 필요)",
-    "donePolicyDrop": "인바운드 정책이 DROP으로 설정됨",
-    "donePolicyAccept": "인바운드 정책이 ACCEPT로 유지됨",
-    "doneViewRules": "규칙 보기",
     "doneClose": "닫기",
     "next": "다음",
-    "cancel": "취소",
-    "customAdd": "추가",
-    "customComment": "설명",
-    "customCommentPlaceholder": "예: HTTPS, 모니터링 등"
+    "cancel": "취소"
   },
   "firewall": {
     "type": "유형",
@@ -13303,7 +13255,9 @@
         "done": "완료",
         "failed": "실패",
         "running": "실행 중"
-      }
+      },
+      "logNode": "{node} · 분당 {rate}줄 · {lag} 지연",
+      "logBehind": "로그 지연"
     },
     "stop": {
       "button": "긴급 중지",
@@ -13319,29 +13273,45 @@
       "infoObjects": "마이크로 세분화 개체는 그대로 유지되며, 재개하면 클러스터 방화벽을 다시 활성화하고 정책을 다시 적용합니다",
       "infoUse": "세분화가 막지 말아야 할 트래픽을 차단할 때 사용하세요",
       "resumeInfoReenable": "클러스터 방화벽을 다시 활성화한 뒤 마지막 리비전을 다시 적용합니다",
-      "resumeInfoSocle": "관리 규칙(SSH 22, 웹 8006)이 없으면 거부됩니다. 먼저 대시보드의 배포 마법사에서 수정하세요",
-      "openWizard": "배포 마법사 열기",
+      "resumeInfoSocle": "자체 방화벽이 켜진 노드가 웹 UI(8006)와 SSH(22)를 허용하지 않으면 거부됩니다. 먼저 해당 노드 방화벽에서 허용하거나 끄십시오",
       "clusterFirewallOff": "클러스터 방화벽 비활성화됨",
-      "notDeployed": "배포된 항목 없음"
+      "notDeployed": "배포된 항목 없음",
+      "socleUncovered": "규칙이 허용하지 않는 주소: {ips}",
+      "socleUncoveredNodes": "규칙이 허용하지 않는 주소: {ips} ({nodes})"
     },
     "pending": {
-      "noCount": "적용되지 않은 변경",
-      "viewPlan": "계획 보기",
+      "noCount": "변경 사항이 아직 적용되지 않았습니다.",
+      "viewPlan": "검토 후 적용",
       "prefixed": "{prefix} - {text}",
-      "whatWillChange": "변경될 내용: {list}",
+      "whatWillChange": "아직 적용되지 않음: {list}.",
       "zones": {
         "added": "{count, plural, other {영역 #개 추가}}",
         "changed": "{count, plural, other {영역 #개 변경}}",
         "removed": "{count, plural, other {영역 #개 삭제}}"
+      },
+      "zonesNamed": {
+        "added": "{count, plural, other {영역 {names} 추가}}",
+        "changed": "{count, plural, other {영역 {names} 변경}}",
+        "removed": "{count, plural, other {영역 {names} 삭제}}"
       },
       "flows": {
         "added": "{count, plural, other {플로우 #개 추가}}",
         "changed": "{count, plural, other {플로우 #개 변경}}",
         "removed": "{count, plural, other {플로우 #개 삭제}}"
       },
+      "flowsNamed": {
+        "added": "플로우 {flow} 추가",
+        "changed": "플로우 {flow} 변경",
+        "removed": "플로우 {flow} 삭제"
+      },
       "members": "{count, plural, other {구성원 변경 #개}}",
+      "membersTo": "{count, plural, other {게스트 #개를 {zone}(으)로}}",
       "tagPrefix": "태그 접두사 변경",
-      "whatWillChangeInline": "변경될 내용: {list}"
+      "whatWillChangeInline": "아직 적용되지 않음: {list}.",
+      "untilApplied": "계획을 적용하기 전에는 Proxmox에 아무것도 변경되지 않습니다.",
+      "applying": "적용 중: {list}",
+      "applyingInline": "적용 중: {list}",
+      "applyingNoCount": "변경 사항을 적용하는 중"
     },
     "firstRun": {
       "title": "마이크로 세분화 설정",
@@ -13376,7 +13346,7 @@
       "NETWORK": "ProxCenter에 연결할 수 없습니다. 네트워크 연결을 확인하세요.",
       "CHECK_PENDING": "이미 대기 중인 점검이 있습니다. 엔진이 다음 실행 때 시작합니다.",
       "generic": "문제가 발생했습니다. 다시 시도하세요.",
-      "SOCLE_MISSING": "관리 규칙(SSH 22, 웹 8006)이 없어 클러스터 방화벽을 다시 활성화하지 않았습니다. 배포 마법사로 추가한 뒤 재개하세요.",
+      "SOCLE_MISSING": "자체 방화벽이 켜진 노드가 웹 UI(8006)와 SSH(22)를 허용하지 않아 클러스터 방화벽을 다시 켜지 않았습니다. 해당 노드 방화벽에서 허용하거나 끈 다음 재개하십시오.",
       "NOT_DEPLOYED": "아직 배포된 항목이 없습니다. 먼저 계획을 적용하세요. 긴급 중지는 배포된 정책에 작동합니다."
     },
     "policy": {
@@ -13408,6 +13378,7 @@
         "outgoing": "송신 플로우",
         "noFlows": "없음",
         "changeState": "상태 변경",
+        "stateChanging": "상태 변경 중",
         "edit": "영역 편집",
         "delete": "영역 삭제",
         "state": {
@@ -13448,15 +13419,37 @@
           "loading": "기록을 읽는 중...",
           "disabled": "영역 비활성화됨: 트래픽이 기록되지 않음",
           "aria": "최근 24시간 미적용 트래픽: 히트 {count}개",
-          "bar": "{from}~{to}: 히트 {count}개"
-        }
+          "bar": "{from}~{to}: 히트 {count}개",
+          "barBoth": "{from}~{to}: 수신 {count, plural, other {#회}}, 송신 {out, plural, other {#회}}",
+          "legendIn": "수신",
+          "legendOut": "송신",
+          "outBlocked": "송신 {short} 차단됨",
+          "outWouldBlock": "송신 {short} 차단 예정",
+          "outConnections": "송신 연결 {short}건"
+        },
+        "egress": {
+          "state": {
+            "off": "아웃바운드: 제어 안 함",
+            "observe": "아웃바운드: 관찰 중",
+            "ready": "아웃바운드: 준비됨",
+            "enforce": "아웃바운드: 차단 중"
+          },
+          "hint": {
+            "off": "아웃바운드 트래픽이 제어되지 않습니다",
+            "observe": "아웃바운드 트래픽을 기록하며 아무것도 차단하지 않습니다",
+            "ready": "관찰 기간 내내 아웃바운드에서 차단될 항목이 없었습니다",
+            "enforce": "정책의 플로우만 영역 밖으로 나갑니다"
+          }
+        },
+        "gatewayTip": "게이트웨이 {ip}"
       },
       "flow": {
-        "notApplied": "적용되지 않음 (v1에서는 송신을 관리하지 않음)",
+        "notApplied": "적용되지 않음 (송신 제어 안 함)",
         "learned": "학습됨",
         "edit": "플로우 편집",
         "delete": "플로우 삭제",
-        "createdBy": "작성자: {user}"
+        "createdBy": "작성자: {user}",
+        "observed": "송신 관찰 중"
       },
       "zoneDialog": {
         "createTitle": "새 영역",
@@ -13466,8 +13459,74 @@
         "label": "레이블",
         "color": "색상",
         "isolate": "구성원 간 격리",
+        "members": "구성원",
+        "inboundSection": "인바운드",
+        "inboundStates": {
+          "disabled": "비활성",
+          "observe": "관찰",
+          "enforce": "차단"
+        },
+        "egressSection": "아웃바운드",
+        "outboundStates": {
+          "off": "제어 안 함",
+          "observe": "관찰",
+          "enforce": "차단"
+        },
+        "egressFilter": "아웃바운드 트래픽 필터링 대상:",
+        "egressFilterTo": "필터링 대상",
+        "egressLocal": "로컬 네트워크",
+        "egressAll": "로컬 네트워크 및 인터넷",
+        "egressAllWarning": "IP 주소 기준 필터링만 가능: 도메인 이름 뒤의 서비스는 주소가 바뀔 수 있습니다.",
+        "egressNeedsState": "존이 관찰 또는 차단 상태여야 합니다",
+        "tips": {
+          "isolate": "이 존의 VM은 선언된 흐름을 통해서만 서로 연결됩니다. 선택 해제하면 자유롭게 통신합니다.",
+          "inbound": {
+            "disabled": "존이 Proxmox에 적용되지 않습니다.",
+            "observe": "아무것도 차단되지 않습니다. 정책 밖의 인바운드 트래픽은 기록되고 제안으로 표시됩니다.",
+            "enforce": "정책의 흐름만 들어옵니다. 나머지는 차단되며 차단됨에서 볼 수 있습니다."
+          },
+          "outbound": {
+            "off": "존의 VM은 자유롭게 나가며 아무것도 기록되지 않습니다.",
+            "observe": "아무것도 차단되지 않습니다. 정책 밖의 아웃바운드 트래픽은 기록되고 제안으로 표시됩니다.",
+            "enforce": "흐름이 허용한 아웃바운드 트래픽만 통과합니다. 나머지는 차단되며 차단됨에서 볼 수 있습니다."
+          },
+          "local": "존에 속한 VM의 서브넷으로 나가는 트래픽을 필터링합니다(존이 없는 VM 포함). 인터넷은 열려 있습니다.",
+          "all": "인터넷을 포함한 모든 아웃바운드 트래픽을 필터링합니다. 정책의 흐름만 통과합니다."
+        },
+        "statesTitle": "존 {name}의 상태를 변경할까요?",
+        "statesConfirm": "상태 적용",
+        "inboundRunFailed": "인바운드 상태 변경에 실패했습니다. 아웃바운드는 변경되지 않았습니다.",
+        "egressOnTitle": "{name} 존의 아웃바운드 트래픽을 제어하시겠습니까?",
+        "egressOffTitle": "{name} 존의 아웃바운드 트래픽 제어를 중지하시겠습니까?",
+        "egressOnBody": "존의 아웃바운드 트래픽이 관찰 상태가 됩니다.",
+        "egressOffBody": "존의 아웃바운드 필터링이 제거됩니다.",
+        "egressIsolateNote": "격리 변경 사항도 함께 적용됩니다.",
+        "egressOnConfirm": "제어",
+        "egressOffConfirm": "제어 중지",
         "create": "만들기",
-        "save": "저장"
+        "save": "저장",
+        "gateway": "게이트웨이",
+        "gatewayHint": "영역 네트워크의 라우터(선택 사항)",
+        "gatewayAllow": "게이트웨이로 허용",
+        "gatewayServices": {
+          "dns": "DNS",
+          "ntp": "NTP",
+          "ping": "Ping",
+          "http": "HTTP",
+          "https": "HTTPS",
+          "ssh": "SSH",
+          "snmp": "SNMP",
+          "syslog": "Syslog",
+          "proxy": "HTTP 프록시",
+          "all": "모든 프로토콜"
+        },
+        "gatewayAllowed": "초안의 흐름이 이미 허용합니다",
+        "gatewayFlowComment": "영역 게이트웨이",
+        "gatewayFirst": "먼저 게이트웨이를 입력하세요",
+        "gatewayServicesHint": "목록에서 선택하거나 프로토콜과 포트를 입력하세요: tcp/8443, udp/5000:5010, icmp, any",
+        "gatewayTypedInvalid": "인식할 수 없는 서비스: 포트가 있는 tcp 또는 udp(tcp/8443, udp/53,123, tcp/5000:5010), 또는 icmp, icmpv6, any",
+        "gatewayTypeHint": "서비스를 선택하거나 입력",
+        "gatewayAdd": "{service} 추가"
       },
       "flowDialog": {
         "createTitle": "새 플로우",
@@ -13499,7 +13558,8 @@
         "cidrBoth": "플로우는 양쪽 모두 CIDR일 수 없습니다.",
         "protoInvalid": "잘못된 프로토콜",
         "portInvalid": "잘못된 포트입니다. 80, 80,443 또는 8000:8100 (1~65535)을 사용하세요.",
-        "portNotAllowed": "이 프로토콜에서는 포트를 사용할 수 없습니다."
+        "portNotAllowed": "이 프로토콜에서는 포트를 사용할 수 없습니다.",
+        "gatewayInvalid": "접두사 없는 IPv4 또는 IPv6 주소"
       },
       "delete": {
         "zoneTitle": "영역 {name}을(를) 삭제할까요?",
@@ -13521,11 +13581,21 @@
         "running": {
           "disabled": "{label}: 비활성으로 변경 중",
           "observe": "{label}: 관찰로 변경 중",
-          "enforce": "{label}: 적용으로 변경 중"
+          "enforce": "{label}: 적용으로 변경 중",
+          "egressObserve": "{label}: 아웃바운드 제어 진행 중",
+          "egressOff": "{label}: 아웃바운드 제어 해제 진행 중",
+          "egressReopen": "{label}: 아웃바운드를 다시 여는 중",
+          "egressEnforce": "{label}: 아웃바운드를 차단하는 중"
         },
         "done": "{label}: 완료 {done}, 실패 {failed}, 미실행 {notRun}",
         "failed": "{label}: 실행에 실패했습니다",
-        "unavailable": "{label}: 진행 상황을 확인할 수 없습니다"
+        "unavailable": "{label}: 진행 상황을 확인할 수 없습니다",
+        "progress": {
+          "waiting": "진행 중인 작업을 기다리는 중",
+          "readingStart": "Proxmox 읽는 중",
+          "reading": "Proxmox 읽는 중, 게스트 {done, number} / {total, number}",
+          "writing": "Proxmox에 쓰는 중, {done, number} / {total, number}"
+        }
       },
       "assign": {
         "title": "{zone}에 게스트 할당",
@@ -13597,13 +13667,31 @@
           "pendingChangeHint": "다음 적용 시 변경됨",
           "pendingRemoval": "삭제 대기 중",
           "pendingRemovalHint": "다음 적용 시 삭제됨",
-          "notApplied": "v1에서 적용 안 됨",
-          "notAppliedHint": "적용되지 않음 (v1에서는 송신을 관리하지 않음)",
-          "unknownHint": "적용된 리비전과 비교하는 중..."
+          "notApplied": "적용되지 않음",
+          "notAppliedHint": "적용되지 않음 (송신 제어 안 함)",
+          "unknownHint": "적용된 리비전과 비교하는 중...",
+          "observed": "송신 관찰 중",
+          "observedHint": "송신 관찰 중: 영역이 이 플로우를 아직 차단하지 않고 기록만 합니다"
         },
         "uncovered": "{count, plural, other {미허용 24시간: 히트 #회}}",
         "uncoveredHint": "어떤 플로우도 허용하지 않는 이 영역으로의 트래픽 (지난 24시간 동안 영역 구성원이 기록)",
         "noFlowInto": "이 영역으로 들어오는 플로우가 없습니다"
+      },
+      "egressState": {
+        "title": {
+          "block": "{name} 영역의 아웃바운드를 차단하시겠습니까?",
+          "reopen": "{name} 영역의 아웃바운드를 다시 여시겠습니까?"
+        },
+        "reopenBody": "아웃바운드가 관찰 상태로 돌아가며 더 이상 아무것도 차단되지 않습니다.",
+        "checking": "아웃바운드 관찰을 확인하는 중...",
+        "ready": "최근 {hours}시간 동안 아웃바운드에서 차단될 항목이 없었습니다.",
+        "notReady": "이 영역은 준비되지 않았습니다. 차단될 대기 중 트래픽 없이 {hours}시간 동안 아웃바운드를 관찰해야 합니다.",
+        "unchecked": "아웃바운드 관찰을 확인할 수 없어 영역을 준비되지 않은 것으로 처리합니다.",
+        "typeName": "확인하려면 {name}을(를) 입력하세요",
+        "confirm": {
+          "block": "아웃바운드 차단",
+          "reopen": "아웃바운드 다시 열기"
+        }
       }
     },
     "plan": {
@@ -13623,6 +13711,13 @@
       "nothing": "변경할 내용이 없습니다. Proxmox가 이미 초안과 일치합니다.",
       "clusterGroup": "클러스터 객체",
       "stepCount": "{count, plural, one {#단계} other {#단계}}",
+      "stepState": {
+        "waiting": "대기 중",
+        "running": "기록 중",
+        "done": "완료",
+        "failed": "실패",
+        "notRun": "실행되지 않음"
+      },
       "collisions": "차단됨: 다음 Proxmox 객체가 우리 이름을 쓰지만 우리 것이 아닙니다. 이름을 바꾸거나 삭제하세요: {names}",
       "foreignRules": "우리 보안 그룹에 수동으로 추가된 규칙은 그대로 유지되며 변경되지 않습니다: {names}",
       "unread": "{count, plural, one {게스트 #개를 읽지 못했으며 다음 실행에서 처리됩니다} other {게스트 #개를 읽지 못했으며 다음 실행에서 처리됩니다}}: {names}",
@@ -13692,6 +13787,46 @@
           "title": "Proxmox에서 이미 사용 중인 이름",
           "detail": "{object}은(는) 이미 Proxmox에 있고 ProxCenter가 만든 것이 아니므로 건드리지 않습니다.",
           "hint": "마이크로 세분화 표시가 없는 pcz-* 이름의 개체가 Proxmox에 있습니다. Proxmox에서 이름을 바꾸거나 삭제하세요."
+        },
+        "egress_rule_missing": {
+          "title": "송신 규칙 없음",
+          "detail": "{name}의 최종 송신 규칙이 Proxmox에 없습니다.",
+          "detailCollision": "{name}은(는) 송신을 차단할 수 없습니다. Proxmox에서 pcz-_local은 다른 사용자의 객체입니다.",
+          "hintCollision": "Proxmox에 마이크로 세그멘테이션 표식이 없는 pcz-_local 객체가 있습니다. Proxmox에서 이름을 바꾸거나 삭제하세요."
+        },
+        "egress_rule_misplaced": {
+          "title": "송신 규칙 위치 오류",
+          "detail": "{name}의 최종 송신 규칙이 마지막 규칙이 아니거나 두 번 나타납니다.",
+          "detailKnown": "{name}의 알려진 대상 규칙이 최종 송신 규칙 바로 앞에 있지 않습니다."
+        },
+        "egress_rule_verdict": {
+          "title": "송신 규칙 판정 불일치",
+          "detail": "{name}의 최종 송신 규칙이 {want}이(가) 아니라 {have}입니다.",
+          "detailCollision": "{name}은(는) 차단할 수 없습니다. Proxmox에서 pcz-_local은 다른 사용자의 객체라 송신 규칙이 {have}로 남습니다.",
+          "detailDest": "{name}의 송신 규칙이 {wantDest} 대신 {haveDest}을(를) 대상으로 합니다.",
+          "hintCollision": "Proxmox에 마이크로 세그멘테이션 표식이 없는 pcz-_local 객체가 있습니다. Proxmox에서 이름을 바꾸거나 삭제하세요."
+        },
+        "known_rule_missing": {
+          "title": "알려진 대상 규칙 없음",
+          "detail": "{name}에 pcz-_known 그룹의 규칙이 없습니다."
+        },
+        "known_rule_extra": {
+          "title": "알려진 대상 규칙 초과",
+          "detail": "{name}에 송신 상태에서 더 이상 필요하지 않은 pcz-_known 그룹 규칙이 남아 있습니다."
+        },
+        "local_set_desync": {
+          "title": "로컬 네트워크 세트 불일치",
+          "detail": "{object}에 {desired} 대신 {actual}이(가) 들어 있습니다."
+        },
+        "egress_no_subnet": {
+          "title": "알려진 서브넷 없는 송신",
+          "detail": "{zone}의 {name}에 알려진 서브넷이 없습니다. 로컬 네트워크가 자신의 IP로 한정됩니다.",
+          "hint": "알려진 서브넷이 없습니다. Proxmox에서 게스트의 네트워크 설정(접두사 길이가 있는 IP 또는 QEMU 게스트 에이전트)을 확인하세요."
+        },
+        "destinationAll": "모든 대상",
+        "destinationLocal": "로컬 네트워크",
+        "verdict": {
+          "disabled": "비활성화됨"
         }
       },
       "chip": {
@@ -13702,7 +13837,14 @@
         "member_without_ip": "IP 없음",
         "ambiguous_zone": "여러 영역",
         "object_collision": "이름 사용 중",
-        "generic": "불일치"
+        "generic": "불일치",
+        "egress_rule_missing": "송신 규칙 없음",
+        "egress_rule_misplaced": "송신 위치 오류",
+        "egress_rule_verdict": "송신 판정 불일치",
+        "known_rule_missing": "알려진 규칙 없음",
+        "known_rule_extra": "알려진 규칙 초과",
+        "local_set_desync": "로컬 세트 불일치",
+        "egress_no_subnet": "서브넷 없음"
       },
       "zoneFilter": "영역 {name}만",
       "zoneFilterClear": "모든 영역 표시",
@@ -13714,6 +13856,13 @@
         "member_without_ip": "알려진 IP가 없는 구성원 ({count, number})",
         "ambiguous_zone": "여러 영역에 있는 게스트 ({count, number})",
         "object_collision": "Proxmox에서 이미 사용 중인 이름 ({count, number})",
+        "egress_rule_missing": "누락된 아웃바운드 규칙 ({count, number})",
+        "egress_rule_misplaced": "잘못된 위치의 아웃바운드 규칙 ({count, number})",
+        "egress_rule_verdict": "판정이 잘못된 아웃바운드 규칙 ({count, number})",
+        "known_rule_missing": "누락된 알려진 주소 규칙 ({count, number})",
+        "known_rule_extra": "남아 있는 알려진 주소 규칙 ({count, number})",
+        "local_set_desync": "동기화되지 않은 로컬 네트워크 세트 ({count, number})",
+        "egress_no_subnet": "로컬 서브넷이 없는 아웃바운드 ({count, number})",
         "generic": "{kind} (개수 {count, number})"
       },
       "noneZone": "없음",
@@ -13746,7 +13895,11 @@
         "status": "상태",
         "statusAll": "모든 상태",
         "zone": "영역",
-        "zoneAll": "모든 영역"
+        "zoneAll": "모든 영역",
+        "direction": "방향",
+        "directionAll": "전체",
+        "directionIn": "인바운드",
+        "directionOut": "아웃바운드"
       },
       "kind": {
         "would_block": "차단될 흐름",
@@ -13803,6 +13956,7 @@
       "dismissTip": "이 쌍에 대한 이 제안을 숨깁니다.",
       "bulkLabel": "선택한 흐름",
       "bulkAcceptTip": "선택한 각 제안의 영역 간 흐름을 초안에 만듭니다.",
+      "bulkAcceptOutZoneTip": "선택한 각 제안의 영역 간 플로우를 초안에 만듭니다. 영역으로 향하는 아웃바운드 플로우는 소스 영역에서 대상 영역으로의 인바운드도 함께 허용합니다.",
       "bulkCidrTip": "각 출발지를 주소 범위로 하여 같은 흐름을 만듭니다.",
       "bulkDismissTip": "선택한 제안을 숨깁니다.",
       "legend": {
@@ -13814,8 +13968,14 @@
         "about": "적중 수 안내"
       },
       "acceptUnknownSource": "알 수 없는 출발지: CIDR로를 사용하세요",
+      "aggregateHint": "이 서비스를 모든 주소로 허용하려면 플로우를 직접 만드세요.",
+      "acceptOutZoneTip": "플로우 {from} → {to}를 추가합니다. {from}에서 {to}로의 인바운드도 함께 허용합니다.",
       "zoneBanner": "{zone} 영역의 제안 · 24시간 동안 미허용 히트 {count, plural, other {#회}}",
       "zoneBannerNoCount": "{zone} 영역의 제안",
+      "serviceBanner": "{service} 서비스로 필터링됨 ({ports})",
+      "serviceBannerClear": "모든 서비스 표시",
+      "sourceBanner": "소스가 어떤 영역에도 속하지 않는 흐름으로 필터링됨",
+      "sourceBannerClear": "모든 소스 표시",
       "dialog": {
         "open": "세부 정보",
         "openFor": "{source}에서 {destination}(으)로의 흐름 세부 정보",
@@ -13842,9 +14002,25 @@
         "colSource": "소스",
         "colGuest": "도달한 게스트",
         "colNode": "노드",
-        "guest": "{name} ({vmid}) · IP {ip}"
+        "guest": "{name} ({vmid}) · IP {ip}",
+        "direction": "방향",
+        "colDestination": "대상",
+        "trafficScopeOutside": "이 판정의 {source}에서 영역 밖 주소로 가는 모든 서비스: 기록은 주소가 아니라 영역을 보관합니다."
       },
-      "actionTip": "{action} – {tip}"
+      "actionTip": "{action} – {tip}",
+      "direction": {
+        "in": "인바운드",
+        "out": "아웃바운드"
+      },
+      "manyDestinations": "다수의 대상",
+      "prefix": {
+        "title": "네트워크로 수락",
+        "length": "프리픽스 길이",
+        "cancel": "취소",
+        "accept": "수락"
+      },
+      "cidrOutTip": "선택한 프리픽스로 초안에 {from} → {ip}의 네트워크 {service} 흐름을 만듭니다.",
+      "bulkCidrOutbound": "아웃바운드 네트워크는 프리픽스를 각각 선택해야 하므로 하나씩 수락합니다."
     },
     "overview": {
       "empty": "아직 그릴 영역이 없습니다.",
@@ -13854,7 +14030,7 @@
       "mapLabel": "영역과 플로우 지도",
       "suggestionsError": "대기 중인 플로우를 읽을 수 없습니다. 지도에는 허용된 플로우만 표시됩니다.",
       "legend": {
-        "outside": "외부로: v1에서 적용되지 않음",
+        "outside": "외부로: 송신 차단 안 됨",
         "allowed": "허용됨",
         "unprotected": "보호되지 않음",
         "blocked": "차단됨",
@@ -13865,8 +14041,8 @@
         "external": "알 수 없음 / 외부",
         "externalHint": "어떤 게스트와도 일치하지 않는 소스: IP 주소 또는 네트워크(CIDR)",
         "outside": "영역 밖",
-        "outsideHint": "영역 밖의 목적지(CIDR). 해당 목적지로 가는 플로우는 v1에서 적용되지 않습니다.",
-        "notApplied": "v1에서 적용되지 않음",
+        "outsideHint": "영역 밖의 대상(CIDR). 이 대상으로의 플로우는 출발 영역이 송신을 차단하면 적용됩니다.",
+        "notApplied": "송신 제어 안 함",
         "aria": "영역 {name}, {state}, {members}",
         "membersUnknown": "구성원 수 알 수 없음",
         "unzoned": "영역 없는 게스트 ({count, number})",
@@ -13879,10 +14055,13 @@
         "moreHint": "{count, plural, other {멤버 #개 더}}: 영역 패널에 모두 나열됩니다",
         "moreUnzonedHint": "{count, plural, other {영역 없는 게스트 #개 더}}: 편차에 모두 나열됩니다",
         "ipHint": "{ip}: 이 영역과 통신한, 영역과 게스트에 속하지 않는 주소",
-        "inside": "{count, plural, other {영역 내부에서 관찰된 흐름 #개}}"
+        "inside": "{count, plural, other {영역 내부에서 관찰된 흐름 #개}}",
+        "observed": "송신 관찰 중",
+        "gateway": "게이트웨이",
+        "gatewayHint": "{zones}의 게이트웨이({ip}): 해당 트래픽이 지도와 관찰 하위 탭에 이름으로 표시됩니다"
       },
       "edge": {
-        "outside": "v1에서 적용되지 않음: {services}",
+        "outside": "송신 차단 안 됨: {services}",
         "aria": "{from}에서 {to}: {services}",
         "allowed": "허용됨: {services}",
         "unprotected": "{count, plural, other {관찰된 흐름 #개}}, 이를 허용하는 흐름 없음(보호되지 않음)",
@@ -13895,7 +14074,9 @@
         "sourceHits": "{service}에서 {from}에서 영역 {to}(으)로 {count, plural, other {#회}}",
         "sourceHitsSampled": "{service}에서 {from}에서 영역 {to}(으)로 {count, plural, other {#회}} (예시 쌍 표시)",
         "countUnprotected": "{count, plural, other {보호되지 않은 흐름 #개}}",
-        "countBlocked": "{count, plural, other {차단된 흐름 #개}}"
+        "countBlocked": "{count, plural, other {차단된 흐름 #개}}",
+        "hitsTotal": "{count, plural, other {로그 발생 총 #회}}",
+        "noCounter": "허용된 흐름에는 카운터가 없습니다. Proxmox는 통과시키는 트래픽을 기록하지 않습니다"
       },
       "panel": {
         "label": "영역 {name}",
@@ -13908,6 +14089,21 @@
         "noFlows": "없음"
       },
       "zonePanel": {
+        "detailsTitle": "영역 상세 · {name}",
+        "subSuggestions": "대기 중인 제안",
+        "subMembers": "구성원",
+        "addMembers": "구성원 추가",
+        "addFlow": "새 플로우",
+        "subIncoming": "수신 플로우",
+        "subOutgoing": "송신 플로우",
+        "colDirection": "방향",
+        "colVerdict": "판정",
+        "expand": "확대",
+        "tabTraffic": "트래픽",
+        "tabData": "데이터",
+        "tabLogs": "로그",
+        "logsEmpty": "엔진 메모리에 이 영역의 이벤트가 없습니다",
+        "logsOlder": "이전 항목 불러오기",
         "edit": "영역 편집",
         "changeState": "상태 변경",
         "delete": "영역 삭제",
@@ -13917,15 +14113,21 @@
         "editFlow": "플로우 편집",
         "deleteFlow": "플로우 삭제",
         "newIncoming": "새 수신 플로우",
-        "newOutgoing": "새 송신 플로우"
+        "newOutgoing": "새 송신 플로우",
+        "egressBlock": "아웃바운드 차단",
+        "egressReopen": "아웃바운드 다시 열기"
+      },
+      "edgePanel": {
+        "detailsTitle": "플로우 상세",
+        "dialogLabel": "플로우 상세 · {from} → {to}",
+        "declaredFlows": "선언된 플로우",
+        "newFlow": "이 영역 간 새 플로우",
+        "suggestionsEmpty": "이 쌍에 대기 중인 제안 없음",
+        "logsEmpty": "엔진 메모리에 이 쌍의 이벤트가 없습니다"
       },
       "partial": "일부만 표시: 대기 중인 처음 {count, number}개 플로우만 그려집니다.",
       "filters": {
         "title": "흐름:"
-      },
-      "toolbar": {
-        "refreshedAt": "{time}에 새로 고침",
-        "refresh": "지도 새로 고침"
       },
       "flowPanel": {
         "label": "{from}에서 {to}(으)로의 흐름",
@@ -13942,6 +14144,12 @@
       "zoomIn": "확대",
       "zoomOut": "축소",
       "fitView": "지도를 화면에 맞추기",
+      "isolate": {
+        "only": "{name}의 흐름만",
+        "all": "모든 흐름",
+        "showAll": "모든 흐름 표시",
+        "showOnly": "해당 흐름만"
+      },
       "a11y": {
         "nodeDescription": "Enter 또는 Space 키를 눌러 세부 정보를 엽니다.",
         "nodeDescriptionKeyboard": "Enter 또는 Space 키를 눌러 세부 정보를 엽니다.",
@@ -14017,6 +14225,7 @@
           "noZoneFlows": "이 게스트는 어느 영역에도 속하지 않아 적용되는 허용 흐름이 없습니다.",
           "incoming": "수신, {peer}에서",
           "outgoing": "송신, {peer}(으)로",
+          "fromZone": "{zone} 영역에서",
           "acceptTip": "{from} → {to} {service} 흐름으로 허용: 엔진은 관찰된 흐름마다 게스트 예시 쌍 하나만 보관하므로 이 흐름은 영역 쌍 전체에 적용됩니다.",
           "partial": "지도에서 대기 중인 관찰 흐름은 처음 {count}개만 읽습니다. 이 목록에 일부가 빠져 있을 수 있습니다."
         },
@@ -14035,6 +14244,7 @@
         "topSourcesEmpty": "이 기간에 출발지 없음",
         "suggestionsEmpty": "이 영역에 대기 중인 제안 없음",
         "summaryOut": "{hits, plural, other {적중 #회}} · 주요 목적지 {source} ({share}%) · 차단 예정 {wouldBlock, number}, 차단됨 {blocked, number}",
+        "summaryOutBlockedHelp": "차단됨: 목적지 영역(해당 영역의 인바운드) 또는 이 영역의 아웃바운드에서 차단된 연결입니다.",
         "topDestinations": "주요 목적지",
         "topDestinationsEmpty": "이 기간에 목적지 없음",
         "memberRunning": "실행 중",
@@ -14061,6 +14271,7 @@
       "checking": "클러스터를 점검하는 중...",
       "runAgain": "다시 실행",
       "openWizard": "배포 마법사 열기",
+      "raiseLogRate": "관찰 중 올리기",
       "busy": "적용이 진행 중입니다. 잠시 후 다시 시도하세요.",
       "noClient": "이 연결에 사용할 수 있는 Proxmox 클라이언트가 없습니다.",
       "readFailed": "Proxmox를 읽을 수 없습니다: {error}",
@@ -14073,20 +14284,27 @@
         "cluster_firewall": {
           "title": "클러스터 방화벽",
           "pass": "클러스터 방화벽이 켜져 있습니다.",
-          "off": "클러스터 방화벽이 꺼져 있습니다. 배포 마법사가 관리 규칙을 추가한 뒤 방화벽을 켭니다.",
+          "off": "클러스터 방화벽이 꺼져 있습니다. 배포 마법사가 노드에 아무것도 쓰지 않고 이를 켭니다.",
           "heldByStop": "긴급 중지가 클러스터 방화벽을 꺼 둔 상태입니다. 다시 켜려면 중지를 해제하세요"
         },
         "socle_rules": {
           "title": "관리 접근",
           "pass": "웹(8006)과 SSH(22)에 계속 접근할 수 있습니다.",
           "nodesOff": "노드 방화벽이 꺼져 있어 차단될 것이 없습니다.",
-          "missing": "어디에서든 포트 {ports}을(를) 열어 두는 규칙이 없습니다. 방화벽을 켜면 접근이 차단될 수 있습니다."
+          "missing": "어디에서든 포트 {ports}을(를) 열어 두는 규칙이 없습니다. 방화벽을 켜면 접근이 차단될 수 있습니다.",
+          "missingFor": "{ips}에서 포트 {ports}을(를) 열어 두는 규칙이 없습니다. 방화벽을 켜면 ProxCenter가 차단될 수 있습니다.",
+          "dockerInternal": "ProxCenter에 대해 포트 {ports}을(를) 열어 두는 규칙이 없습니다. 감지된 주소는 Docker 내부 주소이므로 설정 > 고급에서 Proxmox가 보는 호스트 주소를 입력하세요.",
+          "groupUnreadable": "보안 그룹 {group}의 규칙을 읽을 수 없습니다. 관리 접근을 확인할 수 없습니다.",
+          "hostRulesUnreadable": "노드 {node}의 방화벽 규칙을 읽을 수 없습니다. 관리 접근을 확인할 수 없습니다.",
+          "missingForNodes": "{nodes}에서 {ips}의 포트 {ports}을(를) 열어 두는 규칙이 없습니다. 방화벽을 켜면 ProxCenter가 차단될 수 있습니다.",
+          "missingOn": "{nodes}에서 포트 {ports}을(를) 열어 두는 규칙이 없습니다. 방화벽을 켜면 접근이 차단될 수 있습니다."
         },
         "log_ratelimit": {
           "title": "로그 속도 제한",
-          "default": "PVE가 기본 속도({rate})로 기록하므로 관찰에서 플로우가 누락됩니다. 설정에서 높이세요.",
+          "default": "PVE가 기본 속도({rate})로 로그를 기록하므로 관찰에서 흐름이 누락됩니다.",
           "pass": "PVE가 최대 {rate}까지 기록합니다.",
-          "disabled": "PVE가 방화벽 로그를 제한하지 않습니다."
+          "disabled": "PVE가 방화벽 로그를 제한하지 않습니다.",
+          "planned": "영역을 관찰하는 동안 {rate}(으)로 올렸다가 이후 원래대로 되돌립니다(설정)."
         },
         "self_in_zone": {
           "title": "ProxCenter 주소",
@@ -14094,7 +14312,14 @@
           "unknown": "ProxCenter 주소를 감지하지 못해 이 점검은 판단할 수 없습니다. 설정에서 지정하세요.",
           "inZone": "ProxCenter({self_ip})가 {zone} 영역 안에 있습니다. 강제 적용하면 연결이 끊길 수 있습니다.",
           "uncheckedTimeout": "{count, plural, other {#개 멤버를 확인하지 못했습니다}} (수집이 중단됨). ProxCenter가 그중 하나에 속해 있을 수 있습니다.",
-          "uncheckedCap": "{count, plural, other {#개 멤버를 확인하지 못했습니다}} (수집 한도 초과). ProxCenter가 그중 하나에 속해 있을 수 있습니다."
+          "uncheckedCap": "{count, plural, other {#개 멤버를 확인하지 못했습니다}} (수집 한도 초과). ProxCenter가 그중 하나에 속해 있을 수 있습니다.",
+          "inZoneEgress": "ProxCenter({self_ip})가 송신을 제어하는 영역 {zone} 안에 있습니다. 차단하기 전에 Proxmox 노드로의 플로우를 허용하지 않으면 ProxCenter가 노드와 연결이 끊길 수 있습니다.",
+          "dockerInternal": "감지된 주소는 Docker 내부 주소입니다. 설정 > 고급에서 Proxmox가 보는 호스트 주소를 입력하세요."
+        },
+        "egress_subnets": {
+          "title": "송신 서브넷",
+          "pass": "송신 제어 영역의 모든 구성원에게 알려진 서브넷이 있습니다.",
+          "warn": "{count}개 구성원에 알려진 서브넷이 없습니다 ({guests}): 로컬 네트워크가 자신의 IP로 한정됩니다."
         }
       },
       "rateUnits": {
@@ -14112,8 +14337,8 @@
         "load": "Proxmox 부하",
         "enforcement": "강제 적용",
         "observation": "관찰",
-        "address": "ProxCenter 주소",
         "notifications": "알림 받기",
+        "advanced": "고급",
         "removal": "제거"
       },
       "fields": {
@@ -14122,12 +14347,12 @@
         "ips_interval_sec": "게스트 IP 읽기 간격",
         "full_interval_sec": "전체 점검 간격",
         "log_interval_sec": "방화벽 로그 읽기 간격",
-        "ready_after_hours": "강제 적용 전 관찰 시간",
+        "ready_after_hours": "차단 전 관찰 시간 (인바운드 및 아웃바운드)",
         "write_cap": "실행당 쓰기 상한",
         "rate": "로그 속도 제한",
         "rateUnit": "로그 속도 단위",
         "burst": "로그 버스트",
-        "selfIps": "ProxCenter 주소 목록",
+        "selfIps": "Proxmox가 보는 주소",
         "notify_drift": "드리프트",
         "notify_paused": "엔진 일시 중지",
         "notify_unprotected": "보호되지 않은 게스트",
@@ -14136,8 +14361,7 @@
       "hints": {
         "tagPrefix": "게스트의 영역 태그는 이 접두사 뒤에 영역 이름이 붙은 형태입니다.",
         "write_cap": "한 번의 실행에서 Proxmox에 허용되는 쓰기 수입니다. 초과하면 엔진이 멈추고 확인을 요청합니다.",
-        "rate": "비워 두면 Proxmox의 로그 속도 제한을 건드리지 않습니다. 값을 넣으면 영역을 관찰하는 동안 적용됩니다.",
-        "selfIps": "ProxCenter가 게스트에 접속할 때 사용하는 주소를 쉼표로 구분해 입력합니다. 비워 두면 자동으로 감지합니다."
+        "rate": "비워 두면 Proxmox의 로그 속도 제한을 건드리지 않습니다. 값을 넣으면 영역을 관찰하는 동안 적용됩니다."
       },
       "unitsLong": {
         "seconds": "초",
@@ -14150,8 +14374,14 @@
         "hour": "시간당",
         "day": "일당"
       },
-      "leaveAsIs": "변경 안 함",
+      "leaveAsIs": "변경 없음",
       "detectedAutomatically": "자동 감지",
+      "selfIpsSource": {
+        "settings": "설정",
+        "install": "설치 스크립트",
+        "detected": "감지됨"
+      },
+      "dockerInternalHint": "Docker 내부 주소입니다. Proxmox는 호스트 주소를 보므로 여기에 입력하세요.",
       "validation": {
         "tagPrefix": "태그 접두사는 1~16자입니다: 소문자, 숫자, . _ + -",
         "range": "{label}은(는) {min}~{max}{unit} 범위여야 합니다.",
@@ -14180,6 +14410,13 @@
         "body": "게스트에는 이전 태그가 그대로 남아 있으므로, 다시 태그하기 전까지 다음 적용 때 영역에서 빠집니다.",
         "typeName": "확인하려면 {prefix}을(를) 입력하세요",
         "confirm": "접두사 변경"
+      },
+      "tips": {
+        "rate": "규칙당 로그 줄 수 상한으로, 아무것도 놓치지 않도록 관찰 중에 높게 설정되며 Proxmox 클러스터에 적용됩니다.",
+        "logInterval": "각 노드의 방화벽 로그를 읽는 간격으로, 노드당 간격마다 한 번 읽습니다.",
+        "readyAfter": "차단될 새 플로우가 없는 상태가 이 시간 동안 이어져야 영역이 준비 완료로 표시됩니다. 잠금이 아닙니다.",
+        "writeCap": "초과하면 엔진이 멈추고 확인을 요청합니다.",
+        "selfIps": "ProxCenter가 노드에 연결할 때 사용하는 주소입니다. 사전 점검에서 이 주소가 차단되지 않는지 확인합니다. 비워 두면 자동 감지를 사용합니다."
       }
     },
     "history": {
@@ -14307,6 +14544,8 @@
       "title": "전체 점검",
       "runningText": "전체 점검 진행 중",
       "queued": "엔진 대기 중 (최대 60초)",
+      "queuedFor": "{seconds, number}초째 대기 중: 엔진이 다음 패스에서 60초 이내에 시작합니다",
+      "queuedLate": "엔진이 이 클러스터에서 다른 작업을 마무리하는 중입니다. 검사는 그다음에 진행됩니다",
       "inProgress": "진행 중, {seconds, number}초 경과",
       "progress": "API 호출 {calls, plural, other {#회}}, 쓰기 {writes, plural, other {#회}}, {seconds, number}초",
       "doneSummary": "{seconds, number}초 동안 API 호출 {calls, plural, other {#회}}로 점검 완료",
@@ -14380,7 +14619,12 @@
         "failed": "실패",
         "notRun": "실행 안 됨"
       },
-      "runAgain": "다시 실행"
+      "runAgain": "다시 실행",
+      "stages": {
+        "title": "검사가 하는 일",
+        "ips": "구성원의 IP 주소",
+        "guests": "게스트를 다시 읽어 정책과 비교하고 편차를 복구"
+      }
     },
     "trafficLens": {
       "connection": "연결",
@@ -14427,7 +14671,6 @@
     },
     "dfw": {
       "hits24h": "24시간 적중",
-      "selectAll": "표시된 모든 규칙 선택",
       "any": "모두",
       "actionLabel": "규칙 동작",
       "action": {
@@ -14441,25 +14684,14 @@
       "rowEdited": "미게시",
       "rowMoved": "이동됨",
       "rowDisabled": "비활성",
-      "selectRule": "규칙 {pos} 선택",
+      "deleteRule": "규칙 {pos} 삭제",
       "enableLabel": "규칙 {pos} 활성",
       "logLabel": "규칙 {pos} 로그 기록",
-      "selectSection": "{name}의 규칙 선택",
       "collapse": "{name} 접기",
       "expand": "{name} 펼치기",
-      "lastPublished": "마지막 게시 성공: {date} {time}",
       "publish": "게시 ({count})",
       "discard": "변경 취소",
       "status": {
-        "rules": "{count, plural, other {규칙: 총 #개}}",
-        "rulesAtLeast": "{count, plural, other {규칙: 최소 총 #개}}",
-        "rulesHint": "읽은 섹션만 셉니다: 호스트나 게스트의 규칙은 열 때 읽습니다",
-        "unpublished": "미게시",
-        "disabled": "비활성 {count}",
-        "sections": "섹션: {count}",
-        "managed": "마이크로세그멘테이션 관리 {count}",
-        "covered": "보호된 VM: 실행 중 {running}개 중 {covered}개",
-        "coveredUnknown": "보호된 VM: 아직 읽지 않음",
         "scope": "범위"
       },
       "scope": {
@@ -14468,17 +14700,6 @@
         "vms": "VM",
         "all": "전체"
       },
-      "bulk": {
-        "enable": "활성화",
-        "disable": "비활성화",
-        "clone": "복제",
-        "up": "위로",
-        "down": "아래로",
-        "moveTo": "섹션으로 이동"
-      },
-      "selection": "{count, plural, =0 {선택된 규칙 없음} other {규칙 #개 선택됨}}",
-      "dragHint": "⋮⋮ 끌어서 순서 변경",
-      "clearSelection": "선택 해제",
       "filter": "필터: IP, 포트, 그룹, VM",
       "moveDialog": {
         "title": "{count, plural, other {규칙 #개 이동 대상}}",
@@ -14559,10 +14780,6 @@
       "publishedPart": "변경 {total}개 중 {applied}개 게시됨: 나머지는 다시 게시하세요",
       "publishFailed": "변경 {applied}개 적용 후 게시가 중단됨:",
       "conflict": "섹션의 규칙이 읽은 이후 Proxmox에서 변경되었습니다. 이 섹션의 변경을 취소한 후 다시 게시하세요: 다른 섹션의 변경은 유지됩니다",
-      "mode": {
-        "cluster": "{count, plural, other {클러스터 · 노드 #개}}",
-        "standalone": "단일 노드"
-      },
       "defaultDeny": "영역 기본 거부",
       "denyBlock": "차단",
       "denyWouldBlock": "차단 예정",
@@ -14570,8 +14787,6 @@
       "discardSection": "이 섹션 취소",
       "conflictOptions": "섹션의 방화벽 옵션이 읽은 이후 Proxmox에서 변경되었습니다. 이 섹션의 변경을 취소한 후 다시 게시하세요: 다른 섹션의 변경은 유지됩니다",
       "publishAgain": "다시 게시하세요: 적용되지 않은 변경은 초안에 남아 있습니다.",
-      "summary": "마지막 게시: 변경 {total}개 중 {applied}개 적용",
-      "summaryStopped": "마지막 게시: 변경 {total}개 중 {applied}개 적용, {scope}의 {kind}에서 중단",
       "addRuleShort": "규칙 추가",
       "addRuleTo": "{name}에 규칙 추가",
       "addARule": "규칙 하나 추가",
@@ -14596,6 +14811,9 @@
       "titleNoCount": "적용되지 않은 변경을 취소할까요?",
       "body": "초안이 마지막으로 적용된 리비전으로 돌아갑니다.",
       "confirm": "취소하기"
+    },
+    "gateway": {
+      "name": "{zones}의 게이트웨이"
     }
   },
   "bulkPower": {

@@ -64,7 +64,7 @@ describe('map notes', () => {
     const group = await screen.findByRole('group', { name: 'Flows:' })
     expect(within(group).getAllByRole('checkbox').map(c => c.closest('label')?.textContent)).toEqual(['Unprotected', 'Blocked', 'Allowed'])
     expect(screen.getByText('Allowed, not applied yet')).toBeTruthy()
-    expect(screen.getByText('To Outside: not applied in v1')).toBeTruthy()
+    expect(screen.getByText('To Outside: outbound not enforced')).toBeTruthy()
   })
 
   it('says the map is partial when the suggestions page is full', async () => {

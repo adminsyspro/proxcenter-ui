@@ -305,13 +305,13 @@ describe('queued removals and moves of tagged members', () => {
     setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])], pending_members: pendingRows, pending_changes: true })
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web()], pending_members: pendingRows, last_revision: REVISION_HEAD, pending_changes: pendingRows.length > 0 }))
     const row = await openDetails('web')
-    const member = (await within(row).findByText('web-1')).closest('div') as HTMLElement
+    const member = await within(row).findByRole('listitem', { name: 'web-1' })
     fireEvent.click(within(member).getByRole('button', { name: 'Remove from zone' }))
 
-    expect(await within(member).findByText('Pending removal')).toBeTruthy()
-    expect((within(member).getByRole('button', { name: 'Remove from zone' }) as HTMLButtonElement).disabled).toBe(true)
-    const other = (within(row).getByText('web-2')).closest('div') as HTMLElement
-    expect(within(other).queryByText('Pending removal')).toBeNull()
+    // The details are the zone panel of the map: a queued removal says so and offers to keep the member.
+    await waitFor(() => expect(within(row).getByRole('listitem', { name: 'web-1' }).textContent).toContain('Pending removal'))
+    expect(within(within(row).getByRole('listitem', { name: 'web-1' })).getByRole('button', { name: 'Keep in zone' })).toBeTruthy()
+    expect(within(row).getByRole('listitem', { name: 'web-2' }).textContent).not.toContain('Pending removal')
   })
 
   it('shows a tagged member queued for another zone as moving', async () => {
@@ -334,7 +334,7 @@ describe('queued removals and moves of tagged members', () => {
     mock.routes['GET /revisions?limit=1'] = () => reply(200, { revisions: [revisionWithSnapshot([web()], [])] })
     setup({ zones: [web()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'web-2', ['zone-web'])], pending_members: pendingRows, pending_changes: true })
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web()], pending_members: pendingRows, last_revision: REVISION_HEAD, pending_changes: pendingRows.length > 0 }))
-    expect(await screen.findByText('What will change: 1 member change')).toBeTruthy()
+    expect(await screen.findByText('Not applied yet: 1 member change.')).toBeTruthy()
     const dialog = await openDialog()
     const leaving = await within(dialog).findByRole('listitem', { name: 'web-1' })
     expect(within(leaving).getByText('Pending removal')).toBeTruthy()
@@ -349,7 +349,7 @@ describe('queued removals and moves of tagged members', () => {
     await waitFor(() => expect(calls('POST /members')).toHaveLength(1))
     expect(body(calls('POST /members')[0][1] as RequestInit)).toEqual({ version: 3, clear: [{ type: 'qemu', vmid: 100 }] })
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-    await waitFor(() => expect(screen.queryByText(/What will change/)).toBeNull())
+    await waitFor(() => expect(screen.queryByText(/Not applied yet/)).toBeNull())
   })
 
   it('clears a taken-back move and queues the new guests in the same request', async () => {

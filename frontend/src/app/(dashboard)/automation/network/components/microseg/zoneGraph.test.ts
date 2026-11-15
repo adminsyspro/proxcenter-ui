@@ -287,6 +287,8 @@ describe('groupServices', () => {
   it('reads a known port as its name: one protocol, several protocols, a name with an unknown port or a range', () => {
     expect(groupServices(['tcp/8080', 'tcp/22'])).toBe('SSH, HTTP-alt')
     expect(groupServices(['udp/53', 'tcp/5432'])).toBe('PostgreSQL · DNS')
+    expect(groupServices(['udp/53', 'tcp/53'])).toBe('DNS (tcp) · DNS (udp)')
+    expect(groupServices(['udp/53', 'tcp/53', 'tcp/5432'])).toBe('DNS (tcp), PostgreSQL · DNS (udp)')
     expect(groupServices(['icmp', 'tcp/443', 'tcp/80'])).toBe('icmp · HTTP, HTTPS')
     expect(groupServices(['tcp/80,443', 'tcp/8000-8100'])).toBe('HTTP, HTTPS, tcp/8000-8100')
     expect(groupServices(['tcp/22', 'tcp/42001'])).toBe('SSH, tcp/42001')
@@ -436,5 +438,48 @@ describe('the demo-like map is readable', () => {
       for (const b of boxes) if (rectsOverlap(r, rectAround(b.c, NODE_W, NODE_H))) problems.push(`${id} on ${b.id}`)
     }
     expect(problems).toEqual([])
+  })
+})
+
+describe('outbound flows to Outside', () => {
+  const to = (id: string, src: string) => flow(id, { src_zone_id: src, dst_zone_id: '', dst_cidr: '8.8.8.0/24', proto: 'udp', dport: '53' })
+  const build = (zones: MicrosegZone[], flows: MicrosegFlow[]) => buildZoneGraph({ zones, flows, suggestions: [] })
+  const outsideData = (g: ReturnType<typeof buildZoneGraph>) => byId(g.nodes, 'outside').data as { kind: string; egress?: string }
+
+  it('draws a solid allowed edge when the source zone enforces its outbound traffic', () => {
+    const g = build([zone('zw', 'web', { state: 'enforce', egress_state: 'enforce' }), db], [to('f1', 'zw')])
+    const edge = g.edges.find(e => e.target === 'outside')!
+    expect(data(edge).kind).toBe('allowed')
+    expect(edge.style?.strokeDasharray).toBeUndefined()
+    expect(outsideData(g).egress).toBe('applied')
+  })
+
+  it('draws a dashed edge when the source zone only observes it', () => {
+    const g = build([zone('zw', 'web', { egress_state: 'observe' }), db], [to('f1', 'zw')])
+    const edge = g.edges.find(e => e.target === 'outside')!
+    expect(data(edge).kind).toBe('outside')
+    expect(edge.style?.strokeDasharray).toBeTruthy()
+    expect(outsideData(g).egress).toBe('observed')
+  })
+
+  it('says not applied on the Outside box while one flow to it is not controlled', () => {
+    const g = build([zone('zw', 'web', { state: 'enforce', egress_state: 'enforce' }), zone('zd', 'db'), app], [to('f1', 'zw'), to('f2', 'zd')])
+    expect(outsideData(g).egress).toBe('notApplied')
+    expect(g.edges.filter(e => e.target === 'outside').map(e => data(e).kind).sort()).toEqual(['allowed', 'outside'])
+  })
+})
+
+describe('the occurrences of an edge', () => {
+  it('sums the log occurrences of an observed edge and has none on an allowed one', async () => {
+    const { edgeHits } = await import('./zoneGraph')
+    const seen = (hits: number) => ({ hits }) as unknown as import('@/lib/microseg/types').MicrosegSuggestion
+    expect(edgeHits({ kind: 'blocked', observed: [seen(158), seen(1415)] })).toBe(1573)
+    expect(edgeHits({ kind: 'unprotected', observed: [] })).toBe(0)
+    expect(edgeHits({ kind: 'allowed', observed: [] })).toBeNull()
+  })
+
+  it('sizes the label for the occurrences as the page writes them, compact', async () => {
+    const { shortHits } = await import('./zoneGraph')
+    expect([shortHits(3), shortHits(999), shortHits(1415), shortHits(25_300), shortHits(2_400_000)]).toEqual(['3', '999', '1.4K', '25K', '2.4M'])
   })
 })

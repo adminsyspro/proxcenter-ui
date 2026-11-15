@@ -4,11 +4,11 @@ import { useContext, type ReactNode } from 'react'
 import { Box, MenuItem, Select } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import type { MicrosegZone, SuggestionKind, SuggestionStatus } from '@/lib/microseg/types'
+import type { FlowDirection, MicrosegZone, SuggestionKind, SuggestionStatus } from '@/lib/microseg/types'
 
 import { MicrosegActionsSlot, SlotActions } from './microsegAccess'
 
-export type ObservationFilterValues = { kind: '' | SuggestionKind; status: '' | SuggestionStatus; zone: string }
+export type ObservationFilterValues = { kind: '' | SuggestionKind; status: '' | SuggestionStatus; zone: string; direction: '' | FlowDirection }
 
 type Props = {
   values: ObservationFilterValues
@@ -18,6 +18,7 @@ type Props = {
 
 const KINDS: SuggestionKind[] = ['would_block', 'blocked']
 const STATUSES: SuggestionStatus[] = ['pending', 'accepted', 'dismissed']
+const DIRECTIONS: FlowDirection[] = ['in', 'out']
 
 /**
  * The height and type of the small buttons of the row (Check now, Emergency stop): a select of the row is as tall and
@@ -27,7 +28,8 @@ const COMPACT_SELECT_SX = {
   height: 30,
   // The type of a small button (pxToRem(13)), so it follows the root size the way the buttons do.
   fontSize: '0.8125rem',
-  minWidth: 150,
+  // As wide as its name and value: the row of the tabs holds the four filters and the buttons.
+  minWidth: 0,
   '& .MuiSelect-select': { py: 0, pl: 1.25, display: 'flex', alignItems: 'center', minHeight: 0 },
 } as const
 
@@ -59,7 +61,7 @@ function FilterSelect<T extends string>({ name, value, options, onChange }: Read
 }
 
 /**
- * The three server-side filters of the list: type, status and zone (source or destination). On the row of the
+ * The four server-side filters of the list: type, status, zone (source or destination) and direction. On the row of the
  * sub-tabs, next to Check now (SlotActions), as tall as its buttons; in place, above the table, when the panel has no
  * tab row.
  */
@@ -86,6 +88,12 @@ export default function ObservationFilters({ values, zones, onChange }: Props) {
           value={values.zone}
           options={[{ value: '', label: t('filters.zoneAll') }, ...zones.map(zone => ({ value: zone.id, label: zone.name }))]}
           onChange={zone => onChange({ ...values, zone })}
+        />
+        <FilterSelect
+          name={t('filters.direction')}
+          value={values.direction}
+          options={[{ value: '', label: t('filters.directionAll') }, ...DIRECTIONS.map(d => ({ value: d, label: t(d === 'in' ? 'filters.directionIn' : 'filters.directionOut') }))]}
+          onChange={direction => onChange({ ...values, direction })}
         />
       </Box>
     </SlotActions>

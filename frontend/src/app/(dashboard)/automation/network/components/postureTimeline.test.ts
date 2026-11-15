@@ -265,6 +265,25 @@ describe('the persisted history (UA55)', () => {
     expect(run('1h', rows).total).toBe(9)
   })
 
+  it('reads an outbound bucket (logged by the emitting zone) as the flow it is: emitted by that zone, received by the zone or the outside it names', () => {
+    const last = win('1h').to - 300_000
+    // web emitted 6 hits to db and 4 to the outside (logged by web), and 3 more to db (logged by db).
+    const rows = [
+      row(last, { hits: 6, zone: 'web', src_zone: 'db', direction: 'out' }),
+      row(last, { hits: 4, zone: 'web', src_zone: '', direction: 'out' }),
+      row(last, { hits: 3 }),
+    ]
+    const outOfWeb = run('1h', rows, { by: 'dst', zone: 'web', slices: [slice('zone:zdb', 'zone', '#2', 'db'), ...ZONE_SLICES] })
+    expect(outOfWeb.total).toBe(13)
+    expect(outOfWeb.buckets.at(-1)!.counts['zone:zdb']).toBe(9)
+    // The 4 hits to an address outside the zones are grouped as "Outside", not as an unknown source.
+    const byDst = run('1h', rows, { by: 'dst', zone: 'web', slices: [slice('zone:zdb', 'zone', '#2', 'db'), slice('outside', 'outside', '#616161'), ...ZONE_SLICES] })
+    expect(byDst.buckets.at(-1)!.counts).toEqual({ 'zone:zdb': 9, outside: 4 })
+    const intoDb = run('1h', rows, { zone: 'db' })
+    expect(intoDb.total).toBe(9)
+    expect(intoDb.buckets.at(-1)!.counts['zone:zweb']).toBe(9)
+  })
+
   it('groups by the zone that received the flows (destination), and keeps one zone\'s emitted flows for a panel', () => {
     const last = win('1h').to - 300_000
     const rows = [row(last, { hits: 3 }), row(last, { hits: 2, zone: 'web', src_zone: 'db' }), row(last, { hits: 4, zone: 'web', src_zone: '' })]
@@ -380,8 +399,23 @@ describe('stacked areas', () => {
   it('stacks one band per series in order, the first on the axis, a line on top of each', () => {
     const paths = areaPaths({ series, max: 4, buckets: [bucket(0, { a: 2, b: 2 }), bucket(1, { a: 1 })] }, box)
     expect(paths.map(p => p.key)).toEqual(['a', 'b'])
-    expect(paths[0]).toEqual({ key: 'a', line: 'M 25 5 L 75 7.5', area: 'M 25 5 L 75 7.5 L 75 10 L 25 10 Z' })
-    expect(paths[1]).toEqual({ key: 'b', line: 'M 25 0 L 75 7.5', area: 'M 25 0 L 75 7.5 L 75 7.5 L 25 5 Z' })
+    expect(paths[0]).toMatchObject({ key: 'a', line: 'M 25 5 L 75 7.5', area: 'M 25 5 L 75 7.5 L 75 10 L 25 10 Z' })
+    expect(paths[1]).toMatchObject({ key: 'b', line: 'M 25 0 L 75 7.5', area: 'M 25 0 L 75 7.5 L 75 7.5 L 25 5 Z' })
+  })
+
+  it('curves smoothly through three buckets or more, never past a value, flat where the traffic rests', () => {
+    const paths = areaPaths({ series: series.slice(0, 1), max: 4, buckets: [bucket(0, { a: 0 }), bucket(1, { a: 4 }), bucket(2, { a: 4 }), bucket(3, { a: 2 })] }, box)
+    const { line, area, tops } = paths[0]
+    expect(tops).toEqual([10, 0, 0, 5])
+    expect(line.startsWith('M 12.5 10 C ')).toBe(true)
+    expect(line.endsWith(' 87.5 5')).toBe(true)
+    // Every control point stays within the box: no overshoot above the top value nor under the axis.
+    const ys = line.replace(/^M /, '').split(/ C | /).map(Number).filter((_, i) => i % 2 === 1)
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(0)
+    expect(Math.max(...ys)).toBeLessThanOrEqual(10)
+    // The plateau between the second and third buckets is flat.
+    expect(line).toContain('C 45.83 0 54.17 0 62.5 0')
+    expect(area.endsWith(' 12.5 10 Z')).toBe(true)
   })
 
   it('draws nothing without a value, a single bucket as a flat band', () => {
@@ -408,7 +442,7 @@ describe('mirrored chart', () => {
   it('stacks the outbound side downwards from the baseline', () => {
     const paths = areaPaths({ series: [slice('a', 'zone', '#1', 'a')], max: 4, buckets: [bucket(0, { a: 2 }), bucket(1, { a: 4 })] }, { ...box, top: 10 }, true)
     // Baseline at y 10, a value of 2 out of 4 goes to y 15, 4 to y 20.
-    expect(paths[0]).toEqual({ key: 'a', line: 'M 25 15 L 75 20', area: 'M 25 15 L 75 20 L 75 10 L 25 10 Z' })
+    expect(paths[0]).toMatchObject({ key: 'a', line: 'M 25 15 L 75 20', area: 'M 25 15 L 75 20 L 75 10 L 25 10 Z' })
   })
 
   it('puts both sides on the same buckets and the same scale', () => {
@@ -427,5 +461,18 @@ describe('mirrored chart', () => {
     const { above: up } = alignTimelines(above, below)
     expect(up.buckets).toHaveLength(1)
     expect(up.total).toBe(0)
+  })
+})
+
+describe('postureTimeline: outbound events (logged by the emitting zone)', () => {
+  const out = (over: Partial<MicrosegEvent> = {}) => event({ direction: 'out', zone: 'web', src_zone: 'db', ...over })
+  const dstSlices = [slice('zone:zdb', 'zone', '#222222', 'db'), slice('outside', 'outside', '#616161'), ...ZONE_SLICES]
+
+  it('groups an outbound event by its emitting zone, and by its destination zone or the outside', () => {
+    const events = [out({ ts: at(1) }), out({ ts: at(1), src_zone: '' })]
+    const bySrc = run({ events })
+    expect(bySrc.buckets.at(-1)!.counts).toEqual({ 'zone:zweb': 2 })
+    const byDst = run({ events, groupBy: 'dstzone', slices: dstSlices })
+    expect(byDst.buckets.at(-1)!.counts).toEqual({ 'zone:zdb': 1, outside: 1 })
   })
 })

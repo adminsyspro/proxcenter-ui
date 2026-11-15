@@ -55,8 +55,9 @@ export const ZoneBoxNode = memo(ZoneBoxNodeComponent)
 function IpNodeComponent({ data }: NodeProps) {
   const d = data as unknown as IpNodeData
   const t = useTranslations('microsegPilot.overview.node')
+  const gateway = d.gatewayOf?.join(', ')
   return (
-    <Tooltip title={t('ipHint', { ip: d.ip })}>
+    <Tooltip title={gateway ? t('gatewayHint', { ip: d.ip, zones: gateway }) : t('ipHint', { ip: d.ip })}>
       <Box
         sx={{
           width: NODE_W, height: NODE_H, boxSizing: 'border-box', border: '1px dashed', borderColor: 'text.disabled', borderRadius: 1.5,
@@ -64,8 +65,8 @@ function IpNodeComponent({ data }: NodeProps) {
         }}
       >
         <Handles />
-        <i className='ri-map-pin-line' style={{ fontSize: 16, flexShrink: 0 }} />
-        <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0, fontSize: '0.85rem' }}>{d.ip}</Typography>
+        <i className={gateway ? 'ri-router-line' : 'ri-map-pin-line'} style={{ fontSize: 16, flexShrink: 0 }} />
+        <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0, fontSize: '0.85rem' }}>{gateway ? t('gateway') : d.ip}</Typography>
       </Box>
     </Tooltip>
   )

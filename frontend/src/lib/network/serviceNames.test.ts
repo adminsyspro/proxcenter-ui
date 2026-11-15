@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { WELL_KNOWN_PORTS, WELL_KNOWN_RANGES } from './wellKnownPorts'
-import { serviceLabel, serviceName, serviceTitle, serviceTokenLabel, serviceTokenTitle, serviceTokensTitle } from './serviceNames'
+import { serviceLabel, serviceLabelIn, serviceName, sharedServiceNames, serviceTitle, serviceTokenLabel, serviceTokenTitle, serviceTokensTitle } from './serviceNames'
 
 describe('serviceLabel', () => {
   it('names the everyday ports with the casing admins use', () => {
@@ -84,6 +84,16 @@ describe('serviceTitle and the tokens of the flows', () => {
     expect(serviceTokenLabel('icmp')).toBe('icmp')
     expect(serviceTokenTitle('udp/53')).toBe('DNS (udp/53)')
     expect(serviceTokensTitle(['tcp/22', 'tcp/8080', 'icmp'])).toBe('SSH (tcp/22), HTTP-alt (tcp/8080), icmp')
+  })
+})
+
+describe('serviceLabelIn', () => {
+  it('adds the protocol only to a name that two protocols share in the list', () => {
+    const list = [{ proto: 'udp', dport: '53' }, { proto: 'tcp', dport: '53' }, { proto: 'tcp', dport: '22' }, { proto: 'tcp', dport: '42001' }]
+    const shared = sharedServiceNames(list)
+    expect([...shared]).toEqual(['DNS'])
+    expect(list.map(f => serviceLabelIn(f.proto, f.dport, shared))).toEqual(['DNS (udp)', 'DNS (tcp)', 'SSH', 'tcp/42001'])
+    expect(serviceLabelIn('udp', '53', sharedServiceNames([{ proto: 'udp', dport: '53' }]))).toBe('DNS')
   })
 })
 

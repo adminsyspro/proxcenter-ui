@@ -1,42 +1,16 @@
 'use client'
 
-import { paletteAlpha } from './paletteAlpha'
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Alert, Avatar, Box, Button, Checkbox, Chip, CircularProgress,
-  Dialog, DialogContent, DialogTitle, FormControl, FormControlLabel,
-  IconButton, InputLabel, LinearProgress, MenuItem, Select, Step, StepLabel, Stepper,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  TextField, Typography, useTheme, alpha
+  Alert, Avatar, Box, Button, Chip, CircularProgress, Dialog, DialogContent, DialogTitle, IconButton, Step, StepLabel, Stepper,
+  Typography, useTheme, alpha,
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
 
-// ── Cluster whitelist rules to create ──
-
-interface ClusterWhitelistRule {
-  service: string
-  proto: string
-  dport: string
-  comment: string
-}
-
-const CLUSTER_RULES: ClusterWhitelistRule[] = [
-  { service: 'Corosync',           proto: 'udp', dport: '5405:5412',   comment: 'PVE Cluster - Corosync' },
-  { service: 'Ceph Monitor',       proto: 'tcp', dport: '6789,3300',   comment: 'PVE Cluster - Ceph Monitor' },
-  { service: 'Ceph OSD/MDS',       proto: 'tcp', dport: '6800:7300',   comment: 'PVE Cluster - Ceph OSD/MDS' },
-  { service: 'PVE API/Web UI',     proto: 'tcp', dport: '8006',        comment: 'PVE Cluster - API/Web UI' },
-  { service: 'SSH',                 proto: 'tcp', dport: '22',          comment: 'PVE Cluster - SSH' },
-  { service: 'Live Migration',     proto: 'tcp', dport: '60000:60050', comment: 'PVE Cluster - Live Migration' },
-  { service: 'VNC/SPICE Console',  proto: 'tcp', dport: '5900:5999',   comment: 'PVE Cluster - VNC/SPICE Console' },
-  { service: 'SPICE Proxy',        proto: 'tcp', dport: '3128',        comment: 'PVE Cluster - SPICE Proxy' },
-]
-
-const STEPS = ['stepAnalysis', 'stepPreview', 'stepApply', 'stepActivate', 'stepDone'] as const
-
-// ── Props ──
+const STEPS = ['stepAnalysis', 'stepActivate', 'stepDone'] as const
 
 interface DeploymentWizardProps {
   open: boolean
@@ -49,369 +23,131 @@ interface DeploymentWizardProps {
   onComplete: () => void
 }
 
-type RuleStatus = 'pending' | 'creating' | 'success' | 'error'
+/** What the wizard knows of a node's own firewall: off (`enable: 0`), on once the cluster firewall is, or not read. */
+export type NodeFirewall = 'off' | 'follows' | 'unknown'
 
-export default function DeploymentWizard({
-  open, onClose, selectedConnection, clusterOptions, clusterRules,
-  nodesList, firewallMode, onComplete,
-}: DeploymentWizardProps) {
+/**
+ * A node's firewall is off only with an explicit `enable: 0` in its options: an absent value means it turns on with the
+ * cluster firewall (PVE, Firewall.pm).
+ */
+export function nodeFirewallOf(options: Pick<firewallAPI.NodeOptions, 'enable'> | null | undefined): NodeFirewall {
+  if (!options) return 'unknown'
+  // PVE may hand the flag as a number or as its text.
+  return Number(options.enable) === 0 && options.enable !== undefined && options.enable !== null ? 'off' : 'follows'
+}
+
+/** Reads the firewall options of each node once the wizard opens; a node that cannot be read is `unknown`. */
+function useNodeFirewalls(open: boolean, connection: string, nodes: string[]) {
+  const [states, setStates] = useState<Record<string, NodeFirewall> | null>(null)
+  const key = nodes.join(',')
+  useEffect(() => {
+    if (!open || !connection) return
+    let cancelled = false
+    void Promise.all(nodes.map(async node => {
+      try {
+        return [node, nodeFirewallOf(await firewallAPI.getNodeOptions(connection, node))] as const
+      } catch {
+        return [node, 'unknown'] as const
+      }
+    })).then(entries => { if (!cancelled) setStates(Object.fromEntries(entries)) })
+    return () => { cancelled = true }
+    // `key` stands for the node list: a new array of the same nodes must not read them again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, connection, key])
+  return open ? states : null
+}
+
+/**
+ * Turns the cluster firewall on, which the guests' firewalls (and the micro-segmentation) need. It writes nothing else:
+ * no cluster rule, no inbound policy, nothing on the nodes. Those apply to the nodes only, and ProxCenter leaves the
+ * nodes' firewalls alone. The analysis says which nodes have their own firewall on once the cluster firewall is (no
+ * `enable: 0`), since PVE then filters them with what their admin set up.
+ */
+export default function DeploymentWizard({ open, onClose, selectedConnection, nodesList, onComplete }: DeploymentWizardProps) {
   const theme = useTheme()
   const t = useTranslations('deployWizard')
 
-  // ── State ──
   const [activeStep, setActiveStep] = useState(0)
-  const [customRules, setCustomRules] = useState<ClusterWhitelistRule[]>([])
-  const [newRuleProto, setNewRuleProto] = useState('tcp')
-  const [newRuleDport, setNewRuleDport] = useState('')
-  const [newRuleComment, setNewRuleComment] = useState('')
-  const [ruleStatuses, setRuleStatuses] = useState<RuleStatus[]>([])
-  const [applyDone, setApplyDone] = useState(false)
-  const [applyErrors, setApplyErrors] = useState(0)
-  const [enableFirewall, setEnableFirewall] = useState(true)
-  const [setDrop, setSetDrop] = useState(true)
   const [activating, setActivating] = useState(false)
-  const [activateDone, setActivateDone] = useState(false)
-  const [skippedActivation, setSkippedActivation] = useState(false)
+  const [activateError, setActivateError] = useState(false)
+  const [activated, setActivated] = useState(false)
+  const nodeFirewalls = useNodeFirewalls(open, selectedConnection, nodesList)
+  const following = nodeFirewalls ? Object.entries(nodeFirewalls).filter(([, s]) => s === 'follows').map(([n]) => n).sort((a, b) => a.localeCompare(b)) : []
+  const unknown = nodeFirewalls ? Object.entries(nodeFirewalls).filter(([, s]) => s === 'unknown').map(([n]) => n).sort((a, b) => a.localeCompare(b)) : []
 
-  // All rules = predefined + custom
-  const allRules = [...CLUSTER_RULES, ...customRules]
-
-  // ── Reset on close ──
   const handleClose = useCallback(() => {
     onClose()
     setTimeout(() => {
       setActiveStep(0)
-      setCustomRules([])
-      setNewRuleProto('tcp')
-      setNewRuleDport('')
-      setNewRuleComment('')
-      setRuleStatuses([])
-      setApplyDone(false)
-      setApplyErrors(0)
-      setEnableFirewall(true)
-      setSetDrop(true)
       setActivating(false)
-      setActivateDone(false)
-      setSkippedActivation(false)
+      setActivateError(false)
+      setActivated(false)
     }, 300)
   }, [onClose])
 
-  // ── Custom rules ──
-  const handleAddCustomRule = () => {
-    if (!newRuleDport.trim()) return
-    setCustomRules(prev => [...prev, {
-      service: newRuleComment.trim() || `Custom (${newRuleProto.toUpperCase()} ${newRuleDport})`,
-      proto: newRuleProto,
-      dport: newRuleDport.trim(),
-      comment: newRuleComment.trim() || `Custom - ${newRuleProto.toUpperCase()} ${newRuleDport.trim()}`,
-    }])
-    setNewRuleDport('')
-    setNewRuleComment('')
-  }
-
-  const handleRemoveCustomRule = (idx: number) => {
-    setCustomRules(prev => prev.filter((_, i) => i !== idx))
-  }
-
-  // ── Step 2: Apply rules sequentially ──
-  useEffect(() => {
-    if (activeStep !== 2 || applyDone) return
-    // Initialize statuses for all rules on first entry
-    if (ruleStatuses.length !== allRules.length) {
-      setRuleStatuses(allRules.map(() => 'pending'))
-      return
-    }
-
-    let cancelled = false
-    const rulesToApply = allRules
-
-    const applyRules = async () => {
-      let errors = 0
-
-      for (let i = 0; i < rulesToApply.length; i++) {
-        if (cancelled) return
-
-        setRuleStatuses(prev => {
-          const next = [...prev]
-          next[i] = 'creating'
-          return next
-        })
-
-        try {
-          await firewallAPI.addClusterRule(selectedConnection, {
-            type: 'in',
-            action: 'ACCEPT',
-            enable: 1,
-            proto: rulesToApply[i].proto,
-            dport: rulesToApply[i].dport,
-            comment: rulesToApply[i].comment,
-          })
-
-          if (!cancelled) {
-            setRuleStatuses(prev => {
-              const next = [...prev]
-              next[i] = 'success'
-              return next
-            })
-          }
-        } catch {
-          errors++
-          if (!cancelled) {
-            setRuleStatuses(prev => {
-              const next = [...prev]
-              next[i] = 'error'
-              return next
-            })
-          }
-        }
-      }
-
-      if (!cancelled) {
-        setApplyErrors(errors)
-        setApplyDone(true)
-      }
-    }
-
-    void applyRules()
-    return () => { cancelled = true }
-  }, [activeStep, applyDone, selectedConnection, ruleStatuses.length, allRules.length])
-
-  // ── Step 3: Activate ──
   const handleActivate = async () => {
     setActivating(true)
+    setActivateError(false)
     try {
-      const opts: firewallAPI.UpdateOptionsRequest = {}
-      if (enableFirewall) opts.enable = 1
-      if (enableFirewall && setDrop) opts.policy_in = 'DROP'
-      await firewallAPI.updateClusterOptions(selectedConnection, opts)
-      setActivateDone(true)
-      setActiveStep(4)
+      await firewallAPI.updateClusterOptions(selectedConnection, { enable: 1 })
+      setActivated(true)
+      setActiveStep(2)
       onComplete()
     } catch {
+      setActivateError(true)
+    } finally {
       setActivating(false)
     }
   }
 
   const handleSkipActivation = () => {
-    setSkippedActivation(true)
-    setActiveStep(4)
+    setActiveStep(2)
     onComplete()
   }
 
-  // ── Derived ──
-  const successCount = ruleStatuses.filter(s => s === 'success').length
-
-  // ── Render helpers ──
+  const line = (icon: string, color: string, text: string, testId?: string) => (
+    <Box data-testid={testId} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      <Avatar sx={{ width: 32, height: 32, bgcolor: alpha(color, 0.15) }}>
+        <i className={icon} style={{ fontSize: 16, color }} />
+      </Avatar>
+      <Typography variant='body2'>{text}</Typography>
+    </Box>
+  )
 
   const renderAnalysis = () => (
     <Box sx={{ py: 2 }}>
-      <Typography variant="h6" sx={{ fontWeight: 700, mb: 3 }}>{t('analysisTitle')}</Typography>
+      <Typography variant='h6' sx={{ fontWeight: 700, mb: 3 }}>{t('analysisTitle')}</Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Avatar sx={{ width: 32, height: 32, bgcolor: alpha('#3b82f6', 0.15) }}>
-            <i className="ri-server-line" style={{ fontSize: 16, color: '#3b82f6' }} />
-          </Avatar>
-          <Typography variant="body2">{t('analysisNodes', { count: nodesList.length })}</Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Avatar sx={{ width: 32, height: 32, bgcolor: alpha('#ef4444', 0.15) }}>
-            <i className="ri-shield-cross-line" style={{ fontSize: 16, color: '#ef4444' }} />
-          </Avatar>
-          <Typography variant="body2">{t('analysisFirewallOff')}</Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Avatar sx={{ width: 32, height: 32, bgcolor: alpha('#f59e0b', 0.15) }}>
-            <i className="ri-list-check-3" style={{ fontSize: 16, color: '#f59e0b' }} />
-          </Avatar>
-          <Typography variant="body2">{t('analysisNoRules')}</Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Avatar sx={{ width: 32, height: 32, bgcolor: alpha('#f59e0b', 0.15) }}>
-            <i className="ri-arrow-down-line" style={{ fontSize: 16, color: '#f59e0b' }} />
-          </Avatar>
-          <Typography variant="body2">{t('analysisPolicyAccept')}</Typography>
-        </Box>
+        {line('ri-server-line', '#3b82f6', t('analysisNodes', { count: nodesList.length }))}
+        {line('ri-shield-cross-line', '#ef4444', t('analysisFirewallOff'))}
+        {nodeFirewalls === null
+          ? <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pl: 0.5 }}><CircularProgress size={18} /><Typography variant='body2' color='text.secondary'>{t('analysisNodesReading')}</Typography></Box>
+          : line('ri-node-tree', following.length + unknown.length > 0 ? '#f59e0b' : '#22c55e',
+            following.length + unknown.length > 0 ? t('analysisNodesFollow', { count: following.length, nodes: following.join(', ') }) : t('analysisNodesOff'), 'wizard-node-firewalls')}
       </Box>
-      <Alert severity="warning" sx={{ mb: 2 }}>{t('analysisWarning')}</Alert>
+      <Alert severity='info' sx={{ mb: 2 }}>{t('analysisInfo')}</Alert>
+      {following.length > 0 && <Alert severity='warning' data-testid='wizard-nodes-follow' sx={{ mb: 2 }}>{t('analysisNodesWarning', { nodes: following.join(', ') })}</Alert>}
+      {unknown.length > 0 && <Alert severity='warning' sx={{ mb: 2 }}>{t('analysisNodesUnknown', { nodes: unknown.join(', ') })}</Alert>}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-        <Button variant="text" onClick={handleClose}>{t('cancel')}</Button>
-        <Button variant="contained" onClick={() => setActiveStep(1)}>{t('next')}</Button>
-      </Box>
-    </Box>
-  )
-
-  const renderPreview = () => (
-    <Box sx={{ py: 2 }}>
-      <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>{t('previewTitle')}</Typography>
-      <Alert severity="info" sx={{ mb: 2 }}>{t('previewDescription', { count: allRules.length })}</Alert>
-      <TableContainer sx={{ mb: 2 }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ fontWeight: 700 }}>{t('previewService')}</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>{t('previewProtocol')}</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>{t('previewPorts')}</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>{t('previewDirection')}</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>{t('previewAction')}</TableCell>
-              <TableCell />
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {CLUSTER_RULES.map((rule, idx) => (
-              <TableRow key={`builtin-${idx}`}>
-                <TableCell>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <i className="ri-lock-line" style={{ fontSize: 13, color: theme.palette.text.disabled }} />
-                    {rule.service}
-                  </Box>
-                </TableCell>
-                <TableCell><Chip label={rule.proto.toUpperCase()} size="small" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
-                <TableCell sx={{ fontSize: 12 }}>{rule.dport}</TableCell>
-                <TableCell><Chip label="IN" size="small" color="info" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
-                <TableCell><Chip label="ACCEPT" size="small" color="success" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
-                <TableCell />
-              </TableRow>
-            ))}
-            {customRules.map((rule, idx) => (
-              <TableRow key={`custom-${idx}`} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.04) }}>
-                <TableCell>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <i className="ri-user-line" style={{ fontSize: 13, color: theme.palette.primary.main }} />
-                    {rule.service}
-                  </Box>
-                </TableCell>
-                <TableCell><Chip label={rule.proto.toUpperCase()} size="small" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
-                <TableCell sx={{ fontSize: 12 }}>{rule.dport}</TableCell>
-                <TableCell><Chip label="IN" size="small" color="info" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
-                <TableCell><Chip label="ACCEPT" size="small" color="success" sx={{ height: 22, fontSize: 11, fontWeight: 600 }} /></TableCell>
-                <TableCell>
-                  <IconButton size="small" onClick={() => handleRemoveCustomRule(idx)}>
-                    <i className="ri-delete-bin-line" style={{ fontSize: 15, color: '#ef4444' }} />
-                  </IconButton>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      {/* Add custom rule form */}
-      <Box sx={{
-        display: 'flex', gap: 1, alignItems: 'flex-end', mb: 2, p: 1.5,
-        borderRadius: 1.5, border: `1px dashed ${paletteAlpha(theme, 'divider', 0.3)}`,
-        bgcolor: paletteAlpha(theme, 'divider', 0.02)
-      }}>
-        <FormControl size="small" sx={{ minWidth: 90 }}>
-          <InputLabel>{t('previewProtocol')}</InputLabel>
-          <Select value={newRuleProto} label={t('previewProtocol')} onChange={e => setNewRuleProto(e.target.value)}>
-            <MenuItem value="tcp">TCP</MenuItem>
-            <MenuItem value="udp">UDP</MenuItem>
-          </Select>
-        </FormControl>
-        <TextField
-          size="small"
-          label={t('previewPorts')}
-          placeholder="443 | 8080:8090"
-          value={newRuleDport}
-          onChange={e => setNewRuleDport(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') handleAddCustomRule() }}
-          sx={{ flex: 1, minWidth: 120 }}
-        />
-        <TextField
-          size="small"
-          label={t('customComment')}
-          placeholder={t('customCommentPlaceholder')}
-          value={newRuleComment}
-          onChange={e => setNewRuleComment(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') handleAddCustomRule() }}
-          sx={{ flex: 2 }}
-        />
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={handleAddCustomRule}
-          disabled={!newRuleDport.trim()}
-          startIcon={<i className="ri-add-line" />}
-          sx={{ height: 40, flexShrink: 0 }}
-        >
-          {t('customAdd')}
-        </Button>
-      </Box>
-
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-        <Button variant="text" onClick={handleClose}>{t('cancel')}</Button>
-        <Button variant="contained" onClick={() => setActiveStep(2)}>{t('next')}</Button>
-      </Box>
-    </Box>
-  )
-
-  const renderApply = () => (
-    <Box sx={{ py: 2 }}>
-      <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>{t('applyTitle')}</Typography>
-      {!applyDone && (
-        <LinearProgress variant="determinate" value={allRules.length > 0 ? (successCount / allRules.length) * 100 : 0} sx={{ mb: 2, height: 6, borderRadius: 3 }} />
-      )}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
-        {allRules.map((rule, idx) => (
-          <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1, borderRadius: 1, bgcolor: paletteAlpha(theme, 'divider', 0.04) }}>
-            {ruleStatuses[idx] === 'pending' && (
-              <i className="ri-time-line" style={{ fontSize: 18, color: theme.palette.text.disabled }} />
-            )}
-            {ruleStatuses[idx] === 'creating' && (
-              <CircularProgress size={18} />
-            )}
-            {ruleStatuses[idx] === 'success' && (
-              <i className="ri-check-line" style={{ fontSize: 18, color: '#22c55e' }} />
-            )}
-            {ruleStatuses[idx] === 'error' && (
-              <i className="ri-close-line" style={{ fontSize: 18, color: '#ef4444' }} />
-            )}
-            <Typography variant="body2" sx={{ flex: 1, fontSize: 13 }}>
-              {rule.service}
-              <Typography component="span" sx={{ color: 'text.secondary', ml: 1, fontSize: 11 }}>
-                {rule.proto.toUpperCase()} {rule.dport}
-              </Typography>
-            </Typography>
-            {ruleStatuses[idx] === 'success' && <Chip label="OK" size="small" color="success" sx={{ height: 20, fontSize: 10 }} />}
-            {ruleStatuses[idx] === 'error' && <Chip label="Error" size="small" color="error" sx={{ height: 20, fontSize: 10 }} />}
-          </Box>
-        ))}
-      </Box>
-      {applyDone && applyErrors === 0 && (
-        <Alert severity="success" sx={{ mb: 2 }}>{t('applyComplete', { count: allRules.length })}</Alert>
-      )}
-      {applyDone && applyErrors > 0 && (
-        <Alert severity="warning" sx={{ mb: 2 }}>{t('applyPartial', { success: successCount, total: allRules.length, failed: applyErrors })}</Alert>
-      )}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <Button variant="contained" disabled={!applyDone} onClick={() => setActiveStep(3)}>{t('next')}</Button>
+        <Button variant='text' onClick={handleClose}>{t('cancel')}</Button>
+        <Button variant='contained' onClick={() => setActiveStep(1)} disabled={nodeFirewalls === null}>{t('next')}</Button>
       </Box>
     </Box>
   )
 
   const renderActivate = () => (
     <Box sx={{ py: 2 }}>
-      <Typography variant="h6" sx={{ fontWeight: 700, mb: 3 }}>{t('activateTitle')}</Typography>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
-        <FormControlLabel
-          control={<Checkbox checked={enableFirewall} onChange={(_, v) => { setEnableFirewall(v); if (!v) setSetDrop(false) }} />}
-          label={t('activateEnableFirewall')}
-        />
-        <FormControlLabel
-          control={<Checkbox checked={setDrop} onChange={(_, v) => setSetDrop(v)} disabled={!enableFirewall} />}
-          label={t('activateSetDrop')}
-          sx={{ ml: 2 }}
-        />
-      </Box>
-      <Alert severity="warning" sx={{ mb: 3 }}>{t('activateWarning')}</Alert>
+      <Typography variant='h6' sx={{ fontWeight: 700, mb: 2 }}>{t('activateTitle')}</Typography>
+      <Typography variant='body2' sx={{ mb: 2 }}>{t('activateDescription')}</Typography>
+      {activateError && <Alert severity='error' sx={{ mb: 2 }}>{t('activateFailed')}</Alert>}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Button variant="text" onClick={handleSkipActivation} sx={{ fontSize: 12, color: 'text.secondary' }}>{t('activateSkip')}</Button>
+        <Button variant='text' onClick={handleSkipActivation} sx={{ fontSize: 12, color: 'text.secondary' }}>{t('activateSkip')}</Button>
         <Button
-          variant="contained"
-          color="warning"
+          variant='contained'
+          color='warning'
           onClick={handleActivate}
-          disabled={activating || (!enableFirewall && !setDrop)}
-          startIcon={activating ? <CircularProgress size={16} color="inherit" /> : <i className="ri-shield-flash-line" />}
+          disabled={activating}
+          startIcon={activating ? <CircularProgress size={16} color='inherit' /> : <i className='ri-shield-flash-line' />}
         >
           {activating ? t('activating') : t('activateButton')}
         </Button>
@@ -421,55 +157,40 @@ export default function DeploymentWizard({
 
   const renderDone = () => (
     <Box sx={{ py: 2, textAlign: 'center' }}>
-      <Avatar sx={{ width: 64, height: 64, bgcolor: alpha('#22c55e', 0.15), mx: 'auto', mb: 2 }}>
-        <i className="ri-check-double-line" style={{ fontSize: 32, color: '#22c55e' }} />
+      <Avatar sx={{ width: 64, height: 64, bgcolor: alpha(activated ? '#22c55e' : theme.palette.text.disabled, 0.15), mx: 'auto', mb: 2 }}>
+        <i className={activated ? 'ri-check-double-line' : 'ri-shield-cross-line'} style={{ fontSize: 32, color: activated ? '#22c55e' : theme.palette.text.disabled }} />
       </Avatar>
-      <Typography variant="h6" sx={{ fontWeight: 700, mb: 3 }}>{t('doneTitle')}</Typography>
+      <Typography variant='h6' sx={{ fontWeight: 700, mb: 3 }}>{t('doneTitle')}</Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 3, alignItems: 'center' }}>
-        <Chip icon={<i className="ri-list-check-3" style={{ fontSize: 14 }} />} label={t('doneRulesCreated', { count: successCount })} color="success" sx={{ height: 28 }} />
         <Chip
-          icon={<i className={skippedActivation || !enableFirewall ? "ri-shield-cross-line" : "ri-shield-check-line"} style={{ fontSize: 14 }} />}
-          label={activateDone && enableFirewall ? t('doneFirewallEnabled') : t('doneFirewallNotEnabled')}
-          color={activateDone && enableFirewall ? 'success' : 'default'}
-          sx={{ height: 28 }}
-        />
-        <Chip
-          icon={<i className="ri-arrow-down-line" style={{ fontSize: 14 }} />}
-          label={activateDone && setDrop ? t('donePolicyDrop') : t('donePolicyAccept')}
-          color={activateDone && setDrop ? 'warning' : 'default'}
+          icon={<i className={activated ? 'ri-shield-check-line' : 'ri-shield-cross-line'} style={{ fontSize: 14 }} />}
+          label={activated ? t('doneFirewallEnabled') : t('doneFirewallNotEnabled')}
+          color={activated ? 'success' : 'default'}
           sx={{ height: 28 }}
         />
       </Box>
-      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1.5 }}>
-        <Button variant="outlined" onClick={handleClose}>{t('doneClose')}</Button>
-      </Box>
+      <Button variant='outlined' onClick={handleClose}>{t('doneClose')}</Button>
     </Box>
   )
 
   return (
-    <Dialog open={open} onClose={activeStep < 2 ? handleClose : undefined} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={activating ? undefined : handleClose} maxWidth='md' fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <i className="ri-shield-flash-line" style={{ fontSize: 22, color: theme.palette.warning.main }} />
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>{t('dialogTitle')}</Typography>
+          <i className='ri-shield-flash-line' style={{ fontSize: 22, color: theme.palette.warning.main }} />
+          <Typography variant='h6' sx={{ fontWeight: 700 }}>{t('dialogTitle')}</Typography>
         </Box>
-        {activeStep < 2 && (
-          <IconButton onClick={handleClose} size="small"><i className="ri-close-line" /></IconButton>
-        )}
+        {!activating && <IconButton onClick={handleClose} size='small' aria-label={t('cancel')}><i className='ri-close-line' /></IconButton>}
       </DialogTitle>
 
       <Stepper activeStep={activeStep} alternativeLabel sx={{ px: 3, pb: 2 }}>
-        {STEPS.map((key) => (
-          <Step key={key}><StepLabel>{t(key)}</StepLabel></Step>
-        ))}
+        {STEPS.map(key => <Step key={key}><StepLabel>{t(key)}</StepLabel></Step>)}
       </Stepper>
 
       <DialogContent sx={{ pt: 0 }}>
         {activeStep === 0 && renderAnalysis()}
-        {activeStep === 1 && renderPreview()}
-        {activeStep === 2 && renderApply()}
-        {activeStep === 3 && renderActivate()}
-        {activeStep === 4 && renderDone()}
+        {activeStep === 1 && renderActivate()}
+        {activeStep === 2 && renderDone()}
       </DialogContent>
     </Dialog>
   )

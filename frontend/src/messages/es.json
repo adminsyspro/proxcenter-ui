@@ -9384,40 +9384,8 @@
     "loadErrorDetails": "Detalles",
     "loadErrorHideDetails": "Ocultar detalles",
     "dashboard": {
-      "stopHeldTitle": "Cortafuegos del clúster apagado por la parada de emergencia",
-      "coverageDefinition": "Protegido: cortafuegos activado en las opciones del invitado y en una de sus interfaces de red, lo que aplica Proxmox",
-      "coverageSampled": "Por encima de {max, number} invitados, solo se mide una muestra uniforme.",
-      "todoTitle": "Por hacer",
-      "todoNothing": "Nada que hacer",
-      "todoUnavailable": "No disponible mientras no se puedan leer los datos del cortafuegos",
-      "todoFirewallOff": "Cortafuegos del clúster desactivado",
-      "todoManagementRules": "Ninguna regla del clúster permite la administración ({count, plural, one {puerto {ports}} other {puertos {ports}}})",
-      "todoPolicyIn": "Política de entrada ACCEPT: entra todo lo que ninguna regla descarta",
-      "todoUnprotected": "{count, plural, one {# invitado sin cortafuegos} other {# invitados sin cortafuegos}}",
-      "todoUnzoned": "{count, plural, one {# invitado en marcha en ninguna zona} other {# invitados en marcha en ninguna zona}}",
-      "todoPendingFlows": "{count, plural, one {# flujo observado por revisar} other {# flujos observados por revisar}}",
-      "todoPendingFlowsMore": "Al menos {count, number} flujos observados por revisar",
-      "todoResume": "Reanudar",
-      "todoOpenWizard": "Abrir el asistente",
-      "todoOpenOptions": "Cambiarla",
-      "todoShowThem": "Mostrarlos",
-      "todoOpenDrifts": "Abrir las desviaciones",
-      "todoOpenObservation": "Revisarlos",
       "filterUnprotected": "{count, plural, one {# invitado sin cortafuegos} other {# invitados sin cortafuegos}}",
       "filterClear": "Mostrar todos los invitados",
-      "postureChipCluster": "Cortafuegos del clúster {state} · entrante {policy}",
-      "postureChipHost": "Cortafuegos del host {state} · entrante {policy}",
-      "postureOn": "ACTIVADO",
-      "postureOff": "APAGADO",
-      "postureChipClusterUnknown": "Cortafuegos del clúster no disponible",
-      "postureChipStopped": "Parada de emergencia activa",
-      "postureChipZones": "Zonas en bloqueo {enforced, number} / {total, number}",
-      "postureChipZonesUnknown": "Zonas en bloqueo -",
-      "postureChipGuests": "Invitados protegidos {protected, number} / {running, number} en ejecución",
-      "postureChipGuestsSampled": "Invitados protegidos {protected, number} / {running, number} medidos · {total, number} en ejecución",
-      "postureChipGuestsUnknown": "Invitados protegidos -",
-      "postureChipLastCheck": "Última comprobación {time}",
-      "postureChipNoCheck": "Ninguna comprobación aún",
       "postureTrafficByZone": "Tráfico por zona",
       "postureTrafficByVlan": "Tráfico por VLAN",
       "postureTrafficByNode": "Tráfico por nodo",
@@ -9431,6 +9399,7 @@
       "postureHits": "{count, plural, one {# coincidencia} other {# coincidencias}}",
       "postureMembers": "{count, plural, one {# invitado} other {# invitados}}",
       "postureUnknownExternal": "Desconocido / Externo",
+      "postureOutside": "Exterior",
       "postureUnzoned": "Sin zona",
       "postureOther": "Otros",
       "postureNoVlan": "Sin VLAN",
@@ -9445,23 +9414,29 @@
       "postureAllowed": "Permitido",
       "postureWouldBlock": "Se bloquearía",
       "postureBlocked": "Bloqueado",
-      "postureNotCovered": "No cubierto",
       "postureFlows": "{count, plural, one {# flujo} other {# flujos}}",
       "postureNoCounter": "sin contador",
+      "postureNoCounterHint": "Los flujos que la política permite no se registran, por lo que sus ocurrencias no se cuentan.",
       "postureAwaitingDecision": "en espera de una decisión",
       "postureBlockedIn": "en {zones}",
+      "postureBlockedOut": "saliente desde {zones}",
       "postureBlockedNone": "ninguno descartado",
       "postureServicesTitle": "Servicios principales por coincidencias",
+      "postureServicesShown": "{shown, number} de {total, number} servicios",
+      "postureServicesAll": "Todos los flujos observados",
       "postureColService": "Servicio",
       "postureColFlows": "Flujos",
       "postureColHits": "Coincidencias",
       "postureColStatus": "Estado",
       "postureNoServices": "Ningún servicio observado ni permitido",
+      "postureConversationsTitle": "Conversaciones principales",
+      "postureConversationsCaption": "origen a destino, por ocurrencias",
+      "postureColSource": "Origen",
+      "postureColDestination": "Destino",
+      "postureColServices": "Servicios",
+      "postureNoConversations": "Ningún flujo observado que revisar",
+      "postureConversationsShown": "{shown} de {total} conversaciones",
       "postureUnknownIncludesUnzoned": "las fuentes desconocidas incluyen los invitados sin zona hasta que se lea la lista de invitados (agrupar por VLAN o por nodo)",
-      "postureRefresh": "Volver a calcular la cobertura",
-      "postureRefreshAgo": "Calculada {time} · volver a calcular",
-      "postureRefreshSoon": "Calculada {time} · cifras de hace menos de 30 segundos",
-      "postureRefreshComputing": "Calculando la cobertura",
       "postureTimelineTitle": "Tráfico observado en el tiempo",
       "postureTimelineWindow": "ventana cubierta: {minutes, plural, one {último minuto} other {últimos # min}} (memoria del orquestador)",
       "postureTimelineVerdict": "Veredicto",
@@ -9513,54 +9488,31 @@
     }
   },
   "deployWizard": {
-    "bannerTitle": "Firewall de clúster no configurado",
-    "bannerDescription": "Su clúster no tiene reglas de firewall y el firewall está deshabilitado. Despliegue reglas esenciales antes de activar el firewall para evitar perder conectividad.",
-    "bannerButton": "Desplegar firewall",
     "dialogTitle": "Despliegue de firewall de clúster",
     "stepAnalysis": "Análisis",
-    "stepPreview": "Vista previa",
-    "stepApply": "Aplicar",
     "stepActivate": "Activar",
     "stepDone": "Completado",
     "analysisTitle": "Estado actual del clúster",
     "analysisNodes": "{count} nodos detectados",
     "analysisFirewallOff": "El firewall de clúster está deshabilitado",
-    "analysisNoRules": "No hay reglas de firewall de clúster configuradas",
-    "analysisPolicyAccept": "Política predeterminada: ACCEPT (todo el tráfico permitido)",
-    "analysisWarning": "Activar el firewall con una política DROP sin reglas de whitelist romperá la comunicación del clúster (Corosync, Ceph, migraciones…). Este asistente creará primero las reglas esenciales.",
-    "previewTitle": "Reglas que se crearán",
-    "previewDescription": "Las siguientes {count} reglas se añadirán al firewall de clúster para permitir servicios esenciales de Proxmox en la whitelist.",
-    "previewService": "Servicio",
-    "previewProtocol": "Protocolo",
-    "previewPorts": "Puertos",
-    "previewDirection": "Dirección",
-    "previewAction": "Acción",
-    "applyTitle": "Aplicando reglas",
-    "applyCreating": "Creando regla: {service}",
-    "applySuccess": "Regla creada: {service}",
-    "applyError": "No se pudo crear la regla: {service}",
-    "applyComplete": "¡Todas las {count} reglas se crearon correctamente!",
-    "applyPartial": "{success} de {total} reglas creadas. {failed} fallidas.",
+    "analysisNodesReading": "Leyendo el cortafuegos de los nodos…",
+    "analysisNodesOff": "El cortafuegos de cada nodo está desactivado: activar el cortafuegos del clúster solo filtra los invitados",
+    "analysisNodesFollow": "{count, plural, one {1 nodo activa su propio cortafuegos con el clúster: {nodes}} other {# nodos activan su propio cortafuegos con el clúster: {nodes}}}",
+    "analysisInfo": "Este asistente activa el cortafuegos del clúster, que necesitan el cortafuegos de los invitados y la microsegmentación. No escribe nada en los nodos: ni reglas ni política de entrada.",
+    "analysisNodesWarning": "En {nodes}, el cortafuegos del nodo no está desactivado (enable: 0): Proxmox lo activa con el del clúster y filtra el nodo con las reglas de su administrador. ProxCenter no añade ninguna: compruebe que la interfaz web (8006) y SSH (22) siguen accesibles, o desactive el cortafuegos del nodo.",
+    "analysisNodesUnknown": "No se pudo leer el cortafuegos de {nodes}: compruébelo antes de activar el cortafuegos del clúster.",
     "activateTitle": "Activar firewall",
-    "activateEnableFirewall": "Habilitar firewall de clúster",
-    "activateSetDrop": "Establecer política entrante en DROP",
-    "activateWarning": "Habilitar la política DROP significa que todo el tráfico entrante que no esté permitido explícitamente por una regla será bloqueado. Las reglas creadas en el paso anterior garantizan que los servicios del clúster sigan siendo accesibles.",
+    "activateDescription": "Se activa el cortafuegos del clúster. Nada más cambia: las reglas, las políticas y el cortafuegos de los nodos quedan como están.",
+    "activateFailed": "No se pudo activar el cortafuegos del clúster. Inténtelo de nuevo o actívelo en Cortafuegos > Opciones.",
     "activateButton": "Activar",
     "activateSkip": "Omitir por ahora",
     "activating": "Activando...",
     "doneTitle": "¡Despliegue completado!",
-    "doneRulesCreated": "{count} reglas de clúster creadas",
     "doneFirewallEnabled": "Firewall de clúster habilitado",
     "doneFirewallNotEnabled": "Firewall de clúster no habilitado (se necesita activación manual)",
-    "donePolicyDrop": "Política entrante establecida en DROP",
-    "donePolicyAccept": "La política entrante permanece en ACCEPT",
-    "doneViewRules": "Ver reglas",
     "doneClose": "Cerrar",
     "next": "Siguiente",
-    "cancel": "Cancelar",
-    "customAdd": "Añadir",
-    "customComment": "Descripción",
-    "customCommentPlaceholder": "p. ej., HTTPS, Monitoring…"
+    "cancel": "Cancelar"
   },
   "firewall": {
     "type": "Tipo",
@@ -13303,7 +13255,9 @@
         "done": "Terminado",
         "failed": "Fallido",
         "running": "En curso"
-      }
+      },
+      "logNode": "{node} · {rate} líneas/min · retraso {lag}",
+      "logBehind": "Registro atrasado"
     },
     "stop": {
       "button": "Parada de emergencia",
@@ -13319,29 +13273,45 @@
       "infoObjects": "Los objetos de microsegmentación se conservan; Reanudar reactiva el cortafuegos de clúster y vuelve a aplicar la política",
       "infoUse": "Úselo cuando la segmentación bloquee algo que no debería",
       "resumeInfoReenable": "Reactiva el cortafuegos de clúster y después vuelve a aplicar la última revisión",
-      "resumeInfoSocle": "Se rechaza si faltan las reglas de administración (SSH 22, web 8006): corríjalas antes en el asistente de despliegue del panel",
-      "openWizard": "Abrir el asistente de despliegue",
+      "resumeInfoSocle": "Se rechaza si un nodo con su cortafuegos activo no deja entrar la interfaz web (8006) y SSH (22): permítalos en el cortafuegos de ese nodo, o desactívelo, antes",
       "clusterFirewallOff": "Cortafuegos de clúster desactivado",
-      "notDeployed": "Nada desplegado"
+      "notDeployed": "Nada desplegado",
+      "socleUncovered": "Direcciones que las reglas no aceptan: {ips}",
+      "socleUncoveredNodes": "Direcciones que las reglas no aceptan: {ips} (en {nodes})"
     },
     "pending": {
-      "noCount": "Cambios sin aplicar",
-      "viewPlan": "Ver el plan",
+      "noCount": "Cambios aún sin aplicar.",
+      "viewPlan": "Revisar y aplicar",
       "prefixed": "{prefix}: {text}",
-      "whatWillChange": "Lo que va a cambiar: {list}",
+      "whatWillChange": "Aún sin aplicar: {list}.",
       "zones": {
         "added": "{count, plural, one {# zona añadida} other {# zonas añadidas}}",
         "changed": "{count, plural, one {# zona modificada} other {# zonas modificadas}}",
         "removed": "{count, plural, one {# zona eliminada} other {# zonas eliminadas}}"
+      },
+      "zonesNamed": {
+        "added": "{count, plural, one {zona {names} añadida} other {zonas {names} añadidas}}",
+        "changed": "{count, plural, one {zona {names} modificada} other {zonas {names} modificadas}}",
+        "removed": "{count, plural, one {zona {names} eliminada} other {zonas {names} eliminadas}}"
       },
       "flows": {
         "added": "{count, plural, one {# flujo añadido} other {# flujos añadidos}}",
         "changed": "{count, plural, one {# flujo modificado} other {# flujos modificados}}",
         "removed": "{count, plural, one {# flujo eliminado} other {# flujos eliminados}}"
       },
+      "flowsNamed": {
+        "added": "flujo {flow} añadido",
+        "changed": "flujo {flow} modificado",
+        "removed": "flujo {flow} eliminado"
+      },
       "members": "{count, plural, one {# cambio de miembro} other {# cambios de miembros}}",
+      "membersTo": "{count, plural, one {# invitado a {zone}} other {# invitados a {zone}}}",
       "tagPrefix": "prefijo de etiquetas modificado",
-      "whatWillChangeInline": "lo que va a cambiar: {list}"
+      "whatWillChangeInline": "aún sin aplicar: {list}.",
+      "untilApplied": "Nada cambia en Proxmox hasta que se aplique el plan.",
+      "applying": "Aplicación en curso: {list}",
+      "applyingInline": "aplicación en curso: {list}",
+      "applyingNoCount": "Aplicando los cambios"
     },
     "firstRun": {
       "title": "Configurar la microsegmentación",
@@ -13376,7 +13346,7 @@
       "NETWORK": "No se puede contactar con ProxCenter. Compruebe su conexión de red.",
       "CHECK_PENDING": "Ya hay una comprobación en cola: el motor la inicia en su próxima pasada.",
       "generic": "Algo salió mal. Inténtelo de nuevo.",
-      "SOCLE_MISSING": "Faltan las reglas de administración (SSH 22, web 8006), por lo que no se reactivó el cortafuegos de clúster. Añádalas con el asistente de despliegue y reanude.",
+      "SOCLE_MISSING": "Un nodo con su cortafuegos activo no deja entrar la interfaz web (8006) y SSH (22), por lo que no se reactivó el cortafuegos del clúster. Permítalos en el cortafuegos de ese nodo, o desactívelo, y reanude.",
       "NOT_DEPLOYED": "Aún no hay nada desplegado: aplique antes un plan, la parada de emergencia actúa sobre una política desplegada."
     },
     "policy": {
@@ -13408,6 +13378,7 @@
         "outgoing": "Flujos salientes",
         "noFlows": "Ninguno",
         "changeState": "Cambiar el estado",
+        "stateChanging": "Cambio de estado en curso",
         "edit": "Editar zona",
         "delete": "Eliminar zona",
         "state": {
@@ -13448,15 +13419,37 @@
           "loading": "Leyendo el historial...",
           "disabled": "Zona desactivada: su tráfico no se registra",
           "aria": "{count, plural, one {Tráfico no cubierto en las últimas 24 horas: # impacto} other {Tráfico no cubierto en las últimas 24 horas: # impactos}}",
-          "bar": "{from} a {to}: {count, plural, one {# impacto} other {# impactos}}"
-        }
+          "bar": "{from} a {to}: {count, plural, one {# impacto} other {# impactos}}",
+          "barBoth": "{from} a {to}: {count, plural, one {# coincidencia} other {# coincidencias}} entrantes, {out, plural, one {# coincidencia} other {# coincidencias}} salientes",
+          "legendIn": "Entrante",
+          "legendOut": "Saliente",
+          "outBlocked": "{short} salientes bloqueados",
+          "outWouldBlock": "{short} salientes se bloquearían",
+          "outConnections": "{short} conexiones salientes"
+        },
+        "egress": {
+          "state": {
+            "off": "Salida: sin control",
+            "observe": "Salida: observación",
+            "ready": "Salida: lista",
+            "enforce": "Salida: bloqueo"
+          },
+          "hint": {
+            "off": "El tráfico saliente no está controlado",
+            "observe": "El tráfico saliente se registra, no se bloquea nada",
+            "ready": "No se habría bloqueado nada en salida durante toda la ventana de observación",
+            "enforce": "Solo los flujos de la política salen de la zona"
+          }
+        },
+        "gatewayTip": "Puerta de enlace {ip}"
       },
       "flow": {
-        "notApplied": "No aplicado (salida no gestionada en v1)",
+        "notApplied": "No aplicado (salida no controlada)",
         "learned": "Aprendido",
         "edit": "Editar flujo",
         "delete": "Eliminar flujo",
-        "createdBy": "Creado por {user}"
+        "createdBy": "Creado por {user}",
+        "observed": "Salida en observación"
       },
       "zoneDialog": {
         "createTitle": "Nueva zona",
@@ -13466,8 +13459,74 @@
         "label": "Etiqueta",
         "color": "Color",
         "isolate": "Aislar los miembros entre sí",
+        "members": "Miembros",
+        "inboundSection": "Entrada",
+        "inboundStates": {
+          "disabled": "Desactivada",
+          "observe": "Observación",
+          "enforce": "Bloqueo"
+        },
+        "egressSection": "Salida",
+        "outboundStates": {
+          "off": "No controlada",
+          "observe": "Observación",
+          "enforce": "Bloqueo"
+        },
+        "egressFilter": "Filtrar el tráfico saliente hacia:",
+        "egressFilterTo": "Filtrar hacia",
+        "egressLocal": "La red local",
+        "egressAll": "La red local e Internet",
+        "egressAllWarning": "Solo filtrado por dirección IP: un servicio tras un nombre de dominio puede cambiar de dirección.",
+        "egressNeedsState": "La zona debe estar en observación o en bloqueo",
+        "tips": {
+          "isolate": "Las VM de esta zona solo se comunican entre sí mediante un flujo declarado. Sin marcar, se comunican libremente.",
+          "inbound": {
+            "disabled": "La zona no se aplica en Proxmox.",
+            "observe": "No se bloquea nada: el tráfico entrante fuera de la política se registra y se propone como sugerencia.",
+            "enforce": "Solo entran los flujos de la política; el resto se bloquea y es visible en Bloqueado."
+          },
+          "outbound": {
+            "off": "Las VM de la zona salen libremente, no se registra nada.",
+            "observe": "No se bloquea nada: las salidas fuera de la política se registran y se proponen como sugerencias.",
+            "enforce": "Solo pasan las salidas autorizadas por un flujo; el resto se bloquea y es visible en Bloqueado."
+          },
+          "local": "Filtra las salidas hacia las subredes de las VM en zona, incluidas las VM sin zona. Internet sigue abierto.",
+          "all": "Filtra toda salida, Internet incluido: solo pasan los flujos de la política."
+        },
+        "statesTitle": "¿Cambiar los estados de la zona {name}?",
+        "statesConfirm": "Aplicar los estados",
+        "inboundRunFailed": "El cambio de estado de entrada ha fallado: la salida no se ha modificado.",
+        "egressOnTitle": "¿Controlar el tráfico saliente de la zona {name}?",
+        "egressOffTitle": "¿Dejar de controlar el tráfico saliente de la zona {name}?",
+        "egressOnBody": "El tráfico saliente de la zona pasa a observación.",
+        "egressOffBody": "El filtrado del tráfico saliente de la zona se retira.",
+        "egressIsolateNote": "El cambio de aislamiento se aplica al mismo tiempo.",
+        "egressOnConfirm": "Controlar",
+        "egressOffConfirm": "Dejar de controlar",
         "create": "Crear",
-        "save": "Guardar"
+        "save": "Guardar",
+        "gateway": "Puerta de enlace",
+        "gatewayHint": "El router de la red de la zona, opcional",
+        "gatewayAllow": "Permitir hacia la puerta de enlace",
+        "gatewayServices": {
+          "dns": "DNS",
+          "ntp": "NTP",
+          "ping": "Ping",
+          "http": "HTTP",
+          "https": "HTTPS",
+          "ssh": "SSH",
+          "snmp": "SNMP",
+          "syslog": "Syslog",
+          "proxy": "Proxy HTTP",
+          "all": "Todos los protocolos"
+        },
+        "gatewayAllowed": "Ya permitido por un flujo del borrador",
+        "gatewayFlowComment": "Puerta de enlace de la zona",
+        "gatewayFirst": "Introduzca primero la puerta de enlace",
+        "gatewayServicesHint": "Elegir en la lista, o escribir un protocolo y sus puertos: tcp/8443, udp/5000:5010, icmp, any",
+        "gatewayTypedInvalid": "Servicio no válido: tcp o udp con puertos (tcp/8443, udp/53,123, tcp/5000:5010), o icmp, icmpv6, any",
+        "gatewayTypeHint": "Elegir o escribir un servicio",
+        "gatewayAdd": "Añadir {service}"
       },
       "flowDialog": {
         "createTitle": "Nuevo flujo",
@@ -13499,7 +13558,8 @@
         "cidrBoth": "Un flujo no puede tener un CIDR en ambos lados.",
         "protoInvalid": "Protocolo no válido",
         "portInvalid": "Puerto no válido. Use 80, 80,443 u 8000:8100 (de 1 a 65535).",
-        "portNotAllowed": "No se permite un puerto con este protocolo."
+        "portNotAllowed": "No se permite un puerto con este protocolo.",
+        "gatewayInvalid": "Una dirección IPv4 o IPv6, sin prefijo"
       },
       "delete": {
         "zoneTitle": "¿Eliminar la zona {name}?",
@@ -13521,11 +13581,21 @@
         "running": {
           "disabled": "{label}: cambio a desactivada en curso",
           "observe": "{label}: cambio a observación en curso",
-          "enforce": "{label}: cambio a aplicación en curso"
+          "enforce": "{label}: cambio a aplicación en curso",
+          "egressObserve": "{label}: control del tráfico saliente en curso",
+          "egressOff": "{label}: retirada del control del tráfico saliente en curso",
+          "egressReopen": "{label}: reapertura de la salida en curso",
+          "egressEnforce": "{label}: bloqueo de la salida en curso"
         },
         "done": "{label}: {done} hechos, {failed} fallidos, {notRun} sin ejecutar",
         "failed": "{label}: la ejecución ha fallado",
-        "unavailable": "{label}: el progreso no está disponible"
+        "unavailable": "{label}: el progreso no está disponible",
+        "progress": {
+          "waiting": "en espera de la operación en curso",
+          "readingStart": "lectura de Proxmox",
+          "reading": "lectura de Proxmox, {done, number} / {total, number} invitados",
+          "writing": "escritura en Proxmox, {done, number} / {total, number}"
+        }
       },
       "assign": {
         "title": "Asignar invitados a {zone}",
@@ -13597,13 +13667,31 @@
           "pendingChangeHint": "Se modifica en la próxima aplicación",
           "pendingRemoval": "Eliminación pendiente",
           "pendingRemovalHint": "Se elimina en la próxima aplicación",
-          "notApplied": "No aplicado en v1",
-          "notAppliedHint": "No aplicado (salida no gestionada en v1)",
-          "unknownHint": "Comparando con la revisión aplicada..."
+          "notApplied": "No aplicado",
+          "notAppliedHint": "No aplicado (salida no controlada)",
+          "unknownHint": "Comparando con la revisión aplicada...",
+          "observed": "Salida en observación",
+          "observedHint": "Salida en observación: la zona registra estos flujos sin bloquearlos todavía"
         },
         "uncovered": "{count, plural, one {Sin cubrir 24 h: # impacto} other {Sin cubrir 24 h: # impactos}}",
         "uncoveredHint": "Tráfico hacia esta zona que ningún flujo cubre (registrado por los miembros de la zona en las últimas 24 h)",
         "noFlowInto": "Ningún flujo hacia esta zona"
+      },
+      "egressState": {
+        "title": {
+          "block": "¿Bloquear la salida de la zona {name}?",
+          "reopen": "¿Reabrir la salida de la zona {name}?"
+        },
+        "reopenBody": "La salida vuelve a observación: ya no se bloquea nada.",
+        "checking": "Comprobando la observación de la salida...",
+        "ready": "No se habría bloqueado nada en salida en las últimas {hours} horas.",
+        "notReady": "Esta zona no está lista: necesita {hours} horas de observación de la salida sin tráfico pendiente que se bloquearía.",
+        "unchecked": "No se pudo comprobar la observación de la salida, la zona se considera no lista.",
+        "typeName": "Escriba {name} para confirmar",
+        "confirm": {
+          "block": "Bloquear la salida",
+          "reopen": "Reabrir la salida"
+        }
       }
     },
     "plan": {
@@ -13623,6 +13711,13 @@
       "nothing": "Nada que cambiar: Proxmox ya coincide con el borrador.",
       "clusterGroup": "Objetos del clúster",
       "stepCount": "{count, plural, one {# paso} other {# pasos}}",
+      "stepState": {
+        "waiting": "En espera",
+        "running": "Escribiendo",
+        "done": "Hecho",
+        "failed": "Error",
+        "notRun": "No ejecutado"
+      },
       "collisions": "Bloqueado: estos objetos de Proxmox usan nuestros nombres sin ser nuestros, renómbrelos o elimínelos: {names}",
       "foreignRules": "Las reglas añadidas a mano en nuestros grupos de seguridad se conservan, sin tocarlas: {names}",
       "unread": "{count, plural, one {# invitado no se pudo leer y se tratará} other {# invitados no se pudieron leer y se tratarán}} en la próxima pasada: {names}",
@@ -13692,6 +13787,46 @@
           "title": "Nombre ya usado en Proxmox",
           "detail": "{object} ya existe en Proxmox y no fue creado por ProxCenter: no se toca.",
           "hint": "Existe en Proxmox un objeto llamado pcz-* sin la marca de la microsegmentación: renómbrelo o elimínelo en Proxmox."
+        },
+        "egress_rule_missing": {
+          "title": "Falta la regla de salida",
+          "detail": "La regla final de salida de {name} no está en Proxmox.",
+          "detailCollision": "{name} no puede bloquear su salida: pcz-_local pertenece a otra persona en Proxmox.",
+          "hintCollision": "Existe en Proxmox un objeto llamado pcz-_local sin la marca de microsegmentación: renómbrelo o elimínelo en Proxmox."
+        },
+        "egress_rule_misplaced": {
+          "title": "Regla de salida mal ubicada",
+          "detail": "La regla final de salida de {name} no es la última regla, o aparece dos veces.",
+          "detailKnown": "La regla de destinos conocidos de {name} no está justo antes de su regla final de salida."
+        },
+        "egress_rule_verdict": {
+          "title": "Regla de salida con el veredicto erróneo",
+          "detail": "La regla final de salida de {name} es {have} en lugar de {want}.",
+          "detailCollision": "{name} no puede bloquear: pcz-_local pertenece a otra persona en Proxmox, así que su regla de salida sigue en {have}.",
+          "detailDest": "La regla de salida de {name} apunta a {haveDest} en lugar de {wantDest}.",
+          "hintCollision": "Existe en Proxmox un objeto llamado pcz-_local sin la marca de microsegmentación: renómbrelo o elimínelo en Proxmox."
+        },
+        "known_rule_missing": {
+          "title": "Falta la regla de destinos conocidos",
+          "detail": "Falta la regla del grupo pcz-_known en {name}."
+        },
+        "known_rule_extra": {
+          "title": "Regla de destinos conocidos de más",
+          "detail": "{name} conserva una regla del grupo pcz-_known que su estado de salida ya no necesita."
+        },
+        "local_set_desync": {
+          "title": "Red local desincronizada",
+          "detail": "{object} contiene {actual} en lugar de {desired}."
+        },
+        "egress_no_subnet": {
+          "title": "Salida sin subred conocida",
+          "detail": "{name} de {zone} no tiene subred conocida: su red local se reduce a sus propias IP.",
+          "hint": "Ninguna subred conocida: revise la configuración de red del invitado en Proxmox (una IP con su longitud de prefijo, o el agente invitado QEMU)."
+        },
+        "destinationAll": "todos los destinos",
+        "destinationLocal": "la red local",
+        "verdict": {
+          "disabled": "desactivada"
         }
       },
       "chip": {
@@ -13702,7 +13837,14 @@
         "member_without_ip": "Sin IP",
         "ambiguous_zone": "Varias zonas",
         "object_collision": "Nombre ocupado",
-        "generic": "Desviación"
+        "generic": "Desviación",
+        "egress_rule_missing": "Sin regla de salida",
+        "egress_rule_misplaced": "Salida mal ubicada",
+        "egress_rule_verdict": "Salida, veredicto erróneo",
+        "known_rule_missing": "Falta regla conocida",
+        "known_rule_extra": "Regla conocida de más",
+        "local_set_desync": "Red local desincronizada",
+        "egress_no_subnet": "Sin subred"
       },
       "zoneFilter": "Solo zona {name}",
       "zoneFilterClear": "Mostrar todas las zonas",
@@ -13714,6 +13856,13 @@
         "member_without_ip": "Miembros sin IP conocida ({count, number})",
         "ambiguous_zone": "Invitados en varias zonas ({count, number})",
         "object_collision": "Nombres ya usados en Proxmox ({count, number})",
+        "egress_rule_missing": "Reglas de salida ausentes ({count, number})",
+        "egress_rule_misplaced": "Reglas de salida mal colocadas ({count, number})",
+        "egress_rule_verdict": "Reglas de salida con veredicto erróneo ({count, number})",
+        "known_rule_missing": "Reglas de direcciones conocidas ausentes ({count, number})",
+        "known_rule_extra": "Reglas de direcciones conocidas sobrantes ({count, number})",
+        "local_set_desync": "Conjuntos de la red local desincronizados ({count, number})",
+        "egress_no_subnet": "Salida sin subred local ({count, number})",
         "generic": "{kind} (cantidad: {count, number})"
       },
       "noneZone": "ninguna",
@@ -13746,7 +13895,11 @@
         "status": "Estado",
         "statusAll": "Todos los estados",
         "zone": "Zona",
-        "zoneAll": "Todas las zonas"
+        "zoneAll": "Todas las zonas",
+        "direction": "Dirección",
+        "directionAll": "Todas",
+        "directionIn": "Entrante",
+        "directionOut": "Saliente"
       },
       "kind": {
         "would_block": "Se bloquearía",
@@ -13803,6 +13956,7 @@
       "dismissTip": "Oculta esta sugerencia para este par.",
       "bulkLabel": "Flujos seleccionados",
       "bulkAcceptTip": "Crea en el borrador el flujo entre las zonas de cada sugerencia seleccionada.",
+      "bulkAcceptOutZoneTip": "Crea en el borrador el flujo entre las zonas de cada sugerencia seleccionada. Un flujo de salida hacia una zona también permite la entrada de su zona de destino desde la zona de origen.",
       "bulkCidrTip": "Crea los mismos flujos con cada origen como rango de direcciones.",
       "bulkDismissTip": "Oculta las sugerencias seleccionadas.",
       "legend": {
@@ -13814,8 +13968,14 @@
         "about": "Sobre las coincidencias"
       },
       "acceptUnknownSource": "Origen desconocido: use Como CIDR",
+      "aggregateHint": "Cree un flujo a mano para permitir este servicio hacia cualquier dirección.",
+      "acceptOutZoneTip": "Añade el flujo {from} → {to}: también permite la entrada de {to} desde {from}.",
       "zoneBanner": "Sugerencias para la zona {zone} · {count, plural, one {# impacto sin cubrir} other {# impactos sin cubrir}} en 24 h",
       "zoneBannerNoCount": "Sugerencias para la zona {zone}",
+      "serviceBanner": "Filtrado por el servicio {service} ({ports})",
+      "serviceBannerClear": "Mostrar todos los servicios",
+      "sourceBanner": "Filtrado por los flujos cuyo origen no está en ninguna zona",
+      "sourceBannerClear": "Mostrar todos los orígenes",
       "dialog": {
         "open": "Detalles",
         "openFor": "Detalles del flujo de {source} a {destination}",
@@ -13842,9 +14002,25 @@
         "colSource": "Origen",
         "colGuest": "Invitado alcanzado",
         "colNode": "Nodo",
-        "guest": "{name} ({vmid}) · IP {ip}"
+        "guest": "{name} ({vmid}) · IP {ip}",
+        "direction": "Dirección",
+        "colDestination": "Destino",
+        "trafficScopeOutside": "Todos los servicios de {source} hacia direcciones fuera de las zonas con este veredicto: el historial guarda las zonas, no las direcciones."
       },
-      "actionTip": "{action} – {tip}"
+      "actionTip": "{action} – {tip}",
+      "direction": {
+        "in": "Entrante",
+        "out": "Saliente"
+      },
+      "manyDestinations": "Muchos destinos",
+      "prefix": {
+        "title": "Aceptar como red",
+        "length": "Longitud del prefijo",
+        "cancel": "Cancelar",
+        "accept": "Aceptar"
+      },
+      "cidrOutTip": "Crea en el borrador el flujo {from} → la red de {ip} {service}, con el prefijo elegido.",
+      "bulkCidrOutbound": "Las redes salientes se aceptan una por una, para elegir cada prefijo."
     },
     "overview": {
       "empty": "Aún no hay ninguna zona que dibujar.",
@@ -13854,7 +14030,7 @@
       "mapLabel": "Mapa de las zonas y sus flujos",
       "suggestionsError": "No se pudieron leer los flujos pendientes. El mapa solo muestra los flujos permitidos.",
       "legend": {
-        "outside": "Hacia el exterior: no aplicado en v1",
+        "outside": "Hacia el exterior: salida no bloqueada",
         "allowed": "Permitido",
         "unprotected": "Sin protección",
         "blocked": "Bloqueado",
@@ -13865,8 +14041,8 @@
         "external": "Desconocido / Externo",
         "externalHint": "Orígenes que no corresponden a ningún invitado: una dirección IP o una red (CIDR)",
         "outside": "Exterior",
-        "outsideHint": "Destinos fuera de las zonas (un CIDR). Los flujos hacia ellos no se aplican en v1.",
-        "notApplied": "no aplicado en v1",
+        "outsideHint": "Destinos fuera de las zonas (un CIDR). Los flujos hacia ellos se aplican cuando la zona de origen bloquea su salida.",
+        "notApplied": "salida no controlada",
         "aria": "Zona {name}, {state}, {members}",
         "membersUnknown": "miembros desconocidos",
         "unzoned": "Invitados sin zona ({count, number})",
@@ -13879,10 +14055,13 @@
         "moreHint": "{count, plural, one {# miembro más} other {# miembros más}}: el panel de la zona los lista todos",
         "moreUnzonedHint": "{count, plural, one {# invitado más} other {# invitados más}} sin zona: Desviaciones los lista todos",
         "ipHint": "{ip}: una dirección sin zona y sin invitado que habló con esta zona",
-        "inside": "{count, plural, one {# flujo observado} other {# flujos observados}} dentro de la zona"
+        "inside": "{count, plural, one {# flujo observado} other {# flujos observados}} dentro de la zona",
+        "observed": "salida en observación",
+        "gateway": "Puerta de enlace",
+        "gatewayHint": "Puerta de enlace de {zones} ({ip}): su tráfico se nombra en el mapa y en la subpestaña Observación"
       },
       "edge": {
-        "outside": "No aplicado en v1: {services}",
+        "outside": "Salida no bloqueada: {services}",
         "aria": "{from} a {to}: {services}",
         "allowed": "Permitido: {services}",
         "unprotected": "{count, plural, one {# flujo observado} other {# flujos observados}} que ningún flujo permite (sin protección)",
@@ -13895,7 +14074,9 @@
         "sourceHits": "{count, plural, one {# coincidencia} other {# coincidencias}} de {from} a la zona {to} en {service}",
         "sourceHitsSampled": "{count, plural, one {# coincidencia} other {# coincidencias}} de {from} a la zona {to} en {service} (se muestra un par de ejemplo)",
         "countUnprotected": "{count, plural, one {# flujo sin protección} other {# flujos sin protección}}",
-        "countBlocked": "{count, plural, one {# flujo bloqueado} other {# flujos bloqueados}}"
+        "countBlocked": "{count, plural, one {# flujo bloqueado} other {# flujos bloqueados}}",
+        "hitsTotal": "{count, plural, one {# ocurrencia} other {# ocurrencias}} en el registro en total",
+        "noCounter": "Los flujos permitidos no tienen contador: Proxmox no registra lo que deja pasar"
       },
       "panel": {
         "label": "Zona {name}",
@@ -13908,6 +14089,21 @@
         "noFlows": "Ninguno"
       },
       "zonePanel": {
+        "detailsTitle": "Detalles de la zona · {name}",
+        "subSuggestions": "Sugerencias pendientes",
+        "subMembers": "Miembros",
+        "addMembers": "Añadir miembros",
+        "addFlow": "Nuevo flujo",
+        "subIncoming": "Flujos entrantes",
+        "subOutgoing": "Flujos salientes",
+        "colDirection": "Dirección",
+        "colVerdict": "Veredicto",
+        "expand": "Ampliar",
+        "tabTraffic": "Tráfico",
+        "tabData": "Datos",
+        "tabLogs": "Registros",
+        "logsEmpty": "Ningún evento de esta zona en la memoria del motor",
+        "logsOlder": "Cargar anteriores",
         "edit": "Editar zona",
         "changeState": "Cambiar el estado",
         "delete": "Eliminar zona",
@@ -13917,15 +14113,21 @@
         "editFlow": "Editar flujo",
         "deleteFlow": "Eliminar flujo",
         "newIncoming": "Nuevo flujo entrante",
-        "newOutgoing": "Nuevo flujo saliente"
+        "newOutgoing": "Nuevo flujo saliente",
+        "egressBlock": "Bloquear la salida",
+        "egressReopen": "Reabrir la salida"
+      },
+      "edgePanel": {
+        "detailsTitle": "Detalles del flujo",
+        "dialogLabel": "Detalles del flujo · {from} → {to}",
+        "declaredFlows": "Flujos declarados",
+        "newFlow": "Nuevo flujo entre estas zonas",
+        "suggestionsEmpty": "Ninguna sugerencia pendiente para este par",
+        "logsEmpty": "Ningún evento de este par en la memoria del motor"
       },
       "partial": "Parcial: solo se dibujan los primeros {count, number} flujos pendientes.",
       "filters": {
         "title": "Flujos:"
-      },
-      "toolbar": {
-        "refreshedAt": "Actualizado a las {time}",
-        "refresh": "Actualizar el mapa"
       },
       "flowPanel": {
         "label": "Flujo {from} hacia {to}",
@@ -13942,6 +14144,12 @@
       "zoomIn": "Acercar",
       "zoomOut": "Alejar",
       "fitView": "Ajustar el mapa a la vista",
+      "isolate": {
+        "only": "Solo los flujos de {name}",
+        "all": "Todos los flujos",
+        "showAll": "Mostrar todos los flujos",
+        "showOnly": "Solo sus flujos"
+      },
       "a11y": {
         "nodeDescription": "Pulse Intro o Espacio para abrir sus detalles.",
         "nodeDescriptionKeyboard": "Pulse Intro o Espacio para abrir sus detalles.",
@@ -14017,6 +14225,7 @@
           "noZoneFlows": "Este invitado no está en ninguna zona: ningún flujo permitido se le aplica.",
           "incoming": "Entrante, desde {peer}",
           "outgoing": "Saliente, hacia {peer}",
+          "fromZone": "desde la zona {zone}",
           "acceptTip": "Aceptar como flujo {from} → {to} {service}: el motor guarda un par de invitados de ejemplo por flujo observado, así que el flujo cubre todo el par de zonas.",
           "partial": "Solo se leen los primeros {count} flujos observados pendientes del mapa: puede que falten algunos en esta lista."
         },
@@ -14035,6 +14244,7 @@
         "topSourcesEmpty": "Ninguna fuente en este intervalo",
         "suggestionsEmpty": "Ninguna sugerencia pendiente para esta zona",
         "summaryOut": "{hits, plural, one {# coincidencia} other {# coincidencias}} · destino principal {source} ({share} %) · {wouldBlock, number} se bloquearían, {blocked, number} bloqueados",
+        "summaryOutBlockedHelp": "Bloqueados: conexiones bloqueadas por la zona de destino (su entrada) o por la salida de esta zona.",
         "topDestinations": "Destinos principales",
         "topDestinationsEmpty": "Ningún destino en este intervalo",
         "memberRunning": "En ejecución",
@@ -14061,6 +14271,7 @@
       "checking": "Comprobando el clúster...",
       "runAgain": "Repetir",
       "openWizard": "Abrir el asistente de despliegue",
+      "raiseLogRate": "Elevar durante la observación",
       "busy": "Hay una aplicación en curso, inténtelo de nuevo en un momento.",
       "noClient": "No hay ningún cliente de Proxmox disponible para esta conexión.",
       "readFailed": "No se pudo leer Proxmox: {error}",
@@ -14073,20 +14284,27 @@
         "cluster_firewall": {
           "title": "Cortafuegos del clúster",
           "pass": "El cortafuegos del clúster está activado.",
-          "off": "El cortafuegos del clúster está desactivado. El asistente de despliegue añade las reglas de administración y luego lo activa.",
+          "off": "El cortafuegos del clúster está desactivado. El asistente de despliegue lo activa sin escribir nada en los nodos.",
           "heldByStop": "Cortafuegos de clúster mantenido desactivado por la parada de emergencia: levante la parada para reactivarlo"
         },
         "socle_rules": {
           "title": "Acceso de administración",
           "pass": "La web (8006) y SSH (22) siguen accesibles.",
           "nodesOff": "Los cortafuegos de los nodos están desactivados, no se puede cortar nada.",
-          "missing": "Ninguna regla mantiene abierto el puerto {ports} desde cualquier origen: activar el cortafuegos podría cortar su acceso."
+          "missing": "Ninguna regla mantiene abierto el puerto {ports} desde cualquier origen: activar el cortafuegos podría cortar su acceso.",
+          "missingFor": "Ninguna regla mantiene abierto el puerto {ports} desde {ips}: activar el cortafuegos podría dejar fuera a ProxCenter.",
+          "dockerInternal": "Ninguna regla mantiene abierto el puerto {ports} para ProxCenter: la dirección detectada es interna de Docker, indique en Ajustes > Avanzado la dirección del host que ve Proxmox.",
+          "groupUnreadable": "No se pudieron leer las reglas del grupo de seguridad {group}: no se puede comprobar el acceso de administración.",
+          "hostRulesUnreadable": "No se pudieron leer las reglas del cortafuegos del nodo {node}: no se puede comprobar el acceso de administración.",
+          "missingForNodes": "Ninguna regla mantiene abierto el puerto {ports} desde {ips} en {nodes}: activar el cortafuegos podría dejar fuera a ProxCenter.",
+          "missingOn": "Ninguna regla mantiene abierto el puerto {ports} en {nodes}: activar el cortafuegos podría cortar su acceso."
         },
         "log_ratelimit": {
           "title": "Límite de tasa del registro",
-          "default": "PVE registra a su tasa por defecto ({rate}), así que la observación pierde flujos. Súbala en los ajustes.",
+          "default": "PVE registra a su tasa por defecto ({rate}), por lo que la observación pierde flujos.",
           "pass": "PVE registra hasta {rate}.",
-          "disabled": "PVE no limita el registro del cortafuegos."
+          "disabled": "PVE no limita el registro del cortafuegos.",
+          "planned": "Se eleva a {rate} mientras se observa una zona y luego se restablece (ajustes)."
         },
         "self_in_zone": {
           "title": "Dirección de ProxCenter",
@@ -14094,7 +14312,14 @@
           "unknown": "No se pudo detectar la dirección de ProxCenter, así que esta comprobación no puede concluir. Indíquela en los ajustes.",
           "inZone": "ProxCenter ({self_ip}) está dentro de la zona {zone}: aplicarla podría cortar la conexión.",
           "uncheckedTimeout": "{count, plural, one {No se pudo comprobar # miembro} other {No se pudieron comprobar # miembros}} (recopilación interrumpida): ProxCenter podría estar dentro de uno de ellos.",
-          "uncheckedCap": "{count, plural, one {No se pudo comprobar # miembro} other {No se pudieron comprobar # miembros}} (por encima del límite de recopilación): ProxCenter podría estar dentro de uno de ellos."
+          "uncheckedCap": "{count, plural, one {No se pudo comprobar # miembro} other {No se pudieron comprobar # miembros}} (por encima del límite de recopilación): ProxCenter podría estar dentro de uno de ellos.",
+          "inZoneEgress": "ProxCenter ({self_ip}) está dentro de la zona {zone}, que controla su salida: permita un flujo hacia los nodos Proxmox antes de bloquear, o ProxCenter podría perderlos.",
+          "dockerInternal": "La dirección detectada es interna de Docker: indique en Ajustes > Avanzado la dirección del host que ve Proxmox."
+        },
+        "egress_subnets": {
+          "title": "Subredes de salida",
+          "pass": "Cada miembro de una zona con salida controlada tiene una subred conocida.",
+          "warn": "{count, plural, one {# miembro no tiene subred conocida} other {# miembros no tienen subred conocida}} ({guests}): su red local se reduce a sus propias IP."
         }
       },
       "rateUnits": {
@@ -14112,8 +14337,8 @@
         "load": "Carga sobre Proxmox",
         "enforcement": "Aplicación",
         "observation": "Observación",
-        "address": "Dirección de ProxCenter",
         "notifications": "Avisarme de",
+        "advanced": "Avanzado",
         "removal": "Retirada"
       },
       "fields": {
@@ -14122,12 +14347,12 @@
         "ips_interval_sec": "Intervalo de lectura de las IP de los invitados",
         "full_interval_sec": "Intervalo de la comprobación completa",
         "log_interval_sec": "Intervalo de lectura del registro del cortafuegos",
-        "ready_after_hours": "Observación antes de aplicar",
+        "ready_after_hours": "Observación antes de bloquear (entrada y salida)",
         "write_cap": "Tope de escrituras por pasada",
         "rate": "Límite de tasa del registro",
         "rateUnit": "Unidad de la tasa del registro",
         "burst": "Ráfaga del registro",
-        "selfIps": "Direcciones de ProxCenter",
+        "selfIps": "Direcciones que ve Proxmox",
         "notify_drift": "Desviaciones",
         "notify_paused": "Motor en pausa",
         "notify_unprotected": "Invitados sin proteger",
@@ -14136,8 +14361,7 @@
       "hints": {
         "tagPrefix": "Las etiquetas de zona de los invitados son este prefijo seguido del nombre de la zona.",
         "write_cap": "Escrituras hacia Proxmox permitidas en una pasada. Superado el tope, el motor se detiene y pide su confirmación.",
-        "rate": "Vacío deja intacto el límite de tasa del registro de Proxmox. Si no, se fija mientras se observa una zona.",
-        "selfIps": "Las direcciones desde las que ProxCenter alcanza a los invitados, separadas por comas. Vacío: detección automática."
+        "rate": "Vacío deja intacto el límite de tasa del registro de Proxmox. Si no, se fija mientras se observa una zona."
       },
       "unitsLong": {
         "seconds": "segundos",
@@ -14150,8 +14374,14 @@
         "hour": "por hora",
         "day": "por día"
       },
-      "leaveAsIs": "No tocar",
+      "leaveAsIs": "Sin cambios",
       "detectedAutomatically": "Detectada automáticamente",
+      "selfIpsSource": {
+        "settings": "ajustes",
+        "install": "script de instalación",
+        "detected": "detectada"
+      },
+      "dockerInternalHint": "Dirección interna de Docker: Proxmox ve la dirección del host, indíquela aquí.",
       "validation": {
         "tagPrefix": "El prefijo de etiqueta tiene de 1 a 16 caracteres: minúsculas, dígitos, . _ + -",
         "range": "{label} debe estar entre {min} y {max} {unit}.",
@@ -14180,6 +14410,13 @@
         "body": "Los invitados conservan sus etiquetas antiguas, así que salen de su zona en la próxima aplicación hasta que se vuelvan a etiquetar.",
         "typeName": "Escriba {prefix} para confirmar",
         "confirm": "Cambiar el prefijo"
+      },
+      "tips": {
+        "rate": "Tope de líneas de registro por regla, elevado durante la observación para no perder nada; se aplica al clúster de Proxmox.",
+        "logInterval": "Tiempo entre dos lecturas del registro del cortafuegos de cada nodo: una lectura por nodo y por intervalo.",
+        "readyAfter": "Tiempo sin ningún flujo nuevo que se bloquearía antes de indicar que una zona está lista; no es un bloqueo.",
+        "writeCap": "Superado el tope, el motor se detiene y pide una confirmación.",
+        "selfIps": "Direcciones desde las que ProxCenter alcanza los nodos. La comprobación previa verifica que no queden cortadas. Déjelo vacío para usar la detección."
       }
     },
     "history": {
@@ -14307,6 +14544,8 @@
       "title": "Comprobación completa",
       "runningText": "Comprobación completa en curso",
       "queued": "Esperando al motor (hasta 60 s)",
+      "queuedFor": "En cola desde hace {seconds, number} s: el motor la inicia en su próxima pasada, en 60 s como máximo",
+      "queuedLate": "El motor está terminando otra operación en este clúster: la comprobación va después",
       "inProgress": "En curso, {seconds, number} s transcurridos",
       "progress": "{calls, plural, one {# llamada API} other {# llamadas API}}, {writes, plural, one {# escritura} other {# escrituras}}, {seconds, number} s",
       "doneSummary": "Comprobado en {seconds, number} s con {calls, plural, one {# llamada API} other {# llamadas API}}",
@@ -14380,7 +14619,12 @@
         "failed": "fallido",
         "notRun": "no ejecutado"
       },
-      "runAgain": "Volver a ejecutar"
+      "runAgain": "Volver a ejecutar",
+      "stages": {
+        "title": "Qué hace la comprobación",
+        "ips": "Direcciones IP de los miembros",
+        "guests": "Invitados releídos y comparados con la política, desviaciones corregidas"
+      }
     },
     "trafficLens": {
       "connection": "Conexión",
@@ -14427,7 +14671,6 @@
     },
     "dfw": {
       "hits24h": "Coincidencias 24 h",
-      "selectAll": "Seleccionar todas las reglas mostradas",
       "any": "cualquiera",
       "actionLabel": "Acción de la regla",
       "action": {
@@ -14441,25 +14684,14 @@
       "rowEdited": "sin publicar",
       "rowMoved": "movida",
       "rowDisabled": "desactivada",
-      "selectRule": "Seleccionar la regla {pos}",
+      "deleteRule": "Eliminar la regla {pos}",
       "enableLabel": "Regla {pos} activa",
       "logLabel": "Regla {pos} registrada",
-      "selectSection": "Seleccionar las reglas de {name}",
       "collapse": "Contraer {name}",
       "expand": "Expandir {name}",
-      "lastPublished": "Última publicación correcta el {date} a las {time}",
       "publish": "Publicar ({count})",
       "discard": "Descartar cambios",
       "status": {
-        "rules": "{count, plural, one {Reglas: # en total} other {Reglas: # en total}}",
-        "rulesAtLeast": "{count, plural, one {Reglas: al menos # en total} other {Reglas: al menos # en total}}",
-        "rulesHint": "Cuenta las secciones leídas: las reglas de un host o invitado se leen al abrirlo",
-        "unpublished": "Sin publicar",
-        "disabled": "Desactivadas {count}",
-        "sections": "Secciones: {count}",
-        "managed": "Gestionadas por la microsegmentación {count}",
-        "covered": "VM cubiertas: {covered} / {running} en ejecución",
-        "coveredUnknown": "VM cubiertas: aún sin leer",
         "scope": "Ámbito"
       },
       "scope": {
@@ -14468,17 +14700,6 @@
         "vms": "VM",
         "all": "Todo"
       },
-      "bulk": {
-        "enable": "Activar",
-        "disable": "Desactivar",
-        "clone": "Clonar",
-        "up": "Subir",
-        "down": "Bajar",
-        "moveTo": "Mover a una sección"
-      },
-      "selection": "{count, plural, =0 {Ninguna regla seleccionada} one {# regla seleccionada} other {# reglas seleccionadas}}",
-      "dragHint": "arrastrar ⋮⋮ para reordenar",
-      "clearSelection": "Quitar la selección",
       "filter": "Filtrar: IP, puerto, grupo, VM",
       "moveDialog": {
         "title": "{count, plural, one {Mover # regla a} other {Mover # reglas a}}",
@@ -14559,10 +14780,6 @@
       "publishedPart": "{applied} de {total} cambios publicados: publique de nuevo para el resto",
       "publishFailed": "Publicación detenida tras aplicar {applied} cambios:",
       "conflict": "las reglas de una sección cambiaron en Proxmox desde que se leyeron. Descarte los cambios de esa sección y publique de nuevo: las demás secciones conservan los suyos",
-      "mode": {
-        "cluster": "{count, plural, one {clúster · # nodo} other {clúster · # nodos}}",
-        "standalone": "nodo único"
-      },
       "defaultDeny": "Denegación predeterminada de la zona",
       "denyBlock": "Bloquear",
       "denyWouldBlock": "Bloquearía",
@@ -14570,8 +14787,6 @@
       "discardSection": "Descartar esta sección",
       "conflictOptions": "las opciones del cortafuegos de una sección cambiaron en Proxmox desde que se leyeron. Descarte los cambios de esa sección y publique de nuevo: las demás secciones conservan los suyos",
       "publishAgain": "Publique de nuevo: los cambios no aplicados siguen en el borrador.",
-      "summary": "Última publicación: {applied} de {total} cambios aplicados",
-      "summaryStopped": "Última publicación: {applied} de {total} cambios aplicados, detenida en {kind} en {scope}",
       "addRuleShort": "Añadir regla",
       "addRuleTo": "Añadir una regla a {name}",
       "addARule": "Añadir una regla",
@@ -14596,6 +14811,9 @@
       "titleNoCount": "¿Descartar los cambios sin aplicar?",
       "body": "El borrador vuelve a la última revisión aplicada.",
       "confirm": "Descartar"
+    },
+    "gateway": {
+      "name": "Puerta de enlace de {zones}"
     }
   },
   "bulkPower": {

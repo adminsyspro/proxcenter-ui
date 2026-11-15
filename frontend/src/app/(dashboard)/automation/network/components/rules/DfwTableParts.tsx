@@ -5,7 +5,7 @@ import type { DragEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Box, Button, Checkbox, Chip, IconButton, Link, MenuItem, Select, Switch, TableCell, TableHead, TableRow, Tooltip, Typography, alpha, useTheme,
+  Box, Button, Chip, IconButton, Link, MenuItem, Select, Switch, TableCell, TableHead, TableRow, Tooltip, Typography, alpha, useTheme,
 } from '@mui/material'
 
 import type { Theme } from '@mui/material/styles'
@@ -20,12 +20,13 @@ import { ruleName, ruleService } from './dfwModel'
 
 /** Columns of the table: handle, checkbox, #, enabled, name, source, destination, service, applied to, action, log, hits. */
 export const DFW_COLUMNS = 12
+/** The last column: the row's Delete. */
+const DELETE_WIDTH = 44
 
 const CELL = { fontSize: 13, py: 0.5, px: 0.75, whiteSpace: 'nowrap' } as const
 const HEAD = { ...CELL, fontWeight: 700, color: 'text.secondary' } as const
 
 /** A disabled checkbox reads as one: the theme draws it like an enabled empty box otherwise. */
-const CHECK_SX = { '&.Mui-disabled': { opacity: 0.35 } } as const
 
 export const ACTION_COLOURS: Record<string, string> = { ACCEPT: '#22c55e', DROP: '#ef4444', REJECT: '#f59e0b' }
 
@@ -33,20 +34,14 @@ const Dot = ({ colour }: { colour: string }) => (
   <Box component='span' aria-hidden sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: colour, flexShrink: 0, display: 'inline-block' }} />
 )
 
-/** `show` false: no rule of the table can be checked, the cell stays empty (as on a zone header). */
-export function DfwHead({ allChecked, someChecked, onCheckAll, canCheck, show = true }: { allChecked: boolean; someChecked: boolean; onCheckAll: (checked: boolean) => void; canCheck: boolean; show?: boolean }) {
+/** The head of the table: the drag handle, the rule's columns, then the column of the row's Delete. */
+export function DfwHead() {
   const t = useTranslations()
   const theme = useTheme()
   return (
     <TableHead>
       <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.6) }}>
         <TableCell sx={{ ...HEAD, width: 28 }} />
-        <TableCell sx={{ ...HEAD, width: 36 }} padding='checkbox'>
-          {show && (
-            <Checkbox size='small' sx={CHECK_SX} checked={allChecked} indeterminate={someChecked && !allChecked} disabled={!canCheck}
-              onChange={e => onCheckAll(e.target.checked)} inputProps={{ 'aria-label': t('microsegPilot.dfw.selectAll') }} />
-          )}
-        </TableCell>
         <TableCell sx={{ ...HEAD, width: 34 }}>#</TableCell>
         <TableCell sx={{ ...HEAD, width: 56 }}>{t('common.active')}</TableCell>
         <TableCell sx={HEAD}>{t('common.name')}</TableCell>
@@ -57,6 +52,7 @@ export function DfwHead({ allChecked, someChecked, onCheckAll, canCheck, show = 
         <TableCell sx={{ ...HEAD, width: 130 }}>{t('firewall.action')}</TableCell>
         <TableCell sx={{ ...HEAD, width: 72 }}>{t('firewall.logLevelShort')}</TableCell>
         <TableCell sx={{ ...HEAD, width: 90 }}>{t('microsegPilot.dfw.hits24h')}</TableCell>
+        <TableCell sx={{ ...HEAD, width: DELETE_WIDTH }} />
       </TableRow>
     </TableHead>
   )
@@ -141,13 +137,13 @@ export type RuleRowProps = {
   managed: boolean
   /** The user may write (node.manage) and the rule is not managed. */
   editable: boolean
-  selected: boolean
   appliedTo: string
   /** Hits of the last 24 h, null where they cannot be told. */
   hits: number | null
   hitsTitle: string
   drag: RuleRowDrag
-  onSelect: (checked: boolean) => void
+  /** Removes the rule from the draft (published with the rest); absent on a rule the user may not delete. */
+  onDelete?: () => void
   onToggleEnable: () => void
   onToggleLog: () => void
   onAction: (action: string) => void
@@ -190,21 +186,19 @@ function rowOpacity(dragging: boolean, enabled: boolean): number {
   return enabled ? 1 : 0.6
 }
 
-function rowBackground(theme: Theme, selected: boolean, state: EntryState): string | undefined {
-  if (selected) return alpha(theme.palette.primary.main, 0.1)
+function rowBackground(theme: Theme, state: EntryState): string | undefined {
   if (state) return alpha(theme.palette.warning.main, 0.06)
   return undefined
 }
 
 export function RuleRow(props: RuleRowProps) {
-  const { index, rule, state, managed, editable, selected, appliedTo, hits, hitsTitle, drag, onSelect, onToggleEnable, onToggleLog, onAction, onLogs, onDoubleClick } = props
+  const { index, rule, state, managed, editable, appliedTo, hits, hitsTitle, drag, onDelete, onToggleEnable, onToggleLog, onAction, onLogs, onDoubleClick } = props
   const t = useTranslations('microsegPilot.dfw')
   const theme = useTheme()
   const logging = !!rule.log && rule.log !== 'nolog'
   return (
     <TableRow
       hover
-      selected={selected}
       draggable={drag.enabled}
       onDragStart={drag.onDragStart}
       onDragOver={drag.onDragOver}
@@ -215,20 +209,13 @@ export function RuleRow(props: RuleRowProps) {
       data-state={state ?? ''}
       sx={{
         opacity: rowOpacity(drag.dragging, rule.enable === 1),
-        bgcolor: rowBackground(theme, selected, state),
+        bgcolor: rowBackground(theme, state),
         boxShadow: drag.over ? `inset 0 2px 0 ${theme.palette.primary.main}` : undefined,
       }}
     >
       <TableCell sx={{ ...CELL, width: 28, cursor: drag.enabled ? 'grab' : 'default', color: drag.enabled ? 'text.secondary' : 'text.disabled' }}>
         {/* A rule of the engine never moves: no handle at all, its lock says why. */}
         {!managed && <i className='ri-draggable' aria-hidden style={{ fontSize: 14 }} />}
-      </TableCell>
-      <TableCell padding='checkbox' sx={{ width: 36 }}>
-        {/* A rule of the engine is never selected: no checkbox at all, like the zone's default deny row. */}
-        {!managed && (
-          <Checkbox size='small' sx={CHECK_SX} checked={selected} onChange={e => onSelect(e.target.checked)}
-            inputProps={{ 'aria-label': t('selectRule', { pos: index }) }} />
-        )}
       </TableCell>
       <TableCell sx={{ ...CELL, width: 34, color: 'text.secondary' }}>{index}</TableCell>
       <TableCell sx={{ ...CELL, width: 56 }}>
@@ -253,6 +240,16 @@ export function RuleRow(props: RuleRowProps) {
       <TableCell sx={{ ...CELL, width: 90, color: hits ? 'text.primary' : 'text.secondary', fontWeight: hits ? 600 : 400 }}>
         <Tooltip title={hitsTitle}><span data-testid='dfw-hits'>{hits === null ? '-' : hits.toLocaleString()}</span></Tooltip>
       </TableCell>
+      <TableCell sx={{ ...CELL, width: DELETE_WIDTH, textAlign: 'right' }}>
+        {/* A rule of the engine is never deleted here: no button at all, its lock says why. */}
+        {onDelete && (
+          <WriteTip title={t('deleteRule', { pos: index })}>
+            <IconButton size='small' color='error' disabled={!editable} onClick={onDelete} aria-label={t('deleteRule', { pos: index })}>
+              <i className='ri-delete-bin-line' style={{ fontSize: 16 }} />
+            </IconButton>
+          </WriteTip>
+        )}
+      </TableCell>
     </TableRow>
   )
 }
@@ -265,8 +262,6 @@ export type SectionRowProps = {
   badges: ReactNode
   /** Object, rule count and links on the right. */
   right: ReactNode
-  /** The section checkbox: checks every rule of it; hidden for a read-only section. */
-  check?: { checked: boolean; indeterminate: boolean; disabled: boolean; onChange: (checked: boolean) => void }
   menu?: ReactNode
   /** The section's "Add rule": always shown on an open section, on hover or focus of a collapsed one (always on touch). */
   addRule?: { onClick: () => void; disabled: boolean }
@@ -291,7 +286,7 @@ export function SectionAddButton({ title, onClick, disabled }: { title: string; 
   )
 }
 
-export function SectionRow({ title, icon, open, onToggle, badges, right, check, menu, addRule, indent = 0, testId }: SectionRowProps) {
+export function SectionRow({ title, icon, open, onToggle, badges, right, menu, addRule, indent = 0, testId }: SectionRowProps) {
   const t = useTranslations('microsegPilot.dfw')
   const theme = useTheme()
   const reveal = {
@@ -303,12 +298,6 @@ export function SectionRow({ title, icon, open, onToggle, badges, right, check, 
   return (
     <TableRow data-testid={testId ?? 'dfw-section'} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.06), '& td': { borderBottom: `1px solid ${paletteAlpha(theme, 'divider', 0.3)}` }, ...reveal }}>
       <TableCell sx={{ ...CELL, width: 28 }} />
-      <TableCell padding='checkbox' sx={{ width: 36 }}>
-        {check && (
-          <Checkbox size='small' sx={CHECK_SX} checked={check.checked} indeterminate={check.indeterminate} disabled={check.disabled}
-            onChange={e => check.onChange(e.target.checked)} inputProps={{ 'aria-label': t('selectSection', { name: title }) }} />
-        )}
-      </TableCell>
       <TableCell colSpan={7} sx={{ ...CELL, pl: 0.75 + indent * 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
           <IconButton size='small' onClick={onToggle} aria-expanded={open} aria-label={open ? t('collapse', { name: title }) : t('expand', { name: title })}>
@@ -321,7 +310,7 @@ export function SectionRow({ title, icon, open, onToggle, badges, right, check, 
           {badges}
         </Box>
       </TableCell>
-      <TableCell colSpan={3} sx={{ ...CELL, textAlign: 'right', color: 'text.secondary' }}>
+      <TableCell colSpan={4} sx={{ ...CELL, textAlign: 'right', color: 'text.secondary' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
           {right}
           {addRule && <SectionAddButton title={title} open={open} onClick={addRule.onClick} disabled={addRule.disabled} />}
@@ -336,8 +325,8 @@ export function SectionRow({ title, icon, open, onToggle, badges, right, check, 
 export function EmptyRulesRow({ text, action }: { text: string; action?: { label: string; onClick: () => void; disabled: boolean } }) {
   return (
     <TableRow data-testid='dfw-empty'>
-      <TableCell colSpan={4} sx={{ ...CELL, py: 0.5 }} />
-      <TableCell colSpan={DFW_COLUMNS - 4} sx={{ ...CELL, py: 0.5 }}>
+      <TableCell colSpan={3} sx={{ ...CELL, py: 0.5 }} />
+      <TableCell colSpan={DFW_COLUMNS - 3} sx={{ ...CELL, py: 0.5 }}>
         <Typography component='span' sx={{ fontSize: 12, color: 'text.secondary' }}>{text}</Typography>
         {action && (
           <>
@@ -379,7 +368,6 @@ export function DefaultDenyRow({ enforce, appliedTo, hits, hitsTitle }: { enforc
   return (
     <TableRow data-testid='dfw-default-deny'>
       <TableCell sx={{ ...CELL, width: 28 }} />
-      <TableCell padding='checkbox' sx={{ width: 36 }} />
       <TableCell sx={{ ...CELL, width: 34, color: 'text.disabled' }}>-</TableCell>
       <TableCell sx={{ ...CELL, width: 56 }} />
       <TableCell sx={CELL}>
@@ -399,6 +387,7 @@ export function DefaultDenyRow({ enforce, appliedTo, hits, hitsTitle }: { enforc
       <TableCell sx={{ ...CELL, width: 90, fontWeight: hits ? 600 : 400 }}>
         <Tooltip title={hitsTitle}><span data-testid='dfw-hits'>{hits === null ? '-' : hits.toLocaleString()}</span></Tooltip>
       </TableCell>
+      <TableCell sx={{ ...CELL, width: DELETE_WIDTH }} />
     </TableRow>
   )
 }

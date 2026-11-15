@@ -28,7 +28,7 @@ export const run = (status: MicrosegRun['status'], result: MicrosegRun['result']
 export const body = (init?: RequestInit) => JSON.parse(String(init?.body))
 
 /** The suggestions route the enforce dialog reads, for zone "zw". */
-export const SUGGESTIONS_ROUTE = 'GET /suggestions?kind=would_block&status=pending&zone=zw&limit=200'
+export const SUGGESTIONS_ROUTE = 'GET /suggestions?kind=would_block&status=pending&zone=zw&direction=in&limit=200'
 
 /** A policy on the Policy sub-tab. */
 export function setup(opts: {

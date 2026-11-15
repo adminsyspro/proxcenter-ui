@@ -4,7 +4,7 @@
 // mistake is shown at once instead of coming back as a 400; the server stays
 // the authority.
 
-import type { MicrosegSettings, PolicyUpdate } from '@/lib/microseg/types'
+import type { MicrosegSettings, PolicyUpdate, SelfIpsSource } from '@/lib/microseg/types'
 
 import { isIpAddress } from './zoneForm'
 
@@ -77,6 +77,16 @@ export function buildRateLimit({ rate, rateUnit, burst }: RateLimitForm): string
 
 export function parseSelfIps(text: string): string[] {
   return [...new Set(text.split(/[\s,;]+/).filter(Boolean))]
+}
+
+/**
+ * What an empty addresses field stands for: the addresses the orchestrator
+ * uses without a value of the settings, and where they come from. Null when
+ * the settings hold them (the field shows them) or nothing is known.
+ */
+export function selfIpsFallback(effective: string[] | undefined, source: SelfIpsSource | undefined): { ips: string; source: SelfIpsSource } | null {
+  if (!source || source === 'settings' || !effective || effective.length === 0) return null
+  return { ips: effective.join(', '), source }
 }
 
 export function formFromSettings(tagPrefix: string, settings: Partial<MicrosegSettings> | undefined): SettingsForm {

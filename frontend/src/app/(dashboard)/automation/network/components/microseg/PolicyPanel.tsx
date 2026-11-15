@@ -1,6 +1,6 @@
 'use client'
 
-import { useContext, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import { Box, Button } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -14,13 +14,15 @@ import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { MicrosegActionsSlot, SlotActions } from './microsegAccess'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import ZoneDialog from './ZoneDialog'
+import { zoneGateOf } from './zoneGate'
 import type { ZoneFormValues } from './zoneForm'
 import ZoneList from './ZoneList'
-import { ZoneStateConfirm, useFlowEditor } from './ZonePanelActions'
+import { ZoneStateConfirm, useEgressChange, useFlowEditor } from './ZonePanelActions'
 import { useZoneUncovered } from './useZoneUncovered'
 import { usePendingChanges } from './usePendingChanges'
 import { useZoneEdits } from './useZoneEdits'
 import { useZoneGuests } from './useZoneGuests'
+import { targetPeers } from './targetModel'
 
 type Editing<T> = { item: T | null } | null
 
@@ -45,8 +47,12 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
   const removal = useDialogAction()
   const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
   const flowEditor = useFlowEditor(edits)
+  const egressChange = useEgressChange(edits)
   const { diff } = usePendingChanges(connectionId, policy)
   const uncovered = useZoneUncovered(connectionId)
+  // The details of a zone card show the zone panel of the map: they write through the same edits.
+  const peers = useMemo(() => targetPeers(guests), [guests])
+  const work = useMemo(() => ({ connectionId, edits, version: policy.version, reloadPolicy, peers }), [connectionId, edits, policy.version, reloadPolicy, peers])
 
   const saveZone = (zone: MicrosegZone | null) => async (values: ZoneFormValues) => {
     await edits.saveZone(zone, values)
@@ -85,6 +91,8 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         guestsStatus={guestsStatus}
         pendingMembers={policy.pending_members}
         diff={diff}
+        readyAfterHours={edits.readyAfterHours}
+        work={work}
         uncovered={uncovered.failed ? 'failed' : uncovered.series}
         onAdd={() => setZoneDialog({ item: null })}
         onEdit={zone => setZoneDialog({ item: zone })}
@@ -94,6 +102,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         onEditFlow={flowEditor.edit}
         onDeleteFlow={flowEditor.remove}
         onSetState={onSetState}
+        onSetEgress={(zone, action) => { edits.clearMemberError(); egressChange.ask(zone, action) }}
         onAssign={setAssigning}
         onRemoveMember={ref => edits.changeMember(ref, '')}
         removeBusy={edits.memberBusy}
@@ -109,7 +118,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         onDelete={flowEditor.remove}
       />
 
-      {zoneDialog && <ZoneDialog zone={zoneDialog.item} onSave={saveZone(zoneDialog.item)} onClose={() => setZoneDialog(null)} />}
+      {zoneDialog && <ZoneDialog zone={zoneDialog.item} connectionId={connectionId} readyAfterHours={edits.readyAfterHours} onSave={saveZone(zoneDialog.item)} flows={edits.flows} onClose={() => setZoneDialog(null)} gate={zoneGateOf(edits, () => setZoneDialog(null))} />}
       {flowEditor.dialogs}
       {assigning && (
         <AssignGuestsDialog
@@ -122,6 +131,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         />
       )}
       {changing && <ZoneStateConfirm zone={changing.zone} state={changing.state} edits={edits} onClose={() => setChanging(null)} />}
+      {egressChange.dialog}
       <MicrosegConfirmDialog
         open={deleting !== null}
         title={deleting ? t('delete.zoneTitle', { name: deleting.name }) : ''}

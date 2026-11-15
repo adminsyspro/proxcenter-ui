@@ -42,6 +42,27 @@ export function isRunFinished(run: Pick<MicrosegRun, 'status'> | null | undefine
 }
 
 /**
+ * Waits for a run to end, outside React (a write that must follow another one): reads it at once, then every 2 s,
+ * a curable failure retried later and later (runRetryDelay), a fatal one thrown. Resolves with the finished run.
+ */
+export async function waitForRun(getRun: (runId: string) => Promise<MicrosegRun>, runId: string): Promise<MicrosegRun> {
+  let failures = 0
+  for (;;) {
+    let delay = RUN_POLL_MS
+    try {
+      const run = await getRun(runId)
+      if (isRunFinished(run)) return run
+      failures = 0
+    } catch (e) {
+      if (!(e instanceof MicrosegApiError) || FATAL_CODES.has(e.code)) throw e
+      failures += 1
+      delay = runRetryDelay(failures)
+    }
+    await new Promise(resolve => setTimeout(resolve, delay))
+  }
+}
+
+/**
  * Follows a run: reads it at once, then every 2 s until it is `done` or
  * `failed`. A read that fails with a curable error is retried later and later
  * (runRetryDelay), back to every 2 s after the next success. Polling also

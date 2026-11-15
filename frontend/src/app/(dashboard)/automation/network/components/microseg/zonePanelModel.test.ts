@@ -55,4 +55,16 @@ describe('zoneSuggestions', () => {
     ]
     expect(zoneSuggestions(list, 'zd').map(s => s.id)).toEqual(['b', 'a'])
   })
+
+  it('adds the pending outbound flows the zone emits, once, whatever the destination', () => {
+    const base = suggestion('2026-11-03T10:00:00Z')
+    const list = [
+      { ...base, id: 'a', dst_zone_id: 'zd', hits: 2 },
+      { ...base, id: 'o1', direction: 'out' as const, src_key: 'zd', src_zone_id: 'zd', src_ip: '', dst_zone_id: '', dst_key: '203.0.113.10', dst_ip: '203.0.113.10', hits: 5 },
+      { ...base, id: 'o2', direction: 'out' as const, src_key: 'zd', src_zone_id: 'zd', src_ip: '', dst_zone_id: 'zd', dst_key: 'zd', hits: 4 },
+      { ...base, id: 'o3', direction: 'out' as const, src_key: 'zw', src_zone_id: 'zw', src_ip: '', dst_zone_id: '', dst_key: '203.0.113.11', dst_ip: '203.0.113.11', hits: 9 },
+      { ...base, id: 'o4', direction: 'out' as const, src_key: 'zd', src_zone_id: 'zd', src_ip: '', dst_zone_id: '', dst_key: '203.0.113.12', dst_ip: '203.0.113.12', hits: 1, status: 'dismissed' as const },
+    ]
+    expect(zoneSuggestions(list, 'zd').map(s => s.id)).toEqual(['o1', 'o2', 'a'])
+  })
 })

@@ -12,10 +12,15 @@ import type { PolicyGuest } from './zoneModel'
 /** The orchestrator's note that a write was made while the emergency stop holds the cluster firewall off. */
 const STOP_NOTE_RE = /written while the emergency stop/i
 
-type Props = { run: MicrosegRun; guests: PolicyGuest[] }
+type Props = {
+  run: MicrosegRun
+  guests: PolicyGuest[]
+  /** The caller lists every step with its outcome itself: the failed and not-run sections are left out. */
+  hideSteps?: boolean
+}
 
 /** The outcome of a finished apply run: counts, why it stopped, then the failed steps and the ones not run, per guest. */
-export default function ApplyResult({ run, guests }: Props) {
+export default function ApplyResult({ run, guests, hideSteps = false }: Props) {
   const t = useTranslations('microsegPilot.plan')
   const result = run.result
   const failed = result?.failed ?? []
@@ -40,13 +45,13 @@ export default function ApplyResult({ run, guests }: Props) {
       {result.held && <Notice severity='warning' text={t('held')} />}
       {errors.length > 0 && <Notice severity='warning' text={t('errors', { list: errors.join('; ') })} />}
       {notes.length > 0 && <Notice severity='info' text={t('notes', { list: notes.join('; ') })} />}
-      {failed.length > 0 && (
+      {!hideSteps && failed.length > 0 && (
         <Box>
           <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('failedSection')}</Typography>
           <PlanSteps steps={failed} guests={guests} />
         </Box>
       )}
-      {notRun.length > 0 && (
+      {!hideSteps && notRun.length > 0 && (
         <Box>
           <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('notRunSection')}</Typography>
           <PlanSteps steps={notRun} guests={guests} />

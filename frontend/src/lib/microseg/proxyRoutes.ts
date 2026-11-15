@@ -7,8 +7,8 @@
 // (node.manage for a write, node.view for a read).
 //
 // `audit` says who writes the audit row of a call, so that every write leaves
-// exactly one: the orchestrator audits the five lifecycle actions itself
-// (apply, zone state, emergency stop, restore, remove, see
+// exactly one: the orchestrator audits the six lifecycle actions itself
+// (apply, zone state, zone outbound state, emergency stop, restore, remove, see
 // internal/microseg/audit.go of the backend), the relay audits the draft writes
 // and the manual check under `auditAction`, and a read (or the plan preview) is
 // audited by nobody.
@@ -42,6 +42,7 @@ export const MICROSEG_ROUTES: MicrosegRoute[] = [
   { method: 'PUT', pattern: /^zones\/[^/]+$/, write: true, audit: 'relay', auditAction: 'microseg.zone.update' },
   { method: 'DELETE', pattern: /^zones\/[^/]+$/, write: true, audit: 'relay', auditAction: 'microseg.zone.delete' },
   { method: 'POST', pattern: /^zones\/[^/]+\/state$/, write: true, audit: 'orchestrator', auditAction: 'microseg.state' },
+  { method: 'POST', pattern: /^zones\/[^/]+\/egress-state$/, write: true, audit: 'orchestrator', auditAction: 'microseg.egress_state' },
   { method: 'POST', pattern: /^flows$/, write: true, audit: 'relay', auditAction: 'microseg.flow.create' },
   { method: 'PUT', pattern: /^flows\/[^/]+$/, write: true, audit: 'relay', auditAction: 'microseg.flow.update' },
   { method: 'DELETE', pattern: /^flows\/[^/]+$/, write: true, audit: 'relay', auditAction: 'microseg.flow.delete' },

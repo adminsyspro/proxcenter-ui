@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 
 import type { MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
 import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
+import { outboundFlowStatus } from './outboundStatus'
 import TruncatedText from './TruncatedText'
 
 type Props = {
@@ -32,10 +33,12 @@ export function flowService(flow: Pick<MicrosegFlow, 'proto' | 'dport'>): string
 
 /**
  * A flow on one line: source, arrow, destination, protocol/ports. A destination
- * outside any zone (a CIDR) is not compiled in v1, and says so (UA5).
+ * outside any zone (a CIDR) says what the outbound traffic of its source zone does with it: nothing yet (not applied),
+ * observed, or nothing to say once the zone enforces it (UA5).
  */
 export default function FlowSummary({ flow, zonesById, sideMinWidth = 0 }: Props) {
   const t = useTranslations('microsegPilot.policy.flow')
+  const outbound = flow.dst_cidr ? outboundFlowStatus(flow, zonesById.get(flow.src_zone_id)) : 'applied'
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: '1 1 auto' }}>
       <Side zoneId={flow.src_zone_id} cidr={flow.src_cidr} zonesById={zonesById} minWidth={sideMinWidth} />
@@ -45,9 +48,9 @@ export default function FlowSummary({ flow, zonesById, sideMinWidth = 0 }: Props
         <Chip size='small' variant='outlined' label={serviceLabel(flow.proto, flow.dport)} sx={{ flexShrink: 0 }} />
       </Tooltip>
       {flow.origin === 'learned' && <Chip size='small' color='info' variant='outlined' label={t('learned')} sx={{ flexShrink: 0 }} />}
-      {flow.dst_cidr && (
-        <Tooltip title={t('notApplied')}>
-          <Chip size='small' color='warning' variant='outlined' label={t('notApplied')} sx={{ minWidth: 0, flexShrink: 1 }} />
+      {outbound !== 'applied' && (
+        <Tooltip title={t(outbound)}>
+          <Chip size='small' color={outbound === 'observed' ? 'info' : 'warning'} variant='outlined' label={t(outbound)} sx={{ minWidth: 0, flexShrink: 1 }} />
         </Tooltip>
       )}
     </Box>

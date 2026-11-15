@@ -12,7 +12,7 @@ import HourlyBars from './HourlyBars'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { FlowActions } from './ObservationActions'
 import { eventOfFlow, flowTrafficSeries } from './observedFlowModel'
-import { ObservedKindGlyph } from './observationParts'
+import { DirectionGlyph, ObservedKindGlyph } from './observationParts'
 import { formatWhen } from './summaryModel'
 import TruncatedText from './TruncatedText'
 import { useZoneUncovered } from './useZoneUncovered'
@@ -30,8 +30,26 @@ type Props = {
   source: string
   destination: string
   busy: boolean
-  onResolve: (action: SuggestionAction) => void
+  onResolve: (action: SuggestionAction, prefixLen?: number) => void
+  /** The guest that carries an address, when the inventory knows it. */
+  guestName?: (ip: string) => string | undefined
   onClose: () => void
+}
+
+type Translate = ReturnType<typeof useTranslations<'microsegPilot.observation'>>
+
+type Ends = { guestZone: string; otherZone: string; scope: string }
+
+/**
+ * The two zones of a flow as the dialog reads them, per direction: the zone of the guest that logged the flow (the
+ * destination zone when inbound, the emitting zone when outbound), the other end, and the sentence that says which
+ * traffic the chart counts.
+ */
+function endsOf(t: Translate, outbound: boolean, srcZone: string, dstZone: string): Ends {
+  if (outbound) {
+    return { guestZone: srcZone, otherZone: dstZone, scope: dstZone ? t('dialog.trafficScope', { source: srcZone, destination: dstZone }) : t('dialog.trafficScopeOutside', { source: srcZone }) }
+  }
+  return { guestZone: dstZone, otherZone: srcZone, scope: srcZone ? t('dialog.trafficScope', { source: srcZone, destination: dstZone }) : t('dialog.trafficScopeNoZone', { destination: dstZone }) }
 }
 
 /** One fact on one line: the label at the left, the value at the right. */
@@ -58,13 +76,99 @@ function Section({ title, aside, children }: Readonly<{ title: string; aside?: s
   )
 }
 
+type SectionProps = Readonly<{
+  connectionId: string
+  suggestion: MicrosegSuggestion
+  ends: Ends
+  srcZone: string
+  dstZone: string
+}>
+
+/** The traffic between the two zones over the last 24 hours, one bar per hour (the history the tab already read). */
+function TrafficSection({ connectionId, suggestion: s, ends }: SectionProps) {
+  const t = useTranslations('microsegPilot.observation')
+  const format = useFormatter()
+  const { traffic, failed } = useZoneUncovered(connectionId)
+  if (failed) return null
+
+  const series = traffic ? flowTrafficSeries(traffic, ends.guestZone, ends.otherZone, s.kind, s.direction === 'out' ? 'out' : 'in') : null
+  const from = traffic ? Date.parse(traffic.from) : 0
+  const stepMs = (traffic?.step ?? 3600) * 1000
+  const hour = (i: number) => format.dateTime(new Date(from + i * stepMs), { hour: '2-digit', minute: '2-digit' })
+  const total = series?.reduce((a, b) => a + b, 0) ?? null
+
+  return (
+    <Section title={t('dialog.trafficTitle')} aside={total === null ? undefined : t('dialog.trafficTotal', { count: total })}>
+      <HourlyBars
+        series={series}
+        colour={s.kind === 'blocked' ? 'info.main' : 'error.main'}
+        height={CHART_HEIGHT}
+        ariaLabel={total === null ? t('dialog.trafficLoading') : t('dialog.trafficAria', { count: total })}
+        barLabel={(i, n) => t('dialog.trafficBar', { from: hour(i), to: hour(i + 1), count: n })}
+      />
+      <Box sx={{ display: 'flex', justifyContent: 'space-between' }} aria-hidden>
+        <Typography variant='caption' color='text.secondary'>{traffic ? hour(0) : ''}</Typography>
+        <Typography variant='caption' color='text.secondary'>{t('dialog.now')}</Typography>
+      </Box>
+      <Typography variant='caption' color='text.secondary'>{ends.scope}</Typography>
+    </Section>
+  )
+}
+
+/** The latest occurrences with the guests they reached (the engine's memory, read when the dialog opens, no Proxmox call). */
+function RecentSection({ connectionId, suggestion: s, ends, srcZone, dstZone, guestName }: SectionProps & { guestName?: (ip: string) => string | undefined }) {
+  const t = useTranslations('microsegPilot.observation')
+  const format = useFormatter()
+  const when = (iso: string) => formatWhen(format, iso)
+  const outbound = s.direction === 'out'
+  const events = useMicrosegEvents(connectionId, { zone: ends.guestZone, verdict: s.kind, q: String(s.dport) }, true)
+  const recent = events.events.filter(e => eventOfFlow(e, s, srcZone, dstZone)).slice(0, RECENT_SHOWN)
+  // How far back the engine's memory went for this read (newest first): the oldest event it returned.
+  const oldest = events.events.at(-1)?.ts ?? null
+  const hasEvents = events.events.length > 0
+
+  return (
+    <Section title={t('dialog.recentTitle')} aside={oldest ? t('dialog.recentSince', { time: when(oldest) }) : undefined}>
+      {events.error && !hasEvents && <MicrosegErrorAlert error={events.error} onRetry={events.reload} />}
+      {events.loading && !hasEvents && <CircularProgress size={18} />}
+      {!events.loading && !events.error && recent.length === 0 && (
+        <Typography variant='body2' color='text.secondary'>{t('dialog.recentEmpty')}</Typography>
+      )}
+      {recent.length > 0 && (
+        <Table size='small' aria-label={t('dialog.recentTitle')}>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={CELL_SX}>{t('dialog.colTime')}</TableCell>
+              <TableCell sx={CELL_SX}>{t(outbound ? 'dialog.colDestination' : 'dialog.colSource')}</TableCell>
+              <TableCell sx={CELL_SX}>{t('dialog.colGuest')}</TableCell>
+              <TableCell sx={CELL_SX}>{t('dialog.colNode')}</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {recent.map(e => (
+              <TableRow key={e.seq} data-event={e.seq}>
+                <TableCell sx={CELL_SX}>{when(e.ts)}</TableCell>
+                <TableCell sx={CELL_SX}>{outbound ? e.dst_ip : e.src_ip || t('unknownEndpoint')}</TableCell>
+                <TableCell sx={{ ...CELL_SX, maxWidth: 260 }}>
+                  <TruncatedText text={outbound ? guestName?.(e.dst_ip) ?? (e.dst_ip || '-') : t('dialog.guest', { name: e.guest || String(e.vmid), vmid: e.vmid, ip: e.dst_ip || '-' })} variant='body2' />
+                </TableCell>
+                <TableCell sx={CELL_SX}>{e.node}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </Section>
+  )
+}
+
 /**
  * An observed flow in a centred dialog: what it is (verdict, service, hits, first and last time, the sample pair of
  * addresses), the traffic between its two zones over the last 24 hours, one bar per hour (the history the tab already
  * read: no new request), its latest occurrences with the guests they reached (the engine's memory, read when the
  * dialog opens, no Proxmox call), and the actions of a pending flow.
  */
-export default function ObservedFlowDialog({ connectionId, suggestion: s, zones, source, destination, busy, onResolve, onClose }: Readonly<Props>) {
+export default function ObservedFlowDialog({ connectionId, suggestion: s, zones, source, destination, busy, onResolve, guestName, onClose }: Readonly<Props>) {
   const t = useTranslations('microsegPilot.observation')
   const format = useFormatter()
   const when = (iso: string) => formatWhen(format, iso)
@@ -72,19 +176,9 @@ export default function ObservedFlowDialog({ connectionId, suggestion: s, zones,
   const srcZone = s.src_zone_id ? zones.get(s.src_zone_id)?.name ?? '' : ''
   const dstZone = s.dst_zone_id ? zones.get(s.dst_zone_id)?.name ?? '' : ''
   const service = serviceLabel(s.proto, s.dport)
-  const colour = s.kind === 'blocked' ? 'info.main' : 'error.main'
-
-  const { traffic, failed } = useZoneUncovered(connectionId)
-  const series = traffic && dstZone ? flowTrafficSeries(traffic, dstZone, srcZone, s.kind) : null
-  const from = traffic ? Date.parse(traffic.from) : 0
-  const stepMs = (traffic?.step ?? 3600) * 1000
-  const hour = (i: number) => format.dateTime(new Date(from + i * stepMs), { hour: '2-digit', minute: '2-digit' })
-  const total = series?.reduce((a, b) => a + b, 0) ?? null
-
-  const events = useMicrosegEvents(connectionId, { zone: dstZone, verdict: s.kind, q: String(s.dport) }, !!dstZone)
-  const recent = events.events.filter(e => eventOfFlow(e, s, srcZone, dstZone)).slice(0, RECENT_SHOWN)
-  // How far back the engine's memory went for this read (newest first): the oldest event it returned.
-  const oldest = events.events.at(-1)?.ts ?? null
+  const outbound = s.direction === 'out'
+  const ends = endsOf(t, outbound, srcZone, dstZone)
+  const sectionProps = { connectionId, suggestion: s, ends, srcZone, dstZone }
 
   return (
     <Dialog open onClose={onClose} maxWidth='md' fullWidth aria-labelledby='microseg-flow-title'>
@@ -101,66 +195,24 @@ export default function ObservedFlowDialog({ connectionId, suggestion: s, zones,
       </DialogTitle>
       <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, minWidth: 0 }}>
         <Section title={t('dialog.summary')}>
+          <Line label={t('dialog.direction')}>
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+              <DirectionGlyph direction={s.direction} />
+              <Typography variant='body2' fontWeight={500}>{t(outbound ? 'direction.out' : 'direction.in')}</Typography>
+            </Box>
+          </Line>
+          <Line label={t('dialog.colDestination')}>{destination}</Line>
           <Line label={t('dialog.service')}>{serviceTitle(s.proto, s.dport)}</Line>
           <Line label={t('dialog.hits')}>{format.number(s.hits)}</Line>
           <Line label={t('dialog.firstSeen')}>{when(s.first_seen)}</Line>
           <Line label={t('dialog.lastSeen')}>{when(s.last_seen)}</Line>
-          <Line label={t('dialog.addresses')}>{`${s.src_ip || t('unknownEndpoint')} → ${s.dst_ip || t('unknownEndpoint')}`}</Line>
+          <Line label={t('dialog.addresses')}>{`${s.src_ip || (outbound && srcZone) || t('unknownEndpoint')} → ${s.dst_ip || t('unknownEndpoint')}`}</Line>
           <Typography variant='caption' color='text.secondary'>{t('detail.sampleNote')}</Typography>
         </Section>
 
-        {!failed && dstZone && (
-          <Section title={t('dialog.trafficTitle')} aside={total === null ? undefined : t('dialog.trafficTotal', { count: total })}>
-            <HourlyBars
-              series={series}
-              colour={colour}
-              height={CHART_HEIGHT}
-              ariaLabel={total === null ? t('dialog.trafficLoading') : t('dialog.trafficAria', { count: total })}
-              barLabel={(i, n) => t('dialog.trafficBar', { from: hour(i), to: hour(i + 1), count: n })}
-            />
-            <Box sx={{ display: 'flex', justifyContent: 'space-between' }} aria-hidden>
-              <Typography variant='caption' color='text.secondary'>{traffic ? hour(0) : ''}</Typography>
-              <Typography variant='caption' color='text.secondary'>{t('dialog.now')}</Typography>
-            </Box>
-            <Typography variant='caption' color='text.secondary'>
-              {srcZone ? t('dialog.trafficScope', { source: srcZone, destination: dstZone }) : t('dialog.trafficScopeNoZone', { destination: dstZone })}
-            </Typography>
-          </Section>
-        )}
+        {ends.guestZone && <TrafficSection {...sectionProps} />}
 
-        {dstZone && (
-          <Section title={t('dialog.recentTitle')} aside={oldest ? t('dialog.recentSince', { time: when(oldest) }) : undefined}>
-            {events.error && !events.events.length ? <MicrosegErrorAlert error={events.error} onRetry={events.reload} /> : null}
-            {events.loading && !events.events.length && <CircularProgress size={18} />}
-            {!events.loading && !events.error && recent.length === 0 && (
-              <Typography variant='body2' color='text.secondary'>{t('dialog.recentEmpty')}</Typography>
-            )}
-            {recent.length > 0 && (
-              <Table size='small' aria-label={t('dialog.recentTitle')}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={CELL_SX}>{t('dialog.colTime')}</TableCell>
-                    <TableCell sx={CELL_SX}>{t('dialog.colSource')}</TableCell>
-                    <TableCell sx={CELL_SX}>{t('dialog.colGuest')}</TableCell>
-                    <TableCell sx={CELL_SX}>{t('dialog.colNode')}</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {recent.map(e => (
-                    <TableRow key={e.seq} data-event={e.seq}>
-                      <TableCell sx={CELL_SX}>{when(e.ts)}</TableCell>
-                      <TableCell sx={CELL_SX}>{e.src_ip || t('unknownEndpoint')}</TableCell>
-                      <TableCell sx={{ ...CELL_SX, maxWidth: 260 }}>
-                        <TruncatedText text={t('dialog.guest', { name: e.guest || String(e.vmid), vmid: e.vmid, ip: e.dst_ip || '-' })} variant='body2' />
-                      </TableCell>
-                      <TableCell sx={CELL_SX}>{e.node}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </Section>
-        )}
+        {ends.guestZone && <RecentSection {...sectionProps} guestName={guestName} />}
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 1.5, gap: 1 }}>
         {s.status === 'pending' && <FlowActions suggestion={s} source={source} destination={destination} busy={busy} onResolve={onResolve} variant='buttons' />}

@@ -9,7 +9,7 @@ import { cleanup, act, within } from '@testing-library/react'
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
 import { calls, mock, reply } from './microsegTestKit'
-import { applyRun, failedWith, g101, g200, openPlanDialog, planRun, resetPlanMocks, step } from './planTestKit'
+import { PLAN_STEPS, applyRun, failedWith, g101, g200, openPlanDialog, planRun, resetPlanMocks, step } from './planTestKit'
 import { body } from './policyTestKit'
 
 beforeEach(() => resetPlanMocks())
@@ -141,6 +141,50 @@ describe('applying: the result', () => {
     expect(within(dialog).getByText('Steps not run')).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('button', { name: /db1/ }))
     expect(await within(dialog).findByText('skipped after the failure on this node')).toBeTruthy()
+  })
+
+  it('keeps the plan on screen while it is applied and checks each step as the engine writes it', async () => {
+    mock.routes['POST /apply'] = () => reply(202, { run_id: 'a1' })
+    mock.routes['GET /runs/a1'] = () => reply(200, { ...applyRun({}, 'running'), result: { progress: { phase: 'writing', done: 3, total: 6 } } })
+    const dialog = await openPlanDialog()
+    await clickApply(dialog)
+
+    const state = (testId: string) => within(dialog).getByTestId(testId).querySelector('[data-step-state]')?.getAttribute('data-step-state')
+    // The cluster group is open: its two steps are written.
+    await waitFor(() => expect(state('plan-step-0')).toBe('done'))
+    expect(state('plan-step-1')).toBe('done')
+    const cluster = within(dialog).getByRole('listitem', { name: 'Cluster objects' })
+    expect(cluster.textContent).toContain('2 / 2')
+    expect(within(cluster).getAllByRole('img', { name: 'Done' }).length).toBeGreaterThan(0)
+    // web1: one step of three written, the next being written; db1 waits.
+    const web1 = within(dialog).getByRole('listitem', { name: 'web1' })
+    expect(web1.textContent).toContain('1 / 3')
+    expect(within(web1).getByRole('img', { name: 'Being written' })).toBeTruthy()
+    fireEvent.click(within(web1).getByRole('button', { name: /web1/ }))
+    await waitFor(() => expect(state('plan-step-3')).toBe('running'))
+    expect(state('plan-step-2')).toBe('done')
+    expect(state('plan-step-4')).toBe('waiting')
+    expect(within(dialog).getByRole('listitem', { name: 'db1' }).textContent).toContain('0 / 1')
+  })
+
+  it('leaves each step with its outcome once the application has ended, the reason of a failure on its line', async () => {
+    mock.routes['POST /apply'] = () => reply(202, { run_id: 'a1' })
+    mock.routes['GET /runs/a1'] = () => reply(200, failedWith(applyRun({
+      done: PLAN_STEPS.slice(0, 4), failed: [{ ...PLAN_STEPS[4], error: 'guest is locked' }], not_run: [{ ...PLAN_STEPS[5], error: 'skipped after the failure' }],
+    }), '1 step(s) failed, 1 not run'))
+    const dialog = await openPlanDialog()
+    await clickApply(dialog)
+
+    expect(await within(dialog).findByText('4 done, 1 failed, 1 not run')).toBeTruthy()
+    // Every step is listed once, with its mark: the separate sections of failed and skipped steps are not repeated.
+    expect(within(dialog).queryByText('Failed steps')).toBeNull()
+    expect(within(dialog).queryByText('Steps not run')).toBeNull()
+    const web1 = within(dialog).getByRole('listitem', { name: 'web1' })
+    expect(web1.textContent).toContain('2 / 3')
+    expect(within(web1).getByRole('img', { name: 'Failed' })).toBeTruthy()
+    fireEvent.click(within(web1).getByRole('button', { name: /web1/ }))
+    expect(await within(dialog).findByText('guest is locked')).toBeTruthy()
+    expect(within(within(dialog).getByRole('listitem', { name: 'db1' })).getByRole('img', { name: 'Not run' })).toBeTruthy()
   })
 
   it('shows the truncated notice when the write cap stopped the run', async () => {

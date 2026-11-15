@@ -8,7 +8,7 @@ import { within } from '@testing-library/react'
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 import type { MicrosegFlow } from '@/lib/microseg/types'
 
-import { flow, mock, reply, revisionWithSnapshot, zone } from './microsegTestKit'
+import { calls, flow, mock, reply, revisionWithSnapshot, zone } from './microsegTestKit'
 import { db, setup, installFreshMocks, vm, web } from './policyTestKit'
 
 installFreshMocks()
@@ -78,7 +78,7 @@ describe('zone list', () => {
     expect(within(dialog).getByRole('combobox', { name: 'Destination zone' }).textContent).toContain('db')
   })
 
-  it('opens the details full width below the row: members and flows side by side, remembered for the zone', async () => {
+  it('opens the details full width below the row: the zone panel of the map, remembered for the zone', async () => {
     const out: MicrosegFlow = { ...flow('f1'), src_zone_id: 'zw', dst_zone_id: 'zd' }
     const view = setup({ zones: [web(), db()], flows: [out], vms: [vm(100, 'web-1', ['zone-web'])] })
     const card = await screen.findByRole('listitem', { name: 'web' })
@@ -91,18 +91,34 @@ describe('zone list', () => {
     expect(chevron.getAttribute('aria-controls')).toBe(details.id)
     expect(card.contains(details)).toBe(false)
     expect(getComputedStyle(details.parentElement as HTMLElement).gridColumn).toMatch(/^1\s*\/\s*-1$/)
-    const members = within(details).getByRole('region', { name: 'Members' })
-    const flowsColumn = within(details).getByRole('region', { name: 'Flows of the zone' })
-    expect(members.parentElement).toBe(flowsColumn.parentElement)
-    expect(await within(members).findByText('web-1')).toBeTruthy()
-    expect(within(flowsColumn).getByText('Outgoing flows')).toBeTruthy()
-    expect(within(flowsColumn).getByRole('button', { name: 'Edit flow' })).toBeTruthy()
+    // The zone panel of the map, laid out wide: the traffic of the zone, then its observed flows, members and flows.
+    expect(within(details).getByText('Observed traffic')).toBeTruthy()
+    expect(await within(details).findByRole('listitem', { name: 'web-1' })).toBeTruthy()
+    expect(within(details).getByText('Outgoing flows')).toBeTruthy()
+    expect(within(details).getByRole('button', { name: 'Edit flow' })).toBeTruthy()
+    // Its pending observed flows are read for the zone.
+    await waitFor(() => expect(calls('GET /suggestions?status=pending&zone=zw&limit=200')).toHaveLength(1))
     expect(JSON.parse(window.localStorage.getItem('microseg.policy.openCards.c1') ?? '[]')).toEqual(['zw'])
 
     view.unmount()
     setup({ zones: [web(), db()], flows: [out], vms: [vm(100, 'web-1', ['zone-web'])] })
     expect(await screen.findByRole('region', { name: 'Details of web' })).toBeTruthy()
     expect(screen.queryByRole('region', { name: 'Details of db' })).toBeNull()
+  })
+
+  it('shows the details of one zone at a time: opening one closes the other, and a saved list keeps its last zone', async () => {
+    window.localStorage.setItem('microseg.policy.openCards.c1', JSON.stringify(['zw', 'zd']))
+    setup({ zones: [web(), db()] })
+    expect(await screen.findByRole('region', { name: 'Details of db' })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Details of web' })).toBeNull()
+
+    fireEvent.click(within(screen.getByRole('listitem', { name: 'web' })).getByRole('button', { name: 'Show details of web' }))
+    expect(await screen.findByRole('region', { name: 'Details of web' })).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Details of db' })).toBeNull())
+    expect(JSON.parse(window.localStorage.getItem('microseg.policy.openCards.c1') ?? '[]')).toEqual(['zw'])
+
+    fireEvent.click(within(screen.getByRole('listitem', { name: 'web' })).getByRole('button', { name: 'Hide details of web' }))
+    await waitFor(() => expect(screen.queryByRole('region', { name: /Details of/ })).toBeNull())
   })
 
   it('opens no card on first display, whatever the former list remembered', async () => {
@@ -212,18 +228,29 @@ describe('flow list', () => {
     expect(await screen.findByText('Create a zone first: a flow links zones or a zone and a CIDR.')).toBeTruthy()
   })
 
-  it('says "not applied in v1" for a flow whose destination is a CIDR, in the table and under the zone', async () => {
+  it('says "not applied" for a flow whose destination is a CIDR, in the table and under the zone', async () => {
     const toCidr: MicrosegFlow = { ...flow('f1'), src_zone_id: 'zw', dst_zone_id: '', dst_cidr: '10.0.0.0/8', dport: '53', proto: 'udp' }
     const toZone: MicrosegFlow = { ...flow('f2'), src_zone_id: 'zw', dst_zone_id: 'zd' }
     setup({ zones: [web(), db()], flows: [toCidr, toZone] })
 
-    const pill = 'Not applied (egress not managed in v1)'
+    const pill = 'Not applied (outbound not controlled)'
     const flows = await screen.findByRole('region', { name: 'Flows' })
-    expect(within(flows).getAllByText('Not applied in v1')).toHaveLength(1)
+    expect(within(flows).getAllByText('Not applied')).toHaveLength(1)
     expect(within(flows).getByText('10.0.0.0/8')).toBeTruthy()
 
     fireEvent.click(within(screen.getByRole('listitem', { name: 'web' })).getByRole('button', { name: 'Show details of web' }))
     expect(within(await screen.findByRole('region', { name: 'Details of web' })).getAllByText(pill)).toHaveLength(1)
+  })
+
+  it('says "Outbound observed" for a flow to a CIDR while the source zone observes its outbound traffic, and nothing once it enforces it', async () => {
+    const toCidr: MicrosegFlow = { ...flow('f1'), src_zone_id: 'zw', dst_zone_id: '', dst_cidr: '10.0.0.0/8', dport: '53', proto: 'udp' }
+    setup({ zones: [{ ...web(), egress_state: 'observe' }, db()], flows: [toCidr] })
+    const flows = await screen.findByRole('region', { name: 'Flows' })
+    expect(within(flows).getAllByText('Outbound observed')).toHaveLength(1)
+    expect(within(flows).queryByText(/Not applied/)).toBeNull()
+
+    fireEvent.click(within(screen.getByRole('listitem', { name: 'web' })).getByRole('button', { name: 'Show details of web' }))
+    expect(within(await screen.findByRole('region', { name: 'Details of web' })).getAllByText('Outbound observed')).toHaveLength(1)
   })
 
   it('does not show the pill for a CIDR source', async () => {

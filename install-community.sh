@@ -187,6 +187,51 @@ install_docker() {
 }
 
 # ============================================
+# Host addresses (micro-segmentation preflight)
+# ============================================
+# Behind Docker's bridge network the orchestrator only sees its container
+# address, while the Proxmox nodes see ProxCenter coming from this host's.
+# The installer writes the host's addresses to PROXCENTER_HOST_IPS so the
+# preflight checks the right ones.
+
+# docker_bridge_ips: the addresses of the container interfaces of this host,
+# which Proxmox never sees ProxCenter come from (Docker bridges and veth
+# pairs, CNI, flannel, calico), one per line. Without `ip`, the default
+# docker0 gateway. Any other address is kept: the preflight then asks the
+# rules to accept it too, which can only be stricter (Tailscale, a libvirt
+# NAT or an overlay may be how this host reaches Proxmox).
+docker_bridge_ips() {
+    if ! command -v ip > /dev/null 2>&1; then
+        echo "172.17.0.1"
+        return 0
+    fi
+    ip -o addr show 2>/dev/null \
+        | awk '$2 ~ /^(docker[0-9]*|docker_gwbridge|br-[0-9a-f]+|veth[^ ]*|cni[^ ]*|flannel[^ ]*|cali[^ ]*)(@.*)?:?$/ { split($4, a, "/"); print a[1] }'
+}
+
+# filter_host_ips CANDIDATES EXCLUDED: the CANDIDATES (space separated, as
+# `hostname -I` prints them) without loopback, link-local, the EXCLUDED ones
+# (space or newline separated) and duplicates, comma separated.
+filter_host_ips() {
+    local candidates="$1" excluded out="" ip
+    excluded=" $(echo "$2" | tr '\n' ' ') "
+    for ip in $candidates; do
+        case "$ip" in
+            127.*|::1|169.254.*|[fF][eE]80:*) continue ;;
+        esac
+        case "$excluded" in *" $ip "*) continue ;; esac
+        case ",$out," in *",$ip,"*) continue ;; esac
+        out="${out:+$out,}$ip"
+    done
+    echo "$out"
+}
+
+# host_ips: this host's addresses for PROXCENTER_HOST_IPS.
+host_ips() {
+    filter_host_ips "$(hostname -I 2>/dev/null)" "$(docker_bridge_ips)"
+}
+
+# ============================================
 # Step 2: Configure ProxCenter
 # ============================================
 
@@ -214,6 +259,7 @@ setup_proxcenter() {
     if [ -z "$SERVER_IP" ]; then
         SERVER_IP="localhost"
     fi
+    HOST_IPS=$(host_ips)
 
     # Create .env file
     cat > "$INSTALL_DIR/.env" << EOF
@@ -237,6 +283,11 @@ TLS_ENABLED=true
 
 # Postgres
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+
+# Addresses of this host, as the Proxmox nodes see ProxCenter coming from
+# (micro-segmentation preflight). Empty lets ProxCenter detect it; an
+# address forced in Settings > Advanced wins over this one.
+PROXCENTER_HOST_IPS=$HOST_IPS
 EOF
 
     chmod 600 "$INSTALL_DIR/.env"

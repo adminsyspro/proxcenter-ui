@@ -237,6 +237,19 @@ describe('LoggingTab', () => {
     })
   })
 
+  it('puts the log picker first on the row of the filters once a log is picked, the row on one line', async () => {
+    renderTab()
+
+    const list = await openList()
+
+    fireEvent.click(within(list).getAllByRole('option').find(o => o.textContent === 'pve2')!)
+
+    const search = await screen.findByPlaceholderText(/Search/)
+    const row = search.closest('.MuiTextField-root')!.parentElement as HTMLElement
+    expect(within(row).getAllByRole('combobox')[0]).toHaveValue('pve2')
+    expect(getComputedStyle(row).flexWrap).toBe('nowrap')
+  })
+
   it('keeps the empty state of a Proxmox log inside the table width', async () => {
     renderTab()
 

@@ -87,7 +87,7 @@ describe('flow table: groups and filter', () => {
 })
 
 describe('flow table: state against the applied revision, diff badges', () => {
-  it('says applied, pending add, pending change, pending removal (struck through) or not applied in v1', async () => {
+  it('says applied, pending add, pending change, pending removal (struck through) or not applied', async () => {
     const kept = f('f1', { src_zone_id: 'zw', dst_zone_id: 'zd', dport: '443' })
     const changed = f('f2', { src_zone_id: 'zw', dst_zone_id: 'zd', dport: '22' })
     const removed = f('f4', { src_zone_id: 'zd', dst_zone_id: 'zw', dport: '80' })
@@ -106,9 +106,9 @@ describe('flow table: state against the applied revision, diff badges', () => {
     expect(gone.getAttribute('data-removed')).toBe('true')
     expect(getComputedStyle(gone.cells[0]).textDecoration).toContain('line-through')
     expect(within(gone).queryByRole('button', { name: 'Edit flow' })).toBeNull()
-    expect(stateOf('Outside the zones', 'DNS').cells[3].textContent).toBe('Not applied in v1')
+    expect(stateOf('Outside the zones', 'DNS').cells[3].textContent).toBe('Not applied')
 
-    expect(await screen.findByText('What will change: 2 flows added, 1 flow changed, 1 flow removed')).toBeTruthy()
+    expect(await screen.findByText('Not applied yet: 2 flows added, flow web → db SSH changed, flow db → web HTTP removed.')).toBeTruthy()
   })
 
   it('badges the zones added and changed, and keeps a removed zone struck through until the next apply', async () => {
@@ -133,7 +133,7 @@ describe('flow table: state against the applied revision, diff badges', () => {
     expect(within(oldGroup).getByText('Removed')).toBeTruthy()
     expect(rowsOf(oldGroup)[0].cells[3].textContent).toBe('Pending removal')
     expect(within(oldGroup).queryByRole('button', { name: 'New flow into old' })).toBeNull()
-    expect(screen.getByText('What will change: 1 zone added, 1 zone changed, 1 zone removed, 1 flow removed')).toBeTruthy()
+    expect(screen.getByText('Not applied yet: zone fresh added, zone db changed, zone old removed, flow web → old HTTPS removed.')).toBeTruthy()
   })
 
   it('marks every flow pending add when nothing was applied yet', async () => {

@@ -15,21 +15,6 @@ export function formatWhen(format: ReturnType<typeof useFormatter>, iso: string)
   return Number.isNaN(d.getTime()) ? iso : format.dateTime(d, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-/** What an admin starts, not what the engine does by itself: these runs are not "checks". */
-const ADMIN_KINDS = new Set(['plan', 'apply', 'remove', 'restore'])
-
-/** When the engine last looked at the cluster: its newest own run, whatever the kind. Null before the first one. */
-export function lastCheckAt(status: Pick<MicrosegStatus, 'engine'>): Date | null {
-  let newest: Date | null = null
-  for (const [kind, run] of Object.entries(status.engine.last_runs ?? {})) {
-    if (ADMIN_KINDS.has(kind)) continue
-    const at = new Date(run.started_at)
-    if (Number.isNaN(at.getTime())) continue
-    if (!newest || at > newest) newest = at
-  }
-  return newest
-}
-
 /**
  * The emergency stop switched the cluster firewall off: the engine says so, or, while it cannot read the firewall
  * ('unknown' or absent), the policy remembers that the stop did it.

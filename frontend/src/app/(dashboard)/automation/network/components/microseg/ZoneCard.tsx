@@ -5,17 +5,20 @@ import { Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/materia
 import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
-import type { MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
+import { zoneEgress, type MicrosegFlow, type MicrosegZone } from '@/lib/microseg/types'
 import { serviceLabel } from '@/lib/network/serviceNames'
 
 import DiffChip from './DiffChip'
+import EgressChip from './EgressChip'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import { endText } from './policyTableModel'
 import { flowsOfZone, type ZoneMember } from './zoneModel'
 import { HOVER_ACTIONS, ZoneDetails, ZoneGlyph, ZoneStateMenu, type ZoneRowProps } from './ZoneRow'
 import ZoneSparkline from './ZoneSparkline'
 import ZoneStateChip from './ZoneStateChip'
+import { useRunsInProgress } from './runsInProgress'
 import TruncatedText from './TruncatedText'
+import ZoneWorkspace, { type ZoneWorkContext } from './ZoneWorkspace'
 
 /** How many members and flows a card previews. */
 export const CARD_PREVIEW = 3
@@ -24,12 +27,19 @@ export type ZoneCardProps = ZoneRowProps & {
   /** The zone's drifts (ignored ones left out), null while the engine has not computed them. */
   drifts: number | null
   onOpenDrifts?: (zone: MicrosegZone) => void
+  /** The outbound observation is clean for the whole window (isEgressReady): the chip says ready. */
+  egressReady?: boolean
   /**
    * The zone's uncovered traffic of the last 24 hours, one count per hour: `series` null while the history is read.
    * The whole value is null when the history cannot be read (an older orchestrator): no sparkline then.
    */
-  uncovered?: { series: number[] | null; from: number; stepMs: number } | null
+  uncovered?: { series: number[] | null; outSeries?: number[] | null; from: number; stepMs: number } | null
 }
+
+/** The zone name keeps at least this width (px) before it is cut; the chips give way first. */
+const NAME_MIN_WIDTH = 72
+/** Below this card title width (px), the outbound chip keeps its icon and tooltip only. */
+const EGRESS_ICON_ONLY_BELOW = 400
 
 export const detailsId = (zoneId: string) => `zone-details-${zoneId}`
 
@@ -103,12 +113,17 @@ function FlowPreview({ zone, flows, zonesById }: { zone: MicrosegZone; flows: Mi
  * and the flows opened full width below the row of cards) and the actions, shown on hover or focus (always on touch).
  */
 export default function ZoneCard(props: ZoneCardProps) {
-  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onAssign, onAddFlow, drifts, onOpenDrifts, uncovered } = props
+  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onSetEgress, onAssign, onAddFlow, drifts, onOpenDrifts, uncovered, egressReady = false } = props
   const t = useTranslations('microsegPilot.policy.zone')
   const ts = useTranslations('microsegPilot.overview.sections')
+  // The same words as in the zone panel of the map.
+  const tz = useTranslations('microsegPilot.overview.zonePanel')
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const { canWrite } = useMicrosegWrite()
+  // While a run writes the state of this zone, the chip says so and no other state can be asked for.
+  const changing = useRunsInProgress().zones.has(zone.id)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
+  const egress = zoneEgress(zone)
 
   return (
     <Box
@@ -118,11 +133,12 @@ export default function ZoneCard(props: ZoneCardProps) {
     >
       <Box sx={{ p: 1.5, pb: 1, flex: 1, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
         {/* One line: the name at the left, the state, diff and drifts chips at the right; the description below. */}
-        <Box data-zone-title sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+        <Box data-zone-title sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, containerType: 'inline-size' }}>
           <ZoneGlyph zone={zone} label={t(`state.${zone.state}`)} />
-          <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-            <ZoneStateChip state={zone.state} onClick={canWrite ? setAnchor : undefined} />
+          <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '1 1 0', minWidth: NAME_MIN_WIDTH }} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 1, minWidth: 0 }}>
+            <ZoneStateChip state={zone.state} busy={changing} onClick={canWrite && !changing ? setAnchor : undefined} />
+            <EgressChip state={egress} ready={egressReady} iconOnlyBelow={EGRESS_ICON_ONLY_BELOW} />
             <DiffChip kind={diffKind} />
             {!!drifts && (
               <Chip
@@ -136,7 +152,17 @@ export default function ZoneCard(props: ZoneCardProps) {
             )}
           </Box>
         </Box>
-        <TruncatedText text={zone.label} variant='body2' color='text.secondary' sx={{ minHeight: 20 }} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, minHeight: 20 }}>
+          <TruncatedText text={zone.label} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
+          {zone.gateway && (
+            <Tooltip title={t('gatewayTip', { ip: zone.gateway })}>
+              <Box component='span' data-testid='zone-gateway' sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexShrink: 0, color: 'text.secondary' }}>
+                <i className='ri-router-line' aria-hidden style={{ fontSize: 14 }} />
+                <Typography component='span' variant='caption' sx={{ fontVariantNumeric: 'tabular-nums' }}>{zone.gateway}</Typography>
+              </Box>
+            </Tooltip>
+          )}
+        </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Stat name='members' value={membersKnown ? members.length : null} label={t('statMembers')} />
           <Stat name='incoming' value={incoming.length} label={t('statIncoming')} />
@@ -147,7 +173,7 @@ export default function ZoneCard(props: ZoneCardProps) {
         {/* At the bottom of the card: the cards of a row share their height, so the bars line up across the row. */}
         {uncovered && (
           <Box sx={{ mt: 'auto', pt: 0.5 }}>
-            <ZoneSparkline state={zone.state} series={uncovered.series} from={uncovered.from} stepMs={uncovered.stepMs} />
+            <ZoneSparkline state={zone.state} series={uncovered.series} outSeries={uncovered.outSeries} outState={zoneEgress(zone)} from={uncovered.from} stepMs={uncovered.stepMs} />
           </Box>
         )}
       </Box>
@@ -168,10 +194,20 @@ export default function ZoneCard(props: ZoneCardProps) {
             <IconButton size='small' aria-label={t('edit')} disabled={!canWrite} onClick={() => onEdit(zone)}><i className='ri-pencil-line' /></IconButton>
           </WriteTip>
           <WriteTip title={t('changeState')}>
-            <IconButton size='small' aria-label={t('changeState')} aria-haspopup='menu' disabled={!canWrite} onClick={e => setAnchor(e.currentTarget)}>
+            <IconButton size='small' aria-label={t('changeState')} aria-haspopup='menu' disabled={!canWrite || changing} onClick={e => setAnchor(e.currentTarget)}>
               <i className='ri-toggle-line' />
             </IconButton>
           </WriteTip>
+          {onSetEgress && egress === 'observe' && (
+            <WriteTip title={tz('egressBlock')}>
+              <IconButton size='small' aria-label={tz('egressBlock')} disabled={!canWrite || changing} onClick={() => onSetEgress(zone, 'block')}><i className='ri-lock-line' /></IconButton>
+            </WriteTip>
+          )}
+          {onSetEgress && egress === 'enforce' && (
+            <WriteTip title={tz('egressReopen')}>
+              <IconButton size='small' aria-label={tz('egressReopen')} disabled={!canWrite || changing} onClick={() => onSetEgress(zone, 'reopen')}><i className='ri-lock-unlock-line' /></IconButton>
+            </WriteTip>
+          )}
           <WriteTip title={t('addFlowInto', { zone: zone.name })}>
             <IconButton size='small' aria-label={t('addFlowInto', { zone: zone.name })} disabled={!canWrite} onClick={() => onAddFlow(zone)}><i className='ri-route-line' /></IconButton>
           </WriteTip>
@@ -189,9 +225,11 @@ export default function ZoneCard(props: ZoneCardProps) {
 }
 
 /** The members and the flows of an opened card, full width below its row of cards. */
-export function ZoneCardDetails(props: ZoneRowProps) {
+export function ZoneCardDetails({ work, ...props }: ZoneRowProps & { work?: ZoneWorkContext }) {
   const { zone } = props
   const t = useTranslations('microsegPilot.policy.zone')
+  // With the context of the Policy sub-tab, the details are the zone panel of the map laid out wide.
+  if (work) return <ZoneWorkspace {...props} work={work} id={detailsId(zone.id)} />
   return (
     <Box
       component='section'

@@ -77,18 +77,18 @@ describe('the resume dialog', () => {
     const dialog = await screen.findByRole('dialog')
 
     expect(within(dialog).getByText('Re-enables the cluster firewall, then re-applies the last revision')).toBeTruthy()
-    expect(within(dialog).getByText('Refused if the management rules (SSH 22, web 8006) are missing: fix them in the Dashboard deployment wizard first')).toBeTruthy()
+    expect(within(dialog).getByText("Refused if a node whose own firewall is on does not let the web UI (8006) and SSH (22) in: allow them in that node's firewall, or turn it off, first")).toBeTruthy()
     expect(within(dialog).queryByRole('button', { name: 'Open the deployment wizard' })).toBeNull()
   })
 
-  it('keeps the dialog open on a SOCLE_MISSING refusal, with the message, the server wording and a way to the wizard', async () => {
+  it('keeps the dialog open on a SOCLE_MISSING refusal, with the message and the server wording', async () => {
     mock.routes['POST /emergency-stop'] = () => reply(409, { code: 'SOCLE_MISSING', error: 'cluster firewall not re-enabled: rule SSH 22 missing' })
     renderConfigured()
     fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Resume' }))
 
-    expect(await within(dialog).findByText(/The management rules \(SSH 22, web 8006\) are missing, so the cluster firewall was not re-enabled/)).toBeTruthy()
+    expect(await within(dialog).findByText(/does not let the web UI \(8006\) and SSH \(22\) in, so the cluster firewall was not re-enabled/)).toBeTruthy()
     expect(within(dialog).getByText('cluster firewall not re-enabled: rule SSH 22 missing')).toBeTruthy()
     expect(screen.getByRole('dialog')).toBe(dialog)
     expect(JSON.parse(calls('POST /emergency-stop')[0][1]!.body as string)).toEqual({ on: false })
@@ -97,15 +97,67 @@ describe('the resume dialog', () => {
     expect(within(dialog).getByRole('button', { name: 'Resume' })).toBeTruthy()
   })
 
-  it('opens the deployment wizard from the refusal and closes the dialog', async () => {
+  it('says, in the dialog, that the detected address is internal to Docker and which addresses the rules leave out', async () => {
+    mock.routes['POST /emergency-stop'] = () => reply(409, {
+      code: 'SOCLE_MISSING',
+      error: 'the emergency stop is kept: … (not accepted from 10.43.0.250)',
+      detail: { web: false, ssh: false, reason: 'docker_internal', self_ip: '172.17.0.3', uncovered: ['10.43.0.250', '10.44.0.250'] },
+    })
+    renderConfigured()
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Resume' }))
+
+    expect(await within(dialog).findByText(/so the cluster firewall was not re-enabled/)).toBeTruthy()
+    expect(within(dialog).getByText('The detected address is internal to Docker: in Settings > Advanced, enter the address of the host as Proxmox sees it.')).toBeTruthy()
+    expect(within(dialog).getByText('Addresses the rules do not accept: 10.43.0.250, 10.44.0.250')).toBeTruthy()
+    // The localized lines replace the English wording of the orchestrator.
+    expect(within(dialog).queryByText(/the emergency stop is kept/)).toBeNull()
+  })
+
+  it('names, in the dialog, the security group whose rules could not be read', async () => {
+    mock.routes['POST /emergency-stop'] = () => reply(409, {
+      code: 'SOCLE_MISSING',
+      error: 'the emergency stop is kept: …',
+      detail: { web: false, ssh: false, reason: 'group_unreadable', group: 'sg-gone' },
+    })
+    renderConfigured()
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Resume' }))
+
+    expect(await within(dialog).findByText('The rules of the security group sg-gone could not be read: the management access cannot be checked.')).toBeTruthy()
+  })
+
+  it('lists every reason of the refusal and the nodes left uncovered', async () => {
+    mock.routes['POST /emergency-stop'] = () => reply(409, {
+      code: 'SOCLE_MISSING',
+      error: 'the emergency stop is kept: …',
+      detail: {
+        web: false, ssh: true, reason: 'docker_internal',
+        reasons: [{ reason: 'docker_internal', self_ip: '172.17.0.3' }, { reason: 'host_rules_unreadable', node: 'pve2' }],
+        uncovered: ['10.42.0.250'], uncovered_nodes: ['pve1'],
+      },
+    })
+    renderConfigured()
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Resume' }))
+
+    expect(await within(dialog).findByText('The detected address is internal to Docker: in Settings > Advanced, enter the address of the host as Proxmox sees it.')).toBeTruthy()
+    expect(within(dialog).getByText('The firewall rules of node pve2 could not be read: the management access cannot be checked.')).toBeTruthy()
+    expect(within(dialog).getByText('Addresses the rules do not accept: 10.42.0.250 (on pve1)')).toBeTruthy()
+  })
+
+  it('offers no wizard on the refusal: the wizard writes nothing on the nodes, the refusal says what to do there', async () => {
     mock.routes['POST /emergency-stop'] = () => reply(409, { code: 'SOCLE_MISSING', error: 'x' })
     renderConfigured()
     fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Resume' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Open the deployment wizard' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Resume' }))
 
-    expect(await screen.findByRole('dialog', { name: 'Deployment wizard' })).toBeTruthy()
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Resume micro-segmentation?' })).toBeNull())
+    expect(await within(dialog).findByText(/Allow them in that node's firewall, or turn it off, then resume/)).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: 'Open the deployment wizard' })).toBeNull()
   })
 
   it('offers no wizard button when the page gives no wizard, but still explains the refusal', async () => {

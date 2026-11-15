@@ -61,12 +61,14 @@ function EdgeDetails({ d, source, target }: { d: MapEdgeData; source: string; ta
       <Box>
         <Typography variant='caption' sx={{ display: 'block' }}>{t(d.kind, { services: serviceTokensTitle(d.services) })}</Typography>
         {d.draft && <Typography variant='caption' sx={{ display: 'block' }}>{t('draft')}</Typography>}
+        <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('noCounter')}</Typography>
       </Box>
     )
   }
   return (
     <Box>
       <Typography variant='caption' fontWeight={600} sx={{ display: 'block' }}>{t(d.kind, { count: d.count })}</Typography>
+      {d.hits !== null && <Typography variant='caption' sx={{ display: 'block' }}>{t('hitsTotal', { count: d.hits })}</Typography>}
       {sampled && (
         <Typography variant='caption' sx={{ display: 'block' }}>{t('example', { from: names.short(source), to: names.short(target) })}</Typography>
       )}
@@ -93,6 +95,9 @@ function FlowEdgeComponent({ id, source, target, style, markerEnd, data }: EdgeP
   const t = useTranslations('microsegPilot.overview.edge')
   const d = data as unknown as MapEdgeData & { dimmed?: boolean }
   const dim = d.dimmed ? 'microseg-dim' : undefined
+  const format = useFormatter()
+  // An observed edge says how often its flows were logged after its services: "SSH, PostgreSQL · 1.4K".
+  const label = d.hits != null ? `${d.label} · ${format.number(d.hits, { notation: 'compact' })}` : d.label
 
   return (
     <>
@@ -127,8 +132,9 @@ function FlowEdgeComponent({ id, source, target, style, markerEnd, data }: EdgeP
                 display: 'block', px: 0.75, borderRadius: 1, border: '1px solid', borderColor: d.color, borderStyle: d.kind === 'unprotected' ? 'dashed' : 'solid',
                 bgcolor: 'background.paper', color: 'text.primary', fontWeight: 600, lineHeight: `${d.label_h - 2}px`, fontSize: d.small ? '0.68rem' : undefined,
               }}
+              data-testid={`flow-label-${id}`}
             >
-              {d.label}
+              {label}
             </Typography>
           </Tooltip>
         </Box>

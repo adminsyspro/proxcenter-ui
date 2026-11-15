@@ -31,7 +31,7 @@ const seen = (id: string, over: Partial<MicrosegSuggestion> = {}): MicrosegSugge
 type EdgeData = MapEdgeData & { dimmed?: boolean }
 
 const edgeData = (kind: MapEdgeKind, over: Partial<EdgeData> = {}): EdgeData => ({
-  kind, services: ['tcp/22', 'tcp/443'], label: 'tcp/22, 443', count: 1, flows: [] as MicrosegFlow[], observed: [], draft: false,
+  kind, services: ['tcp/22', 'tcp/443'], label: 'tcp/22, 443', count: 1, hits: null, flows: [] as MicrosegFlow[], observed: [], draft: false,
   fromGroup: 'zone:zw', toGroup: 'zone:zd', path: 'M0 0 L400 0', points: [{ x: 0, y: 0 }, { x: 400, y: 0 }],
   label_x: 200, label_y: 0, label_w: 150, label_h: 22, small: false, particle: false, color: '#2e7d32', ...over,
 })
@@ -73,9 +73,9 @@ describe('the tooltip of an edge', () => {
     expect(await hoverDetails('tcp/22, 443')).toContain('In the draft: applied with the next plan')
   })
 
-  it('says a flow to Outside is not applied in v1', async () => {
+  it('says a flow to Outside is not blocked', async () => {
     renderEdge('zone:zw', 'outside', edgeData('outside', { services: ['udp/53'], label: 'udp/53', color: '#9e9e9e' }))
-    expect(await hoverDetails('udp/53')).toContain('Not applied in v1: DNS (udp/53)')
+    expect(await hoverDetails('udp/53')).toContain('Outbound not blocked: DNS (udp/53)')
   })
 
   it('shows the sample pair and the zone hits of an unprotected edge between guests', async () => {

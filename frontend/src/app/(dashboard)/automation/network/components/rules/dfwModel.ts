@@ -120,9 +120,3 @@ export const zoneDenyHits = (index: HitsIndex | null, zone: string): number | nu
 
 /** The name a rule shows: its comment, else its place in the list. */
 export const ruleName = (rule: RuleFields): string => rule.comment.trim()
-
-/** Running guests whose firewall filters them, over the running guests (state known). */
-export function coveredCount(guests: VMFirewallInfo[]): { covered: number; running: number } {
-  const running = guests.filter(g => g.status === 'running' && !g.stateUnknown)
-  return { covered: running.filter(g => g.firewallEnabled).length, running: running.length }
-}

@@ -255,6 +255,10 @@ services:
       PROXCENTER_OFFLINE: ${PROXCENTER_OFFLINE:-}
       LICENSE_KEY: ${LICENSE_KEY:-}
       TZ: ${TZ:-Europe/Paris}
+      # The cluster nodes' addresses as the Proxmox nodes may see ProxCenter
+      # (micro-segmentation preflight), set by the HA deploy in the managed
+      # .env block.
+      PROXCENTER_HOST_IPS: ${PROXCENTER_HOST_IPS:-}
       # sFlow collector: with host networking, UDP 6343 is reachable
       # directly on the node (no ports: mapping needed).
       PROXCENTER_SFLOW_ENABLED: "true"

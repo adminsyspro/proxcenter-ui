@@ -1,9 +1,9 @@
 /**
- * The "Posture" Dashboard of /automation/network (UA50): the header chips, the observed traffic by zone (donut, chords,
- * legend, group by), its distribution and top services, and the "To do" list with a way to each fix. The guest
+ * The "Posture" Dashboard of /automation/network (UA50): the observed traffic by zone (donut, chords, legend, group by,
+ * timeline), its distribution, top services and top conversations, down to the bottom of the page. The guest
  * coverage comes from one server route; the micro-segmentation reads are orchestrator memory; the guest list is read
- * only for a grouping by VLAN or node. Nothing is listed while its figures are not in, and the emergency stop is never
- * undone through the deployment wizard. No automatic RTL cleanup in this repo.
+ * only for a grouping by VLAN or node. Nothing is listed while its figures are not in.
+ * No automatic RTL cleanup in this repo.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, within } from '@testing-library/react'
@@ -195,87 +195,15 @@ const VMS = [
 ]
 const postureReads = (over: Stub = {}) => stubReads({ policy: POLICY, suggestions: OBSERVED, coverage: { guests: TAGGED }, ...over })
 
-describe('DashboardTab: header chips', () => {
-  it('shows the cluster firewall with its inbound policy, the zones enforced, the running guests protected and the last check', async () => {
-    stubReads({ status: { engine: { paused_until: null, held: false, last_log: null, cluster_firewall: 'enabled', last_runs: { light: { started_at: new Date(Date.now() - 2 * 60_000).toISOString(), status: 'done', api_calls: 1, writes: 0 } } } } })
+describe('DashboardTab: no posture chips', () => {
+  it('shows no posture chips and reads no engine status', async () => {
+    postureReads()
     renderDashboard({ enable: 1, policy_in: 'DROP' })
+    await screen.findByTestId('traffic-legend')
 
-    expect((await screen.findByTestId('chip-cluster')).textContent).toBe('Cluster firewall ON · IN DROP')
-    expect((await screen.findByTestId('chip-zones')).textContent).toBe('Zones enforced 3 / 6')
-    await waitFor(() => expect(screen.getByTestId('chip-guests').textContent).toBe('Guests protected 30 / 33 running'))
-    await waitFor(() => expect(screen.getByTestId('chip-check').textContent).toMatch(/^Last check .*2 minutes ago/))
-  })
-
-  it('counts the protected guests over the sample only, and says so, above the guest cap of the coverage route', async () => {
-    // The cap left one running guest out: it is not taken for an unprotected one.
-    const guests = TAGGED.map((g, i) => (i < 1 ? { ...g, enabled: null, optionsEnabled: null, nicFirewall: null, sampledOut: true } : g))
-    const asked = guests.filter(g => !('sampledOut' in g) && g.status === 'running')
-
-    stubReads({ coverage: { guests, sampled: true, partial: true } })
-    renderDashboard({ enable: 1, policy_in: 'DROP' })
-
-    const running = guests.filter(g => g.status === 'running').length
-    const label = `Guests protected ${asked.filter(g => g.enabled === true).length} / ${asked.length} measured · ${running} running`
-
-    await waitFor(() => expect(screen.getByTestId('chip-guests').textContent).toBe(label))
-    expect(asked.length).toBeLessThan(running)
-  })
-
-  it('says "-" while the guests are not measured, and the host firewall in standalone mode', async () => {
-    stubReads({ coverage: 'pending' })
-    renderDashboard({ enable: 0, policy_in: 'ACCEPT' }, { firewallMode: 'standalone' })
-
-    expect(screen.getByTestId('chip-guests').textContent).toBe('Guests protected -')
-    expect(screen.getByTestId('chip-cluster').textContent).toBe('Host firewall OFF · IN ACCEPT')
-  })
-
-  it('opens the tab of each chip', async () => {
-    stubReads()
-    const onNavigateTab = vi.fn()
-    const onNavigateRulesSubTab = vi.fn()
-    const onOpenGuests = vi.fn()
-    const onOpenMicroseg = vi.fn()
-    renderDashboard({ enable: 1 }, { onNavigateTab, onNavigateRulesSubTab, onOpenGuests, onOpenMicroseg })
-
-    fireEvent.click(await screen.findByTestId('chip-cluster'))
-    expect(onNavigateTab).toHaveBeenCalledWith(1)
-    expect(onNavigateRulesSubTab).toHaveBeenCalledWith(0)
-    fireEvent.click(await screen.findByTestId('chip-zones'))
-    expect(onOpenMicroseg).toHaveBeenCalledWith(undefined)
-    fireEvent.click(screen.getByTestId('chip-guests'))
-    expect(onOpenGuests).toHaveBeenCalledWith(undefined)
-  })
-
-  it('computes the coverage again from the button next to the guests chip, then holds it 30 s', async () => {
-    stubReads()
-    renderDashboard({ enable: 1 })
-
-    const button = await screen.findByRole('button', { name: 'Compute the coverage again' })
-    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(button)
-    await waitFor(() => expect(fetchedUrls().filter(u => u.endsWith('/firewall/coverage/conn-1?refresh=1'))).toHaveLength(1))
-    // Figures just computed: the button holds for 30 s (the server would serve them from its cache anyway).
-    await waitFor(() => expect((screen.getByRole('button', { name: 'Compute the coverage again' }) as HTMLButtonElement).disabled).toBe(true))
-  })
-
-  it('holds the refresh while the figures are less than 30 s old', async () => {
-    stubReads({ coverage: { computedAt: new Date().toISOString() } })
-    renderDashboard({ enable: 1 })
-
-    await waitFor(() => expect(screen.getByTestId('chip-guests').textContent).toBe('Guests protected 30 / 33 running'))
-    expect((screen.getByTestId('coverage-refresh') as HTMLButtonElement).disabled).toBe(true)
-  })
-
-  it('puts the emergency stop in red in place of the cluster chip, leading to Resume', async () => {
-    const onOpenMicroseg = vi.fn()
-    stubReads({ status: { emergency_stop: true, engine: { paused_until: null, held: false, last_runs: {}, last_log: null, cluster_firewall: 'enabled' } } })
-    renderDashboard({ enable: 1 }, { onOpenMicroseg })
-
-    const chip = await screen.findByTestId('chip-stop')
-    expect(chip.textContent).toBe('Emergency stop active')
-    expect(screen.queryByTestId('chip-cluster')).not.toBeInTheDocument()
-    fireEvent.click(chip)
-    expect(onOpenMicroseg).toHaveBeenCalledWith('overview')
+    expect(screen.queryByTestId('posture-chips')).not.toBeInTheDocument()
+    expect(document.querySelector('[data-testid^="chip-"]')).toBeNull()
+    expect(fetchedUrls().some(u => u.endsWith('/microseg/conn-1/status'))).toBe(false)
   })
 })
 
@@ -296,7 +224,9 @@ describe('DashboardTab: traffic by zone', () => {
     expect(screen.getByTestId('donut-total').textContent).toBe('450')
     expect(screen.getByTestId('slice-zone:zweb')).toBeInTheDocument()
     expect(screen.getByTestId('chord-zone:zweb>zone:zdb')).toBeInTheDocument()
-    expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits of the pending observed flows · hits emitted per zone · unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)')
+    expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits emitted per zone')
+    // What the short caption leaves out is behind the information icon.
+    expect(screen.getByTestId('traffic-card-hint').getAttribute('aria-label')).toBe('hits of the pending observed flows · unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)')
   })
 
   it('highlights a slice when its legend row is hovered', async () => {
@@ -326,13 +256,14 @@ describe('DashboardTab: traffic by zone', () => {
     expect(fetchedUrls().filter(u => u === '/api/v1/vms?connId=conn-1')).toHaveLength(1)
     // The guest list is in: the caption no longer says the unknown sources hold the unzoned guests.
     expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits of the pending observed flows')
+    expect(screen.queryByTestId('traffic-card-hint')).toBeNull()
   })
 
   it('says the figures are those of the first 200 flows when the page is full', async () => {
     postureReads({ suggestions: Array.from({ length: 200 }, (_, i) => seen({ dport: String(1000 + i) })) })
     renderDashboard({ enable: 1 })
 
-    expect((await screen.findByTestId('traffic-card-caption')).textContent).toBe('hits of the first 200 pending observed flows · hits emitted per zone · unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)')
+    expect((await screen.findByTestId('traffic-card-hint')).getAttribute('aria-label')).toBe('hits of the first 200 pending observed flows · unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)')
   })
 
   it('says when there is no observed flow', async () => {
@@ -365,7 +296,8 @@ describe('DashboardTab: group by destination zone', () => {
     await waitFor(() => expect([...legend.querySelectorAll('[data-testid^="legend-"]')].filter(e => !e.getAttribute('data-testid')!.endsWith('-members')).map(e => e.getAttribute('data-testid'))).toEqual(['legend-zone:zdb', 'legend-zone:zweb']))
     expect(within(legend).getByTestId('legend-zone:zdb').textContent).toContain('300')
     expect(screen.getByText('Traffic by destination zone')).toBeTruthy()
-    expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits of the pending observed flows · hits received per zone')
+    expect(screen.getByTestId('traffic-card-caption').textContent).toBe('hits received per zone')
+    expect(screen.getByTestId('traffic-card-hint').getAttribute('aria-label')).toBe('hits of the pending observed flows')
     await waitFor(() => expect(within(screen.getByTestId('timeline')).getAllByTestId(/^area-/).map(a => a.getAttribute('data-testid'))).toEqual(['area-zone:zdb', 'area-zone:zweb']))
     expect(fetchedUrls().some(u => u.startsWith('/api/v1/vms?'))).toBe(false)
     expect(window.localStorage.getItem('proxcenter.microseg.postureGroupBy')).toBe('dstzone')
@@ -399,6 +331,10 @@ describe('DashboardTab: traffic over time', () => {
     expect(tip.textContent).toContain('2 events')
     expect(tip.textContent).toContain('web')
     expect(tip.textContent).toContain('Unknown / External')
+    // A dot on each group's line at the hovered bucket, the card beside the guide (here left of it, at the right edge).
+    expect(screen.getAllByTestId('timeline-dot').length).toBeGreaterThanOrEqual(2)
+    const guideX = Number(screen.getByTestId('timeline-guide').getAttribute('x1'))
+    expect(Number.parseFloat(getComputedStyle(tip).left) + 240).toBeLessThanOrEqual(guideX)
     fireEvent.mouseLeave(screen.getByTestId('timeline-overlay'))
     expect(screen.queryByTestId('timeline-tip')).not.toBeInTheDocument()
   })
@@ -654,13 +590,100 @@ describe('DashboardTab: observed traffic distribution and top services', () => {
     expect(screen.getByTestId('tile-blocked').textContent).toContain('in web')
   })
 
+  it('words a blocked outbound flow with the zone that emits it, next to the zones that blocked inbound traffic', async () => {
+    const blockedOut = seen({ direction: 'out', kind: 'blocked', src_key: 'zweb', src_zone_id: 'zweb', src_ip: '', dst_zone_id: 'zdb', dst_key: 'zdb', dst_ip: '10.0.0.2', dport: '53', proto: 'udp', hits: 9 })
+    postureReads({ suggestions: [...OBSERVED, blockedOut, { ...blockedOut, id: 'o2', dport: '443', proto: 'tcp' }] })
+    renderDashboard({ enable: 1 })
+
+    expect(await screen.findByTestId('tile-blocked-value')).toBeTruthy()
+    await waitFor(() => expect(screen.getByTestId('tile-blocked-value').textContent).toBe('3 flows'))
+    const caption = screen.getByTestId('tile-blocked').textContent ?? ''
+    expect(caption).toContain('in web')
+    expect(caption).toContain('outbound from web')
+    expect(caption).not.toContain('in db')
+  })
+
   it('lists the services by hits with their status, the allowed ones without counter', async () => {
     postureReads()
     renderDashboard({ enable: 1 })
 
     const table = await screen.findByTestId('services-table')
     const rows = within(table).getAllByRole('row').slice(1).map(r => r.textContent)
-    expect(rows).toEqual(['PostgreSQL1300Not covered', 'SSH1100Not covered', 'HTTPS150Blocked', 'node-exporter1no counterAllowed'])
+    expect(rows).toEqual(['PostgreSQL1300Would be blocked', 'SSH1100Would be blocked', 'HTTPS150Blocked', 'node-exporter1no counterAllowed'])
+  })
+
+  it('opens what a figure counts: a tile of flows, the name of a service, one of its statuses', async () => {
+    postureReads()
+    const onOpenMicroseg = vi.fn()
+    renderDashboard({ enable: 1 }, { onOpenMicroseg })
+
+    fireEvent.click(await screen.findByTestId('tile-would-block'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { kind: 'would_block' })
+    fireEvent.click(screen.getByTestId('tile-blocked'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { kind: 'blocked' })
+    fireEvent.click(screen.getByTestId('tile-allowed'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('policy')
+    fireEvent.click(screen.getByTestId('tile-unknown'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { source: 'unknown' })
+    // The east-west share is not a list of flows the Observation can be filtered on: nothing to open.
+    expect(screen.getByTestId('tile-east-west').tagName).toBe('DIV')
+
+    fireEvent.click(screen.getByTestId('service-open-SSH'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { service: { label: 'SSH', tokens: ['tcp/22'] }, kind: undefined })
+    fireEvent.click(within(screen.getByTestId('service-HTTPS')).getByTestId('service-part-blocked'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { service: { label: 'HTTPS', tokens: ['tcp/443'] }, kind: 'blocked' })
+    // A service the policy only allows has no observed flow to list: its status opens the Policy, its name nothing.
+    expect(screen.queryByTestId('service-open-node-exporter')).toBeNull()
+    fireEvent.click(within(screen.getByTestId('service-node-exporter')).getByTestId('service-part-allowed'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('policy')
+  })
+
+  it('opens the observed flows of a zone, or of the unknown sources, from the legend of the donut', async () => {
+    postureReads()
+    const onOpenMicroseg = vi.fn()
+    renderDashboard({ enable: 1 }, { onOpenMicroseg })
+
+    fireEvent.click(await screen.findByTestId('open-legend-zone:zweb'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { zoneId: 'zweb' })
+    fireEvent.click(screen.getByTestId('open-legend-external'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { source: 'unknown' })
+  })
+
+  it('says why the allowed flows have no counter, on hover', async () => {
+    postureReads()
+    renderDashboard({ enable: 1 })
+
+    fireEvent.mouseOver(within(await screen.findByTestId('tile-allowed')).getByText('no counter'))
+    expect(await screen.findByText('The flows the policy allows are not logged, so their hits are not counted.')).toBeInTheDocument()
+  })
+
+  it('links to every observed flow under the services, and says how many services the table leaves out', async () => {
+    postureReads({ suggestions: Array.from({ length: 11 }, (_, i) => seen({ dport: String(40000 + i), hits: 100 - i })) })
+    const onOpenMicroseg = vi.fn()
+    renderDashboard({ enable: 1 }, { onOpenMicroseg })
+
+    const footer = await screen.findByTestId('services-footer')
+    // 11 observed ports and the allowed node-exporter: 12 services, 8 shown.
+    expect(footer.textContent).toContain('8 of 12 services')
+    fireEvent.click(within(footer).getByTestId('services-all'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation')
+  })
+
+  it('says nothing of the services left out when the table shows them all', async () => {
+    postureReads()
+    renderDashboard({ enable: 1 })
+
+    const footer = await screen.findByTestId('services-footer')
+    expect(footer.textContent).toBe('All observed flows')
+  })
+
+  it('writes the hits of each status in a service seen under two of them', async () => {
+    postureReads({ suggestions: [seen({ dport: '22', hits: 2000 }), seen({ dport: '22', hits: 300, kind: 'blocked', src_ip: '10.9.9.9' })] })
+    renderDashboard({ enable: 1 })
+
+    const row = await screen.findByTestId('service-SSH')
+    expect(within(row).getByTestId('service-part-not_covered').textContent).toBe('Would be blocked · 2K')
+    expect(within(row).getByTestId('service-part-blocked').textContent).toBe('Blocked · 300')
   })
 })
 
@@ -669,13 +692,9 @@ describe('DashboardTab: skeletons', () => {
     stubReads({ coverage: 'pending', status: 'pending', suggestions: 'pending' })
     renderDashboard(null, { loading: true })
 
-    expect(screen.getByTestId('chip-cluster-loading')).toBeInTheDocument()
-    expect(screen.getByTestId('chip-zones-loading')).toBeInTheDocument()
-    expect(screen.getByTestId('chip-check-loading')).toBeInTheDocument()
     expect(screen.getByTestId('traffic-loading')).toBeInTheDocument()
     expect(screen.getByTestId('distribution-loading')).toBeInTheDocument()
     expect(screen.getByTestId('services-loading')).toBeInTheDocument()
-    expect(screen.getByTestId('todo-loading')).toBeInTheDocument()
   })
 
   it('shows nothing and asks nothing without a connection', () => {
@@ -698,138 +717,67 @@ describe('DashboardTab: skeletons', () => {
   })
 })
 
-describe('DashboardTab: To do', () => {
-  it('lists every fix with its link: guests without firewall filtered, unzoned guests to Drifts, pending flows to Observation', async () => {
-    const onOpenGuests = vi.fn()
+describe('DashboardTab: top conversations', () => {
+  it('lists who talks to whom, the busiest first, and opens the Observation on the zone a pair enters', async () => {
     const onOpenMicroseg = vi.fn()
-    stubReads({
-      drifts: { drifts: UNZONED_13 },
-      suggestions: [seen({}), seen({ dport: '22' })],
-    })
-    renderDashboard({ enable: 1, policy_in: 'DROP' }, { onOpenGuests, onOpenMicroseg })
+    postureReads()
+    renderDashboard({ enable: 1 }, { onOpenMicroseg })
 
-    const unprotected = await screen.findByTestId('todo-unprotected')
-    expect(unprotected.textContent).toContain('26 guests without firewall')
-    fireEvent.click(within(unprotected).getByRole('button', { name: 'Show them' }))
-    expect(onOpenGuests).toHaveBeenCalledWith('unprotected')
+    await waitFor(() => expect(screen.getAllByTestId('conversation-row')).toHaveLength(3))
+    const rows = screen.getAllByTestId('conversation-row')
+    expect(rows.map(r => within(r).getByTestId('conversation-source').textContent)).toEqual(['web', '203.0.113.9', 'db'])
+    expect(rows.map(r => within(r).getByTestId('conversation-destination').textContent)).toEqual(['db', 'web', 'web'])
+    expect(within(rows[0]).getByTestId('conversation-services').textContent).toBe('PostgreSQL')
+    expect(within(rows[0]).getByTestId('conversation-way-in')).toBeInTheDocument()
+    expect(within(rows[2]).getByTestId('conversation-part-blocked').textContent).toBe('Blocked')
 
-    const unzoned = screen.getByTestId('todo-unzoned')
-    expect(unzoned.textContent).toContain('13 running guests in no zone')
-    fireEvent.click(within(unzoned).getByRole('button', { name: 'Open Drifts' }))
-    expect(onOpenMicroseg).toHaveBeenCalledWith('drifts')
-
-    const flows = screen.getByTestId('todo-pendingFlows')
-    expect(flows.textContent).toContain('2 observed flows to review')
-    fireEvent.click(within(flows).getByRole('button', { name: 'Review them' }))
-    expect(onOpenMicroseg).toHaveBeenCalledWith('observation')
+    fireEvent.click(rows[1])
+    expect(onOpenMicroseg).toHaveBeenCalledWith('observation', { zoneId: 'zweb' })
+    fireEvent.click(screen.getByTestId('conversations-all'))
+    expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation')
   })
 
-  it('says "at least 200" for a full page of pending flows', async () => {
-    stubReads({ suggestions: Array.from({ length: 200 }, (_, i) => seen({ dport: String(1000 + i) })) })
+  it('says when there is no observed flow to review', async () => {
+    stubReads({ policy: POLICY, suggestions: [] })
     renderDashboard({ enable: 1 })
 
-    expect((await screen.findByTestId('todo-pendingFlows')).textContent).toContain('At least 200 observed flows to review')
-  })
-
-  it('says the emergency stop holds the cluster firewall off, with Resume, and never offers the wizard', async () => {
-    const onOpenMicroseg = vi.fn()
-    stubReads({ status: { emergency_stop: true, engine: { paused_until: null, held: false, last_runs: {}, last_log: null, cluster_firewall: 'disabled' } } })
-    renderDashboard({ enable: 0 }, { onOpenMicroseg, clusterRules: [] })
-
-    const line = await screen.findByTestId('todo-stopHeld')
-    expect(line.textContent).toContain('Cluster firewall held off by the emergency stop')
-    expect(screen.queryByTestId('todo-firewallOff')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('todo-managementRules')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Open the wizard' })).not.toBeInTheDocument()
-    expect(screen.getByTestId('chip-stop').textContent).toBe('Cluster firewall held off by the emergency stop')
-    expect(screen.queryByTestId('chip-cluster')).not.toBeInTheDocument()
-
-    fireEvent.click(within(line).getByRole('button', { name: 'Resume' }))
-    expect(onOpenMicroseg).toHaveBeenCalledWith('overview')
-  })
-
-  it('reads the stop from the policy flag when the engine cannot read the firewall', async () => {
-    stubReads({
-      status: { emergency_stop: true, engine: { paused_until: null, held: false, last_runs: {}, last_log: null, cluster_firewall: 'unknown' } },
-      policy: { policy: { id: 'p1', connection_id: 'conn-1', tag_prefix: 'zone-', version: 1, settings: {}, emergency_stop: true, stop_cluster_disabled: true } },
-    })
-    renderDashboard({ enable: 0 })
-
-    expect(await screen.findByTestId('todo-stopHeld')).toBeInTheDocument()
-  })
-
-  it('offers the deployment wizard for a firewall that is off, outside a stop', async () => {
-    stubReads({ status: { engine: { paused_until: null, held: false, last_runs: {}, last_log: null, cluster_firewall: 'disabled' } } })
-    renderDashboard({ enable: 0 }, { clusterRules: [] })
-
-    const line = await screen.findByTestId('todo-firewallOff')
-    fireEvent.click(within(line).getByRole('button', { name: 'Open the wizard' }))
-    expect(await screen.findByRole('dialog')).toBeInTheDocument()
-  })
-
-  it('says when no cluster rule lets the administration in', async () => {
-    stubReads()
-    renderDashboard({ enable: 1 }, { clusterRules: [{ pos: 0, type: 'in', action: 'ACCEPT', proto: 'tcp', dport: '8006', enable: 1 }] })
-
-    expect((await screen.findByTestId('todo-managementRules')).textContent).toContain('(port 22)')
-  })
-
-  it('names both administration ports in words when neither is let in', async () => {
-    stubReads()
-    renderDashboard({ enable: 1 }, { clusterRules: [] })
-
-    expect((await screen.findByTestId('todo-managementRules')).textContent).toContain('(ports 8006 and 22)')
-  })
-
-  it('flags an explicit inbound ACCEPT policy and leads to the cluster options', async () => {
-    stubReads()
-    const onNavigateTab = vi.fn()
-    const onNavigateRulesSubTab = vi.fn()
-    renderDashboard({ enable: 1, policy_in: 'ACCEPT' }, { onNavigateTab, onNavigateRulesSubTab })
-
-    const line = await screen.findByTestId('todo-policyIn')
-    fireEvent.click(within(line).getByRole('button', { name: 'Change it' }))
-    expect(onNavigateTab).toHaveBeenCalledWith(1)
-    expect(onNavigateRulesSubTab).toHaveBeenCalledWith(0)
-  })
-
-  it('takes an inbound REJECT for a deny: the chip says it, no To do line', async () => {
-    stubReads()
-    renderDashboard({ enable: 1, policy_in: 'REJECT' })
-
-    expect((await screen.findByTestId('chip-cluster')).textContent).toBe('Cluster firewall ON · IN REJECT')
-    await screen.findByTestId('todo-unprotected')
-    expect(screen.queryByTestId('todo-policyIn')).not.toBeInTheDocument()
-  })
-
-  it('says "Nothing to do" when clean', async () => {
-    stubReads({ coverage: { enabled: 62, disabled: 0, guests: GUESTS.map(g => ({ ...g, enabled: true })) }, status: { coverage: { running: 33, zoned: 33, members: 33, protected: 33 } } })
-    renderDashboard({ enable: 1 })
-
-    expect(await screen.findByTestId('todo-empty')).toBeInTheDocument()
-    expect(screen.getByText('Nothing to do')).toBeInTheDocument()
-  })
-
-  it('lists nothing while the stop state or the micro-segmentation lists are not in', async () => {
-    stubReads({ status: 'pending' })
-    renderDashboard({ enable: 0 })
-
-    await waitFor(() => expect(screen.getByTestId('chip-guests').textContent).toBe('Guests protected 30 / 33 running'))
-    expect(screen.getByTestId('todo-loading')).toBeInTheDocument()
-    expect(screen.queryByTestId('todo-firewallOff')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('conversations-empty')).toBeInTheDocument()
   })
 })
 
+describe('DashboardTab: no To do list, the whole height', () => {
+  it('has no To do list and reads no drifts', async () => {
+    stubReads({ drifts: { drifts: UNZONED_13 }, suggestions: [seen({})] })
+    renderDashboard({ enable: 1, policy_in: 'ACCEPT' })
+    await screen.findByTestId('traffic-legend')
+
+    expect(document.querySelector('[data-testid^="todo-"]')).toBeNull()
+    expect(screen.queryByText('Nothing to do')).not.toBeInTheDocument()
+    expect(fetchedUrls().some(u => u.includes('/drifts'))).toBe(false)
+  })
+
+  it('stretches down to the bottom of the page: the conversations take the free height, the traffic chart that of its row, never under 160 px', async () => {
+    postureReads()
+    renderDashboard({ enable: 1 })
+    await screen.findByTestId('traffic-legend')
+
+    expect(getComputedStyle(screen.getByTestId('dashboard')).flexGrow).toBe('1')
+    expect(getComputedStyle(screen.getByTestId('conversations-card').parentElement as Element).flexGrow).toBe('1')
+    expect(getComputedStyle(screen.getByTestId('traffic-card')).flexGrow).toBe('1')
+    const chart = screen.getByTestId('timeline-chart')
+    expect(getComputedStyle(chart).flexGrow).toBe('1')
+    expect(getComputedStyle(chart).minHeight).toBe('160px')
+  })
+
+})
+
 describe('DashboardTab: load error', () => {
-  it('keeps the load warning at the top and lists nothing', async () => {
+  it('keeps the load warning at the top', async () => {
     stubReads()
     const reload = vi.fn()
     renderDashboard(null, { loadError: 'HTTP 502', reload })
 
     expect(screen.getByText(/Some firewall data could not be loaded.*HTTP 502/)).toBeInTheDocument()
-    expect(screen.getByTestId('chip-cluster').textContent).toBe('Cluster firewall not available')
-    expect(screen.getByTestId('todo-unavailable')).toBeInTheDocument()
-    expect(screen.queryByTestId('todo-firewallOff')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(reload).toHaveBeenCalledTimes(1)

@@ -17,6 +17,7 @@ const OBJECT_GLYPH: Record<string, string> = {
   foreign_accept: 'ri-shield-line',
   ipset_out_of_sync: 'ri-list-settings-line',
   object_collision: 'ri-error-warning-line',
+  local_set_desync: 'ri-list-settings-line',
 }
 
 type KindChipColor = 'warning' | 'error' | 'info'
@@ -30,6 +31,13 @@ export const KIND_CHIP: Record<string, { color: KindChipColor; icon: string }> =
   ipset_out_of_sync: { color: 'info', icon: 'ri-database-2-line' },
   foreign_accept: { color: 'error', icon: 'ri-alert-line' },
   object_collision: { color: 'error', icon: 'ri-alert-line' },
+  egress_rule_missing: { color: 'warning', icon: 'ri-logout-box-r-line' },
+  egress_rule_misplaced: { color: 'warning', icon: 'ri-arrow-up-down-line' },
+  egress_rule_verdict: { color: 'error', icon: 'ri-shield-flash-line' },
+  known_rule_missing: { color: 'warning', icon: 'ri-bookmark-line' },
+  known_rule_extra: { color: 'info', icon: 'ri-bookmark-3-line' },
+  local_set_desync: { color: 'info', icon: 'ri-database-2-line' },
+  egress_no_subnet: { color: 'warning', icon: 'ri-map-pin-line' },
 }
 const UNKNOWN_KIND_CHIP = { color: 'error', icon: 'ri-alert-line' } as const
 

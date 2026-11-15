@@ -11,6 +11,12 @@ export type GuestRef = { node: string; type: GuestType; vmid: number }
 export type ZoneState = 'disabled' | 'observe' | 'enforce'
 export type ZoneEnforcement = 'guest' | 'vnet'
 
+/** Outbound (egress) filtering of a zone, independent of its inbound state. */
+export type EgressState = 'off' | 'observe' | 'enforce'
+/** What outbound filtering covers: the local network (the subnets of the zoned VMs) or the local network and Internet. */
+export type EgressMode = 'local' | 'all'
+export type FlowDirection = 'in' | 'out'
+
 export type MicrosegSettings = {
   light_interval_sec: number
   ips_interval_sec: number
@@ -55,6 +61,20 @@ export type MicrosegZone = {
   state: ZoneState
   isolate_members: boolean
   observe_since: string | null
+  /** Absent on lot-1 data: off. Only meaningful while `state` is observe or enforce, see `zoneEgress`. */
+  egress_state?: EgressState
+  /** Absent: 'local'. */
+  egress_mode?: EgressMode
+  egress_observe_since?: string | null
+  /** The address of the router of the zone's network; absent or empty when unknown (an older orchestrator). */
+  gateway?: string
+}
+
+/** The effective outbound state of a zone: absent, or a zone neither observed nor enforced, is off. */
+export function zoneEgress(z: Pick<MicrosegZone, 'state' | 'egress_state'>): EgressState {
+  if (z.state !== 'observe' && z.state !== 'enforce') return 'off'
+
+  return z.egress_state === 'observe' || z.egress_state === 'enforce' ? z.egress_state : 'off'
 }
 
 export type FlowOrigin = 'manual' | 'learned' | (string & {})
@@ -89,10 +109,15 @@ export type MicrosegSuggestion = {
   id: string
   policy_id: string
   kind: SuggestionKind
+  /** Absent: 'in'. Outbound: `src_*` is the emitting zone, `dst_*` the destination. */
+  direction?: FlowDirection
   src_key: string
   src_ip: string
   src_zone_id: string
+  /** The destination: a zone id, an IP, or `0.0.0.0/0` / `::/0` for the aggregate "many destinations". Absent on lot-1 data. */
+  dst_key?: string
   dst_ip: string
+  /** Empty for an outbound flow to a destination outside any zone. */
   dst_zone_id: string
   proto: string
   dport: string
@@ -100,6 +125,11 @@ export type MicrosegSuggestion = {
   first_seen: string
   last_seen: string
   status: SuggestionStatus
+}
+
+/** The aggregate outbound row: "many destinations". */
+export function isAggregateDst(s: { dst_key?: string }): boolean {
+  return s.dst_key === '0.0.0.0/0' || s.dst_key === '::/0'
 }
 
 /** What a revision froze: the tag prefix, the zones and the flows. */
@@ -130,7 +160,15 @@ export type MicrosegPolicy = {
   last_revision: MicrosegRevision | null
   version: number
   pending_changes: boolean
+  /** The addresses the preflight takes as ProxCenter's (absent on an older orchestrator). */
+  self_ips_effective?: string[]
+  /** Where they come from: the settings, the install script (PROXCENTER_HOST_IPS) or the detection. */
+  self_ips_source?: SelfIpsSource
+  /** The only address known is the detected one of a container network, which Proxmox never sees. */
+  self_ips_docker_internal?: boolean
 }
+
+export type SelfIpsSource = 'settings' | 'install' | 'detected'
 
 export type StepKind =
   | 'cluster.ratelimit' | 'ipset.create' | 'ipset.sync' | 'group.create' | 'group.rules'
@@ -187,7 +225,15 @@ export type MicrosegRunResult = {
   notes?: string[]
   /** The run was written while the emergency stop holds the cluster firewall off. */
   stop_active?: boolean
+  /** Where a plan, an application or a removal still running stands; the outcome of the run replaces it. */
+  progress?: MicrosegRunProgress
 }
+
+/**
+ * `waiting`: another run holds the connection. `reading`: `done` of `total` guests are read.
+ * `writing`: `done` of `total` steps of the plan are over. `total` is 0 while it is not known.
+ */
+export type MicrosegRunProgress = { phase: 'waiting' | 'reading' | 'writing' | (string & {}); done: number; total: number }
 
 export type RunKind = 'light' | 'ips' | 'full' | 'log' | 'targeted' | 'plan' | 'apply' | 'remove'
 export type RunStatus = 'running' | 'done' | 'failed'
@@ -255,6 +301,8 @@ export type MicrosegStatus = {
     cluster_firewall?: ClusterFirewallState
     last_runs: Record<string, MicrosegRunSummary>
     last_log: string | null
+    /** The log reading per node (absent on an orchestrator without it). */
+    log_nodes?: MicrosegLogNode[]
   }
   /** Null until the first full run after an orchestrator restart or a leader change: nothing is measured yet. */
   coverage: MicrosegCoverage | null
@@ -262,6 +310,14 @@ export type MicrosegStatus = {
   coverage_at?: string
   zones_by_state: Record<ZoneState, number>
   emergency_stop: boolean
+}
+
+export type MicrosegLogNode = {
+  node: string
+  lines_last: number
+  lines_per_min_15m: number
+  lag_seconds: number
+  full_pages_24h: number
 }
 
 export type SuggestionAction = 'accept' | 'accept_cidr' | 'dismiss'
@@ -276,6 +332,10 @@ export type ZoneInput = {
   color?: string
   vnet_id?: string
   isolate_members?: boolean
+  /** The orchestrator ignores `egress_state` on a zone write: it changes through setZoneEgressState. */
+  egress_mode?: EgressMode
+  /** The address of the router of the zone's network, empty when unknown. */
+  gateway?: string
 }
 
 export type FlowInput = {
@@ -314,6 +374,8 @@ export type ResolveSuggestionsInput = {
   version: number
   ids: string[]
   action: SuggestionAction
+  /** accept_cidr on an outbound row: IPv4 8..32 (default 24), IPv6 16..128 (default 64); refused on the aggregate. */
+  prefix_len?: number
 }
 
 /** POST /check: the check is queued, the engine starts it at its next pass (up to a minute). */
@@ -339,6 +401,8 @@ export type MicrosegEvent = {
   proto: string
   dport: number | string
   verdict: SuggestionKind
+  /** Absent: 'in'. */
+  direction?: FlowDirection
 }
 
 /** One row of GET /traffic: the hits of a (zone, source zone, verdict) in the bucket that starts at `at`. */
@@ -350,6 +414,8 @@ export type MicrosegTrafficBucket = {
   src_zone: string
   verdict: string
   hits: number
+  /** Absent: 'in'. For 'out', `zone` is the emitting zone and `src_zone` the destination zone ('' outside). */
+  direction?: FlowDirection
 }
 
 /** GET /traffic: the persisted history of the flows (7 days), `step` in seconds. */

@@ -35,6 +35,8 @@ export type Resolver = (ip: string, vmid?: number) => LensEndpoint
 
 export const UNZONED_KEY = 'unzoned'
 export const EXTERNAL_KEY = 'external'
+/** The destination group of an outbound flow to an address outside the zones (the "Outside" of the map). */
+export const OUTSIDE_KEY = 'outside'
 export const OTHER_KEY = 'other'
 export const zoneKey = (zoneId: string) => `zone:${zoneId}`
 
@@ -309,7 +311,7 @@ export function sourceZoneSlices(pairs: LensPair[], resolve: Resolver, max = 10)
 /** The colour of a group: its zone colour, or the grey of the unzoned, external and other groups. */
 export function groupColor(key: string, zonesById: ReadonlyMap<string, MicrosegZone>): string {
   if (key === UNZONED_KEY) return GROUP_COLORS.unzoned
-  if (key === EXTERNAL_KEY) return GROUP_COLORS.external
+  if (key === EXTERNAL_KEY || key === OUTSIDE_KEY) return GROUP_COLORS.external
   if (key === OTHER_KEY) return GROUP_COLORS.other
   return zonesById.get(key.replace(/^zone:/, ''))?.color || GROUP_COLORS.zone
 }

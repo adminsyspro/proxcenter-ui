@@ -4,6 +4,7 @@ import {
   forgetSharedReads, isPlanStale, MicrosegApiError, MicrosegConflictError, microsegApi, microsegErrorKey, microsegErrorKeyOf,
   RUN_READ_SHARE_MS,
 } from './api'
+import { isAggregateDst, zoneEgress } from './types'
 
 const fetchMock = vi.fn()
 const reply = (status: number, body?: unknown) => ({
@@ -256,5 +257,41 @@ describe('microsegApi resume refusal', () => {
     expect(err).not.toBeInstanceOf(MicrosegConflictError)
     expect(err).toMatchObject({ status: 409, code: 'SOCLE_MISSING', serverMessage: 'SSH 22 rule is missing' })
     expect(microsegErrorKeyOf(err)).toBe('microsegPilot.errors.SOCLE_MISSING')
+  })
+})
+
+describe('outbound filtering', () => {
+  it('reads the outbound state of a zone: absent, or a zone neither observed nor enforced, is off', () => {
+    expect(zoneEgress({ state: 'enforce' })).toBe('off')
+    expect(zoneEgress({ state: 'disabled', egress_state: 'enforce' })).toBe('off')
+    expect(zoneEgress({ state: 'observe', egress_state: 'observe' })).toBe('observe')
+    expect(zoneEgress({ state: 'enforce', egress_state: 'enforce' })).toBe('enforce')
+    expect(zoneEgress({ state: 'enforce', egress_state: 'off' })).toBe('off')
+  })
+
+  it('tells the aggregate destination from a zone or an address', () => {
+    expect(isAggregateDst({ dst_key: '0.0.0.0/0' })).toBe(true)
+    expect(isAggregateDst({ dst_key: '::/0' })).toBe(true)
+    expect(isAggregateDst({ dst_key: '10.0.0.5' })).toBe(false)
+    expect(isAggregateDst({ dst_key: 'z1' })).toBe(false)
+    expect(isAggregateDst({})).toBe(false)
+  })
+
+  it('posts the outbound state with its version, and passes prefix_len and the direction filters', async () => {
+    const api = microsegApi('c1')
+    fetchMock.mockResolvedValue(reply(202, { run_id: 'r1' }))
+    expect(await api.setZoneEgressState('z1', 'observe', 3)).toEqual({ run_id: 'r1' })
+    expect(lastCall()).toMatchObject({ url: '/api/v1/firewall/microseg/c1/zones/z1/egress-state', method: 'POST', body: { state: 'observe', version: 3 } })
+    fetchMock.mockResolvedValue(reply(200, { version: 4 }))
+    await api.resolveSuggestions({ version: 4, ids: ['s1'], action: 'accept_cidr', prefix_len: 16 })
+    expect(lastCall().body).toEqual({ version: 4, ids: ['s1'], action: 'accept_cidr', prefix_len: 16 })
+    fetchMock.mockResolvedValue(reply(200, { suggestions: [], limit: 50, offset: 0 }))
+    await api.listSuggestions({ direction: 'out', status: 'pending' })
+    expect(lastCall().url).toBe('/api/v1/firewall/microseg/c1/suggestions?direction=out&status=pending')
+    fetchMock.mockResolvedValue(reply(200, { buckets: [] }))
+    await api.getMicrosegTraffic({ from: 'a', to: 'b', step: 300, direction: 'out' })
+    expect(lastCall().url).toContain('&direction=out')
+    await api.getMicrosegTraffic({ from: 'a', to: 'b', step: 300 })
+    expect(lastCall().url).not.toContain('direction')
   })
 })

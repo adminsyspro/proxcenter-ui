@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { Box, Checkbox, FormControlLabel, Typography } from '@mui/material'
+import { Box, Button, Checkbox, FormControlLabel, Tooltip, Typography } from '@mui/material'
 
 import { GUEST_CONVERSION_ESTIMATE_SEC } from '@/lib/migration/warm/guest-conversion-estimate'
+import { isTestActive } from '@/lib/migration/warm/migration-test-state'
 
 import ConfirmActionButton from './ConfirmActionButton'
 import { postJobAction } from './jobAction'
@@ -25,6 +26,8 @@ type WarmJob = {
   status: string
   projectedDowntimeSec?: number | null
   config?: { cutoverMode?: string | null; convertGuest?: boolean | null } | null
+  testRequest?: unknown
+  testState?: unknown
 } | null | undefined
 
 /**
@@ -78,6 +81,20 @@ export default function WarmCutoverButton({
   if (!canRequestCutover(job)) return null
 
   const awaiting = isAwaitingOperator(job)
+  // A test VM runs on the copy: the cutover waits for the operator to stop it
+  // (the routes refuse it meanwhile).
+  if (isTestActive(job!)) {
+    const reason = t('inventoryPage.esxiMigration.testBlocksCutover')
+    return (
+      <Tooltip title={reason}>
+        <span aria-label={reason}>
+          <Button size={size} variant={awaiting ? 'contained' : 'outlined'} disabled startIcon={<i className="ri-flashlight-line" />} sx={{ textTransform: 'none' }}>
+            {t('inventoryPage.esxiMigration.cutoverNow')}
+          </Button>
+        </span>
+      </Tooltip>
+    )
+  }
   const mins = Math.round((job!.projectedDowntimeSec ?? 0) / 60)
   const conversionControl = conversionDefault !== null && (
     <FormControlLabel

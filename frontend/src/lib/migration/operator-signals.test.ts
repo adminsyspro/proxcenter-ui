@@ -14,6 +14,9 @@ const row = (overrides: Record<string, unknown> = {}) => ({
   cutoverRequestedAt: null,
   forcePowerOffRequestedAt: null,
   rootChoice: null,
+  testRequest: null,
+  testStopRequestedAt: null,
+  cancelRemovesTarget: false,
   ...overrides,
 })
 
@@ -43,7 +46,20 @@ describe("readOperatorSignals", () => {
       cutover: true,
       forcePowerOff: true,
       rootChoice: "/dev/sda1",
+      test: false,
+      testStop: false,
+      cancelRemovesTarget: false,
     })
+  })
+
+  it("reads a cancel that asked to remove the target", async () => {
+    const prisma = prismaWith(vi.fn(async () => row({ status: "cancelled", cancelRemovesTarget: true })))
+    expect(await readOperatorSignals(prisma, "j1")).toMatchObject({ cancelled: true, cancelRemovesTarget: true })
+  })
+
+  it("reads a test request and a test stop request off the row", async () => {
+    const prisma = prismaWith(vi.fn(async () => row({ testRequest: { storage: "Dir-Images", maxSec: 3600 }, testStopRequestedAt: new Date() })))
+    expect(await readOperatorSignals(prisma, "j1")).toMatchObject({ test: true, testStop: true })
   })
 
   it("reports a cancelled row as cancelled, since the cancel route has no column of its own", async () => {
@@ -63,12 +79,12 @@ describe("readOperatorSignals", () => {
 })
 
 describe("clearOperatorSignals", () => {
-  it("nulls the three columns with updateMany, so a vanished row does not throw", async () => {
+  it("nulls the decision columns with updateMany, so a vanished row does not throw", async () => {
     const prisma = prismaWith(vi.fn())
     await clearOperatorSignals(prisma, "j1")
     expect(prisma.migrationJob.updateMany).toHaveBeenCalledWith({
       where: { id: "j1" },
-      data: { cutoverRequestedAt: null, forcePowerOffRequestedAt: null, rootChoice: null },
+      data: { cutoverRequestedAt: null, forcePowerOffRequestedAt: null, rootChoice: null, testRequest: null, testStopRequestedAt: null },
     })
   })
 })

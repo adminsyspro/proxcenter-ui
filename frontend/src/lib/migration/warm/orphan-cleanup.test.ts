@@ -33,6 +33,7 @@ vi.mock("./finish", () => ({
 vi.mock("./orphan-readers", () => ({ sweepOrphanReaders: vi.fn(async () => ({ killed: [], kept: [] })) }))
 vi.mock("@/lib/connections/getConnection", () => ({ getConnectionById: vi.fn(async () => ({ baseUrl: "https://pve1:8006" })) }))
 vi.mock("@/lib/migration/pve-tasks", () => ({ getNodeSshEndpointForMigration: vi.fn(async () => "10.42.0.101") }))
+vi.mock("./migration-test", () => ({ removeTestVm: vi.fn(async () => ({ removed: true })) }))
 
 import { CBT_ENABLED_BY_RUN, CBT_ENABLED_BY_RUN_XCPNG, cleanupOrphanedWarmSource, cleanupOrphanedWarmSources, mappedTargetVolumesFromLog } from "./orphan-cleanup"
 import { unmapTargetVolumes } from "./finish"
@@ -42,6 +43,7 @@ import { soapDisableCbt } from "@/lib/vmware/cbt"
 import { sweepWarmSnapshots } from "./warm-pipeline"
 import { sweepOrphanReaders } from "./orphan-readers"
 import { getConnectionById } from "@/lib/connections/getConnection"
+import { removeTestVm } from "./migration-test"
 
 const sweep = vi.mocked(sweepWarmSnapshots)
 const readers = vi.mocked(sweepOrphanReaders)
@@ -283,6 +285,42 @@ describe("cleanupOrphanedWarmSource", () => {
       await cleanupOrphanedWarmSource(job.id)
 
       expect(await logsOf(job.id)).toEqual(expect.arrayContaining([expect.stringContaining("remove any proxcenter-warm-* snapshot from it in the XCP-ng pool")]))
+    })
+  })
+
+  describe("a test VM the restart interrupted", () => {
+    const overlays = ["/mnt/pve/ISO/dir-images/images/9001/vm-9001-test-0.qcow2"]
+
+    it("removes the test VM and its overlays before releasing anything of the copy", async () => {
+      vi.mocked(removeTestVm).mockClear()
+      node.mapped = JSON.stringify([{ name: "vm-111-disk-0", device: "/dev/rbd3" }])
+      const job = await seed({
+        testState: { phase: "running", testVmid: 9001, overlays },
+        logs: [{ ts: "x", msg: CBT_ENABLED_BY_RUN, level: "success" }, { ts: "x", msg: "Disk 0: target CephStoragePool:vm-111-disk-0 → /dev/rbd3 (3.0 GB)", level: "info" }],
+      })
+
+      await cleanupOrphanedWarmSource(job.id)
+
+      expect(removeTestVm).toHaveBeenCalledWith({ pveConn: { baseUrl: "https://pve1:8006" }, node: "pve1", vmid: 9001, jobId: job.id, connectionId: "pve", nodeIp: "10.42.0.101", overlays })
+      expect(vi.mocked(removeTestVm).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(unmapTargetVolumes).mock.invocationCallOrder[0])
+      expect(await logsOf(job.id)).toContain("Test VM 9001 removed after the server restarted")
+      const row = await prismaTest.migrationJob.findUniqueOrThrow({ where: { id: job.id } })
+      expect(row.testState).toMatchObject({ phase: "ended", reason: "the server restarted", testVmid: 9001 })
+      expect(row.testRequest).toBeNull()
+    })
+
+    it("says so when the test VM cannot be removed", async () => {
+      vi.mocked(removeTestVm).mockClear().mockResolvedValueOnce({ removed: false, reason: "PVE 500: VM is locked" })
+      const job = await seed({ testState: { phase: "running", testVmid: 9001, overlays } })
+      await cleanupOrphanedWarmSource(job.id)
+      expect(await logsOf(job.id)).toContain("Could not remove test VM 9001 on pve1 (PVE 500: VM is locked): delete it in Proxmox, with its disks")
+    })
+
+    it("leaves alone a test that had already ended", async () => {
+      vi.mocked(removeTestVm).mockClear()
+      const job = await seed({ testState: { phase: "ended", testVmid: 9001, overlays } })
+      await cleanupOrphanedWarmSource(job.id)
+      expect(removeTestVm).not.toHaveBeenCalled()
     })
   })
 

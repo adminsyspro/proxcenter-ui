@@ -12,7 +12,7 @@ const pump = vi.hoisted(() => vi.fn(async (_batchId: string) => ({ started: [], 
 vi.mock("@/lib/migration/batch-scheduler", () => ({ pumpBatch: pump }))
 
 import { holdBetweenPasses, reclaimHoldSlot, releaseHoldSlot } from "./hold-slot"
-import { cancelWarmMigrationJob, requestWarmCutover, unregisterJob } from "./job-control"
+import { cancelWarmMigrationJob, requestWarmCutover, requestWarmTest, unregisterJob } from "./job-control"
 
 const conn = (id: string, type: string, extra: Record<string, unknown> = {}) => prismaTest.$transaction([
   prismaTest.connection.create({ data: { id, name: id, type, baseUrl: `https://${id}`, apiTokenEnc: "x", ...extra } as any }),
@@ -129,6 +129,41 @@ describe("holdBetweenPasses", () => {
     setTimeout(() => requestWarmCutover(j.id), 150)
     await expect(holdBetweenPasses(j.id, 0.02, { reclaimRetryMs: 20 })).resolves.toBe("cutover")
     expect(await idleOf(j.id)).toBeNull()
+    unregisterJob(j.id)
+  })
+
+  it("leaves for a test as soon as one is asked during the sleep, and stays idle for it", async () => {
+    const j = await job()
+    setTimeout(() => requestWarmTest(j.id), 50)
+    const t0 = Date.now()
+    await expect(holdBetweenPasses(j.id, 60)).resolves.toBe("test")
+    expect(Date.now() - t0).toBeLessThan(5000)
+    expect(await idleOf(j.id)).toBeInstanceOf(Date)
+    unregisterJob(j.id)
+  })
+
+  it("leaves for a test asked while it waits for a place", async () => {
+    await conn("tgt", "pve", { migrationMaxPerNode: 1 })
+    await job({ status: "full_copy" })
+    const j = await job()
+    setTimeout(() => requestWarmTest(j.id), 150)
+    await expect(holdBetweenPasses(j.id, 0.02, { reclaimRetryMs: 20 })).resolves.toBe("test")
+    unregisterJob(j.id)
+  })
+
+  it("takes a place for a cutover asked while it was idle for a test", async () => {
+    await conn("tgt", "pve", { migrationMaxPerNode: 2 })
+    const j = await job({ holdIdleAt: new Date() })
+    requestWarmCutover(j.id)
+    await expect(holdBetweenPasses(j.id, 0, { afterIdle: true })).resolves.toBe("cutover")
+    expect(await idleOf(j.id)).toBeNull()
+    unregisterJob(j.id)
+  })
+
+  it("goes for the cutover when a cutover and a test are both asked", async () => {
+    const j = await job()
+    setTimeout(() => { requestWarmTest(j.id); requestWarmCutover(j.id) }, 50)
+    await expect(holdBetweenPasses(j.id, 60)).resolves.toBe("cutover")
     unregisterJob(j.id)
   })
 

@@ -214,7 +214,7 @@
     "src/lib/migration/warm/orphan-cleanup.test.ts": 1,
     "src/lib/migration/warm/orphan-readers.test.ts": 2,
     "src/lib/migration/warm/warm-pipeline.disks.test.ts": 1,
-    "src/lib/migration/warm/warm-pipeline.ts": 16,
+    "src/lib/migration/warm/warm-pipeline.ts": 15,
     "src/lib/migration/xcpng-pipeline.ts": 2,
     "src/lib/orchestrator/haRoute.test.ts": 3,
     "src/lib/proxmox/client.test.ts": 1,

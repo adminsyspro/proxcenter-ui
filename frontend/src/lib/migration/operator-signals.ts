@@ -22,6 +22,8 @@
  *
  * Cancellation needs no column: the cancel route already writes
  * `status = "cancelled"` on the row, so the status is its durable signal.
+ * Whether that cancel also removes the copy on the target rides along in
+ * `cancelRemovesTarget`, written by the same update.
  */
 
 /**
@@ -40,6 +42,12 @@ export type OperatorSignalSnapshot = {
   forcePowerOff: boolean
   /** Root filesystem an operator picked for a parked v2v conversion. */
   rootChoice: string | null
+  /** An operator asked a waiting warm migration to boot a test VM. */
+  test: boolean
+  /** An operator asked the running test to stop. */
+  testStop: boolean
+  /** The cancel asked to remove what was copied on the target. */
+  cancelRemovesTarget: boolean
 }
 
 const SIGNAL_SELECT = {
@@ -47,6 +55,9 @@ const SIGNAL_SELECT = {
   cutoverRequestedAt: true,
   forcePowerOffRequestedAt: true,
   rootChoice: true,
+  testRequest: true,
+  testStopRequestedAt: true,
+  cancelRemovesTarget: true,
 } as const
 
 /** Read the decisions currently recorded for a job, or null when it is gone. */
@@ -59,6 +70,9 @@ export async function readOperatorSignals(prisma: any, jobId: string): Promise<O
     cutover: row.cutoverRequestedAt != null,
     forcePowerOff: row.forcePowerOffRequestedAt != null,
     rootChoice: typeof row.rootChoice === "string" && row.rootChoice ? row.rootChoice : null,
+    test: row.testRequest != null,
+    testStop: row.testStopRequestedAt != null,
+    cancelRemovesTarget: row.cancelRemovesTarget === true,
   }
 }
 
@@ -73,7 +87,7 @@ export async function readOperatorSignals(prisma: any, jobId: string): Promise<O
 export async function clearOperatorSignals(prisma: any, jobId: string): Promise<void> {
   await prisma.migrationJob.updateMany({
     where: { id: jobId },
-    data: { cutoverRequestedAt: null, forcePowerOffRequestedAt: null, rootChoice: null },
+    data: { cutoverRequestedAt: null, forcePowerOffRequestedAt: null, rootChoice: null, testRequest: null, testStopRequestedAt: null },
   })
 }
 

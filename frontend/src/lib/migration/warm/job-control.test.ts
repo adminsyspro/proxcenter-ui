@@ -66,6 +66,20 @@ describe("warm job control, signals recorded on the row", () => {
     expect(isTestStopRequested(JOB)).toBe(true)
   })
 
+  it("drops a test signal once the row no longer carries it, so a stale read cannot keep it", async () => {
+    await registerJob(JOB, prisma)
+    row.testRequest = { storage: "Dir-Images", maxSec: 3600 }
+    row.testStopRequestedAt = new Date()
+    await vi.advanceTimersByTimeAsync(OPERATOR_SIGNAL_POLL_MS)
+    expect(isTestRequested(JOB)).toBe(true)
+
+    row.testRequest = null
+    row.testStopRequestedAt = null
+    await vi.advanceTimersByTimeAsync(OPERATOR_SIGNAL_POLL_MS)
+    expect(isTestRequested(JOB)).toBe(false)
+    expect(isTestStopRequested(JOB)).toBe(false)
+  })
+
   it("records the end of a test even on a migration cancelled meanwhile", async () => {
     await registerJob(JOB, prisma)
     row.status = "cancelled"

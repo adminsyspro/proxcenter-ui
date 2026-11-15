@@ -2789,6 +2789,7 @@
       "testRequested": "已请求测试：将在当前同步完成后开始",
       "testRunning": "测试运行中 · 虚拟机 {vmid} · 覆盖层 {size}",
       "testStopping": "正在停止测试：删除测试虚拟机",
+      "testFailed": "上次测试失败：{reason}",
       "testConsole": "控制台",
       "testStop": "停止测试",
       "testBlocksCutover": "请在切换前停止正在运行的测试",

@@ -1,4 +1,5 @@
 import type { PCTask, PCTaskStatus } from "@/contexts/ProxCenterTasksContext"
+import type { MigrationStepInput } from "./activeMigrations"
 import type { SharedTask } from "./sharedTask"
 
 export interface MergedPCTask extends PCTask {
@@ -14,6 +15,11 @@ export interface MergedPCTask extends PCTask {
   /** Source host and batch of a shared migration row: what reopens its dialog. */
   sourceConnectionId?: string
   batchId?: string | null
+  /** Step of a shared migration row, read by migrationStepText: `detail` stays the raw step. */
+  migrationStep?: MigrationStepInput
+  /** What the cancel confirmation of a shared migration row offers (remove the copy of a warm run). */
+  migrationType?: string | null
+  targetVmid?: number | null
 }
 
 function statusFor(raw: string): PCTaskStatus {
@@ -39,6 +45,9 @@ function mapServerTask(st: SharedTask): MergedPCTask {
     jobId: st.id,
     sourceConnectionId: st.sourceConnectionId,
     batchId: st.batchId,
+    migrationStep: { status: st.status, currentStep: st.currentStep, cutoverMode: st.cutoverMode, projectedDowntimeSec: st.projectedDowntimeSec },
+    migrationType: st.migrationType,
+    targetVmid: st.targetVmid,
   }
 }
 

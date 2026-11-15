@@ -49,6 +49,9 @@ export const TEST_RAM_MARGIN_MB = 1024
 
 const TICK_MS = 1000
 const GiB = 1024 ** 3
+/** Tries at clearing the request once a test ended, a few ticks apart. */
+const CLEAR_REQUEST_ATTEMPTS = 3
+const CLEAR_REQUEST_BACKOFF_TICKS = 2
 
 /** What the pipeline that owns the copy hands the test. */
 export interface MigrationTestTarget {
@@ -216,6 +219,15 @@ export async function runMigrationTest(t: MigrationTestTarget): Promise<void> {
   }
   const stopAsked = () => isCancelled(jobId) || isCutoverRequested(jobId) || isTestStopRequested(jobId)
 
+  // A request already gone from the row is not a request: a mirror read in
+  // flight while the previous test cleared its row can put the signal back for
+  // a moment. Nothing to run, and the result of that previous test stays.
+  const raw = await readJobTestRequest(jobId).catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))))
+  if (raw === null) {
+    clearWarmTest(jobId)
+    return
+  }
+
   let vmid: number | null = null
   let overlays: string[] = []
   // Set before the create call: a create that fails half-way may still leave a VM.
@@ -223,7 +235,8 @@ export async function runMigrationTest(t: MigrationTestTarget): Promise<void> {
   let ending: { reason: string; level: "info" | "warn" | "error"; failed?: boolean; leftover?: boolean } | null = null
   let cancelled = false
   try {
-    const parsed = parseTestRequest(await readJobTestRequest(jobId))
+    if (raw instanceof Error) throw raw
+    const parsed = parseTestRequest(raw)
     if (parsed.ok === false) throw new TestRefused(parsed.error)
     const request = parsed.request
     await report({ phase: "preparing", storage: request.storage, step: "checks", preparingSince: new Date().toISOString() })
@@ -341,7 +354,14 @@ export async function runMigrationTest(t: MigrationTestTarget): Promise<void> {
     if (ending?.leftover) line = reason
     else if (ending?.failed) line = vmid === null ? `not started: ${reason}` : `stopped: ${reason}. Test VM ${vmid} and its overlays removed`
     await log(line, ending?.level ?? "info")
-    await updateJobTestFields(jobId, { testRequest: null, testStopRequestedAt: null }).catch(() => {})
+    // Left on the row, the request would start the same test again at the next
+    // hold, and the cutover would stay blocked behind it.
+    let cleared = false
+    for (let attempt = 0; attempt < CLEAR_REQUEST_ATTEMPTS && !cleared; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, tickMs * CLEAR_REQUEST_BACKOFF_TICKS))
+      cleared = await updateJobTestFields(jobId, { testRequest: null, testStopRequestedAt: null }).then(() => true, () => false)
+    }
+    if (!cleared) await log("could not clear the test request on the job: it may start again; stop it from the migrate dialog", "error")
     clearWarmTest(jobId)
   }
   if (cancelled) throw new Error("Migration cancelled")

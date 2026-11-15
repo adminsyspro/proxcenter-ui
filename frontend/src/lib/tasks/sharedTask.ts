@@ -54,6 +54,8 @@ export interface SharedTask {
    */
   projectedDowntimeSec: number | null
   cutoverMode: "auto" | "manual" | null
+  /** cold, live, warm…: a warm run's cancel offers to remove its copy on the target. */
+  migrationType: string | null
   /** Guest conversion default of a VMware warm job (#1000); null when the job has no such choice. */
   convertGuest: boolean | null
   isMine: boolean
@@ -137,6 +139,7 @@ export function toSharedTask(
     error: job.error ?? null,
     projectedDowntimeSec: job.projectedDowntimeSec ?? null,
     cutoverMode: (job.config as any)?.cutoverMode ?? null,
+    migrationType: (job.config as any)?.migrationType ?? null,
     convertGuest: typeof (job.config as any)?.convertGuest === "boolean" ? (job.config as any).convertGuest : null,
     isMine: opts.isMine,
     createdByName: opts.createdByName,

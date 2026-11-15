@@ -10,6 +10,7 @@ import { useHostsByConnection } from '@/hooks/useHosts'
 import { OPEN_BULK_BATCH_EVENT, type OpenBulkBatchDetail } from '@/lib/migration/bulkBatchOpen'
 import { emptyMigrationStats, sumMigrationStats, type MigrationStats } from '@/lib/migration/migration-stats'
 import { bulkBatchFromPayload, bulkLogOffsets, bulkRowsFromBatch, bulkSourceTypeLabel, fetchActiveBulkBatch, fetchBulkBatch, isBulkBatchFinished, shouldTrackBulkJob, type BatchPayload, type BulkMigBatch, type BulkMigJobRow } from './bulkJobList'
+import { migrationStepText } from '@/lib/tasks/activeMigrations'
 import { mergeJobLogs } from '@/lib/migration/jobLogs'
 import { useFavorites } from './hooks/useFavorites'
 import { hypervDiskPathsFromScan, useMigrationOptions } from './hooks/useMigrationOptions'
@@ -1102,7 +1103,8 @@ export default function InventoryDetails({
   updatePCTaskRef.current = updatePCTask
 
   // Poll migration job status + sync to TasksBar.
-  // Prefer j.currentStep when available — processV2vOutput updates it with
+  // Prefer the step of the run when available (migrationStepText: translated,
+  // "Waiting for cutover" while it waits, delta_19 read as "Delta sync"); processV2vOutput updates it with
   // the live virt-v2v phase name ("Inspecting the source", "Copying disk 1/2",
   // etc.) which is far more descriptive than the pipeline-level j.status
   // ("transferring"). The status-based fallback is kept for non-virt-v2v steps
@@ -1130,7 +1132,7 @@ export default function InventoryDetails({
             : j.status
           updatePCTaskRef.current(taskId, {
             progress: j.progress || 0,
-            detail: j.currentStep || stepFallback,
+            detail: migrationStepText(k => t(k as any), { status: j.status, currentStep: j.currentStep ?? null, cutoverMode: j.config?.cutoverMode ?? null, projectedDowntimeSec: j.projectedDowntimeSec ?? null }) || stepFallback,
             status: j.status === 'completed' ? 'done' : j.status === 'failed' || j.status === 'cancelled' ? 'error' : 'running',
             ...(j.status === 'failed' ? { error: j.error } : {}),
           })
@@ -1182,7 +1184,7 @@ export default function InventoryDetails({
       else if (j.status === 'failed' || j.status === 'cancelled') taskStatus = 'error'
       updatePCTaskRef.current(`migration-${j.id}`, {
         progress: j.progress || 0,
-        detail: j.currentStep || stepFallback,
+        detail: migrationStepText(k => t(k as any), { status: j.status, currentStep: j.currentStep ?? null, cutoverMode: j.cutoverMode ?? null, projectedDowntimeSec: j.projectedDowntimeSec ?? null }) || stepFallback,
         status: taskStatus,
         ...(j.status === 'failed' ? { error: j.error || undefined } : {}),
       })

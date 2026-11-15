@@ -27,6 +27,16 @@ describe('useStopTask', () => {
     expect(stop.run).toHaveBeenCalledTimes(1)
   })
 
+  it('hands the choice made in the confirmation to the stop itself', async () => {
+    const stop = target()
+    const { result } = renderHook(() => useStopTask())
+
+    act(() => { result.current.ask(stop) })
+    await act(async () => { await result.current.confirm({ removeTarget: true }) })
+
+    expect(stop.run).toHaveBeenCalledWith({ removeTarget: true })
+  })
+
   it('drops the request and calls nothing when it is dismissed', async () => {
     const stop = target()
     const { result } = renderHook(() => useStopTask())

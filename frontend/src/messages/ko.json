@@ -2789,6 +2789,7 @@
       "testRequested": "테스트 요청됨: 진행 중인 동기화 후 시작됩니다",
       "testRunning": "테스트 실행 중 · VM {vmid} · 오버레이 {size}",
       "testStopping": "테스트 중지 중: 테스트 VM 제거",
+      "testFailed": "마지막 테스트 실패: {reason}",
       "testConsole": "콘솔",
       "testStop": "테스트 중지",
       "testBlocksCutover": "컷오버 전에 실행 중인 테스트를 중지하십시오",

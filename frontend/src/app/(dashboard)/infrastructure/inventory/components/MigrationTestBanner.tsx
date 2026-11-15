@@ -65,11 +65,25 @@ export default function MigrationTestBanner({ job }: Readonly<{ job: BannerJob }
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // The failed test the operator closed, by when it ended: a later failure shows again.
+  const [dismissedFailure, setDismissedFailure] = useState<string | null>(null)
+
   const state = readTestState(job.testState)
   const visible = !isTerminalJobStatus(job.status) && isTestActive(job)
   useSecondTick(visible)
-  if (!visible) return null
   const k = (key: string, values?: Record<string, string | number>) => t(`inventoryPage.esxiMigration.${key}`, values)
+
+  // A refused or failed test is gone from the row's request: without this its
+  // reason (not enough RAM, no room on the storage...) was only in the job log.
+  if (!visible) {
+    const failureId = state?.endedAt ?? state?.reason ?? ''
+    if (isTerminalJobStatus(job.status) || state?.phase !== 'failed' || !state.reason || dismissedFailure === failureId) return null
+    return (
+      <Alert severity="warning" icon={<i className="ri-flask-line" />} data-testid="migration-test-failed" onClose={() => setDismissedFailure(failureId)}>
+        <Typography variant="body2" sx={{ fontSize: 13 }}>{k('testFailed', { reason: state.reason })}</Typography>
+      </Alert>
+    )
+  }
 
   const phase = state?.phase ?? 'requested'
   const runningVmid = phase === 'running' ? state?.testVmid : undefined

@@ -33,6 +33,7 @@ import { useJobs } from '@/hooks/useJobs'
 import { useRefreshInterval } from '@/hooks/useRefreshInterval'
 import { useLicense } from '@/contexts/LicenseContext'
 import { type MergedPCTask } from '@/lib/tasks/mergeSharedTasks'
+import { migrationStepText } from '@/lib/tasks/activeMigrations'
 import { mergeTaskbarRows } from '@/lib/tasks/orchestratorTaskRows'
 import { formatTaskDuration } from '@/lib/tasks/archive'
 import TaskDetailDialog from './TaskDetailDialog'
@@ -302,6 +303,19 @@ export default function TasksFooter({
     await Promise.all([mutateTasks(), mutateJobs(), mutateSharedTasks()])
   })
 
+  /** The detail of a row, the step of a shared migration read as the running-tasks menu reads it. */
+  const pcTaskDetail = (task: MergedPCTask) => (task.migrationStep ? migrationStepText(k => t(k as any), task.migrationStep) : task.detail) || undefined
+
+  /**
+   * What the stop confirmation of a migration offers: its type (a warm run can
+   * have its copy removed) and its VMID on the target, from the Task Center
+   * row when there is one, from the shared row otherwise.
+   */
+  const migrationStopChoice = (metadata: any, task: MergedPCTask) => ({
+    migrationType: metadata?.migrationType ?? task.migrationType ?? null,
+    targetVmid: metadata?.targetVmid ?? task.targetVmid ?? null,
+  })
+
   /**
    * What stopping a ProxCenter row would really do, or null when nothing can
    * be stopped: a finished row, an upload (the browser still owns that one),
@@ -319,9 +333,10 @@ export default function TasksFooter({
 
       return {
         id: task.id,
-        run: () => runJobAction(job, 'cancel'),
+        run: opts => runJobAction(job, 'cancel', opts),
         body: job.type === 'migration' ? t('tasks.shared.cancelConfirmStop') : t('tasks.stop.confirmBodyJob'),
         warning: job.type === 'migration' ? t('tasks.shared.cancelConfirmLeftovers') : undefined,
+        ...(job.type === 'migration' ? { migration: migrationStopChoice(job.metadata, task) } : {}),
       }
     }
 
@@ -345,9 +360,10 @@ export default function TasksFooter({
 
       return {
         id: task.id,
-        run: () => runJobAction(migration, 'cancel'),
+        run: opts => runJobAction(migration, 'cancel', opts),
         body: t('tasks.shared.cancelConfirmStop'),
         warning: t('tasks.shared.cancelConfirmLeftovers'),
+        migration: migrationStopChoice(null, task),
       }
     }
 
@@ -1162,9 +1178,9 @@ export default function TasksFooter({
                         <Typography variant="caption" sx={{ fontWeight: 600, flexShrink: 0, maxWidth: '45%' }} noWrap>
                           {task.label}
                         </Typography>
-                        {task.detail && (
+                        {pcTaskDetail(task) && (
                           <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.65rem', flex: 1, minWidth: 0 }} noWrap>
-                            {task.detail}
+                            {pcTaskDetail(task)}
                           </Typography>
                         )}
                         {task.shared && task.readOnly && task.startedByName && (
@@ -1321,6 +1337,7 @@ return ''
       busy={stop.busy}
       body={stop.target?.body}
       warning={stop.target?.warning}
+      migration={stop.target?.migration}
       onKeep={stop.dismiss}
       onConfirm={stop.confirm}
     />

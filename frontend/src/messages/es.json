@@ -2789,6 +2789,7 @@
       "testRequested": "Prueba solicitada: empieza tras la sincronización en curso",
       "testRunning": "Prueba en curso · VM {vmid} · capa {size}",
       "testStopping": "Deteniendo la prueba: eliminando la VM de prueba",
+      "testFailed": "La última prueba falló: {reason}",
       "testConsole": "Consola",
       "testStop": "Detener la prueba",
       "testBlocksCutover": "Detenga la prueba en curso antes del cutover",

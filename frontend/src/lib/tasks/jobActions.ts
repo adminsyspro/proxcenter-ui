@@ -136,6 +136,9 @@ export function jobActions(job: JobLike): JobAction[] {
 
 export type JobActionRequest = { url: string; method: 'POST' | 'DELETE' }
 
+/** What the stop confirmation of a migration lets the operator choose. */
+export type StopOptions = { removeTarget?: boolean }
+
 /**
  * Endpoint backing an action, or null when unsupported. The verb is part of
  * the answer: every orchestrator action is a POST, but stopping a DRS job
@@ -274,12 +277,19 @@ export function normalizeLog(entry: any): NormalizedLog {
  * then refresh their own SWR cache and surface `error` to the operator: a
  * silent no-op on click is exactly what #767 reported.
  */
-export async function runJobAction(job: JobLike, action: JobAction): Promise<{ ok: boolean; error?: string }> {
+export async function runJobAction(job: JobLike, action: JobAction, opts?: StopOptions): Promise<{ ok: boolean; error?: string }> {
   const request = jobActionRequest(job, action)
   if (!request) return { ok: false, error: `Unsupported action ${action}` }
 
+  // A migration cancel may also remove what a warm run copied on the target
+  // (the cancel route, #612); without the tick the request is the same as before.
+  const removeTarget = job?.type === 'migration' && action === 'cancel' && opts?.removeTarget === true
+  const init: RequestInit = removeTarget
+    ? { method: request.method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removeTarget: true }) }
+    : { method: request.method }
+
   try {
-    const res = await fetch(request.url, { method: request.method })
+    const res = await fetch(request.url, init)
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
 

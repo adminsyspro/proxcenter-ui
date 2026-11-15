@@ -143,6 +143,23 @@ describe('TasksFooter shared migration row', () => {
     expect(state.pushed).toEqual(['/infrastructure/inventory?selectType=ext&selectId=vc2&openMigration=job-7'])
   })
 
+  it('names the step of the run instead of showing the raw delta_19', () => {
+    state.shared = [shared({ status: 'delta_sync', currentStep: 'delta_19' })]
+    render(<TasksFooter defaultExpanded />)
+    fireEvent.click(screen.getByText('ProxCenter'))
+
+    expect(screen.getByText('tasks.steps.delta')).toBeInTheDocument()
+    expect(screen.queryByText('delta_19')).toBeNull()
+  })
+
+  it('says a manual cutover run waits for its cutover, as the running-tasks menu does', () => {
+    state.shared = [shared({ status: 'delta_sync', currentStep: 'delta_4', cutoverMode: 'manual', projectedDowntimeSec: 112 })]
+    render(<TasksFooter defaultExpanded />)
+    fireEvent.click(screen.getByText('ProxCenter'))
+
+    expect(screen.getByText('tasks.shared.waitingForCutover')).toBeInTheDocument()
+  })
+
   it('opens the follow-up of its batch for a run of a bulk migration', () => {
     state.restoreTask = () => false
     state.shared = [shared({ batchId: 'b-2' })]

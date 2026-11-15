@@ -42,8 +42,13 @@ export async function registerJob(jobId: string, prisma: any): Promise<void> {
     if (signals.cancelled) cancelledJobs.add(jobId)
     if (signals.cutover) cutoverRequests.add(jobId)
     if (signals.forcePowerOff) forcePowerOffRequests.add(jobId)
+    // Both ways, unlike the one-shot signals above: the engine clears the row
+    // when a test ends, and a read in flight across that clear must not keep a
+    // request (or a stop) alive for the next test.
     if (signals.test) testRequests.add(jobId)
+    else testRequests.delete(jobId)
     if (signals.testStop) testStopRequests.add(jobId)
+    else testStopRequests.delete(jobId)
   })
 }
 

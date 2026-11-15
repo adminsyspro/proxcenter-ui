@@ -192,6 +192,21 @@ describe('MigrationTestBanner', () => {
     expect(r.container).toBeEmptyDOMElement()
   })
 
+  it('says why the last test did not run to its end, until the operator closes it', () => {
+    // A refused test (RAM, storage) used to vanish from the dialog: only the
+    // job log said why.
+    const reason = 'not enough RAM on pve1: 900 MiB available, the test VM needs 2048 MiB plus 1024 MiB of margin'
+    renderWithProviders(<MigrationTestBanner job={{ ...waiting, testState: { phase: 'failed', reason, endedAt: '2026-11-15T10:11:00Z' } }} />)
+    expect(screen.getByText(`Last test failed: ${reason}`)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByText(`Last test failed: ${reason}`)).toBeNull()
+  })
+
+  it('says nothing about a failed test once the migration is over', () => {
+    const { container } = renderWithProviders(<MigrationTestBanner job={{ ...waiting, status: 'completed', testState: { phase: 'failed', reason: 'x' } }} />)
+    expect(container).toBeEmptyDOMElement()
+  })
+
   it('writes the preparation time as a clock', () => {
     expect(formatTestClock(5)).toBe('0:05')
     expect(formatTestClock(75)).toBe('1:15')

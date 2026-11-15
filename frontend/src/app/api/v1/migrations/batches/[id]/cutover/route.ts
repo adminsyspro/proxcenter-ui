@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { loadBatchForCaller } from "@/lib/migration/batch-access"
 import { parseBatchSelection } from "@/lib/migration/batch-selection"
-import { CUTOVER_ELIGIBLE, requestJobCutover } from "@/lib/migration/warm/request-cutover"
+import { CUTOVER_ELIGIBLE, TEST_BLOCKS_CUTOVER, cutoverBlockedByTest, requestJobCutover } from "@/lib/migration/warm/request-cutover"
 import { audit } from "@/lib/audit"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -27,9 +27,9 @@ async function handlePost(req: Request, { params }: { params: Promise<{ id: stri
     const body = await req.json().catch(() => null) as { jobIds?: unknown } | null
     const jobs = await access.prisma.migrationJob.findMany({
       where: { batchId: id },
-      select: { id: true, sourceVmName: true, status: true },
+      select: { id: true, sourceVmName: true, status: true, testRequest: true, testState: true },
       orderBy: [{ batchOrder: "asc" }, { createdAt: "asc" }],
-    }) as Array<{ id: string; sourceVmName: string | null; status: string }>
+    }) as Array<{ id: string; sourceVmName: string | null; status: string; testRequest?: unknown; testState?: unknown }>
     const parsed = parseBatchSelection(body?.jobIds, jobs.map(j => j.id))
     if (parsed.ok === false) return NextResponse.json({ error: parsed.error }, { status: 400 })
     const selection = parsed.selection
@@ -40,6 +40,7 @@ async function handlePost(req: Request, { params }: { params: Promise<{ id: stri
       if (selection && !selection.has(job.id)) continue
       const entry = { jobId: job.id, sourceVmName: job.sourceVmName, status: job.status }
       if (!CUTOVER_ELIGIBLE.has(job.status)) { skipped.push(entry); continue }
+      if (cutoverBlockedByTest(job)) { skipped.push({ ...entry, error: TEST_BLOCKS_CUTOVER }); continue }
       try {
         await requestJobCutover(access.prisma, job.id)
         requested.push(job.id)

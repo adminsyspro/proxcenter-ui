@@ -1,4 +1,4 @@
-import { keepTargetVm, type AllocatedVolume } from "../pvesm-alloc"
+import { keepTargetVm, volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
 import { destroyPveVm, pveSetVmConfig } from "../pve-vm-config"
 import { convertDisksToQcow2 } from "../qcow2-convert"
 import { startMigratedVm } from "../start-migrated-vm"
@@ -98,19 +98,22 @@ export async function verifySampledFirstBlock(a: {
  * Before any copy completes, the VM is an empty shell: leaving it behind blocks
  * the VMID, so a retry with the same target VMID fails until someone removes it
  * by hand. Once a volume holds a completed copy the VM is kept, together with
- * that volume (#612), and the log says so. Never throws.
+ * that volume (#612), and the log says so, unless the operator cancelled and
+ * asked to remove the target (`removeCopies`). Never throws.
  */
 export async function removeTargetVmOnFailure(a: {
-  jobId: string; pveConn: any; node: string; vmid: number; allocatedVolumes: AllocatedVolume[]
+  jobId: string; pveConn: any; node: string; vmid: number; allocatedVolumes: AllocatedVolume[]; removeCopies?: boolean
 }): Promise<void> {
   const { jobId, pveConn, node, vmid, allocatedVolumes } = a
-  if (keepTargetVm(allocatedVolumes)) {
+  const removeCopies = a.removeCopies === true
+  if (keepTargetVm(allocatedVolumes, { removeCopies })) {
     await appendLog(jobId, `Kept target VM ${vmid}: it holds a completed copy of the source disk. Remove it with 'qm destroy ${vmid} --purge --destroy-unreferenced-disks' if you do not want it.`, "warn").catch(() => {})
     return
   }
   try {
     await destroyPveVm(pveConn, node, vmid)
-    await appendLog(jobId, `Removed target VM ${vmid} created by this migration`, "warn").catch(() => {})
+    const held = removeCopies && keepTargetVm(allocatedVolumes)
+    await appendLog(jobId, held ? `Removed target VM ${vmid} and the copy it held, as asked when cancelling` : `Removed target VM ${vmid} created by this migration`, "warn").catch(() => {})
   } catch (e: any) {
     const msg = e?.message || String(e)
     // PVE answers a missing guest config with a 500: nothing is left behind.
@@ -134,6 +137,38 @@ export async function unmapTargetVolumes(connectionId: string, nodeIp: SshTarget
     if (!v.rbdMapped || !v.devicePath) continue
     const r = await executeSSH(connectionId, nodeIp, `rbd unmap ${shellEscape(v.devicePath)} 2>/dev/null`).catch(() => null)
     if (r?.success) v.rbdMapped = false
+  }
+}
+
+/**
+ * Failure cleanup of the target volumes, shared by the warm pipelines: unmap
+ * every RBD volume (a kept one too), free the ones the VM never referenced,
+ * and log each completed copy kept (#612), or removed when the operator
+ * cancelled and asked for it. Never throws.
+ */
+export async function releaseTargetVolumes(a: {
+  jobId: string; connectionId: string; nodeIp: SshTarget; allocatedVolumes: AllocatedVolume[]; removeCopies: boolean
+}): Promise<void> {
+  const { jobId, connectionId, nodeIp, allocatedVolumes, removeCopies } = a
+  // nodeIp is empty when the job failed before planning: nothing was allocated on the node.
+  if (!nodeIp) return
+  await unmapTargetVolumes(connectionId, nodeIp, allocatedVolumes)
+  for (const v of volumesToFree(allocatedVolumes, { removeCopies })) {
+    // A `saferemove` LVM storage zeroes the volume before removing it, which takes
+    // far longer than the 30 s executeSSH default.
+    const r = await executeSSH(connectionId, nodeIp, `pvesm free ${shellEscape(v.volumeId)} 2>/dev/null`, PVESM_FREE_TIMEOUT_MS).catch((e: any) => ({ success: false, output: "", error: e?.message || String(e) }))
+    if (!v.copied) continue
+    const line = r.success
+      ? `Removed target volume ${v.volumeId}, as asked when cancelling`
+      : `Could not remove target volume ${v.volumeId} (${r.error || r.output || "pvesm free failed"}): remove it from the storage`
+    await appendLog(jobId, line, "warn").catch(() => {})
+  }
+  // Volumes holding a completed copy are deliberately NOT freed on a failure: the
+  // copy is bootable and worth hours of transfer, and deleting it on a post-copy
+  // failure is what destroyed 3.4 TB on a customer cluster (#612). Say so in the
+  // job log, one line per volume, so nothing silently lingers on the storage.
+  for (const v of volumesToKeep(allocatedVolumes, { removeCopies })) {
+    await appendLog(jobId, `Kept target volume ${v.volumeId}: it holds a completed copy of the source disk. Remove it manually from the storage if you do not want it.`, "warn").catch(() => {})
   }
 }
 

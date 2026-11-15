@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { bulkBatchFromPayload, bulkJobState, bulkJobsAwaitingCutover, bulkJobsWithSyncInterval, bulkRowsFromBatch, countBulkJobs, migrationChipLabelKey, migrationChipTone, orderBulkJobs } from './bulkJobList'
+import { bulkBatchFromPayload, bulkJobRowTone, bulkJobState, bulkJobsAwaitingCutover, bulkJobsWithSyncInterval, bulkRowsFromBatch, countBulkJobs, migrationChipLabelKey, migrationChipTone, orderBulkJobs } from './bulkJobList'
 
 const jobs = [
   { vmid: 'a', status: 'completed' },
@@ -196,5 +196,22 @@ describe('sync interval of a batch', () => {
     const rows = [row('queued', 'queued'), row('copy', 'full_copy'), row('hold', 'delta_sync'), row('cut', 'cutover'), row('done', 'completed'), row('auto', 'delta_sync', false)]
 
     expect(bulkJobsWithSyncInterval(rows).map(r => r.jobId)).toEqual(['queued', 'copy', 'hold'])
+  })
+})
+
+describe('a VM of a batch whose copy is under test', () => {
+  const job = (over: Record<string, unknown> = {}) => ({ id: 'j1', sourceVmId: 'vm-1', sourceVmName: 'web-1', status: 'delta_sync', progress: 90, cutoverMode: 'manual', ...over })
+
+  it('is marked while its test runs, and only then', () => {
+    expect(bulkRowsFromBatch([job({ testState: { phase: 'running', testVmid: 9001 } }) as any])[0].inTest).toBe(true)
+    expect(bulkRowsFromBatch([job({ testState: { phase: 'ended' } }) as any])[0]).not.toHaveProperty('inTest')
+    expect(bulkRowsFromBatch([job({ status: 'cancelled', testState: { phase: 'running' } }) as any])[0]).not.toHaveProperty('inTest')
+  })
+
+  it('shows a test chip instead of its progress', () => {
+    const flags = { isDone: false, isFailed: false, isCancelled: false, isQueued: false, isPaused: false }
+    expect(bulkJobRowTone({ ...flags, inTest: true })).toMatchObject({ labelKey: 'testRowLabel', chipBg: 'info.main', chipColor: 'info.contrastText' })
+    expect(bulkJobRowTone(flags).labelKey).toBeUndefined()
+    expect(bulkJobRowTone({ ...flags, isDone: true }).labelKey).toBe('completed')
   })
 })

@@ -58,6 +58,13 @@ vi.mock("./finish", () => ({
   unmapTargetVolumes: vi.fn(async () => {}), verifyWarmDiskIntegrity: vi.fn(async () => {}),
 }))
 vi.mock("./zero-rate-target", () => ({ resolveWarmZeroRateLimit: vi.fn(async () => 100) }))
+// A manual hold runs the operator's test once, then is asked for the cutover;
+// the test itself has its own tests (migration-test.test.ts).
+vi.mock("./hold-wait", async importOriginal => {
+  const actual = await importOriginal<typeof import("./hold-wait")>()
+  return { ...actual, awaitNextHoldPass: vi.fn(async (_j: string, _c: unknown, _p: unknown, test?: { run: () => Promise<void> }) => { await test?.run(); return false }) }
+})
+vi.mock("./migration-test", () => ({ runMigrationTest: vi.fn(async () => {}) }))
 vi.mock("@/lib/vmware/soap", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/vmware/soap")>()
   // vmwareToolsState and the timeouts stay real.
@@ -97,6 +104,7 @@ import { queryAllChangedAreas, soapGetSnapshotChangeIds } from "@/lib/vmware/cbt
 import { ZERO_MODE_OFFLOAD_MARKER } from "./target-provision"
 import type { WarmMigrationConfig } from "./types"
 import { runWarmMigration } from "./warm-pipeline"
+import { runMigrationTest } from "./migration-test"
 
 // ── Fixtures ──
 
@@ -450,6 +458,34 @@ describe("runWarmMigration guest conversion at cutover (#1000)", () => {
     expect(attach().diskSlots).toEqual(["sata0", "scsi1", "sata1"])
     expect(attach()).not.toHaveProperty("nets")
     expect(messages()).toContain("Windows has no VirtIO driver yet and does not see scsi1, net0: install virtio-win-guest-tools.exe from the VirtIO ISO in the guest")
+  })
+})
+
+describe("runWarmMigration test of the waiting copy", () => {
+  const efiVm = () => ({ ...makeVmConfig(), firmware: "efi", nics: [{ label: "n", type: "Vmxnet3", macAddress: "00:50:56:00:00:09", network: "VM Network", pciSlot: 192 }] })
+  const attach = () => vi.mocked(attachDisksAndBoot).mock.calls[0][0]
+  const testTarget = () => vi.mocked(runMigrationTest).mock.calls[0][0]
+
+  it("hands the test the copied volumes and the hardware the cutover gives the guest", async () => {
+    vi.mocked(parseVmConfig).mockImplementation(() => efiVm() as any)
+
+    expect(await runToEnd("warm-test-1", makeConfig({ cutoverMode: "manual", convertGuest: true }))).toBeNull()
+
+    expect(runMigrationTest).toHaveBeenCalledTimes(1)
+    const t = testTarget()
+    expect(t).toMatchObject({ jobId: "warm-test-1", targetConnectionId: "conn-pve", node: "pve1", nodeIp: NODE })
+    expect(t.devices).toEqual(allocations().map(([storage, vol]) => `/dev/${storage}/${vol}`))
+    expect(t.conversion).toMatchObject({ name: "web01", firmware: "efi", isWindows: false, memoryMB: 4096 })
+    // what the cutover attached: the guest was not converted there (no v2v on this fake node)
+    expect(t.paramsFor(false).bootDiskSlot).toBe(attach().bootDiskSlot)
+    expect(t.paramsFor(false).diskSlots).toEqual(attach().diskSlots)
+    expect(t.paramsFor(true)).toMatchObject({ bootDiskSlot: "scsi0", diskSlots: ["scsi0", "scsi1", "scsi2"], nets: { net0: "virtio,bridge=vmbr0,macaddr=00:50:56:00:00:09" } })
+    expect(t.driveOpts?.(0, "scsi0", t.paramsFor(true))).toContain("iothread=1")
+  })
+
+  it("tests the guest as copied when the migration does not convert it", async () => {
+    expect(await runToEnd("warm-test-2", makeConfig({ cutoverMode: "manual", convertGuest: false }))).toBeNull()
+    expect(testTarget().conversion).toBeNull()
   })
 })
 

@@ -31,6 +31,15 @@ describe("POST /api/v1/migrations/[id]/cutover", () => {
     expect(h.prisma.migrationJob.update).not.toHaveBeenCalled()
   })
 
+  it("409s while a test of the waiting copy runs, and asks for nothing", async () => {
+    h.prisma.migrationJob.findFirst.mockResolvedValue({ id: "j1", status: "delta_sync", testState: { phase: "running", testVmid: 9001 } })
+    const res = await callRoute(POST, { params: { id: "j1" } })
+    expect(res.status).toBe(409)
+    expect((await readJson<any>(res)).error).toBe("Stop the running test before the cutover")
+    expect(signal).not.toHaveBeenCalled()
+    expect(h.prisma.migrationJob.update).not.toHaveBeenCalled()
+  })
+
   it("400s when the job is not in a cutover-eligible state", async () => {
     h.prisma.migrationJob.findFirst.mockResolvedValue({ id: "j1", status: "full_copy" })
     const res = await callRoute(POST, { params: { id: "j1" } })

@@ -170,15 +170,56 @@ export function nbdChainFunctions(): string {
  * its exit code in `<dir>/online-disks.exit`. It runs on the overlays once the
  * NBD chains are down, and before the exit code that says the run is over.
  */
-export function buildConversionScript(jobId: string, devices: string[], xml: string, netpin?: string, extraArgs: string[] = [], fileXml?: string, onlineDisks = false): string {
+/** Where the overlays of a migration test go instead of the working dir, and whether to repair a live Windows copy first. */
+export interface ConversionScriptOptions {
+  /**
+   * Overlay i is created at overlayPaths[i] (the test VM's disk) and linked as
+   * `$D/disk<i>.qcow2`, the name the NBD chains, the interface pinning and the
+   * data-disk script use.
+   */
+  overlayPaths?: string[]
+  /**
+   * ntfsfix on every NTFS filesystem of the overlays before the conversion. A
+   * copy of a Windows that runs is never cleanly unmounted, and virt-v2v
+   * refuses to write to it (lab 14/11); only ever on throwaway overlays.
+   */
+  repairNtfs?: boolean
+}
+
+const parentDirs = (paths: string[]) => [...new Set(paths.map(p => p.slice(0, p.lastIndexOf("/")) || "/"))]
+
+/**
+ * Shell lines that create a bare qcow2 overlay of each volume at its path,
+ * replacing a file left there: a migration test without conversion, or the
+ * clean overlays a test boots on after a conversion that was not used.
+ * Exits 90 at the first overlay that cannot be made.
+ */
+export function buildOverlayScript(devices: string[], overlayPaths: string[]): string {
+  const q = shellEscape
+  return [
+    ...parentDirs(overlayPaths).map(d => `mkdir -p ${q(d)} || exit 90`),
+    ...devices.map((dev, i) => `rm -f ${q(overlayPaths[i])}; qemu-img create -q -f qcow2 -b ${q(dev)} -F raw ${q(overlayPaths[i])} || exit 90`),
+  ].join("\n")
+}
+
+export function buildConversionScript(jobId: string, devices: string[], xml: string, netpin?: string, extraArgs: string[] = [], fileXml?: string, onlineDisks = false, opts: ConversionScriptOptions = {}): string {
   const dir = conversionDir(jobId)
   const q = shellEscape
   const b64 = (text: string) => q(Buffer.from(text).toString("base64"))
+  const paths = opts.overlayPaths
+  const overlayArg = (i: number) => paths ? q(paths[i]) : `"$D/disk${i}.qcow2"`
   const lines = [
     `D=${q(dir)}`,
     'rm -rf "$D"; mkdir -p "$D" || exit 1',
     `echo ${b64(xml)} | base64 -d > "$D/guest.xml"`,
-    ...devices.map((dev, i) => `qemu-img create -q -f qcow2 -b ${q(dev)} -F raw "$D/disk${i}.qcow2" > "$D/overlay.log" 2>&1 || { echo 90 > "$D/exit"; exit 0; }`),
+    ...(paths ? parentDirs(paths).map(d => `mkdir -p ${q(d)} || { echo 90 > "$D/exit"; exit 0; }`) : []),
+    ...devices.map((dev, i) => `qemu-img create -q -f qcow2 -b ${q(dev)} -F raw ${overlayArg(i)} > "$D/overlay.log" 2>&1 || { echo 90 > "$D/exit"; exit 0; }`),
+    ...(paths ? devices.map((_, i) => `ln -sfn ${q(paths[i])} "$D/disk${i}.qcow2"`) : []),
+    ...(opts.repairNtfs ? [
+      `G="LIBGUESTFS_BACKEND=direct guestfish --format=qcow2 ${devices.map((_, i) => `-a $D/disk${i}.qcow2`).join(" ")}"; `
+        + 'for p in $(env $G run : list-filesystems 2> "$D/ntfsfix.log" | awk -F": " \'$2=="ntfs"{print $1}\'); do '
+        + 'env $G run : ntfsfix "$p" clearbadsectors:false >> "$D/ntfsfix.log" 2>&1; echo "$p rc=$?" >> "$D/ntfsfix.log"; done',
+    ] : []),
     ...(netpin ? [
       `echo ${q(Buffer.from(netpin).toString("base64"))} | base64 -d > "$D/netpin.sh"`,
       `LIBGUESTFS_BACKEND=direct guestfish --format=qcow2 ${devices.map((_, i) => `-a "$D/disk${i}.qcow2"`).join(" ")} -i`
@@ -457,9 +498,37 @@ export function conversionNotAppliedMessage(r: GuestConversionResult): { msg: st
  * volumes are untouched; a commit that fails is returned with `volumesWritten`.
  * It returns only once nothing of the conversion runs on the node any more.
  */
-export async function convertGuestAtCutover(a: GuestConversionInput): Promise<GuestConversionResult> {
+export function convertGuestAtCutover(a: GuestConversionInput): Promise<GuestConversionResult> {
+  return runGuestConversion(a, { workId: a.jobId, commit: true })
+}
+
+/** Working directory of the conversion a migration test runs (logs and domain XML only). */
+export function testConversionDir(jobId: string): string {
+  return conversionDir(`${jobId}-test`)
+}
+
+/**
+ * The cutover's conversion, run on the overlays a migration test boots from
+ * (migration-test.ts), and never committed: the replicated volumes are only
+ * ever read. A Windows copy gets its NTFS repaired on the overlays first, as
+ * it was copied while running. The overlays stay in place, converted or not;
+ * the caller decides what the test VM boots from. Never throws, except
+ * "Migration cancelled".
+ */
+export function convertGuestForTest(a: GuestConversionInput & { overlayPaths: string[] }): Promise<GuestConversionResult> {
+  return runGuestConversion(a, { workId: `${a.jobId}-test`, commit: false, overlayPaths: a.overlayPaths, repairNtfs: a.isWindows })
+}
+
+interface ConversionMode extends ConversionScriptOptions {
+  /** Names the working directory (conversionDir). */
+  workId: string
+  /** Write the converted overlays back into the volumes (cutover), or leave them as the test's disks. */
+  commit: boolean
+}
+
+async function runGuestConversion(a: GuestConversionInput, mode: ConversionMode): Promise<GuestConversionResult> {
   const ssh = (cmd: string, timeoutMs?: number) => executeSSH(a.connectionId, a.nodeIp, cmd, timeoutMs)
-  const dir = conversionDir(a.jobId)
+  const dir = conversionDir(mode.workId)
   const q = shellEscape
   const pollMs = a.pollMs ?? POLL_MS
   const timeoutMs = a.timeoutMs ?? GUEST_CONVERSION_TIMEOUT_MS
@@ -509,10 +578,13 @@ export async function convertGuestAtCutover(a: GuestConversionInput): Promise<Gu
     const winIps = a.isWindows ? a.staticIps ?? [] : []
     // Windows Server keeps the data disks offline on their new controller (#1173 lab).
     const onlineDisks = a.isWindows && a.devices.length > 1
-    const script = buildConversionScript(a.jobId, a.devices, xml, netpin, windowsStaticIpArgs(winIps, targetMacs), viaNbd ? buildConversionXml(domain) : undefined, onlineDisks)
+    const script = buildConversionScript(mode.workId, a.devices, xml, netpin, windowsStaticIpArgs(winIps, targetMacs), viaNbd ? buildConversionXml(domain) : undefined, onlineDisks,
+      { overlayPaths: mode.overlayPaths, repairNtfs: mode.repairNtfs })
     const launchError = await launch(script)
     if (launchError) return { converted: false, reason: `virt-v2v-in-place could not be started: ${launchError}` }
-    await a.log(`Guest conversion: virt-v2v-in-place running on ${a.devices.length} disk(s) through overlays; the target volumes are only written if it succeeds`)
+    await a.log(mode.commit
+      ? `Guest conversion: virt-v2v-in-place running on ${a.devices.length} disk(s) through overlays; the target volumes are only written if it succeeds`
+      : `Guest conversion: virt-v2v-in-place running on the ${a.devices.length} test overlay(s); the replicated volumes are only read`)
 
     const t0 = Date.now()
     let exitCode: number | null = null
@@ -535,6 +607,11 @@ export async function convertGuestAtCutover(a: GuestConversionInput): Promise<Gu
     // The warning that became the reason is said once, in the caller's line.
     for (const w of outcome.warnings.filter(w => w !== outcome.reason)) await a.log(`Guest conversion: virt-v2v warning: ${w}`, "warn")
     if (!outcome.ok) return { converted: false, reason: outcome.reason || "conversion failed" }
+    if (!mode.commit) {
+      const notes = netpin ? await readNetworkPin(ssh, dir) : describeWindowsStaticIps(winIps, targetMacs)
+      if (onlineDisks) notes.push(await readOnlineDisks(ssh, dir, a.devices.length - 1))
+      return { converted: true, os: outcome.os, seconds, ...(notes.length > 0 && { notes }) }
+    }
 
     // The commit only copies the overlays' clusters into the volumes, but it is
     // the one step that writes them: it runs detached, and the guest does not

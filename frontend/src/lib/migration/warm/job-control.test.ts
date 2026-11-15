@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
-import { registerJob, unregisterJob, isCutoverRequested, isCancelled, isForcePowerOffRequested, updateJob, updateJobFields } from "./job-control"
+import { registerJob, unregisterJob, isCutoverRequested, isCancelled, cancelRemovesTarget, cancelWarmMigrationJob, requestCancelRemovesTarget, isForcePowerOffRequested, updateJob, updateJobFields, isTestRequested, isTestStopRequested, clearWarmTest, requestWarmTest, requestWarmTestStop, readJobTestRequest, updateJobTestFields } from "./job-control"
 import { OPERATOR_SIGNAL_POLL_MS } from "@/lib/migration/operator-signals"
 
 /**
@@ -56,11 +56,67 @@ describe("warm job control, signals recorded on the row", () => {
     expect(isForcePowerOffRequested(JOB)).toBe(true)
   })
 
+  it("picks up a test request and a test stop request recorded on the row", async () => {
+    await registerJob(JOB, prisma)
+    expect(isTestRequested(JOB)).toBe(false)
+    row.testRequest = { storage: "Dir-Images", maxSec: 3600 }
+    row.testStopRequestedAt = new Date()
+    await vi.advanceTimersByTimeAsync(OPERATOR_SIGNAL_POLL_MS)
+    expect(isTestRequested(JOB)).toBe(true)
+    expect(isTestStopRequested(JOB)).toBe(true)
+  })
+
+  it("records the end of a test even on a migration cancelled meanwhile", async () => {
+    await registerJob(JOB, prisma)
+    row.status = "cancelled"
+    await updateJobTestFields(JOB, { testState: { phase: "ended" }, testRequest: null })
+    expect(prisma.migrationJob.updateMany).toHaveBeenLastCalledWith({ where: { id: JOB }, data: { testState: { phase: "ended" }, testRequest: null } })
+    expect(row.status).toBe("cancelled")
+  })
+
+  it("reads the test request recorded on the row", async () => {
+    await registerJob(JOB, prisma)
+    row.testRequest = { storage: "Dir-Images", maxSec: 3600 }
+    await expect(readJobTestRequest(JOB)).resolves.toEqual({ storage: "Dir-Images", maxSec: 3600 })
+  })
+
+  it("drops both test signals on clearWarmTest and when the run ends", async () => {
+    await registerJob(JOB, prisma)
+    requestWarmTest(JOB)
+    requestWarmTestStop(JOB)
+    clearWarmTest(JOB)
+    expect(isTestRequested(JOB)).toBe(false)
+    expect(isTestStopRequested(JOB)).toBe(false)
+    requestWarmTest(JOB)
+    unregisterJob(JOB)
+    expect(isTestRequested(JOB)).toBe(false)
+  })
+
   it("treats a cancelled row as a cancellation, which is how the cancel route signals", async () => {
     await registerJob(JOB, prisma)
     row.status = "cancelled"
     await vi.advanceTimersByTimeAsync(OPERATOR_SIGNAL_POLL_MS)
     expect(isCancelled(JOB)).toBe(true)
+  })
+
+  it("removes the target only for a cancel that asked for it, from the row or in-process", async () => {
+    await registerJob(JOB, prisma)
+    row.status = "cancelled"
+    await vi.advanceTimersByTimeAsync(OPERATOR_SIGNAL_POLL_MS)
+    expect(cancelRemovesTarget(JOB)).toBe(false)
+    row.cancelRemovesTarget = true
+    await vi.advanceTimersByTimeAsync(OPERATOR_SIGNAL_POLL_MS)
+    expect(cancelRemovesTarget(JOB)).toBe(true)
+    unregisterJob(JOB)
+    expect(cancelRemovesTarget(JOB)).toBe(false)
+  })
+
+  it("never removes the target of a migration that was not cancelled", async () => {
+    await registerJob(JOB, prisma)
+    requestCancelRemovesTarget(JOB)
+    expect(cancelRemovesTarget(JOB)).toBe(false)
+    cancelWarmMigrationJob(JOB)
+    expect(cancelRemovesTarget(JOB)).toBe(true)
   })
 
   it("ignores a decision that was recorded before the run started", async () => {

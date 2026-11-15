@@ -33,6 +33,8 @@ type Props = {
   onResolve: (action: SuggestionAction, prefixLen?: number) => void
   /** The guest that carries an address, when the inventory knows it. */
   guestName?: (ip: string) => string | undefined
+  /** "Allow this flow only", when the flow is between two known guests: the names of the two guests and what opens the exception. */
+  exception?: { source: string; destination: string; open: () => void }
   onClose: () => void
 }
 
@@ -166,9 +168,10 @@ function RecentSection({ connectionId, suggestion: s, ends, srcZone, dstZone, gu
  * An observed flow in a centred dialog: what it is (verdict, service, hits, first and last time, the sample pair of
  * addresses), the traffic between its two zones over the last 24 hours, one bar per hour (the history the tab already
  * read: no new request), its latest occurrences with the guests they reached (the engine's memory, read when the
- * dialog opens, no Proxmox call), and the actions of a pending flow.
+ * dialog opens, no Proxmox call), and the actions of a pending flow, "allow this flow only" among them when the flow
+ * is between two known guests.
  */
-export default function ObservedFlowDialog({ connectionId, suggestion: s, zones, source, destination, busy, onResolve, guestName, onClose }: Readonly<Props>) {
+export default function ObservedFlowDialog({ connectionId, suggestion: s, zones, source, destination, busy, onResolve, guestName, exception, onClose }: Readonly<Props>) {
   const t = useTranslations('microsegPilot.observation')
   const format = useFormatter()
   const when = (iso: string) => formatWhen(format, iso)
@@ -215,7 +218,7 @@ export default function ObservedFlowDialog({ connectionId, suggestion: s, zones,
         {ends.guestZone && <RecentSection {...sectionProps} guestName={guestName} />}
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 1.5, gap: 1 }}>
-        {s.status === 'pending' && <FlowActions suggestion={s} source={source} destination={destination} busy={busy} onResolve={onResolve} variant='buttons' />}
+        {s.status === 'pending' && <FlowActions suggestion={s} source={source} destination={destination} busy={busy} onResolve={onResolve} variant='buttons' exception={exception} />}
         <Button onClick={onClose} sx={{ ml: 'auto' }}>{t('dialog.close')}</Button>
       </DialogActions>
     </Dialog>

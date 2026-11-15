@@ -166,6 +166,9 @@ export function cellEdgeData(view: CellView, target: string): PanelEdgeData {
     label: groupServices([...view.services, ...view.observed.map(s => flowService(s))]),
     flows: view.flows,
     observed: view.observed,
+    // The matrix is zone to zone: it holds no exception.
+    exceptions: [],
+    exceptionCount: 0,
   }
 }
 

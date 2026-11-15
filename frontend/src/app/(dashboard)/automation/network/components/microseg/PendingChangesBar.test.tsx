@@ -67,6 +67,22 @@ describe('diffParts', () => {
     expect(diffParts({ ...NO_DIFF, members: 1 }, tt, { ...draft, pending_members: [member(1, 'gone')] })).toEqual(['members(1)'])
   })
 
+  it('counts the exceptions added, changed, removed after the flows', () => {
+    const diff: PolicyDiff = {
+      ...NO_DIFF,
+      flows: new Map([['f1', 'added']]),
+      exceptions: new Map([['e1', 'added'], ['e2', 'added'], ['e3', 'changed'], ['e4', 'removed']]),
+      members: 1,
+    }
+    expect(diffParts(diff, t)).toEqual([
+      'microsegPilot.pending.flows.added:1',
+      'microsegPilot.pending.exceptions.added:2',
+      'microsegPilot.pending.exceptions.changed:1',
+      'microsegPilot.pending.exceptions.removed:1',
+      'microsegPilot.pending.members:1',
+    ])
+  })
+
   it('says nothing for an empty diff', () => {
     expect(diffParts(NO_DIFF, t)).toEqual([])
   })
@@ -97,6 +113,12 @@ describe('pending bar text', () => {
   it('goes on in lower case after a prefix', () => {
     renderWithProviders(<PendingChangesBar connectionId='c1' policy={policy} prefix='Micro-segmentation' />)
     expect(screen.getByText('Micro-segmentation: not applied yet: zone db added, 1 guest to db.')).toBeTruthy()
+  })
+
+  it('says the exceptions the draft adds', () => {
+    const exception = { id: 'e1', policy_id: 'p1', zone_id: 'z1', sources: [{ type: 'qemu', vmid: 101, name: 'app-01' }], destinations: [{ type: 'qemu', vmid: 100, name: 'db-01' }], services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'me' }
+    renderWithProviders(<PendingChangesBar connectionId='c1' policy={{ ...policy, exceptions: [exception] } as MicrosegPolicy} />)
+    expect(screen.getByText('Not applied yet: zone db added, 1 exception added, 1 guest to db.')).toBeTruthy()
   })
 
   const applying = { applying: true, zones: new Set<string>() }

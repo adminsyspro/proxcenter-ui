@@ -27,6 +27,7 @@ export const POLICY: MicrosegPolicy = {
     id: 'f1', policy_id: 'p1', src_zone_id: 'web', src_cidr: '', dst_zone_id: 'db', dst_cidr: '', proto: 'tcp', dport: '5432',
     comment: '', origin: 'manual', created_by: 'me',
   }],
+  exceptions: [],
   pending_members: [],
   last_revision: { id: 'r1', version: 6, author: 'me', created_at: '2026-11-02T09:00:00Z' },
   version: 7,

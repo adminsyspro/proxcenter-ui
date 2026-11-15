@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { countPendingChanges, diffCount, policyDiff } from './pendingChanges'
-import type { MicrosegFlow, MicrosegRevision, MicrosegZone, PendingMember } from './types'
+import type { MicrosegException, MicrosegFlow, MicrosegRevision, MicrosegZone, PendingMember } from './types'
 
 const zone = (id: string, over: Partial<MicrosegZone> = {}): MicrosegZone => ({
   id, policy_id: 'p', name: id, label: '', color: '#fff', enforcement: 'guest', vnet_id: '', state: 'disabled',
@@ -10,6 +10,10 @@ const zone = (id: string, over: Partial<MicrosegZone> = {}): MicrosegZone => ({
 const flow = (id: string, over: Partial<MicrosegFlow> = {}): MicrosegFlow => ({
   id, policy_id: 'p', src_zone_id: 'a', src_cidr: '', dst_zone_id: 'b', dst_cidr: '', proto: 'tcp', dport: '443',
   comment: '', origin: 'manual', created_by: 'me', ...over,
+})
+const exception = (id: string, over: Partial<MicrosegException> = {}): MicrosegException => ({
+  id, policy_id: 'p', zone_id: 'a', sources: [{ type: 'qemu', vmid: 101, name: 'app-01' }], destinations: [{ type: 'qemu', vmid: 201, name: 'db-01' }],
+  services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'me', ...over,
 })
 const member = (vmid: number): PendingMember => ({ id: `m${vmid}`, policy_id: 'p', node: 'pve1', type: 'qemu', vmid, zone_id: 'a' })
 const revision = (zones: MicrosegZone[], flows: MicrosegFlow[], tag_prefix = 'zone-'): MicrosegRevision => ({
@@ -101,5 +105,59 @@ describe('policyDiff', () => {
   it('notes a moved tag prefix', () => {
     const draft = { zones: [zone('a'), zone('b'), zone('gone')], flows: [flow('f1'), flow('f2'), flow('f3')], pending_members: [], tag_prefix: 'seg-' }
     expect(policyDiff(draft, last)!.prefix).toBe(true)
+  })
+})
+
+describe('exceptions', () => {
+  const zones = [zone('a'), zone('b')]
+  const withExceptions = (exceptions?: MicrosegException[]): MicrosegRevision => ({
+    id: 'r1', version: 3, author: 'me', created_at: '2026-11-02T10:00:00Z', snapshot: { tag_prefix: 'zone-', zones, flows: [], ...(exceptions ? { exceptions } : {}) },
+  })
+  const draft = (exceptions: MicrosegException[]) => ({ zones, flows: [], exceptions, pending_members: [] })
+
+  it('tells each exception added, changed (by value) or removed, by id, and counts one change each', () => {
+    const last = withExceptions([exception('e1'), exception('e2'), exception('e3')])
+    const now = draft([exception('e1'), exception('e2', { services: [{ proto: 'tcp', dport: '22' }] }), exception('e4')])
+    const diff = policyDiff(now, last)!
+    expect([...diff.exceptions]).toEqual([['e2', 'changed'], ['e4', 'added'], ['e3', 'removed']])
+    expect(diffCount(diff)).toBe(3)
+    expect(countPendingChanges(now, last)).toBe(3)
+  })
+
+  it('counts nothing for the exceptions the revision holds as they are', () => {
+    expect(countPendingChanges(draft([exception('e1')]), withExceptions([exception('e1')]))).toBe(0)
+  })
+
+  it('counts a guest added, a guest order, a recorded name, a zone or a comment that moved as a change', () => {
+    const last = withExceptions([exception('e1', { sources: [{ type: 'qemu', vmid: 101, name: 'app-01' }, { type: 'qemu', vmid: 102, name: 'app-02' }] })])
+    const count = (over: Partial<MicrosegException>) => countPendingChanges(draft([exception('e1', { sources: [{ type: 'qemu', vmid: 101, name: 'app-01' }, { type: 'qemu', vmid: 102, name: 'app-02' }], ...over })]), last)
+    expect(count({})).toBe(0)
+    expect(count({ sources: [{ type: 'qemu', vmid: 101, name: 'app-01' }] })).toBe(1)
+    expect(count({ sources: [{ type: 'qemu', vmid: 102, name: 'app-02' }, { type: 'qemu', vmid: 101, name: 'app-01' }] })).toBe(1)
+    expect(count({ sources: [{ type: 'qemu', vmid: 101, name: 'renamed' }, { type: 'qemu', vmid: 102, name: 'app-02' }] })).toBe(1)
+    expect(count({ destinations: [{ type: 'lxc', vmid: 201, name: 'db-01' }] })).toBe(1)
+    expect(count({ zone_id: 'b' })).toBe(1)
+    expect(count({ comment: 'backup' })).toBe(1)
+    // Who wrote it is not a change of the policy.
+    expect(count({ created_by: 'someone else' })).toBe(0)
+  })
+
+  it('reads a revision taken before the exceptions existed as holding none: every exception of the draft is added, without an error', () => {
+    const old = withExceptions()
+    expect(old.snapshot && 'exceptions' in old.snapshot).toBe(false)
+    const diff = policyDiff(draft([exception('e1'), exception('e2')]), old)!
+    expect([...diff.exceptions]).toEqual([['e1', 'added'], ['e2', 'added']])
+    expect(countPendingChanges(draft([]), old)).toBe(0)
+  })
+
+  it('reads a draft given without its exceptions as holding none', () => {
+    const diff = policyDiff({ zones, flows: [], pending_members: [] }, withExceptions([exception('e1')]))!
+    expect([...diff.exceptions]).toEqual([['e1', 'removed']])
+  })
+
+  it('counts every exception without a revision, and none when the revision came without its snapshot', () => {
+    expect(countPendingChanges(draft([exception('e1'), exception('e2')]), null)).toBe(4)
+    const bare: MicrosegRevision = { id: 'r1', version: 3, author: 'me', created_at: '2026-11-02T10:00:00Z' }
+    expect(countPendingChanges(draft([exception('e1')]), bare)).toBe(0)
   })
 })

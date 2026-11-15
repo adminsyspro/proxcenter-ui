@@ -14,6 +14,8 @@ type Props = {
   color?: string
   /** Applied to the outer wrapper: the flex sizing the caller needs (flex, minWidth, width). */
   sx?: SxProps<Theme>
+  /** Struck through: the text of a row that leaves at the next apply. On the text itself, an inline block takes no decoration from its wrapper. */
+  struck?: boolean
   tabIndex?: number
   'data-testid'?: string
   component?: ElementType
@@ -23,7 +25,7 @@ type Props = {
  * A text cut with an ellipsis whose full text shows as a tooltip, only when it is cut. The hover
  * area is the text itself (not the stretched flex item), so the tooltip sits on the text.
  */
-export default function TruncatedText({ text, title, variant, fontWeight, color, sx, tabIndex, component = 'span', ...rest }: Readonly<Props>) {
+export default function TruncatedText({ text, title, variant, fontWeight, color, sx, struck = false, tabIndex, component = 'span', ...rest }: Readonly<Props>) {
   const ref = useRef<HTMLElement | null>(null)
   const [open, setOpen] = useState(false)
 
@@ -47,7 +49,7 @@ export default function TruncatedText({ text, title, variant, fontWeight, color,
           color={color}
           tabIndex={tabIndex}
           data-testid={rest['data-testid']}
-          sx={{ display: 'inline-block', maxWidth: '100%', verticalAlign: 'bottom' }}
+          sx={{ display: 'inline-block', maxWidth: '100%', verticalAlign: 'bottom', ...(struck ? { textDecoration: 'line-through', opacity: 0.7 } : {}) }}
         >
           {text}
         </Typography>

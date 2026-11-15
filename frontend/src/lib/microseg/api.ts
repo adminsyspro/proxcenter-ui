@@ -4,7 +4,8 @@
 // Next relay at /api/v1/firewall/microseg/{connectionId}/<route>.
 
 import type {
-  CheckQueued, EgressState, FlowDirection, EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegEventList, MicrosegFlow, MicrosegPolicy,
+  CheckQueued, EgressState, ExceptionInput, FlowDirection, EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegEventList, MicrosegException,
+  MicrosegFlow, MicrosegPolicy,
   MicrosegRevision, MicrosegRun, MicrosegStatus, MicrosegSuggestion, MicrosegTraffic, MicrosegZone, PolicyUpdate,
   PreflightCheck, ResolveSuggestionsInput, SuggestionKind, SuggestionStatus, ZoneInput, ZoneState,
 } from './types'
@@ -156,6 +157,11 @@ export function forgetSharedReads() {
   sharedRunReads.clear()
 }
 
+/** The draft as the browser reads it: an orchestrator older than the exceptions does not send them, which reads as none. */
+function withExceptions(policy: MicrosegPolicy): MicrosegPolicy {
+  return policy && !Array.isArray(policy.exceptions) ? { ...policy, exceptions: [] } : policy
+}
+
 export function microsegBaseUrl(connId: string): string {
   return `/api/v1/firewall/microseg/${encodeURIComponent(connId)}`
 }
@@ -186,10 +192,10 @@ export function microsegApi(connId: string) {
   const id = encodeURIComponent
 
   return {
-    getPolicy: (signal?: AbortSignal) => call<MicrosegPolicy>('GET', 'policy', undefined, signal),
+    getPolicy: async (signal?: AbortSignal) => withExceptions(await call<MicrosegPolicy>('GET', 'policy', undefined, signal)),
     savePolicy: (body: PolicyUpdate) => call<{ version: number; policy: MicrosegPolicy['policy'] }>('PUT', 'policy', body),
     /** R66: the draft back to the last applied revision (empty without one); the answer is the new draft. */
-    discardDraft: (version: number) => call<MicrosegPolicy>('POST', 'policy/discard', { version }),
+    discardDraft: async (version: number) => withExceptions(await call<MicrosegPolicy>('POST', 'policy/discard', { version })),
 
     saveZone: ({ id: zoneId, ...body }: ZoneInput) =>
       call<{ version: number; zone: MicrosegZone }>(zoneId ? 'PUT' : 'POST', zoneId ? `zones/${id(zoneId)}` : 'zones', body),
@@ -203,6 +209,10 @@ export function microsegApi(connId: string) {
     saveFlow: ({ id: flowId, ...body }: FlowInput) =>
       call<{ version: number; flow: MicrosegFlow }>(flowId ? 'PUT' : 'POST', flowId ? `flows/${id(flowId)}` : 'flows', body),
     deleteFlow: (flowId: string, version: number) => call<{ version: number }>('DELETE', `flows/${id(flowId)}`, { version }),
+
+    saveException: ({ id: exceptionId, ...body }: ExceptionInput) =>
+      call<{ version: number; exception: MicrosegException }>(exceptionId ? 'PUT' : 'POST', exceptionId ? `exceptions/${id(exceptionId)}` : 'exceptions', body),
+    deleteException: (exceptionId: string, version: number) => call<{ version: number }>('DELETE', `exceptions/${id(exceptionId)}`, { version }),
 
     setMembers: (body: MembersInput) => call<{ version: number }>('POST', 'members', body),
 

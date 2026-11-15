@@ -68,7 +68,8 @@ export type SankeyLayout = {
   fill: boolean
 }
 
-const KIND_ORDER: Record<MapEdgeKind, number> = { unprotected: 0, blocked: 1, allowed: 2, outside: 3 }
+// The diagram draws no exception: its ribbons are zone to zone.
+const KIND_ORDER: Record<MapEdgeKind, number> = { unprotected: 0, blocked: 1, allowed: 2, exception: 2, outside: 3 }
 const round = (v: number) => Math.round(v * 10) / 10
 
 /** The width of an observed ribbon: the square root of its hits against the busiest one (at `maxW`), never under MIN_W. */

@@ -13304,6 +13304,11 @@
         "changed": "flow {flow} changed",
         "removed": "flow {flow} removed"
       },
+      "exceptions": {
+        "added": "{count, plural, one {# exception added} other {# exceptions added}}",
+        "changed": "{count, plural, one {# exception changed} other {# exceptions changed}}",
+        "removed": "{count, plural, one {# exception removed} other {# exceptions removed}}"
+      },
       "members": "{count, plural, one {# member change} other {# member changes}}",
       "membersTo": "{count, plural, one {# guest to {zone}} other {# guests to {zone}}}",
       "tagPrefix": "tag prefix changed",
@@ -13444,12 +13449,10 @@
         "gatewayTip": "Gateway {ip}"
       },
       "flow": {
-        "notApplied": "Not applied (outbound not controlled)",
         "learned": "Learned",
         "edit": "Edit flow",
         "delete": "Delete flow",
-        "createdBy": "Created by {user}",
-        "observed": "Outbound observed"
+        "createdBy": "Created by {user}"
       },
       "zoneDialog": {
         "createTitle": "New zone",
@@ -13479,7 +13482,7 @@
         "egressAllWarning": "IP filtering only: a service behind a domain name can change address.",
         "egressNeedsState": "The zone must be in observation or blocking",
         "tips": {
-          "isolate": "The VMs of this zone reach each other only through a declared flow. Unchecked, they talk to each other freely.",
+          "isolate": "The VMs of this zone reach each other only through a declared flow or an exception, which lets chosen VMs reach chosen members. Unchecked, they talk to each other freely.",
           "inbound": {
             "disabled": "The zone is not applied on Proxmox.",
             "observe": "Nothing is blocked: inbound traffic outside the policy is logged and offered as suggestions.",
@@ -13564,8 +13567,11 @@
       "delete": {
         "zoneTitle": "Delete zone {name}?",
         "flowTitle": "Delete this flow?",
+        "exceptionTitle": "Delete this exception?",
         "zoneBody": "The zone is removed from the draft. Nothing changes on Proxmox until you apply.",
+        "zoneBodyExceptions": "The zone and its {count, plural, one {# exception} other {# exceptions}} are removed from the draft. Nothing changes on Proxmox until you apply.",
         "flowBody": "The flow is removed from the draft. Nothing changes on Proxmox until you apply.",
+        "exceptionBody": "The exception is removed from the draft. Nothing changes on Proxmox until you apply.",
         "confirm": "Delete"
       },
       "enforce": {
@@ -13691,6 +13697,51 @@
         "confirm": {
           "block": "Block outbound",
           "reopen": "Reopen outbound"
+        }
+      },
+      "exceptions": {
+        "title": "VM exceptions",
+        "tip": "An exception lets chosen VMs reach chosen members of the zone on the services you name, whatever the flows and the isolation of the zone say.",
+        "add": "Add an exception",
+        "edit": "Edit exception",
+        "delete": "Delete exception",
+        "none": "No exception",
+        "createTitle": "New exception",
+        "sources": "Source VMs",
+        "destinations": "Destination VMs",
+        "services": "Allowed services",
+        "guestsPlaceholder": "Choose VMs",
+        "membersGroup": "Members of the zone",
+        "notMembersGroup": "Not members yet",
+        "count": "{count, plural, =0 {No exception} one {# exception} other {# exceptions}}",
+        "manage": "Manage",
+        "notActive": "{count, plural, one {# not active} other {# not active}}",
+        "notActiveHint": "Some exceptions are not active: open the list to see why.",
+        "filter": "Filter by VM, VMID or service",
+        "noMatch": "No exception matches the filter",
+        "columns": {
+          "services": "Services",
+          "status": "Status"
+        },
+        "alreadySource": "Already a source",
+        "alreadyDestination": "Already a destination",
+        "notInInventory": "Not in the inventory",
+        "ruleCount": "{count, plural, one {# rule} other {# rules}}",
+        "tooManyRules": "{count} rules, {max} at most: allow a flow of the zone instead",
+        "overlap": "A VM cannot be both a source and a destination: {names}",
+        "status": {
+          "inactive_zone": "Zone not applied",
+          "no_destination": "No destination in the zone",
+          "missing_guest": "VM not found",
+          "waiting_address": "Address unknown",
+          "renamed": "Name changed"
+        },
+        "statusHint": {
+          "inactive_zone": "The zone is neither observing nor blocking: nothing of this exception is written on Proxmox.",
+          "no_destination": "None of its destinations is a member of the zone: the exception allows nothing until one joins it.",
+          "missing_guest": "A source or a destination is no longer in the inventory.",
+          "waiting_address": "The inventory knows no address of a source yet: its rules may let nothing through until one is read.",
+          "renamed": "A VM no longer has the name it was recorded with: it was renamed, or its VMID was reused. Check that the exception still names the right VM."
         }
       }
     },
@@ -13953,6 +14004,9 @@
       "asCidr": "As CIDR",
       "acceptTip": "Creates the flow {from} → {to} {service} in the draft.",
       "cidrTip": "Creates the same flow with the source {ip} as an address range: needed when the source is an unknown IP.",
+      "exceptionOnly": "Allow this flow only",
+      "exceptionOnlyTip": "Opens an exception of the zone, filled in: only {from} reaches {to} on {service}, not the whole zone pair.",
+      "exceptionSaved": "Exception added to the draft: the next apply writes it.",
       "dismissTip": "Hides this suggestion for this pair.",
       "bulkLabel": "Selected flows",
       "bulkAcceptTip": "Creates in the draft the flow between the zones of each selected suggestion.",
@@ -14034,7 +14088,8 @@
         "allowed": "Allowed",
         "unprotected": "Unprotected",
         "blocked": "Blocked",
-        "draft": "Allowed, not applied yet"
+        "draft": "Allowed, not applied yet",
+        "exception": "Exception between VMs"
       },
       "node": {
         "members": "{count, plural, one {# member} other {# members}}",
@@ -14054,6 +14109,9 @@
         "guestPending": "Queued for the zone, applied with the next plan",
         "moreHint": "{count, plural, one {# more member} other {# more members}}: the zone panel lists them all",
         "moreUnzonedHint": "{count, plural, one {# more guest} other {# more guests}} in no zone: Drifts lists them all",
+        "morePveHint": "{count, plural, one {# more guest} other {# more guests}} on this node",
+        "guestZone": "Zone: {zone}",
+        "guestNoZone": "In no zone",
         "ipHint": "{ip}: an address in no zone and no guest that talked to this zone",
         "inside": "{count, plural, one {# observed flow} other {# observed flows}} inside the zone",
         "observed": "outbound observed",
@@ -14076,7 +14134,11 @@
         "countUnprotected": "{count, plural, one {# unprotected flow} other {# unprotected flows}}",
         "countBlocked": "{count, plural, one {# blocked flow} other {# blocked flows}}",
         "hitsTotal": "{count, plural, one {# log occurrence} other {# log occurrences}} in all",
-        "noCounter": "Allowed flows have no counter: Proxmox does not log what it lets through"
+        "noCounter": "Allowed flows have no counter: Proxmox does not log what it lets through",
+        "exception": "Exception: {services}",
+        "exceptionCount": "{count, plural, one {# exception} other {# exceptions}}",
+        "exceptionsBetween": "{count, plural, one {# exception} other {# exceptions}} between VMs of the two zones",
+        "pairsSampled": "Sample pairs kept by the engine:"
       },
       "panel": {
         "label": "Zone {name}",
@@ -14171,7 +14233,19 @@
         "guests": "Guest view",
         "guestsHint": "one zone and its guests, with what talks to them",
         "sankey": "Sankey diagram",
-        "sankeyHint": "the observed traffic as ribbons, wider with more hits"
+        "sankeyHint": "the observed traffic as ribbons, wider with more hits",
+        "nodes": "Nodes",
+        "nodesHint": "the guests on their Proxmox node, the observed flows and the exceptions from node to node (the allowed flows between zones stay in Groups)"
+      },
+      "pve": {
+        "aria": "Proxmox node {name}, {guests}",
+        "guests": "{count, plural, one {# guest} other {# guests}}",
+        "zoneShare": "Zone {zone}: {count, plural, one {# guest} other {# guests}}",
+        "unzonedShare": "No zone: {count, plural, one {# guest} other {# guests}}",
+        "inside": "{count, plural, one {# internal flow} other {# internal flows}}",
+        "insideHint": "Observed flows between two guests of this node: no line is drawn for them",
+        "unavailable": "Guest list unavailable",
+        "none": "No guest to draw: no zone has a member and no guest is running"
       },
       "matrix": {
         "label": "Flows between the zones: sources by destinations",
@@ -14427,6 +14501,7 @@
         "version": "Version {version}",
         "by": "by {author}",
         "counts": "{zones, plural, one {# zone} other {# zones}}, {flows, plural, one {# flow} other {# flows}}",
+        "countsWithExceptions": "{counts}, {exceptions, plural, one {# exception} other {# exceptions}}",
         "latest": "Latest",
         "restore": "Restore",
         "restoreTitle": "Restore version {version}?",
@@ -14803,7 +14878,10 @@
       "removalPending": "Removal pending (next apply)",
       "flowChanged": "changed",
       "flowChangedHint": "Changed in the draft: applies at the next apply",
-      "engineFlowRule": "The engine’s rule: edit it as its flow (menu or double-click)"
+      "engineFlowRule": "The engine’s rule: edit it as its flow (menu or double-click)",
+      "exceptionRule": "Exception: {source} → {destination} (edited in its zone)",
+      "exceptionRuleRemoved": "Exception: {source} → {destination}, removal pending (next apply)",
+      "knownZoneRule": "Zone {zone} is known: what an observed zone sends to it is not logged"
     },
     "discard": {
       "button": "Discard changes",

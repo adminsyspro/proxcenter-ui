@@ -1,22 +1,27 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import {
-  Autocomplete, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, IconButton, ListItemText,
+  Autocomplete, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, IconButton, ListItemText,
   Radio, RadioGroup, Stack, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import { zoneEgress, type EgressMode, type EgressState, type MicrosegFlow, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
+import { zoneEgress, type EgressMode, type EgressState, type MicrosegFlow, type MicrosegPolicy, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
 
 import { DialogErrorLine, FLUSH_TOGGLE_SX, FormRow, isVersionConflict, ONE_LINE_SX, useDialogAction } from './dialogParts'
-import { missingGatewayFlows, zoneStateChanges } from './useZoneEdits'
+import { draftException, exceptionDraft, exceptionsOfZone, exceptionStatus, shownExceptionStatus, type ExceptionDraft } from './exceptionModel'
+import { EXCEPTION_STATUS_COLOR } from './ExceptionLine'
+import ExceptionsTableDialog from './ExceptionsTableDialog'
+import { missingGatewayFlows, zoneStateChanges, type ExceptionCreated } from './useZoneEdits'
+import { useZoneGuests } from './useZoneGuests'
 import type { ZoneGate } from './zoneGate'
 import {
   DEFAULT_GATEWAY_SERVICES, GATEWAY_SERVICES, gatewayServicePorts, isGatewayService, typedServiceCandidates, typedServiceText, validateZoneForm, ZONE_COLORS,
   type GatewayService,
   type ZoneFormValues,
 } from './zoneForm'
+import { zoneMembers, type PolicyGuest, type ZoneMember } from './zoneModel'
 import ZoneStatesConfirm from './ZoneStatesConfirm'
 
 type Props = {
@@ -25,13 +30,18 @@ type Props = {
   /** For the readiness of a move to blocking. */
   connectionId: string
   readyAfterHours: number
-  /** Throws when the write fails: the dialog then keeps its input and shows the error. */
-  onSave: (values: ZoneFormValues) => Promise<void>
+  /**
+   * Throws when the write fails: the dialog then keeps its input and shows the error. `onExceptionCreated` is to be
+   * called for each new exception once it is written, even when a later step fails: the dialog gives it its id.
+   */
+  onSave: (values: ZoneFormValues, onExceptionCreated: ExceptionCreated) => Promise<void>
   onClose: () => void
   /** The pending changes of the draft: a state change applies the whole draft, so it is refused while there are some. */
   gate?: ZoneGate
   /** The flows of the draft: the services the zone already reaches on its gateway show as allowed. */
   flows?: MicrosegFlow[]
+  /** The draft: the exceptions of the zone, and its members (offered first as the destinations of an exception). Without it the zone shows none. */
+  policy?: MicrosegPolicy
 }
 
 const HELPER_SX = { ...ONE_LINE_SX, mx: 0 } as const
@@ -282,22 +292,70 @@ function EgressModeRow({ values, disabled, set }: { values: ZoneFormValues; disa
 }
 
 /**
+ * The exceptions of the zone on one row: how many it has, a mark when some are not active (the statuses the table
+ * says, so none that reads a guest list still unknown), and the button that opens their table.
+ */
+function ExceptionsRow({ values, guests, members, zoneState, guestsKnown, disabled, onManage }: {
+  values: ExceptionDraft[]
+  guests: PolicyGuest[]
+  members: ZoneMember[]
+  zoneState: ZoneState
+  guestsKnown: boolean
+  disabled: boolean
+  onManage: () => void
+}) {
+  const t = useTranslations('microsegPilot.policy.exceptions')
+  const issues = values.flatMap(e => shownExceptionStatus(exceptionStatus(draftException(e, ''), { state: zoneState }, members, guests), guestsKnown) ?? [])
+  // Amber as soon as one of them asks for a look, grey when the zone is only not applied.
+  const color = issues.some(s => EXCEPTION_STATUS_COLOR[s] === 'warning') ? 'warning' : 'default'
+  return (
+    <FormRow label={t('title')} tip={t('tip')}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%', minWidth: 0 }}>
+        <Typography variant='body2' data-testid='zone-exceptions-summary' sx={{ ...ONE_LINE_SX, flex: '0 1 auto', minWidth: 0 }}>{t('count', { count: values.length })}</Typography>
+        {issues.length > 0 && (
+          <Tooltip title={t('notActiveHint')}>
+            <Chip size='small' variant='outlined' color={color} data-testid='zone-exceptions-not-active' label={t('notActive', { count: issues.length })} sx={{ flexShrink: 0 }} />
+          </Tooltip>
+        )}
+        <Button size='small' variant='outlined' disabled={disabled} onClick={onManage} sx={{ height: 30, flexShrink: 0, whiteSpace: 'nowrap', ml: 'auto' }}>
+          {t('manage')}
+        </Button>
+      </Box>
+    </FormRow>
+  )
+}
+
+/**
  * Create or edit a zone: name (fixed once created), label, color from a small palette, isolation; for an existing zone
  * also its inbound and outbound states, applied at once with the whole draft after the zone is written (confirmed first,
- * refused while the draft had pending changes), and what its outbound filter covers.
+ * refused while the draft had pending changes), and what its outbound filter covers. Its exceptions are summed up on
+ * one row and edited in their own table dialog; they are written with the zone: the save gets the list and the ids of
+ * the stored ones that were removed.
  */
-export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave, onClose, gate, flows = [] }: Props) {
+export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave, onClose, gate, flows = [], policy }: Props) {
   const t = useTranslations()
   const editing = zone !== null
   const nameId = useId()
   const labelId = useId()
+  // The guests are read only for a dialog that edits exceptions (the list the tab already holds, no new request when warm).
+  const { guests, status: guestsStatus } = useZoneGuests(policy ? connectionId : null)
+  const members = useMemo(
+    () => (zone && policy ? zoneMembers(zone, policy.policy.tag_prefix, guests, policy.pending_members, policy.zones) : []),
+    [zone, policy, guests],
+  )
+  const [loaded] = useState(() => (zone && policy ? exceptionsOfZone(zone.id, policy.exceptions).map(exceptionDraft) : []))
+  // The stored exceptions the dialog has listed: the ones it opened with, and the ones a save of its own created
+  // before a later step failed. Only those, once removed from the list, are deleted.
+  const [listedIds, setListedIds] = useState(() => loaded.flatMap(e => (e.id ? [e.id] : [])))
   const [values, setValues] = useState<ZoneFormValues>({
     name: zone?.name ?? '', label: zone?.label ?? '', color: zone ? zone.color : ZONE_COLORS[0], isolate_members: zone?.isolate_members ?? false,
     state: zone?.state ?? 'disabled', egress_state: zone ? zoneEgress(zone) : 'off', egress_mode: zone?.egress_mode ?? 'local',
     // A zone without a gateway yet gets the three services ticked, to take as soon as the gateway is typed.
     gateway: zone?.gateway ?? '', gateway_services: zone?.gateway ? [] : [...DEFAULT_GATEWAY_SERVICES],
+    exceptions: loaded, removed_exceptions: [],
   })
   const [confirming, setConfirming] = useState(false)
+  const [managing, setManaging] = useState(false)
   // The gate as it was when the question was asked: once the dialog has written (its own changes make the draft
   // dirty), a retry must not be refused for them.
   const [frozenGate, setFrozenGate] = useState<ZoneGate | null>(null)
@@ -320,7 +378,14 @@ export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave
     setFrozenGate(prev => prev ?? gate ?? null)
     return run(async () => {
       try {
-        await onSave({ ...values, label: values.label.trim(), gateway: values.gateway.trim() })
+        const kept = new Set(values.exceptions.map(e => e.id))
+        const removed = listedIds.filter(id => !kept.has(id))
+        // A new exception written before a later step fails takes its id: the next try updates it instead of creating it again.
+        const adopt: ExceptionCreated = (draft, id) => {
+          setValues(prev => ({ ...prev, exceptions: prev.exceptions.map(e => (e === draft ? { ...e, id } : e)) }))
+          setListedIds(prev => [...prev, id])
+        }
+        await onSave({ ...values, label: values.label.trim(), gateway: values.gateway.trim(), removed_exceptions: removed }, adopt)
       } catch (e) {
         // The draft moved elsewhere: the next try is a new question, gated on the draft as it is then.
         if (isVersionConflict(e)) setFrozenGate(null)
@@ -373,6 +438,15 @@ export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave
               sx={TOGGLE_LABEL_SX}
             />
           </FormRow>
+          <ExceptionsRow
+            values={values.exceptions}
+            guests={guests}
+            members={members}
+            zoneState={values.state}
+            guestsKnown={guestsStatus === 'ready'}
+            disabled={busy}
+            onManage={() => setManaging(true)}
+          />
           <GatewayRows values={values} zoneId={zone?.id ?? null} flows={flows} disabled={busy} error={errors.gateway} set={set} />
           <Divider />
           {/* A new zone is created disabled: its states are changed once it exists. */}
@@ -387,6 +461,19 @@ export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave
           {editing ? t('microsegPilot.policy.zoneDialog.save') : t('microsegPilot.policy.zoneDialog.create')}
         </Button>
       </DialogActions>
+      {managing && (
+        <ExceptionsTableDialog
+          zoneName={values.name}
+          zoneColor={values.color}
+          values={values.exceptions}
+          guests={guests}
+          members={members}
+          zoneState={values.state}
+          guestsKnown={guestsStatus === 'ready'}
+          onChange={next => set('exceptions', next)}
+          onClose={() => setManaging(false)}
+        />
+      )}
       {confirming && zone && (
         <ZoneStatesConfirm
           connectionId={connectionId}

@@ -75,16 +75,19 @@ function memberParts(diff: PolicyDiff, draft: Draft | undefined, t: (key: string
 }
 
 /**
- * The parts of what is not applied yet: zones then flows added, changed, removed, the member changes, the tag prefix.
+ * The parts of what is not applied yet: zones, flows then exceptions added, changed, removed, the member changes, the
+ * tag prefix.
  * With the draft, the few things that change are named instead of counted: "zone lt04 changed", "flow web → db
  * PostgreSQL added", "1 guest to lt04".
  */
 export function diffParts(diff: PolicyDiff, t: (key: string, values?: Values) => string, draft?: Draft): string[] {
   const zones = tally(diff.zones)
   const flows = tally(diff.flows)
+  const exceptions = tally(diff.exceptions)
   const parts = [
     ...KINDS.filter(k => zones[k] > 0).map(k => zonePart(diff, k, zones[k], draft, t)),
     ...KINDS.filter(k => flows[k] > 0).map(k => flowPart(diff, k, flows[k], draft, t)),
+    ...KINDS.filter(k => exceptions[k] > 0).map(k => t(`microsegPilot.pending.exceptions.${k}`, { count: exceptions[k] })),
     ...memberParts(diff, draft, t),
   ]
   if (diff.prefix) parts.push(t('microsegPilot.pending.tagPrefix'))

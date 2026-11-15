@@ -31,12 +31,18 @@ export function edgeAria(t: EdgeT, names: MapNames, source: string, target: stri
   return t('aria', { from: names.end(source), to: names.end(target), services: edgeContent(t, d) })
 }
 
-/** What an edge carries, for its name: the count of an observed edge, the services of an allowed one. */
+/**
+ * What an edge carries, for its name: the count of an observed edge, the services of an allowed one or of an
+ * exception, and the count of the exceptions between two zones.
+ */
 function edgeContent(t: EdgeT, d: MapEdgeData): string {
   if (d.kind === 'unprotected') return t('countUnprotected', { count: d.count })
   if (d.kind === 'blocked') return t('countBlocked', { count: d.count })
-  return serviceTokensTitle(d.services)
+  return joinParts(d.services.length ? serviceTokensTitle(d.services) : null, d.exceptionCount ? t('exceptionCount', { count: d.exceptionCount }) : null)
 }
+
+/** The parts of a label that are there, in their order: "SSH, PostgreSQL · 1.4K", "HTTPS · 2 exceptions". */
+export const joinParts = (...parts: Array<string | null>) => parts.filter(part => !!part).join(' · ')
 
 /**
  * "14 hits between zone web and zone db on tcp/22": the hits are the zone pair's, not the guests'. On an edge drawn
@@ -49,6 +55,22 @@ export function observedHits(t: EdgeT, names: MapNames, s: MicrosegSuggestion, u
   return t(sampled ? 'sourceHitsSampled' : 'sourceHits', { count: s.hits, from: s.src_ip || unknown, to, service })
 }
 
+/** The guests an edge of the node view stands for, pair by pair with their services (the first ones, then "+N more"). */
+function GuestPairs({ d }: { d: MapEdgeData }) {
+  const t = useTranslations('microsegPilot.overview.edge')
+  const pairs = d.guestPairs ?? []
+  if (!pairs.length) return null
+  return (
+    <>
+      {d.kind !== 'exception' && <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('pairsSampled')}</Typography>}
+      {pairs.slice(0, TOOLTIP_ROWS).map(p => (
+        <Typography key={p.key} variant='caption' sx={{ display: 'block' }}>{t('aria', { from: p.from, to: p.to, services: serviceTokensTitle(p.services) })}</Typography>
+      ))}
+      {pairs.length > TOOLTIP_ROWS && <Typography variant='caption' sx={{ display: 'block' }}>{t('more', { count: pairs.length - TOOLTIP_ROWS })}</Typography>}
+    </>
+  )
+}
+
 function EdgeDetails({ d, source, target }: { d: MapEdgeData; source: string; target: string }) {
   const t = useTranslations('microsegPilot.overview.edge')
   const to = useTranslations('microsegPilot.observation')
@@ -56,10 +78,12 @@ function EdgeDetails({ d, source, target }: { d: MapEdgeData; source: string; ta
   const format = useFormatter()
   const when = (iso: string) => formatWhen(format, iso)
   const sampled = isSampled(source, target)
-  if (d.kind === 'allowed' || d.kind === 'outside') {
+  if (d.kind === 'allowed' || d.kind === 'outside' || d.kind === 'exception') {
     return (
       <Box>
-        <Typography variant='caption' sx={{ display: 'block' }}>{t(d.kind, { services: serviceTokensTitle(d.services) })}</Typography>
+        {d.services.length > 0 && <Typography variant='caption' sx={{ display: 'block' }}>{t(d.kind, { services: serviceTokensTitle(d.services) })}</Typography>}
+        {d.exceptionCount > 0 && <Typography variant='caption' sx={{ display: 'block' }}>{t('exceptionsBetween', { count: d.exceptionCount })}</Typography>}
+        <GuestPairs d={d} />
         {d.draft && <Typography variant='caption' sx={{ display: 'block' }}>{t('draft')}</Typography>}
         <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('noCounter')}</Typography>
       </Box>
@@ -72,19 +96,20 @@ function EdgeDetails({ d, source, target }: { d: MapEdgeData; source: string; ta
       {sampled && (
         <Typography variant='caption' sx={{ display: 'block' }}>{t('example', { from: names.short(source), to: names.short(target) })}</Typography>
       )}
-      {d.observed.slice(0, TOOLTIP_ROWS).map(s => (
+      <GuestPairs d={d} />
+      {!d.guestPairs && d.observed.slice(0, TOOLTIP_ROWS).map(s => (
         <Typography key={s.id} variant='caption' sx={{ display: 'block' }}>
           {`${observedHits(t as EdgeT, names, s, to('unknownEndpoint'), sampled)} · ${to('detail.lastSeen', { time: when(s.last_seen) })}`}
         </Typography>
       ))}
-      {d.observed.length > TOOLTIP_ROWS && <Typography variant='caption' sx={{ display: 'block' }}>{t('more', { count: d.observed.length - TOOLTIP_ROWS })}</Typography>}
+      {!d.guestPairs && d.observed.length > TOOLTIP_ROWS && <Typography variant='caption' sx={{ display: 'block' }}>{t('more', { count: d.observed.length - TOOLTIP_ROWS })}</Typography>}
     </Box>
   )
 }
 
 /**
  * An edge of the zone map, drawn from the shape the graph computed (React Flow's handle positions are not used):
- * the arrow, the grouped services (names of the known ports) as an ellipsized label with the details in a tooltip, and, on an applied allowed
+ * the arrow, the grouped services (names of the known ports) as an ellipsized label with the details in a tooltip (an exception is dashed, label included), and, on an applied allowed
  * flow only, a particle that follows the edge (not drawn under prefers-reduced-motion). A dimmed edge (focus mode)
  * dims its label too.
  */
@@ -96,8 +121,13 @@ function FlowEdgeComponent({ id, source, target, style, markerEnd, data }: EdgeP
   const d = data as unknown as MapEdgeData & { dimmed?: boolean }
   const dim = d.dimmed ? 'microseg-dim' : undefined
   const format = useFormatter()
-  // An observed edge says how often its flows were logged after its services: "SSH, PostgreSQL · 1.4K".
-  const label = d.hits != null ? `${d.label} · ${format.number(d.hits, { notation: 'compact' })}` : d.label
+  // An observed edge says how often its flows were logged after its services ("SSH, PostgreSQL · 1.4K"), a link
+  // between two zones how many exceptions it stands for ("HTTPS · 2 exceptions").
+  const label = joinParts(
+    d.label,
+    d.hits != null ? format.number(d.hits, { notation: 'compact' }) : null,
+    d.exceptionCount ? t('exceptionCount', { count: d.exceptionCount }) : null,
+  )
 
   return (
     <>
@@ -129,7 +159,7 @@ function FlowEdgeComponent({ id, source, target, style, markerEnd, data }: EdgeP
               noWrap
               variant='caption'
               sx={{
-                display: 'block', px: 0.75, borderRadius: 1, border: '1px solid', borderColor: d.color, borderStyle: d.kind === 'unprotected' ? 'dashed' : 'solid',
+                display: 'block', px: 0.75, borderRadius: 1, border: '1px solid', borderColor: d.color, borderStyle: d.kind === 'unprotected' || d.kind === 'exception' ? 'dashed' : 'solid',
                 bgcolor: 'background.paper', color: 'text.primary', fontWeight: 600, lineHeight: `${d.label_h - 2}px`, fontSize: d.small ? '0.68rem' : undefined,
               }}
               data-testid={`flow-label-${id}`}

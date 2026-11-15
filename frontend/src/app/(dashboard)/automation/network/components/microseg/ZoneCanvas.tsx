@@ -11,10 +11,11 @@ import { useTranslations } from 'next-intl'
 
 import { EdgeClickContext, FlowEdge } from './FlowEdge'
 import { IpNode, ZoneBoxNode } from './MapBoxNodes'
+import { PveNode } from './PveNode'
 import { BoundaryNode, GuestNode, MapActionsContext, MoreNode, UnzonedNode, ZoneNode, type MapActions } from './ZoneNode'
-import { UNZONED_ID, type MapNodeData } from './zoneGraph'
+import { UNZONED_ID, isPveGroup, type MapNodeData } from './zoneGraph'
 
-const nodeTypes = { zone: ZoneNode, zoneBox: ZoneBoxNode, unzoned: UnzonedNode, guest: GuestNode, more: MoreNode, boundary: BoundaryNode, ip: IpNode }
+const nodeTypes = { zone: ZoneNode, zoneBox: ZoneBoxNode, unzoned: UnzonedNode, guest: GuestNode, more: MoreNode, boundary: BoundaryNode, ip: IpNode, pveNode: PveNode }
 const edgeTypes = { flow: FlowEdge }
 
 /** What the fit-to-view follows: the top-level nodes (circles and boxes) and their size, which grows with the guests. */
@@ -129,7 +130,7 @@ function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHov
     const d = node.data as unknown as MapNodeData
     if (d.kind === 'zone') onSelectZone(d.zone.id)
     else if (d.kind === 'guest') onSelectGuest(node.id)
-    else if (d.kind === 'more' && d.groupId !== UNZONED_ID) onSelectZone(d.groupId)
+    else if (d.kind === 'more' && d.groupId !== UNZONED_ID && !isPveGroup(d.groupId)) onSelectZone(d.groupId)
   }, [onSelectZone, onSelectGuest])
   const onEdgeClick: EdgeMouseHandler = useCallback((_event, edge) => onSelectEdge(edge.id), [onSelectEdge])
   const onNodeMouseEnter: NodeMouseHandler = useCallback((_event, node) => onHover(node.id), [onHover])

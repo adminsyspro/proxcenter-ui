@@ -623,6 +623,53 @@ describe('Firewalling: the zones edited in place (micro-segmentation draft)', ()
     expect(within(dialog).getByRole('textbox', { name: /Port/ })).toHaveValue('5433')
   })
 
+  it('the rule of an exception names its exception on its lock, and is struck once the exception left the draft', () => {
+    const exception = {
+      id: 'e1', policy_id: 'p1', zone_id: 'z-db', sources: [{ type: 'qemu', vmid: 101, name: 'app-01' }], destinations: [{ type: 'qemu', vmid: 102, name: 'db-01' }],
+      services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'x',
+    }
+    const group = { ...ZONE_GROUP, rules: [...ZONE_GROUP.rules!, { pos: 2, type: 'in', action: 'ACCEPT', enable: 1, source: '+pcz-_vm101', dest: '+pcz-_vm102', proto: 'tcp', dport: '5432', comment: '[pc-microseg] vm101 -> vm102' }] }
+    h.snapshot = { ...h.snapshot, exceptions: [exception] }
+    h.policy = { ...draftPolicy(), exceptions: [exception] }
+    const view = renderView(props({ securityGroups: [group] }))
+    openDb()
+    const row = ruleRow('[pc-microseg] vm101 -> vm102')
+    expect(within(row).getByLabelText('Exception: app-01 → db-01 (edited in its zone)')).toBeInTheDocument()
+    expect(within(row).queryByLabelText('Proxmox was changed by hand or the engine has not re-applied yet')).toBeNull()
+    view.unmount()
+
+    h.policy = { ...draftPolicy(true), exceptions: [] }
+    renderView(props({ securityGroups: [group] }))
+    openDb()
+    const gone = ruleRow('[pc-microseg] vm101 -> vm102')
+    expect(within(gone).getByLabelText('Exception: app-01 → db-01, removal pending (next apply)')).toBeInTheDocument()
+    expect(within(gone).getByText('[pc-microseg] vm101 -> vm102')).toHaveStyle({ textDecoration: 'line-through' })
+  })
+
+  it('the outbound rule of a flow, in the group of its source zone, is edited as that flow; the known zones say what they are', async () => {
+    const appGroup = {
+      group: 'pcz-app',
+      rules: [
+        { pos: 0, type: 'out', action: 'ACCEPT', enable: 1, dest: '+pcz-app', comment: '[pc-microseg] app -> app' },
+        { pos: 1, type: 'out', action: 'ACCEPT', enable: 1, dest: '+pcz-db', proto: 'tcp', dport: '5432', comment: '[pc-microseg] app -> db' },
+      ],
+    }
+    const knownGroup = { group: 'pcz-_known', rules: [{ pos: 0, type: 'out', action: 'ACCEPT', enable: 1, dest: '+pcz-db', comment: '[pc-microseg] db' }] }
+    renderView(props({ securityGroups: [ZONE_GROUP, appGroup, knownGroup] }))
+    fireEvent.click(within(screen.getByTestId('dfw-section-zone:pcz-app')).getByRole('button', { name: /Expand/ }))
+    fireEvent.click(within(screen.getByTestId('dfw-section-zone:pcz-_known')).getByRole('button', { name: /Expand/ }))
+    const byHand = 'Proxmox was changed by hand or the engine has not re-applied yet'
+    const outRule = ruleRow('[pc-microseg] app -> db')
+    expect(within(outRule).queryByLabelText(byHand)).toBeNull()
+    expect(within(outRule).getByLabelText('The engine’s rule: edit it as its flow (menu or double-click)')).toBeInTheDocument()
+    expect(within(ruleRow('[pc-microseg] app -> app')).getByLabelText('The members of the zone reach each other: a setting of the zone (isolate members off)')).toBeInTheDocument()
+    expect(within(ruleRow('[pc-microseg] db')).getByLabelText('Zone db is known: what an observed zone sends to it is not logged')).toBeInTheDocument()
+
+    fireEvent.click(within(outRule).getByRole('button', { name: 'Actions of the flow' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit the flow' }))
+    expect(within(await screen.findByRole('dialog')).getByRole('textbox', { name: /Port/ })).toHaveValue('5432')
+  })
+
   it('a flow deleted from the draft: its deployed row is struck, locked, without Edit or Delete', () => {
     h.policy = { ...draftPolicy(true), flows: [] }
     renderView()

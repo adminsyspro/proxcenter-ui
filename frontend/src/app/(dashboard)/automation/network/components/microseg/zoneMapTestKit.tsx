@@ -5,8 +5,9 @@
 import { afterEach, vi } from 'vitest'
 
 import { screen } from '@/__tests__/setup/renderWithProviders'
-import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, PendingMember } from '@/lib/microseg/types'
+import type { MicrosegException, MicrosegFlow, MicrosegSuggestion, MicrosegZone, PendingMember } from '@/lib/microseg/types'
 
+import MicrosegTab from './MicrosegTab'
 import { flow, mock, policy, renderTab, reply, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
 import { db, suggestion, web } from './policyTestKit'
 
@@ -23,22 +24,27 @@ export const wouldBlock = (id: string, over: Partial<MicrosegSuggestion> = {}): 
 export function setup(opts: {
   zones?: MicrosegZone[]
   flows?: MicrosegFlow[]
+  exceptions?: MicrosegException[]
   suggestions?: MicrosegSuggestion[] | 'error'
   vms?: unknown[]
   pending_members?: PendingMember[]
   pending_changes?: boolean
   last_revision?: typeof REVISION_HEAD | null
+  /** The nodes of the connection, as the firewall page hands them. */
+  nodesList?: string[]
+  nodeStatus?: Record<string, string>
 } = {}) {
   window.localStorage.setItem('microseg.subTab', 'overview')
   mock.routes['GET /policy'] = () => reply(200, policy({
-    zones: opts.zones ?? [web(), db()], flows: opts.flows ?? [], pending_members: opts.pending_members ?? [],
+    zones: opts.zones ?? [web(), db()], flows: opts.flows ?? [], exceptions: opts.exceptions ?? [], pending_members: opts.pending_members ?? [],
     pending_changes: opts.pending_changes ?? false, last_revision: opts.last_revision === undefined ? REVISION_HEAD : opts.last_revision,
   }))
   mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: opts.vms ?? [] } })
   mock.routes[SUGGESTIONS] = () => (opts.suggestions === 'error'
     ? reply(500, { code: 'ORCHESTRATOR_ERROR', error: 'boom' })
     : reply(200, { suggestions: opts.suggestions ?? [], limit: 200, offset: 0 }))
-  return renderTab()
+  if (!opts.nodesList) return renderTab()
+  return renderTab(<MicrosegTab connectionId='c1' firewall={{ clusterOptions: null, clusterRules: [], nodesList: opts.nodesList, nodeStatus: opts.nodeStatus, firewallMode: 'cluster', onComplete: vi.fn() }} />)
 }
 
 export const node = (id: string) => screen.findByTestId(`node-${id}`)

@@ -9,6 +9,7 @@ import { waitForRun } from '@/lib/microseg/useMicroseg'
 import { zoneEgress, type EgressState, type GuestRef, type MembersInput, type MicrosegFlow, type MicrosegPolicy, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
 
 import { InboundRunFailedError } from './dialogParts'
+import { draftBody, draftChanged, type ExceptionDraft } from './exceptionModel'
 import type { FlowSaveValues } from './FlowDialog'
 import type { TrackedRun } from './microsegTabTypes'
 import { usePendingChanges } from './usePendingChanges'
@@ -46,6 +47,9 @@ export function missingGatewayFlows(zoneId: string, gateway: string, services: r
   const unique = wanted.filter((f, i) => wanted.findIndex(o => o.proto === f.proto && o.dport === f.dport) === i)
   return unique.filter(f => !has(f.proto, f.dport)).map(f => ({ dst_cidr: dst, ...f }))
 }
+
+/** Told as soon as a new exception of a zone save is written: the draft it was (the object of the list) and the id it got. */
+export type ExceptionCreated = (draft: ExceptionDraft, id: string) => void
 
 export type ZoneEditsInput = {
   connectionId: string
@@ -93,13 +97,15 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
   }
 
   /**
-   * The zone is written first (with the outbound mode). Then the state changes the dialog asked for, each applied at
+   * The zone is written first (with the outbound mode), then its flows to the gateway and its exceptions, one write
+   * each with the version the write before returned. Then the state changes the dialog asked for, each applied at
    * once with the whole draft: the inbound state with the version the write returned; the outbound state after it,
    * once the inbound run has finished (with the version read again then), or at once when only the outbound changed.
    * A failed inbound run stops there (InboundRunFailedError): the outbound change is not sent. A zone set disabled
    * gets no outbound call: the backend turns its outbound off.
+   * `onExceptionCreated` lets the dialog give its new exceptions their ids, so that a save tried again updates them.
    */
-  const saveZone = (zone: MicrosegZone | null, values: ZoneFormValues) => write(async () => {
+  const saveZone = (zone: MicrosegZone | null, values: ZoneFormValues, onExceptionCreated?: ExceptionCreated) => write(async () => {
     const saved = await api.saveZone({
       id: zone?.id,
       version,
@@ -118,6 +124,22 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
     if (zoneId) {
       for (const f of missingGatewayFlows(zoneId, values.gateway.trim(), values.gateway_services, policy.flows)) {
         next = (await api.saveFlow({ version: next, src_zone_id: zoneId, comment: t('zoneDialog.gatewayFlowComment'), ...f })).version
+      }
+    }
+    if (zoneId) {
+      // The exceptions the dialog removed, then the ones it changed or added, in the order of its list.
+      // A save tried again after a later step failed finds its first writes done: an exception already deleted is
+      // not deleted again, one already created comes back with its id (`onExceptionCreated`) and is not created twice.
+      for (const id of values.removed_exceptions) {
+        if (!policy.exceptions.some(e => e.id === id)) continue
+        next = (await api.deleteException(id, next)).version
+      }
+      for (const draft of values.exceptions) {
+        const stored = draft.id ? policy.exceptions.find(e => e.id === draft.id) : undefined
+        if (stored && !draftChanged(draft, stored)) continue
+        const written = await api.saveException({ id: draft.id, version: next, zone_id: zoneId, ...draftBody(draft) })
+        next = written.version
+        if (!draft.id && written.exception?.id) onExceptionCreated?.(draft, written.exception.id)
       }
     }
     if (!zone) return
@@ -140,6 +162,11 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
   const saveFlow = (flow: MicrosegFlow | null, values: FlowSaveValues) => write(() => api.saveFlow({ id: flow?.id, version, ...values }))
 
   const deleteFlow = (flow: MicrosegFlow) => write(() => api.deleteFlow(flow.id, version))
+
+  /** One exception of a zone written alone (the zone panel): created without id, updated with one. */
+  const saveException = (zoneId: string, draft: ExceptionDraft) => write(() => api.saveException({ id: draft.id, version, zone_id: zoneId, ...draftBody(draft) }))
+
+  const deleteException = (exceptionId: string) => write(() => api.deleteException(exceptionId, version))
 
   /** Applied at once with the whole draft (UA30): the run is followed in the strip of the tab. */
   const setZoneState = (zone: MicrosegZone, state: ZoneState) => write(async () => {
@@ -188,6 +215,8 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
     deleteZone,
     saveFlow,
     deleteFlow,
+    saveException,
+    deleteException,
     setZoneState,
     setZoneEgressState,
     /** Reports a failure the panel shows in its alert (the one-click reopen has no dialog to show it). */

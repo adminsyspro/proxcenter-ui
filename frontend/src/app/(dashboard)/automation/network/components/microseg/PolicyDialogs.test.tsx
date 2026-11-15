@@ -8,7 +8,7 @@ import { within } from '@testing-library/react'
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 import type { MicrosegFlow } from '@/lib/microseg/types'
 
-import { calls, flow, mock, reply } from './microsegTestKit'
+import { calls, exception, flow, mock, reply } from './microsegTestKit'
 import { body, db, setup, installFreshMocks, web } from './policyTestKit'
 
 installFreshMocks()
@@ -111,6 +111,13 @@ describe('zone deletion', () => {
     await waitFor(() => expect(calls('DELETE /zones/zd')).toHaveLength(1))
     expect(body(calls('DELETE /zones/zd')[0][1] as RequestInit)).toEqual({ version: 3 })
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('says that the exception of the zone is deleted with it', async () => {
+    setup({ zones: [db()], exceptions: [exception('e1', { zone_id: 'zd' })] })
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete zone' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('The zone and its 1 exception are removed from the draft. Nothing changes on Proxmox until you apply.')).toBeTruthy()
   })
 
   it('shows the in-use message in the dialog when a flow still uses the zone', async () => {

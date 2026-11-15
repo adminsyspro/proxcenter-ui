@@ -291,7 +291,7 @@ export default function NetworkAutomationPage() {
               initialSubTab={microsegSubTab ?? undefined}
               initialObservation={observationFocus}
               targetVm={linkedVm}
-              firewall={{ clusterOptions, clusterRules, nodesList, firewallMode, onComplete: loadFirewallData }}
+              firewall={{ clusterOptions, clusterRules, nodesList, nodeStatus, firewallMode, onComplete: loadFirewallData }}
             />
           )}
 

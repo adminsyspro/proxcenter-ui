@@ -8,7 +8,7 @@ import type { MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/m
 import { sharedServiceNames } from '@/lib/network/serviceNames'
 
 import { destinationKey, groupByDestination, maxHits, type ObservationGroup } from './observationModel'
-import ObservationRow, { destinationName, OBSERVATION_COLUMNS } from './ObservationRow'
+import ObservationRow, { destinationName, OBSERVATION_COLUMNS, type ObservationRowProps } from './ObservationRow'
 
 const HEAD_SX = { py: 0.75, px: 1, whiteSpace: 'nowrap', fontWeight: 600 } as const
 const VISUALLY_HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' } as const
@@ -29,6 +29,8 @@ type Props = {
   onToggle: (id: string) => void
   onResolve: (s: MicrosegSuggestion, action: SuggestionAction, prefixLen?: number) => void
   onOpenDetails: (s: MicrosegSuggestion) => void
+  /** "Allow this flow only" for a flow between two known guests; undefined for the others, which do not get the action. */
+  exceptionOf?: (s: MicrosegSuggestion) => ObservationRowProps['exception']
   /** The first flow of the next page, when there is one: its destination group may go on there. */
   nextFlow?: MicrosegSuggestion
   /** The folded destinations (a zone id, or an address; '' = unknown destination), and the fold or unfold of one. */
@@ -66,7 +68,7 @@ function GroupHeader({ group, color, collapsed, onToggle }: { group: Observation
  * busiest first) that folds its flows (the panel keeps the folded zones). The grouping covers the page only:
  * the caption says so when the next page goes on with a zone.
  */
-export default function ObservationTable({ rows, zones, guestName, gatewayName, selected, busy, now, allChecked, someChecked, canSelect, onToggleAll, onToggle, onResolve, onOpenDetails, nextFlow, collapsed, onToggleGroup }: Props) {
+export default function ObservationTable({ rows, zones, guestName, gatewayName, selected, busy, now, allChecked, someChecked, canSelect, onToggleAll, onToggle, onResolve, onOpenDetails, exceptionOf, nextFlow, collapsed, onToggleGroup }: Props) {
   const t = useTranslations('microsegPilot.observation')
   const max = maxHits(rows)
 
@@ -129,6 +131,7 @@ export default function ObservationTable({ rows, zones, guestName, gatewayName, 
                     onResolve={(action, prefixLen) => onResolve(s, action, prefixLen)}
                     sharedServices={shared}
                     onOpenDetails={() => onOpenDetails(s)}
+                    exception={exceptionOf?.(s)}
                   />
                 ))}
               </Fragment>

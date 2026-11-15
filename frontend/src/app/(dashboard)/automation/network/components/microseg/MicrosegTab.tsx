@@ -159,7 +159,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
 
   const firstRun = !policy.last_revision && policy.zones.length === 0
   const contentProps: MicrosegSubTabProps = {
-    connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan, startRun, onOpenSettings, onOpenPreflight, targetVm, driftsZone, observationZone, observationFocus,
+    connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan, startRun, onOpenSettings, onOpenPreflight, targetVm, driftsZone, observationZone, observationFocus, pveNodes: firewall?.nodesList, pveNodeStatus: firewall?.nodeStatus,
   }
 
   return (

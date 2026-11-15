@@ -63,10 +63,12 @@ export type ObservationRowProps = {
   sharedServices?: ReadonlySet<string>
   /** Opens the flow in its dialog (details, traffic, recent occurrences). */
   onOpenDetails: () => void
+  /** "Allow this flow only", when the flow is between two known guests: their names and what opens the exception. */
+  exception?: { source: string; destination: string; open: () => void }
 }
 
 /** One observed flow, one row of the table; its details open in a centred dialog (ObservedFlowDialog). */
-export default function ObservationRow({ suggestion: s, zones, guestName, gatewayName, checked, busy, maxHits, now, onToggle, onResolve, onOpenDetails, sharedServices = NO_SHARED }: ObservationRowProps) {
+export default function ObservationRow({ suggestion: s, zones, guestName, gatewayName, checked, busy, maxHits, now, onToggle, onResolve, onOpenDetails, exception, sharedServices = NO_SHARED }: ObservationRowProps) {
   const t = useTranslations('microsegPilot.observation')
   const format = useFormatter()
 
@@ -130,7 +132,7 @@ export default function ObservationRow({ suggestion: s, zones, guestName, gatewa
         </TableCell>
         <TableCell sx={{ ...CELL_SX, textAlign: 'right' }}>
           {pending ? (
-            <FlowActions suggestion={s} source={source} destination={destination} busy={busy} onResolve={onResolve} />
+            <FlowActions suggestion={s} source={source} destination={destination} busy={busy} onResolve={onResolve} exception={exception} />
           ) : (
             <Chip size='small' variant='outlined' label={t(`status.${s.status}`)} />
           )}

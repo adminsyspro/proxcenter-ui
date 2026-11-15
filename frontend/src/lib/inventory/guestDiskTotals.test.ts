@@ -10,7 +10,14 @@ import {
   invalidateGuestDiskTotal,
   onlineNodeSet,
   peekGuestDiskTotal,
+  peekGuestNet,
+  peekGuestConfigFacts,
+  rememberGuestConfigFacts,
+  noteGuestNicFirewall,
+  peekGuestNicFirewall,
+  configVlans,
   readGuestDiskBytes,
+  rememberGuestConfig,
   resetGuestDiskTotals,
   type DiskTotalGuest,
 } from "./guestDiskTotals"
@@ -53,6 +60,52 @@ beforeEach(() => {
 
 afterEach(() => {
   resetGuestDiskTotals()
+})
+
+describe("peekGuestNicFirewall (UA44)", () => {
+  it("keeps the NIC firewall flag of the config read it already does, and knows nothing of a guest never read", async () => {
+    const table = {
+      ...configs,
+      "qemu/104": { ...configs["qemu/104"], net0: "virtio=AA:BB:CC:DD:EE:01,bridge=vmbr0,firewall=1" },
+      "lxc/200": { ...configs["lxc/200"], net0: "name=eth0,bridge=vmbr0,firewall=0" },
+    }
+    const fetchConfig = fetchFrom(table)
+    await attachGuestDiskTotals(null, CONN, guests(), { onlineNodes: ONLINE, fetchConfig, now })
+
+    expect(fetchConfig).toHaveBeenCalledTimes(3)
+    expect(peekGuestNicFirewall(CONN, "qemu", 104)).toBe(true)
+    expect(peekGuestNicFirewall(CONN, "qemu", "9938")).toBe(false)
+    expect(peekGuestNicFirewall(CONN, "lxc", 200)).toBe(false)
+    expect(peekGuestNicFirewall(CONN, "qemu", 555)).toBeUndefined()
+  })
+
+  it("keeps the VLAN tags of the NICs from the same read", async () => {
+    const table = { ...configs, "qemu/104": { ...configs["qemu/104"], net0: "virtio=AA,bridge=vmbr0,tag=30,firewall=1", net1: "virtio=AB,bridge=vmbr1,tag=20" } }
+    await attachGuestDiskTotals(null, CONN, guests(), { onlineNodes: ONLINE, fetchConfig: fetchFrom(table), now })
+
+    expect(peekGuestNet(CONN, "qemu", 104)).toEqual({ nicFirewall: true, vlans: [20, 30] })
+    expect(peekGuestNet(CONN, "qemu", 555)).toBeUndefined()
+    expect(configVlans({ net0: "name=eth0,tag=7", ipconfig0: "tag=9", net1: 3 })).toEqual([7])
+  })
+
+  it("follows a NIC toggle made by ProxCenter, and leaves a guest without NIC unfiltered", async () => {
+    const table = { ...configs, "qemu/104": { ...configs["qemu/104"], net0: "virtio=AA,bridge=vmbr0" } }
+    await attachGuestDiskTotals(null, CONN, guests(), { onlineNodes: ONLINE, fetchConfig: fetchFrom(table), now })
+
+    noteGuestNicFirewall(CONN, "qemu", 104, true)
+    noteGuestNicFirewall(CONN, "lxc", 200, true)
+
+    expect(peekGuestNet(CONN, "qemu", 104)?.nicFirewall).toBe(true)
+    // lxc/200 has no netN: the toggle set nothing, it must not read as filtered.
+    expect(peekGuestNet(CONN, "lxc", 200)?.nicFirewall).toBe(false)
+  })
+
+  it("forgets the flag with the figure when ProxCenter changes the guest", async () => {
+    await attachGuestDiskTotals(null, CONN, guests(), { onlineNodes: ONLINE, fetchConfig: fetchFrom(), now })
+    invalidateGuestDiskTotal(CONN, "qemu", 104)
+
+    expect(peekGuestNicFirewall(CONN, "qemu", 104)).toBeUndefined()
+  })
 })
 
 describe("attachGuestDiskTotals (#938)", () => {
@@ -316,5 +369,86 @@ describe("readGuestDiskBytes (#938, vDC quotas)", () => {
 
     expect(pveFetchMock).toHaveBeenCalledWith({ id: "c" }, "/nodes/pve1/qemu/104/config")
     expect(bytes).toEqual([36 * G])
+  })
+})
+
+describe("rememberGuestConfig (UA46)", () => {
+  beforeEach(() => resetGuestDiskTotals())
+
+  it("keeps a config the firewall coverage read: NIC facts and disk total, so the inventory does not read it again", async () => {
+    const facts = rememberGuestConfig(CONN, "lxc", 300, { rootfs: "local:300/vm-300-disk-0.raw,size=8G", net0: "name=eth0,bridge=vmbr0,firewall=1,tag=40,type=veth" })
+
+    expect(facts).toEqual({ nicFirewall: true, vlans: [40] })
+    expect(peekGuestNet(CONN, "lxc", 300)).toEqual({ nicFirewall: true, vlans: [40] })
+    expect(peekGuestDiskTotal(CONN, "lxc", 300)).toBe(8 * G)
+
+    const fetchConfig = vi.fn(async () => ({}))
+    await attachGuestDiskTotals(null, CONN, [{ vmid: 300, type: "lxc", node: "pve1" }], { onlineNodes: ONLINE, fetchConfig })
+    expect(fetchConfig).not.toHaveBeenCalled()
+  })
+
+  it("lets a NIC toggle follow it", () => {
+    rememberGuestConfig(CONN, "lxc", 301, { rootfs: "local:301/vm-301-disk-0.raw,size=8G", net0: "name=eth0,bridge=vmbr0,type=veth" })
+    noteGuestNicFirewall(CONN, "lxc", 301, true)
+
+    expect(peekGuestNicFirewall(CONN, "lxc", 301)).toBe(true)
+  })
+
+  it("keeps nothing from an answer that is not a config", () => {
+    expect(rememberGuestConfig(CONN, "lxc", 302, null)).toBeNull()
+    expect(peekGuestNet(CONN, "lxc", 302)).toBeUndefined()
+  })
+})
+
+describe("attachGuestDiskTotals partial list (UA46)", () => {
+  beforeEach(() => resetGuestDiskTotals())
+
+  const fetchConfig = async (_node: string, type: "qemu" | "lxc", vmid: string) => ({
+    [type === "lxc" ? "rootfs" : "scsi0"]: `local:${vmid}/disk,size=1G`,
+    net0: "name=eth0,bridge=vmbr0,firewall=1",
+  })
+
+  it("keeps the cached configs of the guests a vDC session does not list", async () => {
+    await attachGuestDiskTotals(null, CONN, [{ vmid: 1, type: "lxc", node: "pve1" }, { vmid: 2, type: "lxc", node: "pve1" }], { onlineNodes: ONLINE, fetchConfig })
+
+    await attachGuestDiskTotals(null, CONN, [{ vmid: 1, type: "lxc", node: "pve1" }], { onlineNodes: ONLINE, fetchConfig, partial: true })
+
+    expect(peekGuestNet(CONN, "lxc", 2)).toEqual({ nicFirewall: true, vlans: [] })
+  })
+
+  it("still drops a guest gone from the complete list", async () => {
+    await attachGuestDiskTotals(null, CONN, [{ vmid: 1, type: "lxc", node: "pve1" }, { vmid: 2, type: "lxc", node: "pve1" }], { onlineNodes: ONLINE, fetchConfig })
+
+    await attachGuestDiskTotals(null, CONN, [{ vmid: 1, type: "lxc", node: "pve1" }], { onlineNodes: ONLINE, fetchConfig })
+
+    expect(peekGuestNet(CONN, "lxc", 2)).toBeUndefined()
+  })
+})
+
+describe("peekGuestConfigFacts (UA52, GET /api/v1/vms)", () => {
+  it("keeps the config fields of the inventory's own read, so GET /api/v1/vms reads no config of its own", async () => {
+    const table = { "qemu/104": { ...configs["qemu/104"], cores: "4", agent: "1", ipconfig0: "ip=10.0.0.4/24", description: "db" } }
+    await attachGuestDiskTotals(null, CONN, [guests()[0]], { onlineNodes: ONLINE, fetchConfig: fetchFrom(table), now })
+
+    const cached = peekGuestConfigFacts(CONN, "qemu", 104, { maxdisk: 20 * G, now: clock })
+    expect(cached).toMatchObject({ diskTotal: 36 * G, readAt: clock, fresh: true })
+    expect(cached?.facts).toMatchObject({ cores: 4, agentEnabled: true, configIps: ["10.0.0.4"], description: "db" })
+  })
+
+  it("is no longer fresh past the TTL, nor when maxdisk moved, and is undefined for a guest never read", async () => {
+    await attachGuestDiskTotals(null, CONN, [guests()[0]], { onlineNodes: ONLINE, fetchConfig: fetchFrom(), now, random: () => 0 })
+
+    expect(peekGuestConfigFacts(CONN, "qemu", 104, { maxdisk: 20 * G, now: clock + DISK_TOTAL_TTL_MS })?.fresh).toBe(false)
+    expect(peekGuestConfigFacts(CONN, "qemu", 104, { maxdisk: 30 * G, now: clock })?.fresh).toBe(false)
+    expect(peekGuestConfigFacts(CONN, "qemu", 999)).toBeUndefined()
+  })
+
+  it("keeps a config GET /api/v1/vms read, with its NIC facts for the coverage, and nothing from a non-config", () => {
+    expect(rememberGuestConfigFacts(CONN, { vmid: 400, type: "lxc", node: "pve1" }, { rootfs: "local:400/d.raw,size=8G", net0: "name=eth0,ip=10.1.0.4/24,firewall=1" })).toBe(true)
+    expect(peekGuestNet(CONN, "lxc", 400)).toEqual({ nicFirewall: true, vlans: [] })
+    expect(peekGuestConfigFacts(CONN, "lxc", 400)?.facts.configIps).toEqual(["10.1.0.4"])
+
+    expect(rememberGuestConfigFacts(CONN, { vmid: 401, type: "lxc", node: "pve1" }, null)).toBe(false)
+    expect(rememberGuestConfigFacts(CONN, { vmid: 402, type: "node", node: "pve1" }, { rootfs: "x,size=1G" })).toBe(false)
   })
 })

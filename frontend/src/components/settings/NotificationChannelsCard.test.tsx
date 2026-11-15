@@ -590,3 +590,15 @@ describe('NotificationChannelsCard updates type', () => {
     expect((await screen.findAllByRole('option')).map(o => o.textContent)).toContain('Updates')
   })
 })
+
+describe('NotificationChannelsCard micro-segmentation type', () => {
+  it('offers the Micro-segmentation type without any feature', async () => {
+    mockFetch([channel()])
+    renderCard()
+
+    const dialog = await openEdit('Ops Slack')
+
+    fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Notification types' }))
+    expect((await screen.findAllByRole('option')).map(o => o.textContent)).toContain('Micro-segmentation')
+  })
+})

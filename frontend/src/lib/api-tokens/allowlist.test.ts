@@ -222,8 +222,6 @@ describe('shared canonical matcher', () => {
       'fw-node-rule-create': '/api/v1/firewall/nodes/c1/pve1/rules',
       'fw-node-rule-update': '/api/v1/firewall/nodes/c1/pve1/rules/2',
       'fw-node-rule-delete': '/api/v1/firewall/nodes/c1/pve1/rules/2',
-      'fw-microseg-base-generate': '/api/v1/firewall/microseg/c1/generate-base',
-      'fw-vm-isolate': '/api/v1/firewall/microseg/c1/vm/pve1/qemu/100/isolate',
       'fw-vm-get': '/api/v1/firewall/vms/c1/pve1/qemu/100',
       'fw-vm-rule-create': '/api/v1/firewall/vms/c1/pve1/qemu/100',
       'fw-vm-options-update': '/api/v1/firewall/vms/c1/pve1/qemu/100',
@@ -330,6 +328,11 @@ describe('method-aware matching', () => {
       expect(matchPublicApiPath(`${jobs}/${spelling}`, 'GET').ok, spelling).toBe(false)
     }
     expect(matchPublicApiPath(`${jobs}/runs/guests`, 'POST').entryId).toBe('backup-job-guests')
+  })
+
+  it('keeps the micro-segmentation relay closed to public API tokens, reads and the emergency stop alike', () => {
+    expect(matchPublicApiPath('/api/v1/firewall/microseg/c1/policy', 'GET').ok).toBe(false)
+    expect(matchPublicApiPath('/api/v1/firewall/microseg/c1/emergency-stop', 'POST').ok).toBe(false)
   })
 
   it('a PBS snapshot id carries its slashes encoded in its one segment only', () => {

@@ -613,6 +613,16 @@ return
               help: t('notifications.help.updates'),
               withSeverity: false
             })}
+            {renderCategoryRow({
+              typeKey: 'microseg',
+              enabled: settings.enable_microseg ?? false,
+              onToggle: e => setSettings(s => ({ ...s, enable_microseg: e.target.checked })),
+              icon: 'ri-shield-keyhole-line',
+              iconColor: '#8b5cf6',
+              label: t('notifications.microseg'),
+              help: t('notifications.help.microseg'),
+              withSeverity: false
+            })}
             {hasFeature(Features.SLA_MONITORING) && (
               <NotificationSlaRow
                 settings={settings}

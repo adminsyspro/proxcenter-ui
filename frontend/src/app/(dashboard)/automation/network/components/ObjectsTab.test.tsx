@@ -15,8 +15,7 @@
  * to show Aliases and IP Sets under separate menu entries, so both the
  * narrowed and the combined rendering are covered.
  *
- * `window.confirm` gates the deletions and jsdom does not implement it, so it
- * is stubbed per test rather than globally.
+ * The deletions are confirmed in a themed dialog, never a native confirm().
  *
  * No automatic RTL cleanup is configured in this repo, hence afterEach.
  */
@@ -44,6 +43,12 @@ vi.mock('@/lib/api/firewall', () => ({
 }))
 
 const { showToastMock } = vi.hoisted(() => ({ showToastMock: vi.fn() }))
+
+// The zones of the micro-segmentation policy give the pcz-<zone> objects their colour.
+const microseg = vi.hoisted(() => ({ zones: [] as Array<{ name: string; color: string }> }))
+vi.mock('@/lib/microseg/useMicroseg', () => ({
+  useMicrosegPolicy: () => ({ data: { zones: microseg.zones } }),
+}))
 
 vi.mock('@/contexts/ToastContext', () => ({
   useToast: () => ({ showToast: showToastMock, success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
@@ -89,6 +94,12 @@ function renderTab(overrides: Parameters<typeof props>[0] = {}) {
 const rowOf = (text: string) => screen.getAllByRole('row').find(r => within(r).queryByText(text))!
 
 const dialog = () => within(screen.getByRole('dialog'))
+
+const borderOf = (el: HTMLElement) => getComputedStyle(el).borderLeftColor
+const rgb = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgb(${n >> 16}, ${(n >> 8) & 255}, ${n & 255})`
+}
 
 describe('ObjectsTab', () => {
   afterEach(cleanup)
@@ -190,20 +201,25 @@ describe('ObjectsTab', () => {
     expect(dialog().getByLabelText('Description')).toHaveValue('')
   })
 
-  it('asks the browser to confirm before deleting an alias', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  it('confirms in a themed dialog before deleting an alias, never a native confirm', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm')
 
     renderTab({ view: 'aliases' })
 
     fireEvent.click(within(rowOf('net-mgmt')).getByRole('button', { name: 'Delete' }))
 
-    expect(confirmSpy).toHaveBeenCalledWith('Delete alias "net-mgmt"?')
+    const ask = await screen.findByRole('dialog')
+    expect(within(ask).getByText('Delete alias "net-mgmt"?')).toBeInTheDocument()
+    expect(within(ask).getByText(/Alias net-mgmt will be permanently deleted/)).toBeInTheDocument()
+    fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(api.deleteAlias).not.toHaveBeenCalled()
 
-    confirmSpy.mockReturnValue(true)
     fireEvent.click(within(rowOf('net-mgmt')).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(api.deleteAlias).toHaveBeenCalledWith(CONN, 'net-mgmt'))
+    expect(confirmSpy).not.toHaveBeenCalled()
     confirmSpy.mockRestore()
   })
 
@@ -293,8 +309,9 @@ describe('ObjectsTab', () => {
     await waitFor(() => expect(api.deleteIPSetEntry).toHaveBeenCalledWith(CONN, 'trusted', '1.2.3.4'))
   })
 
-  it('asks the browser to confirm before deleting an IP set', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  it('confirms in a themed dialog before deleting an IP set, and keeps it open on a failure', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm')
+    api.deleteIPSet.mockRejectedValueOnce(new Error('ipset in use'))
 
     renderTab({ view: 'ipsets' })
 
@@ -302,8 +319,15 @@ describe('ObjectsTab', () => {
 
     fireEvent.click(within(card.parentElement!.parentElement!).getByRole('button', { name: 'Delete' }))
 
-    expect(confirmSpy).toHaveBeenCalledWith('Delete IP Set "blocklist"?')
-    await waitFor(() => expect(api.deleteIPSet).toHaveBeenCalledWith(CONN, 'blocklist'))
+    const ask = await screen.findByRole('dialog')
+    expect(within(ask).getByText('Delete IP Set "blocklist"?')).toBeInTheDocument()
+    fireEvent.click(within(ask).getByRole('button', { name: 'Delete' }))
+    expect(await within(ask).findByText('ipset in use')).toBeInTheDocument()
+
+    fireEvent.click(within(ask).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(api.deleteIPSet).toHaveBeenCalledTimes(2))
+    expect(api.deleteIPSet).toHaveBeenLastCalledWith(CONN, 'blocklist')
+    expect(confirmSpy).not.toHaveBeenCalled()
     confirmSpy.mockRestore()
   })
 
@@ -318,5 +342,52 @@ describe('ObjectsTab', () => {
     renderTab({ selectedConnection: '' })
 
     for (const button of screen.getAllByRole('button', { name: 'New' })) expect(button).toBeDisabled()
+  })
+})
+
+describe('ObjectsTab load error', () => {
+  afterEach(cleanup)
+
+  it.each(['aliases', 'ipsets'] as const)('warns on top of the %s view when the firewall data could not be loaded, and retries', view => {
+    const p = renderTab({ view, loadError: 'HTTP 502' })
+
+    expect(screen.getByText(/Some firewall data could not be loaded.*HTTP 502/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(p.reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows nothing when it loaded', () => {
+    renderTab({ view: 'aliases' })
+
+    expect(screen.queryByText(/could not be loaded/)).not.toBeInTheDocument()
+  })
+
+  describe('colours', () => {
+    afterEach(() => { microseg.zones = [] })
+
+    it('gives each IP set a dot and a left border in its colour, and tints its entries', () => {
+      microseg.zones = [{ name: 'web', color: '#10b981' }]
+      renderTab({ ipsets: [{ name: 'pcz-web', members: [{ cidr: '10.0.0.1' }] }, { name: 'trusted', members: [{ cidr: '1.2.3.4' }] }] })
+
+      const zoneHeader = screen.getByTestId('ipset-header-pcz-web')
+      expect(borderOf(zoneHeader)).toBe(rgb('#10b981'))
+      expect(getComputedStyle(screen.getByTestId('ipset-dot-pcz-web')).backgroundColor).toBe(rgb('#10b981'))
+      const entry = screen.getByTestId('ipset-entry-pcz-web')
+      expect(getComputedStyle(entry).borderColor).toBe(rgb('#10b981'))
+      expect(getComputedStyle(entry).backgroundColor).toContain('0.08')
+      expect(within(entry).getByText('10.0.0.1')).toBeInTheDocument()
+
+      expect(borderOf(screen.getByTestId('ipset-header-trusted'))).not.toBe(borderOf(zoneHeader))
+      expect(within(screen.getByTestId('ipset-header-trusted')).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    })
+
+    it('colours the alias chips, a pcz alias with its zone', () => {
+      microseg.zones = [{ name: 'web', color: '#ef4444' }]
+      renderTab({ ipsets: [], aliases: [{ name: 'pcz-web', cidr: '10.0.0.0/24' }, { name: 'net-dmz', cidr: '10.98.0.0/16' }] })
+
+      expect(getComputedStyle(screen.getByTestId('alias-chip-pcz-web')).borderColor).toBe(rgb('#ef4444'))
+      expect(getComputedStyle(screen.getByTestId('alias-chip-net-dmz')).borderColor).not.toBe(rgb('#ef4444'))
+      expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(2)
+    })
   })
 })

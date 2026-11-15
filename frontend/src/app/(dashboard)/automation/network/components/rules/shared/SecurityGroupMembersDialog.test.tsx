@@ -36,6 +36,7 @@ vi.mock('@/contexts/ToastContext', () => ({
 import * as firewallAPI from '@/lib/api/firewall'
 
 import SecurityGroupMembersDialog from './SecurityGroupMembersDialog'
+import { groupMembers } from './groupMembership'
 
 Element.prototype.scrollIntoView ??= vi.fn()
 
@@ -63,18 +64,25 @@ function guest(vmid: number, overrides: Partial<VMFirewallInfo> = {}): VMFirewal
     optionsEnabled: true,
     nicFirewallEnabled: true,
     rules: [],
+    rulesLoaded: true,
+    stateUnknown: false,
     options: null,
     vlans: [],
+    tags: [],
     ...overrides,
   }
 }
 
 function props(overrides: Partial<ComponentProps<typeof SecurityGroupMembersDialog>> = {}) {
+  const guests = overrides.guests ?? []
   return {
     open: true,
     groupName: GROUP,
     connectionId: CONNECTION,
-    guests: [],
+    guests,
+    // Every guest's rules read here: the members are the whole membership.
+    membership: { ...groupMembers(GROUP, guests, null), known: true },
+    loadGuestRules: vi.fn().mockResolvedValue([]),
     guestsNotScanned: 0,
     onClose: vi.fn(),
     onChanged: vi.fn(),
@@ -312,5 +320,70 @@ describe('SecurityGroupMembersDialog', () => {
 
     await act(async () => finishDetach?.())
     await waitFor(() => expect(button).toBeEnabled())
+  })
+})
+
+describe('SecurityGroupMembersDialog with rules read on demand (UA44)', () => {
+  it('says the members are only those whose rules were read, when the list is not known', () => {
+    const read = guest(150, { rules: [groupRule(GROUP, 2)] })
+    const unread = guest(151, { rulesLoaded: false })
+
+    renderDialog({ guests: [read, unread], membership: groupMembers(GROUP, [read, unread], null) })
+
+    expect(screen.getByTestId('members-unknown')).toBeInTheDocument()
+    expect(screen.getByText('guest-150 (150)')).toBeInTheDocument()
+  })
+
+  it('reads the rules of a member before detaching it when they were not read', async () => {
+    const member = guest(152, { rulesLoaded: false, rules: [] })
+    const loadGuestRules = vi.fn().mockResolvedValue([groupRule(GROUP, 4)])
+
+    renderDialog({ guests: [member], membership: { members: [member], known: true }, loadGuestRules })
+    fireEvent.click(screen.getByRole('button', { name: 'Detach' }))
+
+    await waitFor(() => expect(deleteVMRule).toHaveBeenCalledWith(CONNECTION, 'pve1', 'qemu', 152, 4))
+    expect(loadGuestRules).toHaveBeenCalledTimes(1)
+  })
+
+  it('says a member carries no rule of the group instead of deleting anything', async () => {
+    const member = guest(153, { rulesLoaded: false })
+
+    renderDialog({ guests: [member], membership: { members: [member], known: true }, loadGuestRules: vi.fn().mockResolvedValue([]) })
+    fireEvent.click(screen.getByRole('button', { name: 'Detach' }))
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('guest-153 (153) carries no rule of sg-web', 'info'))
+    expect(deleteVMRule).not.toHaveBeenCalled()
+  })
+
+  it('reads the rules of a selected guest not read yet before attaching, and skips it when it carries the group', async () => {
+    const unreadMember = guest(160, { name: 'hidden-member', rulesLoaded: false })
+    const unreadOther = guest(161, { name: 'plain', rulesLoaded: false })
+    const loadGuestRules = vi.fn(async (g: VMFirewallInfo) => (g.vmid === 160 ? [groupRule(GROUP, 5)] : []))
+
+    const { dialogProps } = renderDialog({
+      guests: [unreadMember, unreadOther],
+      membership: { members: [], known: false },
+      loadGuestRules,
+    })
+    await chooseGuest('hidden-member (160)')
+    await chooseGuest('plain (161)')
+    fireEvent.click(screen.getByRole('button', { name: 'Attach' }))
+
+    await waitFor(() => expect(addVMRule).toHaveBeenCalledTimes(1))
+    expect(addVMRule).toHaveBeenCalledWith(CONNECTION, 'pve1', 'qemu', 161, { type: 'group', action: GROUP, enable: 1 })
+    expect(loadGuestRules).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('hidden-member (160) already carry sg-web: not attached again', 'info'))
+    expect(dialogProps.onChanged).toHaveBeenCalledWith([unreadOther])
+  })
+
+  it('pages a long member list, 25 at a time (UA47)', () => {
+    const many = Array.from({ length: 30 }, (_, i) => guest(300 + i, { name: `m-${300 + i}`, rules: [groupRule(GROUP, 0)] }))
+
+    renderDialog({ guests: many })
+
+    expect(screen.getAllByText(/^m-\d+ \(\d+\)$/)).toHaveLength(25)
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(screen.getAllByText(/^m-\d+ \(\d+\)$/)).toHaveLength(5)
+    expect(screen.getByText('Page 2 of 2')).toBeInTheDocument()
   })
 })

@@ -31,28 +31,36 @@ interface RuleFormDialogProps {
   onClose: () => void
   onSubmit: () => void
   isNew: boolean
-  scope: { type: 'cluster' | 'security-group'; name?: string }
+  scope: { type: 'cluster' | 'security-group' | 'host' | 'guest'; name?: string }
   rule: RuleFormData
   onRuleChange: (rule: RuleFormData) => void
   securityGroups: firewallAPI.SecurityGroup[]
   aliases: firewallAPI.Alias[]
   ipsets: firewallAPI.IPSet[]
+  /** The confirm button's label, over Add / Save (the Firewalling draft keeps the rule until it is published). */
+  submitLabel?: string
+  /** A first line above the fields (the Firewalling scope picker). */
+  header?: React.ReactNode
+  submitDisabled?: boolean
 }
 
 const scopeColors: Record<string, string> = {
   cluster: '#06b6d4',
   'security-group': '#8b5cf6',
+  host: '#f59e0b',
+  guest: '#3b82f6',
 }
 
 export default function RuleFormDialog({
-  open, onClose, onSubmit, isNew, scope, rule, onRuleChange, securityGroups, aliases, ipsets
+  open, onClose, onSubmit, isNew, scope, rule, onRuleChange, securityGroups, aliases, ipsets, submitLabel, header, submitDisabled = false
 }: RuleFormDialogProps) {
   const t = useTranslations()
 
   const isGroup = rule.type === 'group'
   const scopeColor = scopeColors[scope.type] || '#3b82f6'
-  const scopeLabel = scope.type === 'cluster' ? t('firewall.cluster') : t('firewall.sgPrefix', { name: scope.name })
-  const showGroupType = scope.type === 'cluster' // only cluster rules can be of type 'group'
+  const scopeLabel = scopeLabelOf(scope, t)
+  // A security group cannot hold a group rule (PVE groups do not nest); the cluster, a host and a guest can.
+  const showGroupType = scope.type !== 'security-group'
 
   const set = (field: keyof RuleFormData, value: string | number) => {
     onRuleChange({ ...rule, [field]: value })
@@ -70,6 +78,7 @@ export default function RuleFormDialog({
         </Box>
       </DialogTitle>
       <DialogContent sx={{ pt: '20px !important' }}>
+        {header}
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 4 }}>
             <FormControl fullWidth size="small">
@@ -158,10 +167,16 @@ export default function RuleFormDialog({
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose}>{t('common.cancel')}</Button>
-        <Button variant="contained" onClick={onSubmit} startIcon={<i className={isNew ? 'ri-add-line' : 'ri-check-line'} />}>
-          {isNew ? t('common.add') : t('common.save')}
+        <Button variant="contained" onClick={onSubmit} disabled={submitDisabled} startIcon={<i className={isNew ? 'ri-add-line' : 'ri-check-line'} />}>
+          {submitLabel ?? (isNew ? t('common.add') : t('common.save'))}
         </Button>
       </DialogActions>
     </Dialog>
   )
+}
+
+function scopeLabelOf(scope: RuleFormDialogProps['scope'], t: ReturnType<typeof useTranslations>): string {
+  if (scope.type === 'cluster') return t('firewall.cluster')
+  if (scope.type === 'security-group') return t('firewall.sgPrefix', { name: scope.name ?? '' })
+  return scope.name ?? ''
 }

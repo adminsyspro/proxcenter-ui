@@ -33,8 +33,9 @@ export async function GET(
     if (!scoped.ok) return scoped.response
 
     // Filtrer uniquement les VMs/CTs (pas les nodes, storage, etc.)
-    let guests = raw
-      .filter((r) => (r?.type === "qemu" || r?.type === "lxc") && scoped.visibility.has(r.type, r.vmid))
+    const allGuests = raw.filter((r) => r?.type === "qemu" || r?.type === "lxc")
+    let guests = allGuests
+      .filter((r) => scoped.visibility.has(r.type, r.vmid))
       .map(mapClusterResource)
 
     // #938: `diskTotal` (sum of every disk) for the cluster and node panels.
@@ -43,6 +44,9 @@ export async function GET(
     await attachGuestDiskTotals(conn, id, guests, {
       onlineNodes: onlineNodeSet(raw.filter((r) => r?.type === "node")),
       blocking: false,
+      // A vDC session lists its own guests only: the other guests' cached configs (disk totals, the NIC flags the
+      // firewall coverage reads) must not be dropped as if they were deleted (UA46).
+      partial: guests.length < allGuests.length,
     })
 
     // Apply RBAC scope filtering so scoped users only see their permitted VMs

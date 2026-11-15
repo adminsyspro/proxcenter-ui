@@ -1,0 +1,960 @@
+'use client'
+
+import { Fragment, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { useTranslations } from 'next-intl'
+
+import { Alert, Box, IconButton, LinearProgress, Link, Menu, MenuItem, Paper, Table, TableBody, TableContainer, Typography, useTheme } from '@mui/material'
+
+import * as firewallAPI from '@/lib/api/firewall'
+import type { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
+import { useToast } from '@/contexts/ToastContext'
+import FirewallLogDialog from '@/components/firewall/FirewallLogDialog'
+import {
+  addRule, cloneRules, currentEntries, enableGuestFirewall, entryStates, moveRule, moveRulesToScope, removeRules,
+  scopeDraftOf, setScopeOptions, shiftRules, toFields, updateRules,
+  type DraftEntry, type EntryState, type FirewallDraft,
+} from '@/lib/firewall/draft'
+import { ENGINE_GUEST_OPTIONS, isEngineComment, scopeKey, type DraftScope, type PublishOp, type PublishResult, type RuleFields, type ScopeOptions } from '@/lib/firewall/publishOps'
+import { useMicrosegEvents } from '@/lib/microseg/useMicrosegEvents'
+import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
+import { useLastRevisionSnapshot } from '@/lib/microseg/useLastRevision'
+import { NodeIcon, StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
+
+import MicrosegConfirmDialog from '../microseg/MicrosegConfirmDialog'
+import { useMicrosegWrite, WriteTip } from '../microseg/microsegAccess'
+import { useNow } from '../microseg/useNow'
+import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
+import RuleFormDialog, { type RuleFormData } from './RuleFormDialog'
+import GroupPager, { GROUP_PAGE_SIZE, pageCount, useGroupPages } from './shared/GroupPager'
+import { ZONE_GROUP_PREFIX } from './shared/groupMembership'
+import { DfwHead, DefaultDenyRow, EmptyRulesRow, RuleRow, SectionRow, WideRow, Badge, type RuleRowProps } from './DfwTableParts'
+import { ActionBar, StatusBar, ViewToolbar } from './DfwToolbar'
+import { MoveToSectionDialog, ScopeOptionsDialog, ScopePicker, type SectionTarget } from './DfwDialogs'
+import {
+  UNTAGGED, coveredCount, guestMatches, hitsIndex, ruleMatches, zoneDenyHits, showsCluster, showsGuests, showsHosts, vlanGroups, zoneSections,
+  type ScopeFilter, type ZoneSection,
+} from './dfwModel'
+import { useFirewallDraft } from './useFirewallDraft'
+import { useSectionRules } from './useSectionRules'
+import { EditZoneButton, ZoneAddFlow, ZoneRuleRow, ZoneStateControl, ZoneTools } from './ZoneTools'
+import { occurrences } from './zoneRuleMatch'
+
+type Rules = firewallAPI.FirewallRule[]
+
+export type FirewallingViewProps = {
+  connectionId: string
+  connectionName?: string
+  firewallMode: firewallAPI.FirewallMode
+  nodesList: string[]
+  /** The PVE status of each node (online, offline): the host sections show it on the Proxmox logo. */
+  nodeStatus?: Record<string, string>
+  clusterRules: Rules
+  setClusterRules: React.Dispatch<React.SetStateAction<Rules>>
+  clusterOptions: firewallAPI.ClusterOptions | null
+  setClusterOptions: React.Dispatch<React.SetStateAction<firewallAPI.ClusterOptions | null>>
+  hostRulesByNode: Record<string, Rules>
+  setHostRulesByNode: React.Dispatch<React.SetStateAction<Record<string, Rules>>>
+  /** The guests listed (filtered by the Dashboard link when it applies). */
+  guests: VMFirewallInfo[]
+  setVMFirewallData: React.Dispatch<React.SetStateAction<VMFirewallInfo[]>>
+  loadingVMRules: boolean
+  loadGuestRules: (vm: VMFirewallInfo) => Promise<Rules>
+  securityGroups: firewallAPI.SecurityGroup[]
+  aliases: firewallAPI.Alias[]
+  ipsets: firewallAPI.IPSet[]
+  initialScope: ScopeFilter
+  /** A filter set from outside (the Dashboard link): every VLAN group back to its first page. */
+  listFilter?: string | null
+  reloadFirewall: () => void
+  reloadGuests: () => Promise<void>
+}
+
+/** One section of the table: a scope of Proxmox, or a zone group of the engine (read-only). */
+type Section = {
+  key: string
+  kind: 'zone' | 'cluster' | 'host' | 'guest'
+  title: string
+  scope: DraftScope | null
+  /** The rules as read, null while not read. */
+  base: Rules | null
+  entries: DraftEntry[]
+  states: Map<string, EntryState>
+  managed: boolean
+  pending: number
+  appliedTo: string
+  zone?: ZoneSection
+  guest?: VMFirewallInfo
+  node?: string
+  /** The list read now is not the one the draft was made on. */
+  stale: boolean
+}
+
+/** The rule editor: on a section's rule, or a new rule (with the scope picker when opened from the toolbar). */
+type Editor = { sectionKey: string; entryId: string | null; form: RuleFormData; pick?: boolean }
+type Drag = { sectionKey: string; id: string; overId: string | null } | null
+
+const NEW_RULE: RuleFields = { type: 'in', action: 'ACCEPT', enable: 1, source: '', dest: '', proto: '', dport: '', sport: '', macro: '', iface: '', log: 'nolog', comment: '', 'icmp-type': '' }
+
+const selKey = (sectionKey: string, id: string) => `${sectionKey}|${id}`
+const splitSel = (k: string): [string, string] => {
+  const at = k.lastIndexOf('|')
+  return [k.slice(0, at), k.slice(at + 1)]
+}
+
+const guestScope = (vm: VMFirewallInfo): DraftScope => ({ kind: 'guest', node: vm.node, vmType: vm.type, vmid: vm.vmid })
+const digestOf = (rules: Rules | null) => rules?.find(r => typeof r.digest === 'string')?.digest ?? ''
+
+function buildSection(
+  base: Omit<Section, 'entries' | 'states' | 'pending' | 'stale' | 'managed'> & { managed?: boolean },
+  draft: FirewallDraft,
+  pendingOf: (scope: DraftScope) => number,
+): Section {
+  if (!base.scope) {
+    return { ...base, managed: true, entries: (base.base ?? []).map((r, i) => ({ id: `b${i}`, rule: toFields(r) })), states: new Map(), pending: 0, stale: false }
+  }
+  const sd = scopeDraftOf(draft, base.scope)
+  return {
+    ...base,
+    managed: base.managed ?? false,
+    entries: currentEntries(draft, base.scope, base.base),
+    states: entryStates(sd),
+    pending: pendingOf(base.scope),
+    stale: !!sd?.base && base.base !== null && digestOf(base.base) !== sd.baseDigest,
+  }
+}
+
+/** Applies what a publish wrote to the lists the page holds: no new read for what the server already re-read. */
+function applyPublished(result: PublishResult, ops: PublishOp[], p: FirewallingViewProps, setNodeOptions: (node: string, o: ScopeOptions) => void) {
+  for (const [key, value] of Object.entries(result.scopes)) {
+    if (!value.rules || key.includes('#')) continue
+    const rules = value.rules as Rules
+    if (key === 'cluster') p.setClusterRules(rules)
+    else if (key.startsWith('host:')) p.setHostRulesByNode(prev => ({ ...prev, [key.slice(5)]: rules }))
+    else p.setVMFirewallData(prev => prev.map(v => (`guest:${v.type}/${v.vmid}` === key ? { ...v, rules, rulesLoaded: true } : v)))
+  }
+  ops.slice(0, result.applied).forEach(op => {
+    if (op.kind === 'options.set') {
+      if (op.scope.kind === 'cluster') p.setClusterOptions(prev => ({ ...prev, ...op.options }))
+      else if (op.scope.kind === 'host') setNodeOptions(op.scope.node, op.options)
+      else {
+        const { vmid } = op.scope
+        p.setVMFirewallData(prev => prev.map(v => (v.vmid === vmid ? patchGuest(v, op.options) : v)))
+      }
+    } else if (op.kind === 'guest.enable') {
+      const { vmid } = op.scope
+      p.setVMFirewallData(prev => prev.map(v => (v.vmid === vmid ? { ...patchGuest(v, { enable: 1 }), nicFirewallEnabled: true, firewallEnabled: true } : v)))
+    }
+  })
+}
+
+/** The set with `key` added, or removed when it was there. */
+function toggled(set: Set<string>, key: string): Set<string> {
+  const next = new Set(set)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  return next
+}
+
+/** The fixed sections a scope filter shows: the zone groups and the cluster, then the hosts. */
+function fixedFor(scope: ScopeFilter, cluster: Section[], zones: Section[], hosts: Section[]): Section[] {
+  return [...(showsCluster(scope) ? [...zones, ...cluster] : []), ...(showsHosts(scope) ? hosts : [])]
+}
+
+/** The figures of the status bar: rules of the sections read, disabled ones, sections in the scope. */
+function statusFigures(fixed: Section[], loadedGuests: Section[], guestCount: number, guestsShown: boolean) {
+  const counted = [...fixed.filter(s => s.base !== null), ...loadedGuests]
+  return {
+    total: counted.reduce((n, s) => n + s.entries.length, 0),
+    disabled: counted.reduce((n, s) => n + s.entries.filter(e => e.rule.enable !== 1).length, 0),
+    partial: fixed.some(s => s.base === null) || (guestsShown && loadedGuests.length < guestCount),
+    sections: fixed.length + (guestsShown ? guestCount : 0),
+  }
+}
+
+/** The page of each VLAN group; a filter set from outside starts every group again from its first page. */
+function usePagesFor(listFilter: string | null) {
+  const pager = useGroupPages()
+  const [pagedFilter, setPagedFilter] = useState(listFilter)
+  if (pagedFilter !== listFilter) {
+    setPagedFilter(listFilter)
+    pager.reset()
+  }
+  return pager
+}
+
+/**
+ * The micro-segmentation side of the table: the deployed zones (mode, members) and the hits of their rules, from the
+ * orchestrator only (no Proxmox call), read only when the connection has zone groups.
+ */
+function useZones(connectionId: string, groups: firewallAPI.SecurityGroup[], guests: VMFirewallInfo[]) {
+  const hasZones = groups.some(g => g.group.startsWith(ZONE_GROUP_PREFIX))
+  const zoneConnection = hasZones ? connectionId : null
+  const { data: policy, reload: reloadPolicy } = useMicrosegPolicy(zoneConnection)
+  const { revision } = useLastRevisionSnapshot(zoneConnection, policy?.last_revision?.id)
+  const deployed = revision?.snapshot ?? null
+  const events = useMicrosegEvents(connectionId, { zone: '', verdict: '', q: '' }, hasZones)
+  const now = useNow(60_000, events.events)
+  const hits = useMemo(() => (hasZones ? hitsIndex(events.events, events.truncated, now) : null), [hasZones, events.events, events.truncated, now])
+  const zones = useMemo(() => zoneSections(groups, deployed, guests), [groups, deployed, guests])
+  return { deployed, hits, zones, policy, reloadPolicy }
+}
+
+function Notices({ error, onCloseError, notice, onCloseNotice, onDiscardScope }: {
+  error: AlertError | null
+  onCloseError: () => void
+  notice: string | null
+  onCloseNotice: () => void
+  /** The publish stopped on a scope still in the draft: its changes can be dropped from the alert. */
+  onDiscardScope?: () => void
+}) {
+  return (
+    <>
+      {error && <PublishErrorAlert error={error} onClose={onCloseError} onDiscardScope={onDiscardScope} />}
+      {notice && <Alert severity='info' onClose={onCloseNotice}>{notice}</Alert>}
+    </>
+  )
+}
+
+/** Why the last publish stopped, on one line. */
+type AlertError = { message: string; code?: string; kind?: string; applied?: number }
+
+/** The stops a discard of the section cures: the list or its rule is not the one the draft was made on. */
+const DISCARD_CURES = new Set(['DIGEST_CONFLICT', 'STALE_POSITION', 'NOT_OURS', 'MANAGED_RULE'])
+/** The stops a new publish cures: nothing wrong with the draft, the publish was cut. */
+const RETRY_CURES = new Set(['TIME_BUDGET', 'PVE_ERROR'])
+
+export const offersDiscard = (code: string | undefined): boolean => !!code && DISCARD_CURES.has(code)
+
+function alertText(error: AlertError, t: ReturnType<typeof useTranslations<'microsegPilot.dfw'>>): string {
+  if (error.code === 'DIGEST_CONFLICT') return error.kind === 'options.set' ? t('conflictOptions') : t('conflict')
+  if (error.code && RETRY_CURES.has(error.code)) return `${error.message} ${t('publishAgain')}`
+  return error.message
+}
+
+function PublishErrorAlert({ error, onClose, onDiscardScope }: { error: AlertError; onClose: () => void; onDiscardScope?: () => void }) {
+  const t = useTranslations('microsegPilot.dfw')
+  const head = error.applied === undefined ? '' : `${t('publishFailed', { applied: error.applied })} `
+  return (
+    <Alert severity='error' onClose={onClose} data-testid='dfw-publish-error' action={onDiscardScope ? <DiscardLink onClick={onDiscardScope} /> : undefined}>
+      {head}{alertText(error, t)}
+    </Alert>
+  )
+}
+
+function DiscardLink({ onClick, disabled = false }: { onClick: () => void; disabled?: boolean }) {
+  const t = useTranslations('microsegPilot.dfw')
+  return (
+    <Link component='button' type='button' underline='hover' disabled={disabled} onClick={onClick} sx={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
+      {t('discardSection')}
+    </Link>
+  )
+}
+
+function patchGuest(v: VMFirewallInfo, options: ScopeOptions): VMFirewallInfo {
+  const merged = { ...v.options, ...options }
+  const optionsEnabled = Number(merged.enable) === 1
+  return { ...v, options: merged, optionsEnabled, firewallEnabled: optionsEnabled && v.nicFirewallEnabled }
+}
+
+export default function FirewallingView(p: FirewallingViewProps) {
+  const t = useTranslations('microsegPilot.dfw')
+  const tg = useTranslations()
+  const theme = useTheme()
+  const { showToast } = useToast()
+  const { canWrite: mayWrite } = useMicrosegWrite()
+  const canWrite = mayWrite && !!p.connectionId
+
+  const fw = useFirewallDraft(p.connectionId)
+  // What the last publish did, shown until the draft changes again.
+  const [summary, setSummary] = useState<string | null>(null)
+  // Every change the user makes to the draft: the summary of the last publish is then no longer the state shown.
+  const edit = (change: (d: FirewallDraft) => FirewallDraft) => {
+    setSummary(null)
+    fw.update(change)
+  }
+  // Nothing changes in the draft while it is being published: the answer rebases it.
+  const canEdit = canWrite && !fw.busy
+  const lazy = useSectionRules({ connectionId: p.connectionId, hostRulesByNode: p.hostRulesByNode, setHostRulesByNode: p.setHostRulesByNode, loadGuestRules: p.loadGuestRules })
+
+  const [scope, setScope] = useState<ScopeFilter>(p.initialScope)
+  const [filter, setFilter] = useState('')
+  // Every section starts collapsed, the cluster's too.
+  const [open, setOpen] = useState<Set<string>>(() => new Set())
+  const [openVlans, setOpenVlans] = useState<Set<string>>(() => new Set())
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [editor, setEditor] = useState<Editor | null>(null)
+  const [drag, setDrag] = useState<Drag>(null)
+  const [dialog, setDialog] = useState<'move' | 'confirmPublish' | 'discard' | null>(null)
+  const [optionsFor, setOptionsFor] = useState<string | null>(null)
+  const [menuFor, setMenuFor] = useState<{ key: string; anchor: HTMLElement } | null>(null)
+  const [logVm, setLogVm] = useState<VMFirewallInfo | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [confirmCount, setConfirmCount] = useState(0)
+  // The scroll to a zone section asked by a guest's Edit zone: cancelled when the tab goes away first.
+  const scrollFrame = useRef<number | null>(null)
+  useEffect(() => () => { if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current) }, [])
+  const [refreshing, setRefreshing] = useState(false)
+  const pager = usePagesFor(p.listFilter ?? null)
+
+  // Micro-segmentation: the deployed zones (their mode, their members) and the engine's events, from the
+  // orchestrator only (no Proxmox call), read only when the connection has zone groups.
+  const { deployed, hits, zones, policy, reloadPolicy } = useZones(p.connectionId, p.securityGroups, p.guests)
+
+  const pendingOf = (s: DraftScope) => opsOn(fw.ops, s)
+
+  // ── Sections ──
+  const clusterSection = buildSection({
+    key: 'cluster', kind: 'cluster', title: t('section.cluster'), scope: { kind: 'cluster' }, base: p.clusterRules, appliedTo: t('appliedTo.cluster'),
+  }, fw.draft, pendingOf)
+  const zoneList = zones.map(z => buildSection({
+    key: `zone:${z.group}`, kind: 'zone', title: t('section.zone', { zone: z.zone }), scope: null, base: z.rules ?? [], zone: z,
+    appliedTo: z.members === null ? t('appliedTo.zoneUnknown', { zone: z.zone }) : t('appliedTo.zone', { count: z.members }),
+  }, fw.draft, pendingOf))
+  const hostList = p.nodesList.map(node => buildSection({
+    key: `host:${node}`, kind: 'host', title: t('section.host', { node }), scope: { kind: 'host', node }, base: p.hostRulesByNode[node] ?? null, node, appliedTo: node,
+  }, fw.draft, pendingOf))
+  const guestSection = (vm: VMFirewallInfo) => {
+    const s = guestScope(vm)
+    const ruleCarrier = vm.rulesLoaded ? vm.rules : null
+    return buildSection({ key: scopeKey(s), kind: 'guest', title: `${vm.name} (${vm.vmid})`, scope: s, base: ruleCarrier, guest: vm, appliedTo: vm.name }, fw.draft, pendingOf)
+  }
+  const standalone = p.firewallMode === 'standalone'
+  const clusterIfAny = standalone ? [] : [clusterSection]
+  const fixedSections: Section[] = [...clusterIfAny, ...zoneList, ...hostList]
+  const sectionByKey = (key: string): Section | null => {
+    const fixed = fixedSections.find(s => s.key === key)
+    if (fixed) return fixed
+    const vm = p.guests.find(g => scopeKey(guestScope(g)) === key)
+    return vm ? guestSection(vm) : null
+  }
+
+  /** The rules of the section are known: read, or held by the draft (restored after a reload). */
+  const hasRules = (s: Section) => s.base !== null || (!!s.scope && !!scopeDraftOf(fw.draft, s.scope)?.rules)
+
+  const q = filter.trim()
+  const visibleEntries = (s: Section) => s.entries.map((e, i) => ({ e, i })).filter(({ e }) => ruleMatches(e.rule, q))
+  const sectionShown = (s: Section) => !q || s.title.toLowerCase().includes(q.toLowerCase()) || visibleEntries(s).length > 0
+  const shownGuests = p.guests.filter(vm => guestMatches(vm, q) || (vm.rulesLoaded && vm.rules.some(r => ruleMatches(toFields(r), q))))
+  const groups = vlanGroups(shownGuests)
+
+  // ── Status bar figures ──
+  const guestsShown = showsGuests(scope)
+  const inScope = fixedFor(scope, clusterIfAny, zoneList, hostList)
+  const figures = statusFigures(inScope, guestsShown ? p.guests.filter(vm => vm.rulesLoaded).map(guestSection) : [], p.guests.length, guestsShown)
+  const covered = p.guests.length > 0 ? coveredCount(p.guests) : null
+
+  // ── Selection ──
+  const selection = useMemo(() => {
+    const bySection = new Map<string, string[]>()
+    for (const k of selected) {
+      const [sectionKey, id] = splitSel(k)
+      bySection.set(sectionKey, [...(bySection.get(sectionKey) ?? []), id])
+    }
+    return bySection
+  }, [selected])
+  const toggleSel = (sectionKey: string, ids: string[], on: boolean) => setSelected(prev => {
+    const next = new Set(prev)
+    for (const id of ids) {
+      if (on) next.add(selKey(sectionKey, id))
+      else next.delete(selKey(sectionKey, id))
+    }
+    return next
+  })
+
+  /** Applies a change to every section holding checked rules. */
+  const onSelection = (change: (d: FirewallDraft, s: Section & { scope: DraftScope }, ids: string[]) => FirewallDraft) => {
+    edit(d => [...selection.entries()].reduce((acc, [key, ids]) => {
+      const s = sectionByKey(key)
+      return s?.scope && !s.managed ? change(acc, s as Section & { scope: DraftScope }, ids) : acc
+    }, d))
+  }
+
+  // ── Opening sections (the rules of a host or a guest are read the first time it opens) ──
+  const toggleSection = (s: Section) => {
+    const opening = !open.has(s.key)
+    setOpen(prev => toggled(prev, s.key))
+    if (!opening) return
+    if (s.kind === 'host' && s.node) void lazy.openHost(s.node)
+    if (s.kind === 'guest' && s.guest) void lazy.openGuest(s.guest)
+  }
+
+  // ── Editor ──
+  const openEditor = (s: Section, entry: DraftEntry | null) => {
+    if (!canEdit || !s.scope || s.managed) return
+    setEditor({ sectionKey: s.key, entryId: entry?.id ?? null, form: { ...(entry?.rule ?? NEW_RULE) } })
+  }
+  const saveEditor = () => {
+    if (!editor) return
+    const s = sectionByKey(editor.sectionKey)
+    if (!s?.scope) return
+    const fields = toFields(editor.form)
+    const sc = s.scope
+    edit(d => (editor.entryId ? updateRules(d, sc, s.base, [editor.entryId], fields) : addRule(d, sc, s.base, fields)))
+    setOpen(prev => new Set(prev).add(s.key))
+    setEditor(null)
+  }
+
+  // ── Drag and drop, inside a section ──
+  const dragFor = (s: Section, entry: DraftEntry, index: number) => {
+    const engine = isEngineComment(entry.rule.comment)
+    const enabled = canEdit && !s.managed && !engine && !q
+    return {
+      enabled,
+      dragging: drag?.sectionKey === s.key && drag.id === entry.id,
+      over: drag?.sectionKey === s.key && drag.overId === entry.id && drag.id !== entry.id,
+      onDragStart: (e: DragEvent) => {
+        if (!enabled) return
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/plain', entry.id)
+        setDrag({ sectionKey: s.key, id: entry.id, overId: null })
+      },
+      onDragOver: (e: DragEvent) => {
+        // A rule of the engine is no drop target: nothing goes before or after it from here.
+        if (drag?.sectionKey !== s.key || engine) return
+        e.preventDefault()
+        if (drag.overId !== entry.id) setDrag({ ...drag, overId: entry.id })
+      },
+      onDrop: (e: DragEvent) => {
+        e.preventDefault()
+        if (drag?.sectionKey === s.key && drag.id !== entry.id && s.scope && !engine) {
+          const sc = s.scope
+          edit(d => moveRule(d, sc, s.base, drag.id, index))
+        }
+        setDrag(null)
+      },
+      onDragEnd: () => setDrag(null),
+    }
+  }
+
+  // ── Publish ──
+  const publish = async (confirmed: boolean) => {
+    const sentOps = fw.ops
+    const outcome = await fw.publish(confirmed)
+    if (outcome.status === 'confirm') {
+      setConfirmCount(outcome.count)
+      return setDialog('confirmPublish')
+    }
+    setDialog(null)
+    if (outcome.status === 'refused') return
+    applyPublished(outcome.result, sentOps, p, (node, o) => lazy.setNodeOptions(prev => ({ ...prev, [node]: { ...prev[node], ...o } })))
+    setSelected(new Set())
+    const { applied, failed } = outcome.result
+    setSummary(failed
+      ? t('summaryStopped', { applied, total: sentOps.length, kind: failed.kind, scope: failed.scope })
+      : t('summary', { applied, total: sentOps.length }))
+    if (outcome.status === 'published' && outcome.result.applied < sentOps.length) {
+      setNotice(t('publishedPart', { applied: outcome.result.applied, total: sentOps.length }))
+    } else if (outcome.status === 'published') {
+      setNotice(null)
+      showToast(t('published', { count: outcome.result.applied }), 'success')
+    }
+  }
+
+  const refresh = async () => {
+    setRefreshing(true)
+    try {
+      p.reloadFirewall()
+      await p.reloadGuests()
+      // The sections already read, and only them, one after the other.
+      for (const node of Object.keys(p.hostRulesByNode)) await lazy.readHost(node)
+      for (const vm of p.guests.filter(g => g.rulesLoaded && open.has(scopeKey(guestScope(g))))) await lazy.readGuest(vm)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  // ── Section targets (Move to, Add section) ──
+  const writableTargets: SectionTarget[] = [
+    ...clusterIfAny.map(s => ({ key: s.key, label: s.title, scope: s.scope!, loaded: true })),
+    ...hostList.map(s => ({ key: s.key, label: s.title, scope: s.scope!, loaded: hasRules(s) })),
+    ...p.guests.map(vm => ({ key: scopeKey(guestScope(vm)), label: `${vm.name} (${vm.vmid}) · ${vm.node}`, scope: guestScope(vm), loaded: vm.rulesLoaded || !!scopeDraftOf(fw.draft, guestScope(vm))?.rules })),
+  ]
+
+  /** The rules of a host or guest section read, the first time (one call; two for a host, its options after). */
+  const ensureRules = (s: Section | null) => {
+    if (!s || hasRules(s)) return
+    if (s.kind === 'host' && s.node) void lazy.openHost(s.node)
+    if (s.kind === 'guest' && s.guest) void lazy.openGuest(s.guest)
+  }
+  /** A new rule in a section (never a zone group): the section opens, its rules are read, the editor opens on it. */
+  const startAddRule = (s: Section, pick = false) => {
+    if (!canEdit || !s.scope || s.managed) return
+    setOpen(prev => new Set(prev).add(s.key))
+    ensureRules(s)
+    setEditor({ sectionKey: s.key, entryId: null, form: { ...NEW_RULE }, pick })
+  }
+  /** The scopes the toolbar's Add rule offers: the cluster, the hosts, the guests shown. */
+  const pickTargets: SectionTarget[] = [
+    ...writableTargets.filter(target => target.scope.kind !== 'guest'),
+    ...shownGuests.map(vm => writableTargets.find(target => target.key === scopeKey(guestScope(vm)))!).filter(Boolean),
+  ]
+  const pickScope = (key: string) => {
+    ensureRules(sectionByKey(key))
+    setEditor(prev => (prev ? { ...prev, sectionKey: key } : prev))
+  }
+
+  // ── Options of a scope ──
+  const sectionOrNull = (key: string | null | undefined) => (key ? sectionByKey(key) : null)
+  const optionsSection = sectionOrNull(optionsFor)
+  const currentOptions = (s: Section): ScopeOptions => {
+    const read: ScopeOptions = readOptions(s, p.clusterOptions, lazy.nodeOptions, lazy.guestOptions)
+    return { ...read, ...(s.scope ? scopeDraftOf(fw.draft, s.scope)?.options : undefined) }
+  }
+  const saveOptions = (s: Section, form: ScopeOptions) => {
+    if (!s.scope) return
+    const sc = s.scope
+    const read = readOptions(s, p.clusterOptions, lazy.nodeOptions, lazy.guestOptions)
+    edit(d => {
+      let next = setScopeOptions(d, sc, read, form)
+      if (s.guest && form.enable === 1 && !s.guest.nicFirewallEnabled) next = enableGuestFirewall(next, sc)
+      return next
+    })
+    setOptionsFor(null)
+  }
+
+  // ── Rendering ──
+  const hitsTitle = (s: Section) => (s.kind === 'zone' ? t('hitsOnDefault') : t('hitsNone'))
+  const denyTitle = () => (hits?.partial ? t('hitsPartial') : t('hitsZone'))
+
+  /** Drops the changes of one scope: the way out of a conflict (the scope starts again from the list Proxmox holds). */
+  const discardSection = (key: string) => {
+    const scopeOf = fw.draft.scopes[key]?.scope
+    if (scopeOf) edit(d => discardOf(d, scopeOf))
+    fw.clearError()
+  }
+
+  /** The alert's way out: drop the scope the publish stopped on, while the draft still holds it. */
+  const errorDiscard = () => {
+    const key = fw.error?.scope
+    return key && fw.draft.scopes[key] && offersDiscard(fw.error?.code) ? () => discardSection(key) : undefined
+  }
+
+  const patchRule = (s: Section, id: string, fields: Partial<RuleFields>) => {
+    const sc = s.scope
+    if (sc) edit(d => updateRules(d, sc, s.base, [id], fields))
+  }
+
+  const renderRules = (s: Section): ReactNode => {
+    if (!open.has(s.key)) return null
+    if (!hasRules(s)) {
+      const failed = lazy.failed.has(s.key)
+      return (
+        <WideRow testId={`dfw-reading-${s.key}`}>
+          {failed ? <Typography variant='body2' color='text.secondary'>{tg('networkPage.rulesOnDemand.readFailed')}</Typography> : <LinearProgress />}
+        </WideRow>
+      )
+    }
+    const rows = visibleEntries(s)
+    const deployedZone = s.zone?.state === 'enforce' || s.zone?.state === 'observe'
+    const deny = s.zone && deployedZone ? <DefaultDenyRow key={`${s.key}|deny`} enforce={s.zone.state === 'enforce'} appliedTo={s.appliedTo} hits={zoneDenyHits(hits, s.zone.zone)} hitsTitle={denyTitle()} /> : null
+    if (rows.length === 0) {
+      const add = s.scope && !q ? { label: t('addARule'), onClick: () => startAddRule(s), disabled: !canEdit } : undefined
+      return deny ?? <EmptyRulesRow text={q ? t('noMatch') : tg('networkPage.noRules')} action={add} />
+    }
+    // Identical rules of a zone group map one to one to identical flows, in order.
+    const ranks = s.zone ? occurrences(s.entries.map(x => x.rule)) : []
+    const ruleRows = rows.map(({ e, i }) => {
+      const managed = s.managed || isEngineComment(e.rule.comment)
+      const editable = canEdit && !managed
+      const patch = (fields: Partial<RuleFields>) => patchRule(s, e.id, fields)
+      const zoneGroup = s.kind === 'guest' && managed && e.rule.type === 'group' && e.rule.action.toLowerCase().startsWith(ZONE_GROUP_PREFIX) ? e.rule.action : null
+      const row: RuleRowProps = {
+        index: i + 1,
+        rule: e.rule,
+        state: s.states.get(e.id) ?? null,
+        managed,
+        editable,
+        selected: selected.has(selKey(s.key, e.id)),
+        appliedTo: s.appliedTo,
+        hits: null,
+        hitsTitle: hitsTitle(s),
+        drag: dragFor(s, e, i),
+        onSelect: on => toggleSel(s.key, [e.id], on),
+        onToggleEnable: () => patch({ enable: e.rule.enable === 1 ? 0 : 1 }),
+        onToggleLog: () => patch({ log: e.rule.log && e.rule.log !== 'nolog' ? 'nolog' : 'info' }),
+        onAction: action => patch({ action }),
+        onOpen: () => openEditor(s, e),
+        onLogs: s.guest ? () => setLogVm(s.guest!) : undefined,
+        actions: zoneGroup ? <EditZoneButton onClick={() => openZone(zoneGroup)} /> : undefined,
+      }
+      // A zone group's rule is edited as the flow it comes from (micro-segmentation draft).
+      return s.zone ? <ZoneRuleRow key={`${s.key}|${e.id}`} zoneName={s.zone.zone} occurrence={ranks[i]} {...row} /> : <RuleRow key={`${s.key}|${e.id}`} {...row} />
+    })
+    return deny ? [...ruleRows, deny] : ruleRows
+  }
+
+  const sectionBadges = (s: Section): ReactNode => (
+    <>
+      {s.zone && <ZoneStateControl zoneName={s.zone.zone} fallback={<ZoneStateBadge state={s.zone.state} />} />}
+      {s.managed && <Badge label={t('managed')} />}
+      {s.pending > 0 && <Badge label={t('unpublishedCount', { count: s.pending })} tone='warning' />}
+      {s.stale && <Badge label={t('changedInProxmox')} tone='error' title={t('changedInProxmoxHint')} />}
+      {s.stale && s.scope && <DiscardLink disabled={fw.busy} onClick={() => discardSection(scopeKey(s.scope!))} />}
+      {firewallOffBadge(s)}
+    </>
+  )
+
+  // The firewall of a host or guest that is off: a badge, and a link that turns it on at publish.
+  function firewallOffBadge(s: Section): ReactNode {
+    const sd = s.scope ? scopeDraftOf(fw.draft, s.scope) : undefined
+    const hostOff = s.kind === 'host' && s.node && s.node in lazy.nodeOptions && Number(lazy.nodeOptions[s.node]?.enable) !== 1
+    const guestOff = s.kind === 'guest' && s.guest && !s.guest.firewallEnabled && !s.guest.stateUnknown
+    if (!hostOff && !guestOff) return null
+    const willEnable = sd?.enableFirewall || sd?.options?.enable === 1
+    const offLabel = s.kind === 'guest' ? t('guestFirewallOff') : t('hostFirewallOff')
+    const sc = s.scope!
+    const turnOn = () => edit(d => (s.kind === 'guest' ? enableGuestFirewall(d, sc) : setScopeOptions(d, sc, lazy.nodeOptions[s.node!] ?? null, { enable: 1 })))
+    const undo = () => edit(d => (s.kind === 'guest' ? enableGuestFirewall(d, sc, false) : setScopeOptions(d, sc, lazy.nodeOptions[s.node!] ?? null, { enable: Number(lazy.nodeOptions[s.node!]?.enable) || 0 })))
+    return (
+      <>
+        <Badge label={willEnable ? t('firewallOnAtPublish') : offLabel} tone={willEnable ? 'warning' : 'default'} />
+        <WriteTip>
+          <Link component='button' type='button' underline='hover' disabled={!canEdit} onClick={willEnable ? undo : turnOn} sx={{ fontSize: 12, fontWeight: 600 }}>
+            {willEnable ? t('undo') : t('enableFirewall')}
+          </Link>
+        </WriteTip>
+      </>
+    )
+  }
+
+  const sectionRight = (s: Section): ReactNode => {
+    const count = hasRules(s) ? t('ruleCount', { count: s.entries.length }) : tg('networkPage.rulesOnDemand.chip')
+    return (
+      <>
+        <Typography component='span' noWrap sx={{ fontSize: 12 }}>{objectName(s, t)} · {count}</Typography>
+      </>
+    )
+  }
+
+  /** The rules of a section the user may check: none in a zone group, never the engine's rules of a guest. */
+  const selectableIds = (s: Section) => (s.managed ? [] : visibleEntries(s).filter(({ e }) => !isEngineComment(e.rule.comment)).map(({ e }) => e.id))
+  /**
+   * A checkbox only on a section whose rules are known and hold at least one the user may check; an empty cell
+   * otherwise (a zone group, an empty or unread section), as on a zone header. Disabled for a read-only user.
+   */
+  const sectionCheck = (s: Section) => {
+    const ids = selectableIds(s)
+    if (ids.length === 0) return undefined
+    const on = ids.filter(id => selected.has(selKey(s.key, id))).length
+    return { checked: on === ids.length, indeterminate: on > 0 && on < ids.length, disabled: !canEdit, onChange: (c: boolean) => toggleSel(s.key, ids, c) }
+  }
+
+  const sectionMenu = (s: Section): ReactNode => {
+    // A zone group: its Add rule is a new flow into the zone (micro-segmentation draft).
+    if (!s.scope) return s.zone ? <ZoneAddFlow zoneName={s.zone.zone} title={s.title} open={open.has(s.key)} /> : undefined
+    return (
+      <IconButton size='small' aria-label={t('sectionMenu', { name: s.title })} onClick={e => setMenuFor({ key: s.key, anchor: e.currentTarget })}>
+        <i className='ri-more-2-fill' style={{ fontSize: 16 }} />
+      </IconButton>
+    )
+  }
+  /** The zone section of a guest's zone group: opened, shown, scrolled to. */
+  const openZone = (group: string) => {
+    const key = `zone:${group}`
+    if (!showsCluster(scope)) setScope('all')
+    setOpen(prev => new Set(prev).add(key))
+    if (scrollFrame.current !== null) cancelAnimationFrame(scrollFrame.current)
+    scrollFrame.current = requestAnimationFrame(() => {
+      scrollFrame.current = null
+      document.querySelector(`[data-testid="dfw-section-${key}"]`)?.scrollIntoView?.({ block: 'center' })
+    })
+  }
+
+  const renderSection = (s: Section, indent = 0) => (
+    <Fragment key={s.key}>
+      <SectionRow
+        title={s.title}
+        icon={sectionIcon(s, theme.palette.text.secondary, p.nodeStatus)}
+        open={open.has(s.key)}
+        onToggle={() => toggleSection(s)}
+        badges={sectionBadges(s)}
+        right={sectionRight(s)}
+        check={sectionCheck(s)}
+        menu={sectionMenu(s)}
+        addRule={s.scope ? { onClick: () => startAddRule(s), disabled: !canEdit } : undefined}
+        indent={indent}
+        testId={`dfw-section-${s.key}`}
+      />
+      {renderRules(s)}
+    </Fragment>
+  )
+
+  const zoneTags = new Set((deployed?.zones ?? []).filter(z => z.state === 'observe' || z.state === 'enforce').map(z => `${deployed!.tag_prefix}${z.name}`.toLowerCase()))
+  const inZone = (vm: VMFirewallInfo) => vm.tags.some(tag => zoneTags.has(tag.toLowerCase()))
+  const protectedIn = (vms: VMFirewallInfo[]) => vms.filter(inZone).length
+  /** The engine owns the guest's switch, inbound policy and log level: its rules are there, or it is tagged into a zone. */
+  const engineOwnsOptions = (s: Section) => s.kind === 'guest' && (s.entries.some(e => isEngineComment(e.rule.comment)) || (!!s.guest && inZone(s.guest)))
+  /** A guest's options dialog opens on its rules read (one call the first time), so the engine's lock is known. */
+  const openOptions = (s: Section) => {
+    if (!s.guest) return setOptionsFor(s.key)
+    // Its rules (for the engine's lock) and its options as Proxmox holds them, one after the other, each read once.
+    const vm = s.guest
+    const key = s.key
+    void lazy.openGuest(vm).then(() => lazy.readGuestOptions(vm)).then(() => setOptionsFor(key))
+  }
+
+  const renderGroup = ([vlan, vms]: [string, VMFirewallInfo[]]) => {
+    const label = vlan === UNTAGGED ? tg('networkPage.untagged') : `VLAN ${vlan}`
+    const isOpen = openVlans.has(vlan) || !!q
+    const pages = pageCount(vms.length, pager.size)
+    const page = pager.pageOf(vlan, vms.length)
+    const prot = protectedIn(vms)
+    return (
+      <Fragment key={`vlan-${vlan}`}>
+        <WideRow tone='group' testId={`dfw-group-${vlan}`}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <IconButton size='small' aria-expanded={isOpen} aria-label={isOpen ? t('collapse', { name: label }) : t('expand', { name: label })}
+              onClick={() => setOpenVlans(prev => toggled(prev, vlan))}>
+              <i className={isOpen ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 18 }} />
+            </IconButton>
+            <i className={vlan === UNTAGGED ? 'ri-ethernet-line' : 'ri-git-branch-line'} style={{ fontSize: 16 }} />
+            <Typography component='span' sx={{ fontSize: 13, fontWeight: 700 }}>{label} · {tg('networkPage.vmPager.groupCount', { count: vms.length })}</Typography>
+            {prot > 0 && <Badge label={t('group.protected', { count: prot })} tone='success' />}
+            <Typography component='span' sx={{ ml: 'auto', fontSize: 12, color: 'text.secondary' }}>
+              {t('group.onOpen')}{pages > 1 ? ` · ${t('group.page', { page: page + 1, pages })}` : ''}
+            </Typography>
+          </Box>
+        </WideRow>
+        {isOpen && pager.slice(vlan, vms).map(vm => renderSection(guestSection(vm), 1))}
+        {isOpen && vms.length > GROUP_PAGE_SIZE && (
+          <WideRow><GroupPager count={vms.length} page={page} size={pager.size} onPage={n => pager.setPage(vlan, n)} onSize={pager.setSize} label={label} /></WideRow>
+        )}
+      </Fragment>
+    )
+  }
+
+  const shownFixed = inScope.filter(sectionShown)
+
+  // The head checkbox checks every rule shown in an open section that can be changed.
+  // The head checkbox checks every selectable rule of the sections shown (collapsed or not) whose rules are known.
+  const guestSections = guestsShown ? shownGuests.map(guestSection).filter(hasRules) : []
+  const visibleSelectable = [...shownFixed, ...guestSections].flatMap(s => selectableIds(s).map(id => selKey(s.key, id)))
+  const allVisibleChecked = visibleSelectable.length > 0 && visibleSelectable.every(k => selected.has(k))
+  const oneSection = selection.size === 1
+  const firstSelected = [...selection.keys()][0]
+  const addTarget = sectionOrNull(firstSelected) ?? clusterIfAny[0] ?? hostList[0]
+  const canAddRule = !!addTarget?.scope && !addTarget.managed
+  const menuSection = sectionOrNull(menuFor?.key)
+  const selectedCount = selected.size
+  const subtitle = [p.connectionName, t(standalone ? 'mode.standalone' : 'mode.cluster', { count: p.nodesList.length })].filter(Boolean).join(' · ')
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
+      <ViewToolbar
+        subtitle={subtitle}
+        publishedAt={fw.publishedAt}
+        count={fw.count}
+        busy={fw.busy}
+        canWrite={canWrite}
+        refreshing={refreshing}
+        onPublish={() => { void publish(false) }}
+        onDiscard={() => setDialog('discard')}
+        onRefresh={() => { void refresh() }}
+        menu={[
+          ...clusterIfAny.map(() => ({ label: t('clusterOptions'), onClick: () => setOptionsFor('cluster') })),
+          { label: tg('common.expandAll'), onClick: () => setOpen(new Set(['cluster', ...zoneList.map(z => z.key)])) },
+          { label: tg('common.collapseAll'), onClick: () => { setOpen(new Set()); setOpenVlans(new Set()) } },
+        ]}
+      />
+
+      <Notices error={fw.error} onCloseError={fw.clearError} notice={notice} onCloseNotice={() => setNotice(null)}
+        onDiscardScope={errorDiscard()} />
+
+      <StatusBar summary={summary} total={figures.total} totalPartial={figures.partial} unpublished={fw.count} disabled={figures.disabled} sections={figures.sections}
+        managed={inScope.filter(s => s.kind === 'zone').length} covered={covered} scope={scope} onScope={setScope} />
+
+      <ActionBar
+        selected={selectedCount}
+        canWrite={canEdit}
+        canAddRule={canAddRule}
+        oneSection={oneSection}
+        filter={filter}
+        onFilter={value => { setFilter(value); pager.reset() }}
+        onAddRule={() => addTarget && startAddRule(addTarget, true)}
+        onEnable={() => onSelection((d, s, ids) => updateRules(d, s.scope, s.base, ids, { enable: 1 }))}
+        onDisable={() => onSelection((d, s, ids) => updateRules(d, s.scope, s.base, ids, { enable: 0 }))}
+        onClone={() => onSelection((d, s, ids) => cloneRules(d, s.scope, s.base, ids))}
+        onUp={() => onSelection((d, s, ids) => shiftRules(d, s.scope, s.base, ids, -1))}
+        onDown={() => onSelection((d, s, ids) => shiftRules(d, s.scope, s.base, ids, 1))}
+        onMoveTo={() => setDialog('move')}
+        onDelete={() => { onSelection((d, s, ids) => removeRules(d, s.scope, s.base, ids)); setSelected(new Set()) }}
+        onClearSelection={() => setSelected(new Set())}
+      />
+
+      <ZoneTools connectionId={p.connectionId} policy={policy} deployed={deployed} reloadPolicy={reloadPolicy} onRunFinished={p.reloadFirewall}>
+      <TableContainer component={Paper} variant='outlined' sx={{ borderRadius: 2.5 }}>
+        <Table size='small' sx={{ minWidth: 1180 }}>
+          <DfwHead show={visibleSelectable.length > 0} allChecked={allVisibleChecked} someChecked={selectedCount > 0} canCheck={canEdit}
+            onCheckAll={on => setSelected(on ? new Set(visibleSelectable) : new Set())} />
+          <TableBody>
+            {shownFixed.map(s => renderSection(s))}
+            {renderGuestGroups()}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      </ZoneTools>
+
+      {renderDialogs()}
+    </Box>
+  )
+
+  function renderGuestGroups(): ReactNode {
+    if (!guestsShown) return null
+    if (p.loadingVMRules && p.guests.length === 0) return <WideRow><LinearProgress /></WideRow>
+    return groups.map(renderGroup)
+  }
+
+  function renderDialogs(): ReactNode {
+    // A new rule waits for the rules of its scope to be read (a draft is only made on a list seen).
+    const editorSection = editor ? sectionByKey(editor.sectionKey) : null
+    const editorRulesKnown = !!editorSection && hasRules(editorSection)
+    return (
+      <>
+      {editor && (
+        <RuleFormDialog
+          open
+          isNew={!editor.entryId}
+          onClose={() => setEditor(null)}
+          onSubmit={saveEditor}
+          scope={editorScope(sectionByKey(editor.sectionKey))}
+          rule={editor.form}
+          onRuleChange={form => setEditor(prev => (prev ? { ...prev, form } : prev))}
+          securityGroups={p.securityGroups.filter(g => !g.group.toLowerCase().startsWith(ZONE_GROUP_PREFIX))}
+          aliases={p.aliases}
+          ipsets={p.ipsets}
+          submitLabel={t('keepInDraft')}
+          header={editor.pick ? <ScopePicker value={editor.sectionKey} targets={pickTargets} onChange={pickScope} reading={!editorRulesKnown} /> : undefined}
+          submitDisabled={!editorRulesKnown}
+        />
+      )}
+      {dialog === 'move' && (
+        <MoveToSectionDialog
+          open
+          count={selectedCount}
+          targets={writableTargets.filter(target => !selection.has(target.key) || selection.size > 1)}
+          onClose={() => setDialog(null)}
+          onMove={target => {
+            edit(d => [...selection.entries()].reduce((acc, [key, ids]) => {
+              const from = sectionByKey(key)
+              return from?.scope && !from.managed ? moveRulesToScope(acc, { scope: from.scope, baseRules: from.base }, ids, { scope: target.scope, baseRules: sectionByKey(target.key)?.base ?? null }) : acc
+            }, d))
+            setSelected(new Set())
+            setDialog(null)
+            setOpen(prev => new Set(prev).add(target.key))
+          }}
+        />
+      )}
+      {optionsSection && (
+        <ScopeOptionsDialog open name={optionsSection.title} scope={optionsSection.scope!} current={currentOptions(optionsSection)}
+          locked={engineOwnsOptions(optionsSection) ? [...ENGINE_GUEST_OPTIONS] : []} busy={fw.busy}
+          onClose={() => setOptionsFor(null)} onSave={form => saveOptions(optionsSection, form)} />
+      )}
+      <MicrosegConfirmDialog
+        open={dialog === 'confirmPublish'}
+        title={t('confirmPublish.title', { count: confirmCount })}
+        body={t('confirmPublish.body', { count: confirmCount })}
+        confirmLabel={t('confirmPublish.confirm')}
+        busy={fw.busy}
+        onConfirm={() => { void publish(true) }}
+        onCancel={() => setDialog(null)}
+      />
+      <MicrosegConfirmDialog
+        open={dialog === 'discard'}
+        title={t('confirmDiscard.title')}
+        body={t('confirmDiscard.body', { count: fw.count })}
+        confirmLabel={t('confirmDiscard.confirm')}
+        color='error'
+        onConfirm={() => { fw.discard(); setSummary(null); setSelected(new Set()); setDialog(null) }}
+        onCancel={() => setDialog(null)}
+      />
+      <Menu open={!!menuFor && !!menuSection} anchorEl={menuFor?.anchor} onClose={() => setMenuFor(null)}>
+        {menuSection && sectionMenuItems(menuSection).map(item => (
+          <MenuItem key={item.label} disabled={item.disabled} sx={{ fontSize: 13 }} onClick={() => { setMenuFor(null); item.onClick() }}>{item.label}</MenuItem>
+        ))}
+      </Menu>
+      {logVm && (
+        <FirewallLogDialog
+          open
+          onClose={() => setLogVm(null)}
+          connectionId={p.connectionId}
+          scope={{ kind: 'vm', node: logVm.node, vmType: logVm.type, vmid: logVm.vmid }}
+          subject={`${logVm.name} (${logVm.vmid})`}
+        />
+      )}
+      </>
+    )
+  }
+
+  function sectionMenuItems(s: Section): { label: string; onClick: () => void; disabled?: boolean }[] {
+    return [
+      { label: tg('networkPage.addRule'), onClick: () => startAddRule(s), disabled: !canEdit },
+      { label: t('menu.options'), onClick: () => openOptions(s), disabled: s.kind === 'host' && !((s.node ?? '') in lazy.nodeOptions) },
+      ...(s.guest ? [{ label: tg('networkPage.viewLogs'), onClick: () => setLogVm(s.guest!) }] : []),
+      { label: t('menu.discard'), onClick: () => edit(d => discardOf(d, s.scope!)), disabled: s.pending === 0 || fw.busy },
+    ]
+  }
+}
+
+/** Operations of the draft that touch `scope`. */
+function opsOn(ops: PublishOp[], scope: DraftScope): number {
+  const key = scopeKey(scope)
+  return ops.filter(op => scopeKey(op.scope) === key).length
+}
+
+function discardOf(d: FirewallDraft, scope: DraftScope): FirewallDraft {
+  const scopes = { ...d.scopes }
+  delete scopes[scopeKey(scope)]
+  return { ...d, scopes }
+}
+
+/** What Proxmox applies to an option it does not store (the orchestrator also drops a stored 0). */
+function optionDefaults(kind: Section['kind']): Required<ScopeOptions> {
+  return { enable: kind === 'host' ? 1 : 0, policy_in: PVE_DEFAULT_POLICY_IN, policy_out: PVE_DEFAULT_POLICY_OUT, log_level_in: 'nolog', log_level_out: 'nolog' }
+}
+
+/** The options of a scope as read, every field given: what Proxmox stores, else what it applies. */
+function readOptions(
+  s: Section,
+  cluster: firewallAPI.ClusterOptions | null,
+  nodes: Record<string, firewallAPI.NodeOptions>,
+  guests: Record<string, firewallAPI.VMOptions>,
+): ScopeOptions {
+  const pick = (o: Record<string, unknown> | null | undefined): ScopeOptions => {
+    const out: ScopeOptions = { ...optionDefaults(s.kind) }
+    if (!o) return out
+    if (o.enable !== undefined) out.enable = Number(o.enable) === 1 ? 1 : 0
+    for (const key of ['policy_in', 'policy_out', 'log_level_in', 'log_level_out'] as const) {
+      if (typeof o[key] === 'string' && o[key]) out[key] = o[key] as string
+    }
+    return out
+  }
+  if (s.kind === 'cluster') return pick(cluster as Record<string, unknown> | null)
+  if (s.kind === 'host') return pick(nodes[s.node!] as Record<string, unknown> | undefined)
+  return pick((guests[s.key] ?? s.guest?.options) as Record<string, unknown> | null)
+}
+
+function objectName(s: Section, t: ReturnType<typeof useTranslations<'microsegPilot.dfw'>>): string {
+  if (s.kind === 'zone') return t('object.group', { group: s.zone!.group })
+  if (s.kind === 'cluster') return t('object.cluster')
+  if (s.kind === 'host') return t('object.host', { node: s.node! })
+  return t('object.guest', { vmid: s.guest!.vmid, node: s.guest!.node })
+}
+
+function sectionIcon(s: Section, colour: string, nodeStatus: Record<string, string> | undefined): ReactNode {
+  if (s.kind === 'guest' && s.guest) return <StatusIcon type='vm' status={s.guest.status} vmType={s.guest.type} size={16} />
+  if (s.kind === 'host') return <NodeIcon status={nodeStatus?.[s.node!]} size={16} />
+  const icon: Record<Section['kind'], string> = { zone: 'ri-shield-keyhole-line', cluster: 'ri-server-line', host: 'ri-hard-drive-2-line', guest: 'ri-computer-line' }
+  return <i className={icon[s.kind]} aria-hidden style={{ fontSize: 16, color: colour }} />
+}
+
+function editorScope(s: Section | null): { type: 'cluster' | 'host' | 'guest'; name?: string } {
+  if (!s || s.kind === 'cluster') return { type: 'cluster' }
+  return { type: s.kind === 'host' ? 'host' : 'guest', name: s.kind === 'host' ? s.node : s.title }
+}
+
+function ZoneStateBadge({ state }: { state: ZoneSection['state'] }) {
+  const t = useTranslations('microsegPilot.dfw')
+  if (state === 'enforce') return <Badge label={t('zoneState.enforce')} tone='error' />
+  if (state === 'observe') return <Badge label={t('zoneState.observe')} tone='info' />
+  return <Badge label={t('zoneState.disabled')} />
+}

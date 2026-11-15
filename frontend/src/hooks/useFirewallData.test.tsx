@@ -29,12 +29,12 @@ const api = vi.mocked(firewallAPI)
 const rule = (pos: number): FirewallRule => ({ pos, type: 'in', action: 'ACCEPT', enable: 1 })
 
 /** Answer the nodes request with these node names, or with a failed response. */
-function mockNodes(nodes: string[] | 'fail' | 'throw') {
+function mockNodes(nodes: string[] | 'fail' | 'throw', status: Record<string, string> = {}) {
   vi.stubGlobal('fetch', vi.fn(async () => {
     if (nodes === 'throw') throw new Error('network down')
     if (nodes === 'fail') return { ok: false, json: async () => ({}) } as Response
 
-    return { ok: true, json: async () => ({ data: nodes.map(node => ({ node })) }) } as Response
+    return { ok: true, json: async () => ({ data: nodes.map(node => ({ node, ...(status[node] ? { status: status[node] } : {}) })) }) } as Response
   }))
 }
 
@@ -69,6 +69,15 @@ describe('useFirewallData', () => {
     expect(result.current.aliases).toHaveLength(1)
     expect(result.current.connectionInfo).toMatchObject({ mode: 'cluster', node_count: 2 })
     expect(api.getNodeOptions).not.toHaveBeenCalled()
+  })
+
+  it('keeps the PVE status of each node the nodes route gives one for', async () => {
+    mockNodes(['pve1', 'pve2', 'pve3'], { pve1: 'online', pve2: 'offline' })
+
+    const { result } = renderHook(() => useFirewallData('conn-1', true))
+
+    await waitFor(() => expect(result.current.nodesList).toEqual(['pve1', 'pve2', 'pve3']))
+    expect(result.current.nodeStatus).toEqual({ pve1: 'online', pve2: 'offline' })
   })
 
   it('keeps what loaded and reports every distinct failure, unwrapped', async () => {
@@ -148,19 +157,56 @@ describe('useFirewallData', () => {
     expect(result.current.nodeRules).toEqual([])
   })
 
-  it('falls back to a nodeless standalone view when the nodes request fails', async () => {
+  it('keeps the cluster mode (unknown) and no node when the nodes request fails', async () => {
     for (const failure of ['fail', 'throw'] as const) {
       mockNodes(failure)
 
       const { result, unmount } = renderHook(() => useFirewallData('conn-1', true))
 
-      await waitFor(() => expect(result.current.connectionInfo).not.toBeNull())
+      await waitFor(() => expect(result.current.loadError).not.toBeNull())
+      await waitFor(() => expect(result.current.loading).toBe(false))
 
-      expect(result.current.firewallMode).toBe('standalone')
-      expect(result.current.connectionInfo).toMatchObject({ primary_node: '', has_node_fw: false })
+      expect(result.current.firewallMode).toBe('cluster')
+      expect(result.current.nodesList).toEqual([])
+      expect(result.current.nodeStatus).toEqual({})
+      expect(result.current.connectionInfo).toBeNull()
       expect(api.getNodeOptions).not.toHaveBeenCalled()
       unmount()
     }
+  })
+
+  it('reports a node list that cannot be loaded instead of silently going standalone', async () => {
+    mockNodes('throw')
+
+    const thrown = renderHook(() => useFirewallData('conn-1', true))
+
+    await waitFor(() => expect(thrown.result.current.loadError).toBe('network down'))
+    expect(thrown.result.current.firewallMode).toBe('cluster')
+    thrown.unmount()
+
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 502, json: async () => ({ error: 'Bad gateway' }) }) as Response))
+
+    const refused = renderHook(() => useFirewallData('conn-1', true))
+
+    await waitFor(() => expect(refused.result.current.loadError).toBe('Bad gateway'))
+    expect(refused.result.current.firewallMode).toBe('cluster')
+    refused.unmount()
+
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => { throw new Error('not json') } }) as unknown as Response))
+
+    const opaque = renderHook(() => useFirewallData('conn-1', true))
+
+    await waitFor(() => expect(opaque.result.current.loadError).toBe('HTTP 500'))
+    expect(opaque.result.current.firewallMode).toBe('cluster')
+  })
+
+  it('keeps the node list error next to the other load errors', async () => {
+    mockNodes('throw')
+    api.getClusterRules.mockRejectedValueOnce(new Error('HTTP 500'))
+
+    const { result } = renderHook(() => useFirewallData('conn-1', true))
+
+    await waitFor(() => expect(result.current.loadError).toBe('HTTP 500 · network down'))
   })
 
   it('loads nothing without a connection or an Enterprise license', async () => {
@@ -195,5 +241,98 @@ describe('useFirewallData', () => {
 
     await waitFor(() => expect(result.current.clusterRules).toHaveLength(2))
     expect(result.current.loadError).toBeNull()
+  })
+  describe('a load that is no longer the latest', () => {
+    function deferred<T>() {
+      let resolve!: (v: T) => void
+      let reject!: (e: unknown) => void
+      const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
+
+      return { promise, resolve, reject }
+    }
+
+    it('does not let the late failure of the previous connection set the error of the new one', async () => {
+      mockNodes(['pve1', 'pve2'])
+      const late = deferred<FirewallRule[]>()
+      api.getClusterRules.mockImplementation(((id: string) => (id === 'conn-1' ? late.promise : Promise.resolve([rule(0), rule(1)]))) as never)
+
+      const { result, rerender } = renderHook(({ id }: { id: string }) => useFirewallData(id, true), {
+        initialProps: { id: 'conn-1' },
+      })
+
+      rerender({ id: 'conn-2' })
+      await waitFor(() => expect(result.current.clusterRules).toHaveLength(2))
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        late.reject(new Error('HTTP 500 from conn-1'))
+        await late.promise.catch(() => undefined)
+      })
+
+      expect(result.current.loadError).toBeNull()
+      expect(result.current.clusterRules).toHaveLength(2)
+      expect(result.current.loading).toBe(false)
+    })
+
+    it('does not let the late success of the previous connection replace the data of the new one', async () => {
+      mockNodes(['pve1', 'pve2'])
+      const late = deferred<FirewallRule[]>()
+      api.getClusterRules.mockImplementation(((id: string) => (id === 'conn-1' ? late.promise : Promise.resolve([rule(0), rule(1)]))) as never)
+
+      const { result, rerender } = renderHook(({ id }: { id: string }) => useFirewallData(id, true), {
+        initialProps: { id: 'conn-1' },
+      })
+
+      rerender({ id: 'conn-2' })
+      await waitFor(() => expect(result.current.clusterRules).toHaveLength(2))
+
+      await act(async () => {
+        late.resolve([rule(0), rule(1), rule(2), rule(3), rule(4)])
+        await late.promise
+      })
+
+      expect(result.current.clusterRules).toHaveLength(2)
+      expect(result.current.loadError).toBeNull()
+    })
+
+    it('keeps the answer of the latest reload of the same connection', async () => {
+      mockNodes(['pve1', 'pve2'])
+      const first = deferred<FirewallRule[]>()
+      api.getClusterRules.mockReset().mockReturnValueOnce(first.promise).mockResolvedValue([rule(0), rule(1)])
+
+      const { result } = renderHook(() => useFirewallData('conn-1', true))
+
+      await act(async () => { await result.current.reload() })
+      expect(result.current.clusterRules).toHaveLength(2)
+
+      await act(async () => {
+        first.reject(new Error('HTTP 500 first'))
+        await first.promise.catch(() => undefined)
+      })
+
+      expect(result.current.loadError).toBeNull()
+      expect(result.current.clusterRules).toHaveLength(2)
+    })
+
+    it('stops loading and ignores the late answer when the connection is dropped', async () => {
+      mockNodes(['pve1', 'pve2'])
+      const late = deferred<FirewallRule[]>()
+      api.getClusterRules.mockReturnValue(late.promise)
+
+      const { result, rerender } = renderHook(
+        ({ id }: { id: string | null }) => useFirewallData(id, true),
+        { initialProps: { id: 'conn-1' as string | null } },
+      )
+      await waitFor(() => expect(result.current.loading).toBe(true))
+
+      rerender({ id: null })
+      await act(async () => {
+        late.reject(new Error('HTTP 500 late'))
+        await late.promise.catch(() => undefined)
+      })
+
+      expect(result.current.loadError).toBeNull()
+      expect(result.current.loading).toBe(false)
+    })
   })
 })

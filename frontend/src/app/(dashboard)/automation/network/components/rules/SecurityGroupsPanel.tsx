@@ -1,5 +1,6 @@
 'use client'
 
+import { paletteAlpha } from '../paletteAlpha'
 import { Fragment, useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
@@ -16,11 +17,18 @@ import { ruleToFormData } from './shared/ruleToFormData'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
 import { useToast } from '@/contexts/ToastContext'
 import { PolicySection } from '../../types'
+import FirewallLoadAlert from '../FirewallLoadAlert'
 import RuleFormDialog, { RuleFormData } from './RuleFormDialog'
 import RulesTableHead from './shared/RulesTableHead'
 import SecurityGroupMembersDialog from './shared/SecurityGroupMembersDialog'
 import FirewallLogDialog from '@/components/firewall/FirewallLogDialog'
+import { useLastRevisionSnapshot } from '@/lib/microseg/useLastRevision'
+import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
+import { ZONE_GROUP_PREFIX, groupMembers } from './shared/groupMembership'
+import { objectColour, objectDotSx } from '../microseg/objectColour'
 import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
+import { WriteTip, useMicrosegWrite } from '../microseg/microsegAccess'
+import MicrosegConfirmDialog from '../microseg/MicrosegConfirmDialog'
 
 // ── Props ──
 
@@ -37,19 +45,12 @@ interface SecurityGroupsPanelProps {
   totalRules: number
   aliases: firewallAPI.Alias[]
   ipsets: firewallAPI.IPSet[]
+  /** What failed on the last load of the firewall data, null when it all loaded. */
+  loadError?: string | null
   reload: () => void
+  /** Reads one guest's rules (the members dialog asks it before detaching a guest whose rules were not read). */
+  loadGuestRules: (vm: VMFirewallInfo) => Promise<firewallAPI.FirewallRule[]>
   reloadVMFirewallRules: (vm: VMFirewallInfo) => Promise<void>
-}
-
-// ── Helpers ──
-
-function computeAppliedTo(sgName: string, vmFirewallData: VMFirewallInfo[]): { vmid: number; name: string; node: string }[] {
-  const vms: { vmid: number; name: string; node: string }[] = []
-  for (const vm of vmFirewallData) {
-    const hasRef = vm.rules.some(r => r.type === 'group' && r.action === sgName)
-    if (hasRef) vms.push({ vmid: vm.vmid, name: vm.name, node: vm.node })
-  }
-  return vms
 }
 
 /**
@@ -79,11 +80,24 @@ function computeScopeRefs(
 
 export default function SecurityGroupsPanel({
   securityGroups, vmFirewallData, loadingVMRules, guestsNotScanned, clusterRules, hostRulesByNode,
-  firewallMode, selectedConnection, totalRules, aliases, ipsets, reload, reloadVMFirewallRules
+  firewallMode, selectedConnection, totalRules, aliases, ipsets, loadError, reload, loadGuestRules, reloadVMFirewallRules
 }: SecurityGroupsPanelProps) {
   const theme = useTheme()
   const t = useTranslations()
   const { showToast } = useToast()
+  // A read-only user (no node.manage on the connection) sees every write control disabled, with the reason.
+  const { canWrite } = useMicrosegWrite()
+  const writable = canWrite && !!selectedConnection
+
+  // Membership without reading every guest's rules (UA44): the zone groups of the deployed micro-segmentation
+  // revision have their members from the zone tags; any other group only knows the guests whose rules were read.
+  const { data: microsegPolicy, loading: policyLoading } = useMicrosegPolicy(selectedConnection || null)
+  const { revision: deployed, loading: revisionLoading } = useLastRevisionSnapshot(selectedConnection || null, microsegPolicy?.last_revision?.id)
+  const deployedSnapshot = deployed?.snapshot ?? null
+  // The members of a zone group come from the deployed revision: until it is read, its count is not known yet (a
+  // "0 VMs" shown meanwhile reads as an unused group).
+  const deploymentPending = !!policyLoading || (!!microsegPolicy?.last_revision && !!revisionLoading)
+  const membersPending = (group: string) => loadingVMRules || (deploymentPending && group.startsWith(ZONE_GROUP_PREFIX))
 
   // ── State ──
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
@@ -102,6 +116,10 @@ export default function SecurityGroupsPanel({
 
   // Delete confirm
   const [deleteConfirm, setDeleteConfirm] = useState<{ groupName: string; pos: number } | null>(null)
+  // The group whose deletion is asked (themed dialog, never a native confirm), and that deletion while it runs
+  const [groupToDelete, setGroupToDelete] = useState<string | null>(null)
+  const [deletingGroup, setDeletingGroup] = useState(false)
+  const [deleteGroupError, setDeleteGroupError] = useState<string | null>(null)
 
   // Members (which guests this group is attached to)
   const [membersOf, setMembersOf] = useState<string | null>(null)
@@ -115,6 +133,13 @@ export default function SecurityGroupsPanel({
     [vmFirewallData]
   )
 
+  const membersLabel = (section: PolicySection) => {
+    if (membersPending(section.id)) return '…'
+    // "0+ VMs" would read as odd: with none seen, the count is plain and the tooltip says why it may be more.
+    if (section.appliedToKnown === false && section.appliedTo.length > 0) return t('networkPage.rulesOnDemand.membersUnknownCount', { count: section.appliedTo.length })
+    return t('networkPage.vmCount', { count: section.appliedTo.length })
+  }
+
   // Drag & drop
   const [dragState, setDragState] = useState<{ sectionId: string; draggedPos: number | null; dragOverPos: number | null }>({ sectionId: '', draggedPos: null, dragOverPos: null })
 
@@ -122,18 +147,20 @@ export default function SecurityGroupsPanel({
   const sections: PolicySection[] = useMemo(() => {
     return securityGroups.map(sg => {
       const rules = sg.rules || []
+      const membership = groupMembers(sg.group, vmFirewallData, deployedSnapshot)
       return {
         id: sg.group,
         type: 'security-group' as const,
         name: sg.group,
         comment: sg.comment,
         rules,
-        appliedTo: computeAppliedTo(sg.group, vmFirewallData),
+        appliedTo: membership.members.map(vm => ({ vmid: vm.vmid, name: vm.name, node: vm.node })),
+        appliedToKnown: membership.known,
         ruleCount: rules.length,
         activeRuleCount: rules.filter(isRuleEnabled).length,
       }
     })
-  }, [securityGroups, vmFirewallData])
+  }, [securityGroups, vmFirewallData, deployedSnapshot])
 
   // ── Filter by search ──
   const filteredSections = useMemo(() => {
@@ -220,14 +247,22 @@ export default function SecurityGroupsPanel({
   }
 
   // ── Delete SG ──
-  const handleDeleteGroup = async (name: string) => {
-    if (!confirm(t('networkPage.deleteSgConfirm', { name }))) return
+  const handleDeleteGroup = (name: string) => {
+    setDeleteGroupError(null)
+    setGroupToDelete(name)
+  }
+  const confirmDeleteGroup = async () => {
+    if (!groupToDelete) return
+    setDeletingGroup(true)
     try {
-      await firewallAPI.deleteSecurityGroup(selectedConnection, name)
+      await firewallAPI.deleteSecurityGroup(selectedConnection, groupToDelete)
       showToast(t('networkPage.securityGroupDeleted'), 'success')
+      setGroupToDelete(null)
       reload()
     } catch (err: any) {
-      showToast(err.message || t('networkPage.error'), 'error')
+      setDeleteGroupError(err?.message || t('networkPage.error'))
+    } finally {
+      setDeletingGroup(false)
     }
   }
 
@@ -293,14 +328,14 @@ export default function SecurityGroupsPanel({
     return (
       <TableRow
         key={`${section.id}-rule-${idx}`}
-        hover draggable
+        hover draggable={canWrite}
         onDragStart={e => handleDragStart(e, section.id, rule.pos)}
         onDragEnd={handleDragEnd}
         onDragOver={e => handleDragOver(e, section.id, rule.pos)}
         onDragLeave={handleDragLeave}
         onDrop={e => handleDrop(e, section, rule.pos)}
         sx={{
-          cursor: 'grab', opacity: isDragging ? 0.5 : 1,
+          cursor: canWrite ? 'grab' : 'default', opacity: isDragging ? 0.5 : 1,
           borderTop: isDragOver ? `2px solid ${theme.palette.primary.main}` : undefined,
           '&:active': { cursor: 'grabbing' }
         }}
@@ -339,21 +374,26 @@ export default function SecurityGroupsPanel({
           bgcolor: sectionRowBg,
           '&:hover': { bgcolor: sectionRowHoverBg },
           cursor: 'pointer',
-          '& td': { borderBottom: `1px solid ${alpha(theme.palette.divider, 0.15)}` }
+          '& td': { borderBottom: `1px solid ${paletteAlpha(theme, 'divider', 0.15)}` }
         }}
         onClick={() => toggleSection(section.id)}
       >
-        <TableCell colSpan={11} sx={{ py: 1, px: 2 }}>
+        <TableCell
+          colSpan={11}
+          data-testid={`sg-header-${section.id}`}
+          sx={{ py: 1, px: 2, borderLeft: `4px solid ${objectColour(section.id, microsegPolicy?.zones)}` }}
+        >
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
               <i
                 className={isExpanded ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'}
                 style={{ fontSize: 20, color: theme.palette.text.secondary, flexShrink: 0 }}
               />
+              <Box component="span" data-testid={`sg-dot-${section.id}`} sx={objectDotSx(objectColour(section.id, microsegPolicy?.zones))} />
               <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{section.name}</span>
               {section.comment && (
                 <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  — {section.comment}
+                  · {section.comment}
                 </Typography>
               )}
               <Chip
@@ -362,19 +402,21 @@ export default function SecurityGroupsPanel({
                 sx={{ height: 20, fontSize: 10, ml: 0.5 }}
               />
               <Tooltip
-                title={loadingVMRules
+                title={membersPending(section.id)
                   ? t('networkPage.loading')
                   : [
+                    section.appliedToKnown === false ? t('networkPage.rulesOnDemand.membersUnknown') : '',
                     section.appliedTo.length > 0
                       ? section.appliedTo.map(v => `${v.name} (${v.vmid})`).join(', ')
-                      : t('networkPage.noVmsReferencing'),
+                      : (section.appliedToKnown === false ? '' : t('networkPage.noVmsReferencing')),
                     guestsNotScanned > 0 ? t('firewall.membersPartial', { count: guestsNotScanned }) : '',
-                  ].filter(Boolean).join(' — ')
+                  ].filter(Boolean).join(' · ')
                 }
               >
                 <Chip
                   icon={<i className="ri-computer-line" style={{ fontSize: 12 }} />}
-                  label={loadingVMRules ? '…' : t('networkPage.vmCount', { count: section.appliedTo.length })}
+                  label={membersLabel(section)}
+                  data-testid={`sg-members-${section.id}`}
                   size="small"
                   variant="outlined"
                   onClick={() => setMembersOf(section.id)}
@@ -395,7 +437,7 @@ export default function SecurityGroupsPanel({
                 ].filter(Boolean)
 
                 return (
-                  <Tooltip title={parts.join(' — ')}>
+                  <Tooltip title={parts.join(' · ')}>
                     <Chip
                       icon={<i className="ri-server-line" style={{ fontSize: 12 }} />}
                       label={scope.cluster ? t('firewall.cluster') : scope.nodes.length}
@@ -420,16 +462,16 @@ export default function SecurityGroupsPanel({
                   <i className="ri-terminal-box-line" style={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
-              <Tooltip title={t('networkPage.addRule')}>
-                <IconButton size="small" onClick={() => openAddRule(section.id)}>
+              <WriteTip title={t('networkPage.addRule')}>
+                <IconButton size="small" aria-label={t('networkPage.addRule')} disabled={!writable} onClick={() => openAddRule(section.id)}>
                   <i className="ri-add-line" style={{ fontSize: 16 }} />
                 </IconButton>
-              </Tooltip>
-              <Tooltip title={t('networkPage.delete')}>
-                <IconButton size="small" color="error" onClick={() => handleDeleteGroup(section.id)}>
+              </WriteTip>
+              <WriteTip title={t('networkPage.delete')}>
+                <IconButton size="small" aria-label={t('networkPage.delete')} color="error" disabled={!writable} onClick={() => handleDeleteGroup(section.id)}>
                   <i className="ri-delete-bin-line" style={{ fontSize: 14 }} />
                 </IconButton>
-              </Tooltip>
+              </WriteTip>
             </Box>
           </Box>
         </TableCell>
@@ -446,9 +488,11 @@ export default function SecurityGroupsPanel({
         <TableRow key={`empty-${section.id}`}>
           <TableCell colSpan={11} sx={{ py: 3, textAlign: 'center', color: 'text.secondary' }}>
             <Typography variant="body2">{t('networkPage.noRules')}</Typography>
-            <Button size="small" sx={{ mt: 1 }} onClick={() => openAddRule(section.id)}>
-              {t('networkPage.addRule')}
-            </Button>
+            <WriteTip>
+              <Button size="small" sx={{ mt: 1 }} disabled={!writable} onClick={() => openAddRule(section.id)}>
+                {t('networkPage.addRule')}
+              </Button>
+            </WriteTip>
           </TableCell>
         </TableRow>
       )
@@ -468,7 +512,7 @@ export default function SecurityGroupsPanel({
         <Typography variant="body1" sx={{ color: 'text.secondary', maxWidth: 500, mx: 'auto', mb: 3 }}>
           {t('network.securityGroupsClusterFeature')}
         </Typography>
-        <Box sx={{ p: 3, bgcolor: alpha(theme.palette.divider, 0.05), borderRadius: 2, maxWidth: 600, mx: 'auto' }}>
+        <Box sx={{ p: 3, bgcolor: paletteAlpha(theme, 'divider', 0.05), borderRadius: 2, maxWidth: 600, mx: 'auto' }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 2 }}>{t('network.availableAlternatives')}</Typography>
           {/* Centred as a group: the panel is textAlign center, so leaving the
               rows flex-start gave centred labels above left-anchored rows. */}
@@ -508,6 +552,8 @@ export default function SecurityGroupsPanel({
 
   return (
     <Box sx={{ p: 3 }}>
+      <FirewallLoadAlert error={loadError} onRetry={reload} />
+
       {/* Toolbar */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -524,9 +570,11 @@ export default function SecurityGroupsPanel({
           <Button size="small" variant="outlined" onClick={collapseAll}>{t('common.collapseAll')}</Button>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Button size="small" variant="contained" startIcon={<i className="ri-add-line" />} onClick={() => setGroupDialogOpen(true)} disabled={!selectedConnection}>
-            {t('networkPage.newPolicy')}
-          </Button>
+          <WriteTip>
+            <Button size="small" variant="contained" startIcon={<i className="ri-add-line" />} onClick={() => setGroupDialogOpen(true)} disabled={!writable}>
+              {t('networkPage.newPolicy')}
+            </Button>
+          </WriteTip>
           <Button size="small" variant="outlined" startIcon={<i className="ri-refresh-line" />} onClick={reload}>
             {t('networkPage.refresh')}
           </Button>
@@ -535,7 +583,7 @@ export default function SecurityGroupsPanel({
 
       {/* SG flat table */}
       {filteredSections.length > 0 ? (
-        <TableContainer component={Paper} sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
+        <TableContainer component={Paper} sx={{ border: `1px solid ${paletteAlpha(theme, 'divider', 0.1)}` }}>
           <Table size="small">
             <RulesTableHead withLogs />
             <TableBody>
@@ -546,10 +594,12 @@ export default function SecurityGroupsPanel({
           </Table>
         </TableContainer>
       ) : (
-        <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${alpha(theme.palette.divider, 0.3)}` }}>
+        <Paper sx={{ p: 4, textAlign: 'center', border: `1px dashed ${paletteAlpha(theme, 'divider', 0.3)}` }}>
           <i className="ri-shield-line" style={{ fontSize: 48, opacity: 0.3 }} />
           <Typography variant="body1" sx={{ mt: 2, color: 'text.secondary' }}>{t('networkPage.noSecurityGroup')}</Typography>
-          <Button sx={{ mt: 2 }} onClick={() => setGroupDialogOpen(true)}>{t('networkPage.createGroup')}</Button>
+          <WriteTip>
+            <Button sx={{ mt: 2 }} disabled={!writable} onClick={() => setGroupDialogOpen(true)}>{t('networkPage.createGroup')}</Button>
+          </WriteTip>
         </Paper>
       )}
 
@@ -576,6 +626,8 @@ export default function SecurityGroupsPanel({
           groupName={membersOf}
           connectionId={selectedConnection}
           guests={vmFirewallData}
+          membership={groupMembers(membersOf, vmFirewallData, deployedSnapshot)}
+          loadGuestRules={loadGuestRules}
           guestsNotScanned={guestsNotScanned}
           onClose={() => setMembersOf(null)}
           onChanged={touched => { touched.forEach(guest => { void reloadVMFirewallRules(guest) }) }}
@@ -619,6 +671,19 @@ export default function SecurityGroupsPanel({
           <Button variant="contained" onClick={handleCreateGroup} disabled={!newGroup.group}>{t('networkPage.createButton')}</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Delete Security Group Confirmation */}
+      <MicrosegConfirmDialog
+        open={!!groupToDelete}
+        title={t('networkPage.deleteSgConfirm', { name: groupToDelete ?? '' })}
+        body={t('networkPage.deleteSgWarning', { name: groupToDelete ?? '' })}
+        confirmLabel={t('common.delete')}
+        color='error'
+        busy={deletingGroup}
+        error={deleteGroupError}
+        onConfirm={() => { void confirmDeleteGroup() }}
+        onCancel={() => setGroupToDelete(null)}
+      />
 
       {/* Delete Rule Confirmation */}
       <Dialog open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} maxWidth="xs" fullWidth>

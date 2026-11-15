@@ -85,6 +85,13 @@ const ACTION_ICONS: Record<string, string> = { DROP: 'ri-forbid-2-line', REJECT:
 /** Below this, a 'fill' table lets the page scroll rather than shrink further. */
 const MIN_FILL_HEIGHT = 160
 
+/**
+ * The empty state sits in a cell that spans the table: its text wraps inside the table width, centered, instead of
+ * running on one line past the right edge (the cells of the table are nowrap).
+ */
+export const EMPTY_CELL_SX = { py: 5, px: 2, textAlign: 'center', borderBottom: 'none', whiteSpace: 'normal' } as const
+export const EMPTY_TEXT_SX = { maxWidth: 520, mx: 'auto', whiteSpace: 'normal', overflowWrap: 'anywhere' } as const
+
 const SMALL_SELECT_SX = { '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' } }
 
 /** Keyed by its scope where the scope changes: every read starts from fresh state. */
@@ -446,13 +453,13 @@ export default function FirewallLogView({ connectionId, scope: scopeProp, guests
 
             {!loading && data && pageRows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={colSpan} sx={{ py: 5, textAlign: 'center', borderBottom: 'none' }}>
+                <TableCell colSpan={colSpan} sx={EMPTY_CELL_SX}>
                   <i className="ri-file-list-line" style={{ fontSize: 32, opacity: 0.3 }} />
-                  <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1, ...EMPTY_TEXT_SX }}>
                     {data.rows.length === 0 ? t('firewallLog.empty') : t('firewallLog.noMatch')}
                   </Typography>
                   {data.rows.length === 0 && (
-                    <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.5, maxWidth: 520, mx: 'auto' }}>
+                    <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.5, ...EMPTY_TEXT_SX }}>
                       {t('firewallLog.emptyHint')}
                     </Typography>
                   )}

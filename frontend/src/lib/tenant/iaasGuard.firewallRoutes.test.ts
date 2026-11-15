@@ -39,7 +39,6 @@ const h = vi.hoisted(() => {
     orchestratorOrPve: vi.fn(),
     getOrchestratorClient: vi.fn(() => orchestrator),
     guardSessionGuest: vi.fn(),
-    tenantGuestVisibility: vi.fn(),
     audit: vi.fn(),
     fetch: vi.fn(),
   }
@@ -77,13 +76,14 @@ vi.mock("@/lib/firewall/pveDirect", () => new Proxy({}, {
 vi.mock("@/lib/firewall/withPveFallback", () => ({
   orchestratorOrPve: (...a: any[]) => h.orchestratorOrPve(...a),
 }))
-vi.mock("@/lib/orchestrator/client", () => ({
+vi.mock("@/lib/orchestrator/client", async () => ({
+  ...(await vi.importActual<Record<string, unknown>>("@/lib/orchestrator/path")),
   getOrchestratorClient: () => h.getOrchestratorClient(),
   orchestratorFetch: (...a: any[]) => h.orchestrator.get(...a),
+  orchestratorRelay: (...a: any[]) => h.orchestrator.get(...a),
 }))
 vi.mock("@/lib/orchestrator/headers", () => ({ orchestratorHeaders: async () => ({}) }))
 vi.mock("@/lib/vdc/guestGuard", () => ({ guardSessionGuest: (...a: any[]) => h.guardSessionGuest(...a) }))
-vi.mock("@/lib/vdc/guestScope", () => ({ tenantGuestVisibility: (...a: any[]) => h.tenantGuestVisibility(...a) }))
 vi.mock("@/lib/audit", () => ({ audit: (...a: any[]) => h.audit(...a) }))
 vi.mock("@/lib/audit/withAudit", () => ({ withAudit: (_o: unknown, handler: unknown) => handler }))
 vi.mock("@/lib/api-tokens/routeGuard", () => ({ withPublicApiGuard: (_id: unknown, handler: unknown) => handler }))
@@ -94,6 +94,7 @@ const DENIED_FILES = [
   "firewall/route.ts",
   "firewall/aliases/[connectionId]/[name]/route.ts",
   "firewall/cluster/[connectionId]/route.ts",
+  "firewall/coverage/[connectionId]/route.ts",
   "firewall/cluster/[connectionId]/rules/route.ts",
   "firewall/cluster/[connectionId]/rules/[pos]/route.ts",
   "firewall/groups/[connectionId]/[groupName]/route.ts",
@@ -102,12 +103,11 @@ const DENIED_FILES = [
   "firewall/ipsets/[connectionId]/[ipsetName]/route.ts",
   "firewall/ipsets/[connectionId]/[ipsetName]/entries/route.ts",
   "firewall/ipsets/[connectionId]/[ipsetName]/entries/[cidr]/route.ts",
-  "firewall/microseg/[connectionId]/analyze/route.ts",
-  "firewall/microseg/[connectionId]/generate-base/route.ts",
-  "firewall/microseg/[connectionId]/vms/route.ts",
+  "firewall/microseg/[connectionId]/[...path]/route.ts",
   "firewall/nodes/[connectionId]/[node]/route.ts",
   "firewall/nodes/[connectionId]/[node]/rules/route.ts",
   "firewall/nodes/[connectionId]/[node]/rules/[pos]/route.ts",
+  "firewall/publish/[connectionId]/route.ts",
 ]
 
 /**
@@ -126,7 +126,6 @@ const LOGS = "firewall/logs/[connectionId]/route.ts"
 /** Prefixes of whole subtrees with their own guard. */
 const SUBTREE_GUARDS: Array<[RegExp, string]> = [
   [/^firewall\/vms\//, "guest firewall: guest scope of the vDC (lib/vdc/guestGuard)"],
-  [/^firewall\/microseg\/\[connectionId\]\/vm\//, "guest microsegmentation: guest scope of the vDC (lib/vdc/guestGuard)"],
 ]
 
 const API = fileURLToPath(new URL("../../app/api/v1/", import.meta.url))
@@ -153,6 +152,9 @@ const load = (file: string) => MODULES[`../../app/api/v1/${file}`]() as Promise<
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const
 const PARAMS = { connectionId: "conn-1", node: "pve1", pos: "0", groupName: "web", name: "dns1", ipsetName: "admins", cidr: "192.0.2.1" }
+/** The micro-segmentation relay is one catch-all: a known route for each of its methods. */
+const MICROSEG_RELAY = "firewall/microseg/[connectionId]/[...path]/route.ts"
+const MICROSEG_PATHS: Record<string, string[]> = { GET: ["policy"], POST: ["zones"], PUT: ["policy"], DELETE: ["zones", "z1"] }
 const SIDE_EFFECTS = [
   "verifyConnectionOwnership", "getConnectionById", "pveFetch", "pveDirect", "orchestratorOrPve", "getOrchestratorClient", "audit", "fetch",
 ] as const
@@ -179,7 +181,7 @@ const call = async (c: { file: string; method: string }) => {
   const searchParams = Object.fromEntries(new URLSearchParams(query ?? ""))
   return callRoute(mod[c.method], {
     method: c.method as any,
-    params: PARAMS,
+    params: file === MICROSEG_RELAY ? { ...PARAMS, path: MICROSEG_PATHS[c.method] } as any : PARAMS,
     // firewall/route.ts takes the connection from the query string.
     searchParams: { ...searchParams, connectionId: "conn-1", node: "pve1", group: "web" },
     body: c.method === "GET" ? undefined : {},
@@ -220,7 +222,8 @@ describe("firewall and CVE routes: every file is classified for IaaS tenants", (
     for (const file of DENIED_FILES) {
       const source = readFileSync(join(API, file), "utf8")
       const mod = await load(file)
-      const handlers = METHODS.filter(m => typeof mod[m] === "function").length
+      // Distinct handlers: the methods of a catch-all relay share one function.
+      const handlers = new Set(METHODS.map(m => mod[m]).filter(fn => typeof fn === "function")).size
       expect(source.match(/await (denyIaasTenant\(\)|guardProviderInfra\()/g)?.length ?? 0, file).toBeGreaterThanOrEqual(handlers)
     }
   })
@@ -329,90 +332,5 @@ describe("firewall log of a guest", () => {
     expect(h.verifyConnectionOwnership).toHaveBeenCalledWith("conn-1")
     expect(h.guardSessionGuest).toHaveBeenCalledWith(expect.objectContaining({ connectionId: "conn-1", node: "pve1", vmid: "100" }))
     expect(h.orchestrator.get).not.toHaveBeenCalled()
-  })
-})
-
-const GUEST = "firewall/microseg/[connectionId]/vm/[node]/[vmType]/[vmid]"
-const GUEST_PARAMS = { connectionId: "conn-1", node: "pve3", vmType: "lxc", vmid: "106" }
-
-describe("isolation simulation of a guest", () => {
-  const SIMULATION = {
-    vmid: 106,
-    affected_vms: [
-      { vmid: 107, name: "own-db", node: "pve2", network: "net-web" },
-      { vmid: 7201, name: "acme-web-01", node: "pve3", network: "net-web" },
-    ],
-  }
-  const simulate = async () =>
-    callRoute((await load(`${GUEST}/simulate/route.ts`)).GET, { method: "GET", params: GUEST_PARAMS })
-
-  it("an IaaS tenant sees only its own guests among the affected ones", async () => {
-    h.orchestrator.get.mockResolvedValue({ data: structuredClone(SIMULATION) })
-    h.tenantGuestVisibility.mockResolvedValue({ all: false, has: (_t: string | null, vmid: string | number) => String(vmid) === "107" })
-    const res = await simulate()
-    expect(res.status).toBe(200)
-    expect((await res.json()).affected_vms).toEqual([SIMULATION.affected_vms[0]])
-    expect(h.tenantGuestVisibility).toHaveBeenCalledWith("tenant-iaas", undefined, "conn-1", { infra: IAAS_SCOPE })
-  })
-
-  it("nothing unverified: the visibility lookup's refusal is handed back", async () => {
-    h.orchestrator.get.mockResolvedValue({ data: structuredClone(SIMULATION) })
-    h.tenantGuestVisibility.mockResolvedValue(new (await import("next/server")).NextResponse(null, { status: 503 }))
-    expect((await simulate()).status).toBe(503)
-  })
-
-  it("the provider gets the simulation as the orchestrator built it", async () => {
-    arrange(PROVIDER, { kind: "provider" })
-    h.orchestrator.get.mockResolvedValue({ data: structuredClone(SIMULATION) })
-    expect(await (await simulate()).json()).toEqual(SIMULATION)
-    expect(h.tenantGuestVisibility).not.toHaveBeenCalled()
-  })
-})
-
-describe("isolating its own guest from an IaaS tenant session", () => {
-  const isolate = async (body: Record<string, unknown>) =>
-    callRoute((await load(`${GUEST}/isolate/route.ts`)).POST, { method: "POST", params: GUEST_PARAMS, body })
-  const REFUSED = { error: "Cluster-level object not available to a vDC tenant" }
-
-  beforeEach(() => {
-    h.orchestratorOrPve.mockResolvedValue([{ group: "sg-web" }, { group: "sg-base-web" }])
-    h.orchestrator.post.mockResolvedValue({ data: { success: true } })
-  })
-
-  it.each(["apply_base_sgs", "Apply_Base_SGs", "apply_baſe_sgs"])("%s: 403, the orchestrator is not reached", async key => {
-    const res = await isolate({ enable_firewall: true, [key]: true })
-    expect(res.status).toBe(403)
-    expect(await res.json()).toEqual(REFUSED)
-    expect(h.orchestrator.post).not.toHaveBeenCalled()
-  })
-
-  it("a group that does not exist yet (it would be created): 403", async () => {
-    const res = await isolate({ additional_sgs: ["sg-web", "sg-base-dmz"] })
-    expect(res.status).toBe(403)
-    expect(await res.json()).toEqual(REFUSED)
-    expect(h.orchestrator.post).not.toHaveBeenCalled()
-  })
-
-  it("existing groups are applied, with only the known fields forwarded", async () => {
-    const res = await isolate({ enable_firewall: true, additional_sgs: ["sg-web", "sg-base-web"], apply_base_sgs: false, extra: 1 })
-    expect(res.status).toBe(200)
-    expect(h.orchestrator.post).toHaveBeenCalledWith(
-      "/firewall/microseg/conn-1/vm/pve3/lxc/106/isolate",
-      { enable_firewall: true, additional_sgs: ["sg-web", "sg-base-web"], apply_base_sgs: false },
-    )
-  })
-
-  it("a mistyped body: 400", async () => {
-    expect((await isolate({ additional_sgs: "sg-web" })).status).toBe(400)
-    expect(h.orchestrator.post).not.toHaveBeenCalled()
-  })
-
-  it("the provider keeps apply_base_sgs and its raw body", async () => {
-    arrange(PROVIDER, { kind: "provider" })
-    h.orchestrator.post.mockResolvedValue({ data: { success: true } })
-    const body = { apply_base_sgs: true, additional_sgs: ["sg-base-dmz"] }
-    expect((await isolate(body)).status).toBe(200)
-    expect(h.orchestrator.post).toHaveBeenCalledWith("/firewall/microseg/conn-1/vm/pve3/lxc/106/isolate", body)
-    expect(h.orchestratorOrPve).not.toHaveBeenCalled()
   })
 })

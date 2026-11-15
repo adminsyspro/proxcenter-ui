@@ -173,7 +173,7 @@ describe('AddDiskDialog, storage policy locks QoS fields', () => {
   }
 
   // Same "find the <label>, grab the sibling combobox" helper used across
-  // the repo's other MUI-Select tests (see HostRulesPanel.test.tsx).
+  // the repo's other MUI-Select tests.
   function storageCombobox() {
     const el = screen.queryAllByText('Storage').find(n => n.tagName === 'LABEL')
 

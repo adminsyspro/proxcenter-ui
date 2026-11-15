@@ -13,6 +13,7 @@ import { firewallResourceType, invalidResourceType } from '@/lib/firewall/pathPa
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { guardSessionGuest } from '@/lib/vdc/guestGuard'
 import { withAudit } from '@/lib/audit/withAudit'
+import { forgetGuestCoverage } from '@/lib/firewall/guestCoverage'
 
 type RouteContext = {
   params: Promise<{ connectionId: string; node: string; vmType: string; vmid: string }>
@@ -113,6 +114,8 @@ async function putHandler(req: NextRequest, ctx: RouteContext) {
       () => orchestrator.put(orchestratorPath`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/options`, body),
       async () => pveDirect.updateVMOptions(await getConnectionById(connectionId), node, vmType, vmid, body),
     )
+    // The coverage read this guest's options as they were: it reads them again, alone (UA44).
+    forgetGuestCoverage(connectionId, { type: vmType, vmid })
 
     return NextResponse.json(result)
   } catch (e: any) {

@@ -15,6 +15,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { invalidateConnectionCache } from "@/lib/connections/getConnection"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 import { invalidateGuestIpIndex } from "@/lib/cache/guestIpCache"
+import { evictGuestCoverage } from "@/lib/firewall/guestCoverage"
 import { updateConnectionSchema } from "@/lib/schemas"
 import { orchestratorFetch } from "@/lib/orchestrator/client"
 import { pveFetch } from "@/lib/proxmox/client"
@@ -435,6 +436,7 @@ async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string }
     clearNodeIpCache(id)
     invalidateInventoryCache()
     invalidateGuestIpIndex(id)
+    evictGuestCoverage(id)
 
     // Audit
     const { audit } = await import("@/lib/audit")

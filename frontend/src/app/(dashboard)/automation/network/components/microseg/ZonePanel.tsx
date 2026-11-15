@@ -20,7 +20,7 @@ import ZoneStateChip from './ZoneStateChip'
 import { destinationName, endpoint } from './ObservationRow'
 import { useGatewayName } from './useGatewayName'
 import { bareIp } from './zoneGraph'
-import { ExpandAddButton, FlowsList, MemberAction, NewFlowButton, ZoneHeaderActions, useFlowEditor } from './ZonePanelActions'
+import { ExpandAddButton, FlowsList, MemberAction, NewFlowButton, ZoneHeaderActions, useExceptionEditor, useFlowEditor } from './ZonePanelActions'
 import type { ZoneEdits } from './useZoneEdits'
 import { useIgnoredDrifts } from './driftIgnore'
 import { OneLine } from './dialogParts'
@@ -37,7 +37,7 @@ type Props = {
   membersKnown: boolean
   flows: MicrosegFlow[]
   zonesById: Map<string, MicrosegZone>
-  /** The writes on the draft (zone, state, members, flows). */
+  /** The writes on the draft (zone, state, members, flows, exceptions). */
   edits: ZoneEdits
   onClose: () => void
   onAssign: () => void
@@ -117,8 +117,8 @@ type WorkProps = Omit<Props, 'onClose'> & {
 
 /**
  * What the zone panel shows, shared by the panel of the map and the details of a zone card on the Policy sub-tab: the
- * observed traffic and its top sources, then the pending suggestions, the members and the flows in and out, all
- * editable in place, with the bodies again for the expanded dialog.
+ * observed traffic and its top sources, then the pending suggestions, the members, the exceptions and the flows in
+ * and out, all editable in place, with the bodies again for the expanded dialog.
  */
 export function useZoneWork({
   zone, members, membersKnown, flows, zonesById, edits, onAssign,
@@ -129,7 +129,9 @@ export function useZoneWork({
   const tsec = useTranslations('microsegPilot.overview.sections')
   const ts = useTranslations('microsegPilot.policy.zone')
   const tt = useTranslations('microsegPilot.overview.target.panel')
+  const te = useTranslations('microsegPilot.policy.exceptions')
   const editor = useFlowEditor(edits)
+  const exceptions = useExceptionEditor(edits, zone, members, membersKnown)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
   const zones = useMemo(() => [...zonesById.values()], [zonesById])
   // The map reads every pending observed flow, outbound ones included: the readiness needs no read of its own, unless that read was cut (partialLimit).
@@ -199,6 +201,8 @@ export function useZoneWork({
   )
   const newIncoming = <NewFlowButton label={tz('newIncoming')} onClick={() => editor.create({ dst_zone_id: zone.id })} />
   const newOutgoing = <NewFlowButton label={tz('newOutgoing')} onClick={() => editor.create({ src_zone_id: zone.id })} />
+  const newException = <NewFlowButton label={te('add')} onClick={exceptions.create} />
+  const exceptionsBody = (size = FLOWS_PAGE_SIZE) => exceptions.list(size)
   const incomingBody = (size = FLOWS_PAGE_SIZE) => <FlowsList flows={incoming} zonesById={zonesById} editor={editor} size={size} />
   const outgoingBody = (size = FLOWS_PAGE_SIZE) => <FlowsList flows={outgoing} zonesById={zonesById} editor={editor} size={size} />
 
@@ -206,6 +210,7 @@ export function useZoneWork({
     <>
       <PanelSection id='zone.suggestions' title={tsec('suggestions')} count={pending.length}>{suggestionsBody()}</PanelSection>
       <PanelSection id='zone.members' title={t('members')} count={membersKnown ? members.length : null}>{membersBody()}</PanelSection>
+      <PanelSection id='zone.exceptions' title={te('title')} count={exceptions.count} action={newException}>{exceptionsBody()}</PanelSection>
       <PanelSection id='zone.incoming' title={ts('incoming')} count={incoming.length} action={newIncoming}>{incomingBody()}</PanelSection>
       <PanelSection id='zone.outgoing' title={ts('outgoing')} count={outgoing.length} action={newOutgoing}>{outgoingBody()}</PanelSection>
     </>
@@ -215,19 +220,22 @@ export function useZoneWork({
   const dataTabs: DataTab[] = [
     { id: 'suggestions', label: withCount(tz('subSuggestions'), pending.length), content: suggestionsBody },
     { id: 'members', label: withCount(tz('subMembers'), membersKnown ? members.length : null), action: <ExpandAddButton label={tz('addMembers')} onClick={onAssign} />, content: membersBody },
+    { id: 'exceptions', label: withCount(te('title'), exceptions.count), action: <ExpandAddButton label={te('add')} onClick={exceptions.create} />, content: exceptionsBody },
     { id: 'incoming', label: withCount(tz('subIncoming'), incoming.length), action: <ExpandAddButton label={tz('addFlow')} onClick={() => editor.create({ dst_zone_id: zone.id })} />, content: incomingBody },
     { id: 'outgoing', label: withCount(tz('subOutgoing'), outgoing.length), action: <ExpandAddButton label={tz('addFlow')} onClick={() => editor.create({ src_zone_id: zone.id })} />, content: outgoingBody },
   ]
 
-  return { trafficSections, dataSections, dataTabs, dialogs: editor.dialogs, signals, egress, egressReady }
+  const dialogs = <>{editor.dialogs}{exceptions.dialogs}</>
+
+  return { trafficSections, dataSections, dataTabs, dialogs, signals, egress, egressReady }
 }
 
 /**
  * The zone clicked on the map, as tall as the map with its body scrolling, in foldable sections (remembered per
  * browser): the observed traffic over time (the Dashboard's chart filtered on this zone, inbound or outbound, with a
  * one-line summary), its top sources (or destinations), the pending suggestions towards it (resolved as in
- * Observation), its members (ten per page; NIC firewall off and stopped told on each), the flows in and out, all
- * editable in place. A chip in the header says the zone's drifts and opens the Drifts sub-tab on them. The engine's
+ * Observation), its members (ten per page; NIC firewall off and stopped told on each), its exceptions, the flows in
+ * and out, all editable in place. A chip in the header says the zone's drifts and opens the Drifts sub-tab on them. The engine's
  * drifts are read once per selection (the Drifts sub-tab's key), no refresh on focus.
  */
 export default function ZonePanel(props: Props) {

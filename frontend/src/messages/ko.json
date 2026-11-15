@@ -13305,6 +13305,11 @@
         "changed": "플로우 {flow} 변경",
         "removed": "플로우 {flow} 삭제"
       },
+      "exceptions": {
+        "added": "{count, plural, other {예외 #개 추가}}",
+        "changed": "{count, plural, other {예외 #개 변경}}",
+        "removed": "{count, plural, other {예외 #개 삭제}}"
+      },
       "members": "{count, plural, other {구성원 변경 #개}}",
       "membersTo": "{count, plural, other {게스트 #개를 {zone}(으)로}}",
       "tagPrefix": "태그 접두사 변경",
@@ -13445,12 +13450,10 @@
         "gatewayTip": "게이트웨이 {ip}"
       },
       "flow": {
-        "notApplied": "적용되지 않음 (송신 제어 안 함)",
         "learned": "학습됨",
         "edit": "플로우 편집",
         "delete": "플로우 삭제",
-        "createdBy": "작성자: {user}",
-        "observed": "송신 관찰 중"
+        "createdBy": "작성자: {user}"
       },
       "zoneDialog": {
         "createTitle": "새 영역",
@@ -13480,7 +13483,7 @@
         "egressAllWarning": "IP 주소 기준 필터링만 가능: 도메인 이름 뒤의 서비스는 주소가 바뀔 수 있습니다.",
         "egressNeedsState": "존이 관찰 또는 차단 상태여야 합니다",
         "tips": {
-          "isolate": "이 존의 VM은 선언된 흐름을 통해서만 서로 연결됩니다. 선택 해제하면 자유롭게 통신합니다.",
+          "isolate": "이 존의 VM은 선언된 흐름이나 예외를 통해서만 서로 연결됩니다. 예외는 선택한 VM이 선택한 멤버에 접근하도록 허용합니다. 선택 해제하면 자유롭게 통신합니다.",
           "inbound": {
             "disabled": "존이 Proxmox에 적용되지 않습니다.",
             "observe": "아무것도 차단되지 않습니다. 정책 밖의 인바운드 트래픽은 기록되고 제안으로 표시됩니다.",
@@ -13565,8 +13568,11 @@
       "delete": {
         "zoneTitle": "영역 {name}을(를) 삭제할까요?",
         "flowTitle": "이 플로우를 삭제할까요?",
+        "exceptionTitle": "이 예외를 삭제할까요?",
         "zoneBody": "영역이 초안에서 제거됩니다. 적용하기 전에는 Proxmox에서 아무것도 바뀌지 않습니다.",
+        "zoneBodyExceptions": "영역과 해당 예외 {count}개가 초안에서 제거됩니다. 적용하기 전에는 Proxmox에서 아무것도 바뀌지 않습니다.",
         "flowBody": "플로우가 초안에서 제거됩니다. 적용하기 전에는 Proxmox에서 아무것도 바뀌지 않습니다.",
+        "exceptionBody": "예외가 초안에서 제거됩니다. 적용하기 전에는 Proxmox에서 아무것도 바뀌지 않습니다.",
         "confirm": "삭제"
       },
       "enforce": {
@@ -13692,6 +13698,51 @@
         "confirm": {
           "block": "아웃바운드 차단",
           "reopen": "아웃바운드 다시 열기"
+        }
+      },
+      "exceptions": {
+        "title": "VM 예외",
+        "tip": "예외는 존의 흐름과 격리 설정과 관계없이, 선택한 VM이 존의 선택한 멤버에 지정한 서비스로 접근하도록 허용합니다.",
+        "add": "예외 추가",
+        "edit": "예외 편집",
+        "delete": "예외 삭제",
+        "none": "예외 없음",
+        "createTitle": "새 예외",
+        "sources": "출발지 VM",
+        "destinations": "목적지 VM",
+        "services": "허용 서비스",
+        "guestsPlaceholder": "VM 선택",
+        "membersGroup": "존의 멤버",
+        "notMembersGroup": "아직 멤버가 아님",
+        "count": "{count, plural, =0 {예외 없음} other {예외 #개}}",
+        "manage": "관리",
+        "notActive": "{count, plural, other {비활성 #개}}",
+        "notActiveHint": "일부 예외가 활성 상태가 아닙니다. 목록을 열어 이유를 확인하세요.",
+        "filter": "VM, VMID 또는 서비스로 필터링",
+        "noMatch": "필터와 일치하는 예외가 없습니다",
+        "columns": {
+          "services": "서비스",
+          "status": "상태"
+        },
+        "alreadySource": "이미 출발지임",
+        "alreadyDestination": "이미 목적지임",
+        "notInInventory": "인벤토리에 없음",
+        "ruleCount": "{count, plural, other {규칙 #개}}",
+        "tooManyRules": "규칙 {count}개, 최대 {max}개: 대신 존의 흐름을 허용하세요",
+        "overlap": "VM은 출발지와 목적지를 동시에 맡을 수 없습니다: {names}",
+        "status": {
+          "inactive_zone": "존 미적용",
+          "no_destination": "존에 목적지 없음",
+          "missing_guest": "VM을 찾을 수 없음",
+          "waiting_address": "주소 알 수 없음",
+          "renamed": "이름 변경됨"
+        },
+        "statusHint": {
+          "inactive_zone": "존이 관찰 중도 차단 중도 아닙니다. 이 예외의 어떤 것도 Proxmox에 기록되지 않습니다.",
+          "no_destination": "목적지 중 존의 멤버가 없습니다. 하나가 존에 들어올 때까지 예외는 아무것도 허용하지 않습니다.",
+          "missing_guest": "출발지 또는 목적지가 더 이상 인벤토리에 없습니다.",
+          "waiting_address": "인벤토리가 아직 출발지의 주소를 알지 못합니다. 주소를 읽을 때까지 규칙이 아무것도 통과시키지 않을 수 있습니다.",
+          "renamed": "VM의 이름이 기록된 이름과 다릅니다. 이름이 바뀌었거나 VMID가 재사용되었습니다. 예외가 여전히 올바른 VM을 가리키는지 확인하세요."
         }
       }
     },
@@ -13954,6 +14005,9 @@
       "asCidr": "CIDR로",
       "acceptTip": "초안에 {from} → {to} {service} 흐름을 만듭니다.",
       "cidrTip": "출발지 {ip}를 주소 범위로 하여 같은 흐름을 만듭니다. 출발지가 알 수 없는 IP일 때 필요합니다.",
+      "exceptionOnly": "이 흐름만 허용",
+      "exceptionOnlyTip": "미리 채워진 영역 예외를 엽니다. 영역 쌍 전체가 아니라 {from}만 {service}로 {to}에 접근합니다.",
+      "exceptionSaved": "예외가 초안에 추가되었습니다. 다음 적용 시 기록됩니다.",
       "dismissTip": "이 쌍에 대한 이 제안을 숨깁니다.",
       "bulkLabel": "선택한 흐름",
       "bulkAcceptTip": "선택한 각 제안의 영역 간 흐름을 초안에 만듭니다.",
@@ -14035,7 +14089,8 @@
         "allowed": "허용됨",
         "unprotected": "보호되지 않음",
         "blocked": "차단됨",
-        "draft": "허용됨, 아직 적용되지 않음"
+        "draft": "허용됨, 아직 적용되지 않음",
+        "exception": "VM 간 예외"
       },
       "node": {
         "members": "{count, plural, other {구성원 #개}}",
@@ -14055,6 +14110,9 @@
         "guestPending": "영역에 대기 중, 다음 계획으로 적용됨",
         "moreHint": "{count, plural, other {멤버 #개 더}}: 영역 패널에 모두 나열됩니다",
         "moreUnzonedHint": "{count, plural, other {영역 없는 게스트 #개 더}}: 편차에 모두 나열됩니다",
+        "morePveHint": "{count, plural, other {이 노드의 게스트 #개 더}}",
+        "guestZone": "영역: {zone}",
+        "guestNoZone": "영역 없음",
         "ipHint": "{ip}: 이 영역과 통신한, 영역과 게스트에 속하지 않는 주소",
         "inside": "{count, plural, other {영역 내부에서 관찰된 흐름 #개}}",
         "observed": "송신 관찰 중",
@@ -14077,7 +14135,11 @@
         "countUnprotected": "{count, plural, other {보호되지 않은 흐름 #개}}",
         "countBlocked": "{count, plural, other {차단된 흐름 #개}}",
         "hitsTotal": "{count, plural, other {로그 발생 총 #회}}",
-        "noCounter": "허용된 흐름에는 카운터가 없습니다. Proxmox는 통과시키는 트래픽을 기록하지 않습니다"
+        "noCounter": "허용된 흐름에는 카운터가 없습니다. Proxmox는 통과시키는 트래픽을 기록하지 않습니다",
+        "exception": "예외: {services}",
+        "exceptionCount": "{count, plural, other {예외 #개}}",
+        "exceptionsBetween": "{count, plural, other {두 영역의 VM 사이 예외 #개}}",
+        "pairsSampled": "엔진이 보관한 예시 쌍:"
       },
       "panel": {
         "label": "영역 {name}",
@@ -14172,7 +14234,19 @@
         "guests": "게스트 보기",
         "guestsHint": "한 영역과 그 게스트, 그리고 이들과 통신하는 대상",
         "sankey": "생키 다이어그램",
-        "sankeyHint": "관찰된 트래픽을 띠로 표시, 히트가 많을수록 넓게"
+        "sankeyHint": "관찰된 트래픽을 띠로 표시, 히트가 많을수록 넓게",
+        "nodes": "노드",
+        "nodesHint": "Proxmox 노드별 게스트, 노드 간 관찰된 흐름과 예외(영역 간 허용된 흐름은 그룹에 남습니다)"
+      },
+      "pve": {
+        "aria": "Proxmox 노드 {name}, {guests}",
+        "guests": "{count, plural, other {게스트 #개}}",
+        "zoneShare": "영역 {zone}: {count, plural, other {게스트 #개}}",
+        "unzonedShare": "영역 없음: {count, plural, other {게스트 #개}}",
+        "inside": "{count, plural, other {내부 흐름 #개}}",
+        "insideHint": "이 노드의 두 게스트 사이에서 관찰된 흐름: 선으로 그려지지 않습니다",
+        "unavailable": "게스트 목록을 사용할 수 없습니다",
+        "none": "그릴 게스트가 없습니다: 구성원이 있는 영역이 없고 실행 중인 게스트도 없습니다"
       },
       "matrix": {
         "label": "영역 간 흐름: 출발지 × 목적지",
@@ -14428,6 +14502,7 @@
         "version": "버전 {version}",
         "by": "작성자 {author}",
         "counts": "영역 {zones}개, 플로우 {flows}개",
+        "countsWithExceptions": "{counts}, 예외 {exceptions}개",
         "latest": "최신",
         "restore": "복원",
         "restoreTitle": "버전 {version}을(를) 복원하시겠습니까?",
@@ -14804,7 +14879,10 @@
       "removalPending": "삭제 대기 중 (다음 적용)",
       "flowChanged": "변경됨",
       "flowChangedHint": "초안에서 변경됨: 다음 적용 시 반영됩니다",
-      "engineFlowRule": "엔진 규칙: 해당 흐름으로 편집하세요 (메뉴 또는 더블클릭)"
+      "engineFlowRule": "엔진 규칙: 해당 흐름으로 편집하세요 (메뉴 또는 더블클릭)",
+      "exceptionRule": "예외: {source} → {destination} (해당 영역에서 편집)",
+      "exceptionRuleRemoved": "예외: {source} → {destination}, 제거 대기 중 (다음 적용)",
+      "knownZoneRule": "영역 {zone}은(는) 알려진 영역입니다: 관찰 중인 영역이 이 영역으로 보내는 트래픽은 기록되지 않습니다"
     },
     "discard": {
       "button": "변경 취소",

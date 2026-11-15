@@ -23,6 +23,12 @@ import TruncatedText from './TruncatedText'
 const ROWS_PER_PAGE = 5
 /** A guest name keeps at least this much of the row (a 12-character name such as "pcz-demo-34"), cut beyond. */
 const NAME_MIN_WIDTH = 96
+/** The room a name holds in its row: NAME_MIN_WIDTH, less for a name too short to fill it (its length, with a margin for wide letters). */
+const nameFloor = (name: string) => `min(${NAME_MIN_WIDTH}px, ${name.length + 3}ch)`
+/** The flex shrink factor of the text of a row that is cut before any other. */
+const FIRST_TO_YIELD = 1000
+/** What is left of the emitting zone of a row at its narrowest: room for an ellipsis to hover. */
+const FROM_ZONE_FLOOR = '2ch'
 
 type Props = {
   target: TargetGuest
@@ -76,13 +82,16 @@ function ObservedLine({ row, peers, zonesById, sharedServices, busy, onResolve }
   const kind = s.kind === 'blocked' ? 'blocked' : 'unprotected'
   return (
     <Box role='listitem' aria-label={where} data-suggestion={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minHeight: 36, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>
-      <Tooltip title={where}>
+      <Tooltip title={fromZone ? `${where}, ${fromZone}` : where}>
         <i className={row.direction === 'out' ? 'ri-arrow-right-up-line' : 'ri-arrow-left-down-line'} style={{ flexShrink: 0 }} aria-hidden />
       </Tooltip>
-      <TruncatedText text={peer} title={where} fontWeight={600} sx={{ flex: '1 1 0', minWidth: NAME_MIN_WIDTH }} />
-      {fromZone && <TruncatedText text={fromZone} color='text.secondary' variant='caption' sx={{ flex: '0 1 auto', minWidth: 0, maxWidth: 110 }} />}
-      <ServiceHits suggestion={s} sharedServices={sharedServices} />
-      {/* The kind gives way before the peer's name: it is cut first, its full label stays in the tooltip. */}
+      {/* The kind chip never shrinks: its label stays whole. What gives way is the emitting zone first (its shrink
+          factor dwarfs the others; it keeps FROM_ZONE_FLOOR, so that its ellipsis can still be hovered, and the
+          tooltip of the direction icon, which always opens, says it too), then the service and its hits, each cut
+          with its full text as tooltip; the peer's name keeps NAME_MIN_WIDTH, or its own width when it is shorter. */}
+      <TruncatedText text={peer} title={where} fontWeight={600} sx={{ flex: '1 1 0', minWidth: nameFloor(peer) }} />
+      {fromZone && <TruncatedText text={fromZone} color='text.secondary' variant='caption' sx={{ flex: `0 ${FIRST_TO_YIELD} auto`, minWidth: FROM_ZONE_FLOOR, maxWidth: 110 }} />}
+      <ServiceHits suggestion={s} sharedServices={sharedServices} yields />
       <Tooltip title={t(`legend.${kind}`)}>
         <Chip
           size='small'
@@ -90,7 +99,7 @@ function ObservedLine({ row, peers, zonesById, sharedServices, busy, onResolve }
           color={kind === 'blocked' ? 'info' : 'error'}
           icon={<ObservedKindGlyph kind={s.kind} />}
           label={t(`legend.${kind}`)}
-          sx={{ flex: '0 1 auto', minWidth: 0, maxWidth: 120 }}
+          sx={{ flexShrink: 0 }}
         />
       </Tooltip>
       <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} acceptLabel={accept} acceptTip={acceptTip} />

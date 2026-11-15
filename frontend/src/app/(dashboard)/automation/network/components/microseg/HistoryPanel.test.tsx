@@ -11,7 +11,7 @@ import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProvider
 import type { MicrosegRevision, MicrosegRun } from '@/lib/microseg/types'
 
 import HistoryPanel from './HistoryPanel'
-import { GUESTS_ROUTE, calls, flow, mock, policy, renderTab, reply, resetMocks, zone } from './microsegTestKit'
+import { GUESTS_ROUTE, calls, exception, flow, mock, policy, renderTab, reply, resetMocks, zone } from './microsegTestKit'
 import { body } from './policyTestKit'
 
 beforeEach(resetMocks)
@@ -132,6 +132,21 @@ describe('the history table', () => {
 })
 
 describe('revisions', () => {
+  it('says how many exceptions a revision holds, and nothing of them when it has none or was taken before they existed', async () => {
+    const snap = { tag_prefix: 'zone-', zones: [zone('web'), zone('db')], flows: [flow('f1')] }
+    setup({ revisions: [
+      rev(9, { snapshot: { ...snap, exceptions: [exception('e1'), exception('e2')] } }),
+      rev(8, { snapshot: { ...snap, exceptions: [exception('e1')] } }),
+      rev(7, { snapshot: { ...snap, exceptions: [] } }),
+      rev(6, { snapshot: snap }),
+    ] })
+    const summary = async (name: string) => within(await rowOf(name)).getByTestId('history-summary').textContent
+    expect(await summary('Version 9')).toBe('2 zones, 1 flow, 2 exceptions · +1 −0 ~0 vs previous')
+    expect(await summary('Version 8')).toBe('2 zones, 1 flow, 1 exception · +1 −0 ~0 vs previous')
+    expect(await summary('Version 7')).toBe('2 zones, 1 flow · +0 −0 ~0 vs previous')
+    expect(await summary('Version 6')).toBe('2 zones, 1 flow')
+  })
+
   it('shows the version, the author, the counts and what changed against the previous revision, Applied and Latest', async () => {
     setup({ revisions: [
       rev(9, { snapshot: { tag_prefix: 'zone-', zones: [zone('web'), zone('db')], flows: [flow('f1'), { ...flow('f2'), dport: '443' }] } }),

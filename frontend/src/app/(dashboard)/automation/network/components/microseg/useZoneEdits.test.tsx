@@ -10,10 +10,12 @@ import { SWRConfig } from 'swr'
 import type { ReactNode } from 'react'
 
 import { MicrosegApiError } from '@/lib/microseg/api'
+import type { MicrosegException } from '@/lib/microseg/types'
 import { useMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 import enMessages from '@/messages/en.json'
 
-import { calls, flow, mock, policy, reply, zone, REVISION_HEAD } from './microsegTestKit'
+import { exceptionDraft, type ExceptionDraft } from './exceptionModel'
+import { calls, fetchMock, flow, mock, policy, reply, zone, REVISION_HEAD } from './microsegTestKit'
 import { body, installFreshMocks } from './policyTestKit'
 import { InboundRunFailedError } from './dialogParts'
 import { useZoneEdits, zoneStateChanges, type ZoneEditsInput } from './useZoneEdits'
@@ -23,7 +25,14 @@ installFreshMocks()
 const web = zone('zw', { name: 'web', state: 'disabled' })
 const draft = policy({ zones: [web], last_revision: REVISION_HEAD })
 const ref = { node: 'pve1', type: 'qemu' as const, vmid: 100 }
-const values = { name: 'web', label: 'front', color: '#ef4444', isolate_members: true, state: 'disabled' as const, egress_state: 'off' as const, egress_mode: 'all' as const, gateway: '', gateway_services: [] }
+const values = { name: 'web', label: 'front', color: '#ef4444', isolate_members: true, state: 'disabled' as const, egress_state: 'off' as const, egress_mode: 'all' as const, gateway: '', gateway_services: [], exceptions: [], removed_exceptions: [] }
+const app1 = { type: 'qemu' as const, vmid: 101, name: 'app-01' }
+const db1 = { type: 'qemu' as const, vmid: 201, name: 'db-01' }
+const stored = (id: string): MicrosegException => ({
+  id, policy_id: 'p1', zone_id: 'zw', sources: [app1], destinations: [db1], services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'me',
+})
+const [e1, e2, e3] = ['e1', 'e2', 'e3'].map(stored)
+const withExceptions = { ...draft, exceptions: [e1, e2, e3] }
 const flowValues = { src_zone_id: 'zw', src_cidr: '', dst_zone_id: 'zw', dst_cidr: '', proto: 'tcp', dport: '22', comment: '', origin: 'manual' }
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -106,6 +115,123 @@ describe('useZoneEdits', () => {
     expect(calls('POST /flows').map(c => [body(c[1] as RequestInit).proto, body(c[1] as RequestInit).dport])).toEqual([['tcp', '53']])
     await act(() => result.current.saveZone(web, { ...values, gateway: '', gateway_services: ['dns', 'ntp', 'ping'] }))
     expect(calls('POST /flows')).toHaveLength(1)
+  })
+
+  it('writes the exception of a new zone after the zone, with the version the zone write returned', async () => {
+    mock.routes['POST /zones'] = () => reply(200, { version: 4, zone: zone('zn', { name: 'app' }) })
+    mock.routes['POST /exceptions'] = () => reply(200, { version: 5, exception: {} })
+    const { result } = setup()
+    const exception = { sources: [app1], destinations: [db1], services: ['postgresql', 'tcp/5432', 'ping'], comment: '' }
+    await act(() => result.current.saveZone(null, { ...values, name: 'app', exceptions: [exception] }))
+    expect(calls('POST /zones')).toHaveLength(1)
+    expect(calls('POST /exceptions').map(c => body(c[1] as RequestInit))).toEqual([{
+      version: 4, zone_id: 'zn', sources: [app1], destinations: [db1], comment: '',
+      // A service named twice is sent once; a ping is ICMP and ICMPv6.
+      services: [{ proto: 'tcp', dport: '5432' }, { proto: 'icmp', dport: '' }, { proto: 'icmpv6', dport: '' }],
+    }])
+  })
+
+  it('writes the exceptions after the flows to the gateway, each write with the version of the one before', async () => {
+    mock.routes['POST /zones'] = () => reply(200, { version: 4, zone: zone('zn', { name: 'app' }) })
+    let v = 4
+    mock.routes['POST /flows'] = () => reply(200, { version: ++v, flow: {} })
+    mock.routes['POST /exceptions'] = () => reply(200, { version: ++v, exception: {} })
+    const { result } = setup()
+    const one = { sources: [app1], destinations: [db1], services: ['ssh'], comment: '' }
+    await act(() => result.current.saveZone(null, { ...values, name: 'app', gateway: '10.30.0.1', gateway_services: ['ntp'], exceptions: [one, { ...one, services: ['https'] }] }))
+    expect(calls('POST /flows').map(c => body(c[1] as RequestInit).version)).toEqual([4])
+    expect(calls('POST /exceptions').map(c => body(c[1] as RequestInit).version)).toEqual([5, 6])
+  })
+
+  it('writes no exception for a zone dialog that has none', async () => {
+    mock.routes['POST /zones'] = () => reply(200, { version: 4, zone: zone('zn', { name: 'app' }) })
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web })
+    const { result } = setup({ policy: withExceptions })
+    await act(() => result.current.saveZone(null, { ...values, name: 'app' }))
+    // The exceptions of the zone as they are stored: nothing to write.
+    await act(() => result.current.saveZone(web, { ...values, exceptions: [exceptionDraft(e1), exceptionDraft(e2)] }))
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).includes('/exceptions'))).toHaveLength(0)
+  })
+
+  it('deletes the removed exceptions, updates the changed ones and creates the new ones, before the state change', async () => {
+    const observed = zone('zw', { name: 'web', state: 'observe' })
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: observed })
+    let v = 4
+    mock.routes['DELETE /exceptions/e1'] = () => reply(200, { version: ++v })
+    mock.routes['PUT /exceptions/e2'] = () => reply(200, { version: ++v, exception: {} })
+    mock.routes['POST /exceptions'] = () => reply(200, { version: ++v, exception: {} })
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1' })
+    const { result } = setup({ policy: withExceptions })
+    const changed = { ...exceptionDraft(e2), sources: [...e2.sources, db1] }
+    const created = { sources: [db1], destinations: [app1], services: ['all'], comment: '' }
+    await act(() => result.current.saveZone(observed, { ...values, state: 'enforce', exceptions: [exceptionDraft(e3), changed, created], removed_exceptions: ['e1'] }))
+    expect(body(calls('DELETE /exceptions/e1')[0][1] as RequestInit)).toEqual({ version: 4 })
+    expect(body(calls('PUT /exceptions/e2')[0][1] as RequestInit)).toEqual({
+      version: 5, zone_id: 'zw', sources: [app1, db1], destinations: [db1], services: [{ proto: 'tcp', dport: '5432' }], comment: '',
+    })
+    expect(body(calls('POST /exceptions')[0][1] as RequestInit)).toMatchObject({ version: 6, zone_id: 'zw', services: [{ proto: 'any', dport: '' }] })
+    // The unchanged one is not written.
+    expect(calls('PUT /exceptions/e3')).toHaveLength(0)
+    expect(body(calls('POST /zones/zw/state')[0][1] as RequestInit)).toEqual({ version: 7, state: 'enforce' })
+  })
+
+  it('tries a save again after a step failed without creating an exception twice nor deleting one already gone', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web })
+    mock.routes['DELETE /exceptions/e1'] = () => reply(200, { version: 5 })
+    let posts = 0
+    // The first new exception is written, the second is refused once.
+    mock.routes['POST /exceptions'] = () => {
+      posts++
+      if (posts === 1) return reply(200, { version: 6, exception: { ...stored('n1'), sources: [db1], destinations: [app1] } })
+      return posts === 2 ? reply(400, { code: 'INVALID', error: 'refused' }) : reply(200, { version: 7, exception: stored('n2') })
+    }
+    const reloadPolicy = vi.fn(async () => undefined)
+    const { result, rerender } = renderHook(
+      ({ p }) => useZoneEdits({ connectionId: 'c1', policy: p, reloadPolicy, startRun: vi.fn() }),
+      { wrapper, initialProps: { p: withExceptions } },
+    )
+    const first: ExceptionDraft = { sources: [db1], destinations: [app1], services: ['postgresql'], comment: '' }
+    const second: ExceptionDraft = { sources: [db1], destinations: [app1], services: ['ssh'], comment: '' }
+    const created = vi.fn()
+    const form = { ...values, exceptions: [exceptionDraft(e2), first, second], removed_exceptions: ['e1'] }
+    const error = await refused(result.current.saveZone(web, form, created))
+    expect((error as MicrosegApiError).serverMessage).toBe('refused')
+    expect(created.mock.calls).toEqual([[first, 'n1']])
+
+    // The draft read again: e1 is gone, the first new exception is stored. The dialog gave it its id.
+    const n1 = { ...stored('n1'), sources: [db1], destinations: [app1] }
+    rerender({ p: { ...withExceptions, version: 6, exceptions: [e2, e3, n1] } })
+    await act(() => result.current.saveZone(web, { ...form, exceptions: [exceptionDraft(e2), { ...first, id: 'n1' }, second] }, created))
+    expect(calls('DELETE /exceptions/e1')).toHaveLength(1)
+    expect(calls('PUT /exceptions/n1')).toHaveLength(0)
+    expect(calls('POST /exceptions').map(c => body(c[1] as RequestInit).services)).toEqual([
+      [{ proto: 'tcp', dport: '5432' }], [{ proto: 'tcp', dport: '22' }], [{ proto: 'tcp', dport: '22' }],
+    ])
+    expect(body(calls('POST /exceptions')[2][1] as RequestInit).version).toBe(4)
+    expect(created.mock.calls[1]).toEqual([second, 'n2'])
+  })
+
+  it('never deletes an exception the dialog did not remove, even one it does not list', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web })
+    const { result } = setup({ policy: withExceptions })
+    await act(() => result.current.saveZone(web, values))
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).includes('/exceptions'))).toHaveLength(0)
+  })
+
+  it('saves and deletes one exception with the draft version, then reads the policy again', async () => {
+    mock.routes['POST /exceptions'] = () => reply(200, { version: 4, exception: {} })
+    mock.routes['PUT /exceptions/e1'] = () => reply(200, { version: 4, exception: {} })
+    mock.routes['DELETE /exceptions/e1'] = () => reply(200, { version: 4 })
+    const { result, reloadPolicy } = setup({ policy: withExceptions })
+    await act(() => result.current.saveException('zw', { sources: [app1], destinations: [db1], services: ['ssh'], comment: 'why' }))
+    expect(body(calls('POST /exceptions')[0][1] as RequestInit)).toEqual({
+      version: 3, zone_id: 'zw', sources: [app1], destinations: [db1], services: [{ proto: 'tcp', dport: '22' }], comment: 'why',
+    })
+    await act(() => result.current.saveException('zw', { ...exceptionDraft(e1), services: ['ssh'] }))
+    expect(body(calls('PUT /exceptions/e1')[0][1] as RequestInit)).toMatchObject({ version: 3, zone_id: 'zw', services: [{ proto: 'tcp', dport: '22' }] })
+    await act(() => result.current.deleteException('e1'))
+    expect(body(calls('DELETE /exceptions/e1')[0][1] as RequestInit)).toEqual({ version: 3 })
+    expect(reloadPolicy).toHaveBeenCalledTimes(3)
   })
 
   it('reads the policy again and rethrows on a version conflict', async () => {

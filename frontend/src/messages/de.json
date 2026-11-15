@@ -12876,6 +12876,11 @@
         "changed": "Fluss {flow} geändert",
         "removed": "Fluss {flow} entfernt"
       },
+      "exceptions": {
+        "added": "{count, plural, one {# Ausnahme hinzugefügt} other {# Ausnahmen hinzugefügt}}",
+        "changed": "{count, plural, one {# Ausnahme geändert} other {# Ausnahmen geändert}}",
+        "removed": "{count, plural, one {# Ausnahme entfernt} other {# Ausnahmen entfernt}}"
+      },
       "members": "{count, plural, one {# Mitgliedsänderung} other {# Mitgliedsänderungen}}",
       "membersTo": "{count, plural, one {# Gast nach {zone}} other {# Gäste nach {zone}}}",
       "tagPrefix": "Tag-Präfix geändert",
@@ -13016,12 +13021,10 @@
         "gatewayTip": "Gateway {ip}"
       },
       "flow": {
-        "notApplied": "Nicht angewendet (Ausgang nicht kontrolliert)",
         "learned": "Gelernt",
         "edit": "Fluss bearbeiten",
         "delete": "Fluss löschen",
-        "createdBy": "Erstellt von {user}",
-        "observed": "Ausgang im Beobachtungsmodus"
+        "createdBy": "Erstellt von {user}"
       },
       "zoneDialog": {
         "createTitle": "Neue Zone",
@@ -13051,7 +13054,7 @@
         "egressAllWarning": "Nur Filterung nach IP-Adresse: Ein Dienst hinter einem Domainnamen kann seine Adresse ändern.",
         "egressNeedsState": "Die Zone muss im Beobachtungs- oder Blockierungsmodus sein",
         "tips": {
-          "isolate": "Die VMs dieser Zone erreichen einander nur über einen deklarierten Fluss. Deaktiviert kommunizieren sie frei miteinander.",
+          "isolate": "Die VMs dieser Zone erreichen einander nur über einen deklarierten Fluss oder eine Ausnahme, die ausgewählten VMs den Zugriff auf ausgewählte Mitglieder erlaubt. Deaktiviert kommunizieren sie frei miteinander.",
           "inbound": {
             "disabled": "Die Zone wird nicht auf Proxmox angewendet.",
             "observe": "Nichts wird blockiert: eingehender Verkehr außerhalb der Richtlinie wird protokolliert und als Vorschlag angeboten.",
@@ -13136,8 +13139,11 @@
       "delete": {
         "zoneTitle": "Zone {name} löschen?",
         "flowTitle": "Diesen Fluss löschen?",
+        "exceptionTitle": "Diese Ausnahme löschen?",
         "zoneBody": "Die Zone wird aus dem Entwurf entfernt. Auf Proxmox ändert sich nichts, bis Sie anwenden.",
+        "zoneBodyExceptions": "Die Zone und {count, plural, one {ihre Ausnahme} other {ihre # Ausnahmen}} werden aus dem Entwurf entfernt. Auf Proxmox ändert sich nichts, bis Sie anwenden.",
         "flowBody": "Der Fluss wird aus dem Entwurf entfernt. Auf Proxmox ändert sich nichts, bis Sie anwenden.",
+        "exceptionBody": "Die Ausnahme wird aus dem Entwurf entfernt. Auf Proxmox ändert sich nichts, bis Sie anwenden.",
         "confirm": "Löschen"
       },
       "enforce": {
@@ -13263,6 +13269,51 @@
         "confirm": {
           "block": "Ausgang sperren",
           "reopen": "Ausgang wieder öffnen"
+        }
+      },
+      "exceptions": {
+        "title": "VM-Ausnahmen",
+        "tip": "Eine Ausnahme erlaubt ausgewählten VMs, ausgewählte Mitglieder der Zone über die angegebenen Dienste zu erreichen, unabhängig von den Flüssen und der Isolation der Zone.",
+        "add": "Ausnahme hinzufügen",
+        "edit": "Ausnahme bearbeiten",
+        "delete": "Ausnahme löschen",
+        "none": "Keine Ausnahme",
+        "createTitle": "Neue Ausnahme",
+        "sources": "Quell-VMs",
+        "destinations": "Ziel-VMs",
+        "services": "Erlaubte Dienste",
+        "guestsPlaceholder": "VMs auswählen",
+        "membersGroup": "Mitglieder der Zone",
+        "notMembersGroup": "Noch keine Mitglieder",
+        "count": "{count, plural, =0 {Keine Ausnahme} one {# Ausnahme} other {# Ausnahmen}}",
+        "manage": "Verwalten",
+        "notActive": "{count, plural, one {# nicht aktiv} other {# nicht aktiv}}",
+        "notActiveHint": "Einige Ausnahmen sind nicht aktiv: Öffnen Sie die Liste, um den Grund zu sehen.",
+        "filter": "Nach VM, VMID oder Dienst filtern",
+        "noMatch": "Keine Ausnahme entspricht dem Filter",
+        "columns": {
+          "services": "Dienste",
+          "status": "Zustand"
+        },
+        "alreadySource": "Bereits Quelle",
+        "alreadyDestination": "Bereits Ziel",
+        "notInInventory": "Nicht im Inventar",
+        "ruleCount": "{count, plural, one {# Regel} other {# Regeln}}",
+        "tooManyRules": "{count} Regeln, höchstens {max}: Erlauben Sie stattdessen einen Fluss der Zone",
+        "overlap": "Eine VM kann nicht zugleich Quelle und Ziel sein: {names}",
+        "status": {
+          "inactive_zone": "Zone nicht angewendet",
+          "no_destination": "Kein Ziel in der Zone",
+          "missing_guest": "VM nicht gefunden",
+          "waiting_address": "Adresse unbekannt",
+          "renamed": "Name geändert"
+        },
+        "statusHint": {
+          "inactive_zone": "Die Zone beobachtet weder noch blockiert sie: Von dieser Ausnahme wird nichts auf Proxmox geschrieben.",
+          "no_destination": "Keines ihrer Ziele ist Mitglied der Zone: Die Ausnahme erlaubt nichts, bis eines beitritt.",
+          "missing_guest": "Eine Quelle oder ein Ziel ist nicht mehr im Inventar.",
+          "waiting_address": "Das Inventar kennt noch keine Adresse einer Quelle: Ihre Regeln lassen möglicherweise nichts durch, bis eine gelesen wird.",
+          "renamed": "Eine VM trägt nicht mehr den gespeicherten Namen: Sie wurde umbenannt, oder ihre VMID wurde wiederverwendet. Prüfen Sie, ob die Ausnahme noch die richtige VM benennt."
         }
       }
     },
@@ -13525,6 +13576,9 @@
       "asCidr": "Als CIDR",
       "acceptTip": "Legt den Fluss {from} → {to} {service} im Entwurf an.",
       "cidrTip": "Legt denselben Fluss mit der Quelle {ip} als Adressbereich an: nötig, wenn die Quelle eine unbekannte IP ist.",
+      "exceptionOnly": "Nur diesen Fluss erlauben",
+      "exceptionOnlyTip": "Öffnet eine vorausgefüllte Ausnahme der Zone: nur {from} erreicht {to} über {service}, nicht das ganze Zonenpaar.",
+      "exceptionSaved": "Ausnahme zum Entwurf hinzugefügt: die nächste Anwendung schreibt sie.",
       "dismissTip": "Blendet diesen Vorschlag für dieses Paar aus.",
       "bulkLabel": "Ausgewählte Flüsse",
       "bulkAcceptTip": "Legt im Entwurf für jeden ausgewählten Vorschlag den Fluss zwischen den Zonen an.",
@@ -13606,7 +13660,8 @@
         "allowed": "Erlaubt",
         "unprotected": "Ungeschützt",
         "blocked": "Blockiert",
-        "draft": "Erlaubt, noch nicht angewendet"
+        "draft": "Erlaubt, noch nicht angewendet",
+        "exception": "Ausnahme zwischen VMs"
       },
       "node": {
         "members": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
@@ -13626,6 +13681,9 @@
         "guestPending": "Für die Zone vorgemerkt, mit dem nächsten Plan angewendet",
         "moreHint": "{count, plural, one {# weiteres Mitglied} other {# weitere Mitglieder}}: der Zonenbereich listet alle",
         "moreUnzonedHint": "{count, plural, one {# weiterer Gast} other {# weitere Gäste}} ohne Zone: Abweichungen listet alle",
+        "morePveHint": "{count, plural, one {# weiterer Gast} other {# weitere Gäste}} auf diesem Knoten",
+        "guestZone": "Zone: {zone}",
+        "guestNoZone": "In keiner Zone",
         "ipHint": "{ip}: eine Adresse ohne Zone und ohne Gast, die mit dieser Zone gesprochen hat",
         "inside": "{count, plural, one {# beobachteter Fluss} other {# beobachtete Flüsse}} innerhalb der Zone",
         "observed": "Ausgang beobachtet",
@@ -13648,7 +13706,11 @@
         "countUnprotected": "{count, plural, one {# ungeschützter Fluss} other {# ungeschützte Flüsse}}",
         "countBlocked": "{count, plural, one {# blockierter Fluss} other {# blockierte Flüsse}}",
         "hitsTotal": "{count, plural, one {# Protokolleintrag} other {# Protokolleinträge}} insgesamt",
-        "noCounter": "Erlaubte Flüsse haben keinen Zähler: Proxmox protokolliert nicht, was es durchlässt"
+        "noCounter": "Erlaubte Flüsse haben keinen Zähler: Proxmox protokolliert nicht, was es durchlässt",
+        "exception": "Ausnahme: {services}",
+        "exceptionCount": "{count, plural, one {# Ausnahme} other {# Ausnahmen}}",
+        "exceptionsBetween": "{count, plural, one {# Ausnahme} other {# Ausnahmen}} zwischen VMs der beiden Zonen",
+        "pairsSampled": "Vom Dienst behaltene Beispielpaare:"
       },
       "panel": {
         "label": "Zone {name}",
@@ -13743,7 +13805,19 @@
         "guests": "Gastansicht",
         "guestsHint": "eine Zone und ihre Gäste, mit allem, was mit ihnen spricht",
         "sankey": "Sankey-Diagramm",
-        "sankeyHint": "der beobachtete Verkehr als Bänder, breiter mit mehr Treffern"
+        "sankeyHint": "der beobachtete Verkehr als Bänder, breiter mit mehr Treffern",
+        "nodes": "Knoten",
+        "nodesHint": "die Gäste auf ihrem Proxmox-Knoten, die beobachteten Flüsse und die Ausnahmen von Knoten zu Knoten (die erlaubten Flüsse zwischen Zonen bleiben in Gruppen)"
+      },
+      "pve": {
+        "aria": "Proxmox-Knoten {name}, {guests}",
+        "guests": "{count, plural, one {# Gast} other {# Gäste}}",
+        "zoneShare": "Zone {zone}: {count, plural, one {# Gast} other {# Gäste}}",
+        "unzonedShare": "Ohne Zone: {count, plural, one {# Gast} other {# Gäste}}",
+        "inside": "{count, plural, one {# interner Fluss} other {# interne Flüsse}}",
+        "insideHint": "Beobachtete Flüsse zwischen zwei Gästen dieses Knotens: für sie wird keine Linie gezeichnet",
+        "unavailable": "Gästeliste nicht verfügbar",
+        "none": "Kein Gast zu zeichnen: keine Zone hat ein Mitglied und kein Gast läuft"
       },
       "matrix": {
         "label": "Flüsse zwischen den Zonen: Quellen nach Zielen",
@@ -13999,6 +14073,7 @@
         "version": "Version {version}",
         "by": "von {author}",
         "counts": "{zones, plural, one {# Zone} other {# Zonen}}, {flows, plural, one {# Fluss} other {# Flüsse}}",
+        "countsWithExceptions": "{counts}, {exceptions, plural, one {# Ausnahme} other {# Ausnahmen}}",
         "latest": "Neueste",
         "restore": "Wiederherstellen",
         "restoreTitle": "Version {version} wiederherstellen?",
@@ -14375,7 +14450,10 @@
       "removalPending": "Entfernung ausstehend (nächste Anwendung)",
       "flowChanged": "geändert",
       "flowChangedHint": "Im Entwurf geändert: wird bei der nächsten Anwendung wirksam",
-      "engineFlowRule": "Regel der Engine: als ihren Fluss bearbeiten (Menü oder Doppelklick)"
+      "engineFlowRule": "Regel der Engine: als ihren Fluss bearbeiten (Menü oder Doppelklick)",
+      "exceptionRule": "Ausnahme: {source} → {destination} (in ihrer Zone bearbeitet)",
+      "exceptionRuleRemoved": "Ausnahme: {source} → {destination}, Entfernung ausstehend (nächste Anwendung)",
+      "knownZoneRule": "Zone {zone} ist bekannt: Was eine beobachtete Zone an sie sendet, wird nicht protokolliert"
     },
     "discard": {
       "button": "Änderungen verwerfen",

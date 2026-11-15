@@ -12,7 +12,7 @@ import RBACContext, { type RBACContextValue } from '@/contexts/RBACContext'
 import frMessages from '@/messages/fr.json'
 import type { MicrosegFlow, MicrosegZone, PendingMember } from '@/lib/microseg/types'
 
-import { calls, fetchMock, flow, mock, policy, renderTab, reply, revisionWithSnapshot, BASE, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
+import { calls, exception, fetchMock, flow, mock, policy, renderTab, reply, revisionWithSnapshot, BASE, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
 import type { ZoneFormValues } from './zoneForm'
 import MicrosegTab from './MicrosegTab'
 import ZoneDialog from './ZoneDialog'
@@ -132,6 +132,19 @@ describe('zone header actions', () => {
     await waitFor(() => expect(screen.queryByRole('complementary')).toBeNull())
     await waitFor(() => expect(screen.queryByTestId('node-zone:zw')).toBeNull())
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('says in the confirmation that the exceptions of the zone are deleted with it, and nothing of them when it has none', async () => {
+    const view = setup({ exceptions: [exception('e1'), exception('e2'), exception('e3', { zone_id: 'zd' })] })
+    fireEvent.click(button(await openPanel(), 'Delete zone'))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete zone web?' })
+    expect(within(dialog).getByText('The zone and its 2 exceptions are removed from the draft. Nothing changes on Proxmox until you apply.')).toBeTruthy()
+    view.unmount()
+
+    setup()
+    fireEvent.click(button(await openPanel(), 'Delete zone'))
+    const plain = await screen.findByRole('dialog', { name: 'Delete zone web?' })
+    expect(within(plain).getByText('The zone is removed from the draft. Nothing changes on Proxmox until you apply.')).toBeTruthy()
   })
 
   it('keeps the panel open with the error when the deletion fails', async () => {
@@ -593,6 +606,127 @@ describe('flows', () => {
   })
 })
 
+describe('exceptions', () => {
+  const vms = [vm(100, 'web-1', ['zone-web'], { ips: ['10.0.0.1'] }), vm(200, 'app-01', [], { ips: ['10.0.0.9'] }), vm(201, 'app-02', [], { ips: ['10.0.0.10'] })]
+  const LABEL = 'app-01 → web-1 · PostgreSQL'
+  const region = async () => within(await openPanel()).getByRole('region', { name: 'VM exceptions' })
+  const pick = async (dialog: HTMLElement, name: string, option: RegExp) => {
+    const field = within(dialog).getByRole('combobox', { name })
+    fireEvent.mouseDown(field)
+    fireEvent.click(within(await screen.findByRole('listbox')).getByRole('option', { name: option }))
+    fireEvent.keyDown(field, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+  }
+
+  it('keeps an exception removed from the draft struck until the next apply, and marks the new and changed ones as draft', async () => {
+    const applied = [exception('e1'), exception('e2', { sources: [{ type: 'qemu', vmid: 201, name: 'app-02' }], services: [{ proto: 'tcp', dport: '443' }] })]
+    const head = revisionWithSnapshot([web(), db()], [])
+    mock.routes['GET /revisions?limit=1'] = () => reply(200, { revisions: [{ ...head, snapshot: { ...head.snapshot, exceptions: applied } }] })
+    setup({
+      vms, pending_changes: true,
+      exceptions: [{ ...applied[1], services: [{ proto: 'tcp', dport: '8443' }] }, exception('e3', { services: [{ proto: 'tcp', dport: '22' }] })],
+    })
+    const list = await region()
+    // Removed from the draft, still enforced until the apply: listed struck, said removed, with nothing to edit.
+    const gone = await within(list).findByRole('listitem', { name: LABEL })
+    expect(within(gone).getByText(LABEL)).toHaveStyle({ textDecoration: 'line-through' })
+    expect(within(gone).getByText('Removed')).toBeTruthy()
+    expect(within(gone).queryByRole('button', { name: 'Edit exception' })).toBeNull()
+    expect(within(gone).queryByRole('button', { name: 'Delete exception' })).toBeNull()
+    // Changed and new: the draft mark of a flow of the panel.
+    const changed = within(list).getByRole('listitem', { name: /^app-02 → web-1 · .*8443/ })
+    expect(within(changed).getByText('Draft')).toBeTruthy()
+    const added = within(list).getByRole('listitem', { name: 'app-01 → web-1 · SSH' })
+    expect(within(added).getByText('Draft')).toBeTruthy()
+    expect(button(added, 'Edit exception').disabled).toBe(false)
+  })
+
+  it('marks nothing when the draft has nothing to apply', async () => {
+    setup({ vms, exceptions: [exception('e1')] })
+    const row = await within(await region()).findByRole('listitem', { name: LABEL })
+    expect(within(row).queryByText('Draft')).toBeNull()
+    expect(within(row).queryByText('Removed')).toBeNull()
+    expect(within(row).getByText(LABEL)).not.toHaveStyle({ textDecoration: 'line-through' })
+  })
+
+  it('deletes an exception with the draft version once confirmed in a themed dialog, never a native one', async () => {
+    const native = vi.spyOn(window, 'confirm')
+    mock.routes['DELETE /exceptions/e1'] = () => reply(200, { version: 4 })
+    setup({ vms, exceptions: [exception('e1')] })
+    const row = await within(await region()).findByRole('listitem', { name: LABEL })
+    fireEvent.click(button(row, 'Delete exception'))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete this exception?' })
+    expect(calls('DELETE /exceptions/e1')).toHaveLength(0)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(calls('DELETE /exceptions/e1')).toHaveLength(1))
+    expect(body(calls('DELETE /exceptions/e1')[0][1] as RequestInit)).toEqual({ version: 3 })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(native).not.toHaveBeenCalled()
+    native.mockRestore()
+  })
+
+  it('keeps the confirmation open with the reason when the deletion fails', async () => {
+    mock.routes['DELETE /exceptions/e1'] = () => reply(409, { code: 'VERSION_CONFLICT', error: 'conflict' })
+    setup({ vms, exceptions: [exception('e1')] })
+    fireEvent.click(button(await within(await region()).findByRole('listitem', { name: LABEL }), 'Delete exception'))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete this exception?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(calls('DELETE /exceptions/e1')).toHaveLength(1))
+    expect(await within(dialog).findByRole('alert')).toBeTruthy()
+  })
+
+  it('opens the exception dialog prefilled from the pencil, and writes the exception at once with the draft version', async () => {
+    mock.routes['PUT /exceptions/e1'] = () => reply(200, { version: 4, exception: exception('e1') })
+    setup({ vms, exceptions: [exception('e1')] })
+    fireEvent.click(button(await within(await region()).findByRole('listitem', { name: LABEL }), 'Edit exception'))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit exception' })
+    expect(within(dialog).getByTestId('exception-sources-value').textContent).toBe('app-01')
+    expect(within(dialog).getByTestId('exception-destinations-value').textContent).toBe('web-1')
+    expect(within(dialog).getByTestId('exception-services-value').textContent).toBe('PostgreSQL')
+    await pick(dialog, 'Allowed services', /^SSH/)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(calls('PUT /exceptions/e1')).toHaveLength(1))
+    expect(body(calls('PUT /exceptions/e1')[0][1] as RequestInit)).toEqual({
+      version: 3, zone_id: 'zw', sources: [{ type: 'qemu', vmid: 200, name: 'app-01' }], destinations: [{ type: 'qemu', vmid: 100, name: 'web-1' }],
+      services: [{ proto: 'tcp', dport: '5432' }, { proto: 'tcp', dport: '22' }], comment: '',
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('opens the dialog empty from the add button, then writes the new exception of the zone and shows it in the pending bar', async () => {
+    mock.routes['POST /exceptions'] = () => reply(200, { version: 4, exception: exception('e9') })
+    setup({ vms, last_revision: null })
+    fireEvent.click(button(await region(), 'Add an exception'))
+    const dialog = await screen.findByRole('dialog', { name: 'New exception' })
+    expect(within(dialog).queryByTestId('exception-sources-value')?.textContent ?? '').toBe('')
+    await pick(dialog, 'Source VMs', /^app-02/)
+    await pick(dialog, 'Destination VMs', /^web-1/)
+    await pick(dialog, 'Allowed services', /^HTTPS/)
+    mock.routes['GET /policy'] = () => reply(200, policy({
+      zones: [web(), db()], exceptions: [exception('e9', { sources: [{ type: 'qemu', vmid: 201, name: 'app-02' }], services: [{ proto: 'tcp', dport: '443' }] })],
+      last_revision: null, pending_changes: true, version: 4,
+    }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(calls('POST /exceptions')).toHaveLength(1))
+    expect(body(calls('POST /exceptions')[0][1] as RequestInit)).toEqual({
+      version: 3, zone_id: 'zw', sources: [{ type: 'qemu', vmid: 201, name: 'app-02' }], destinations: [{ type: 'qemu', vmid: 100, name: 'web-1' }],
+      services: [{ proto: 'tcp', dport: '443' }], comment: '',
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(await screen.findByRole('listitem', { name: 'app-02 → web-1 · HTTPS' })).toBeTruthy()
+    expect(await screen.findByText(/Not applied yet: .*1 exception added/)).toBeTruthy()
+  })
+
+  it('keeps the dialog open with the server wording when the write is refused', async () => {
+    mock.routes['PUT /exceptions/e1'] = () => reply(400, { code: 'INVALID', error: 'too many rules for one exception' })
+    setup({ vms, exceptions: [exception('e1')] })
+    fireEvent.click(button(await within(await region()).findByRole('listitem', { name: LABEL }), 'Edit exception'))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit exception' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(await within(dialog).findByText(/too many rules for one exception/)).toBeTruthy()
+  })
+})
+
 describe('read-only user', () => {
   const READ_ONLY = 'Read-only: you need node management rights'
   const rbac = (): RBACContextValue => ({
@@ -604,13 +738,13 @@ describe('read-only user', () => {
 
   it('disables every write control of the panel and says why', async () => {
     window.localStorage.setItem('microseg.subTab', 'overview')
-    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web(), db()], flows: [flowOf('f1'), flowOf('f2', { src_zone_id: 'zd', dst_zone_id: 'zw' })], last_revision: REVISION_HEAD }))
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web(), db()], flows: [flowOf('f1'), flowOf('f2', { src_zone_id: 'zd', dst_zone_id: 'zw' })], exceptions: [exception('e1')], last_revision: REVISION_HEAD }))
     mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: [vm(100, 'web-1', ['zone-web'])] } })
     mock.routes['GET /suggestions?status=pending&limit=200'] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
     renderReadOnly()
     const panel = await openPanel()
     await within(panel).findByRole('listitem', { name: 'web-1' })
-    const names = ['Edit zone', 'Change state', 'Delete zone', 'Assign guests', 'Remove from zone', 'Edit flow', 'Delete flow', 'New incoming flow', 'New outgoing flow']
+    const names = ['Edit zone', 'Change state', 'Delete zone', 'Assign guests', 'Remove from zone', 'Edit flow', 'Delete flow', 'New incoming flow', 'New outgoing flow', 'Edit exception', 'Delete exception', 'Add an exception']
     for (const name of names) {
       for (const control of within(panel).getAllByRole('button', { name }) as HTMLButtonElement[]) expect(control.disabled, name).toBe(true)
     }

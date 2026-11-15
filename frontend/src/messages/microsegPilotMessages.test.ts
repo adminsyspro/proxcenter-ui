@@ -63,7 +63,10 @@ describe('microsegPilot i18n parity across the 6 served locales', () => {
     // Proper nouns and words that are the same in a language (Plan, Zones, Type, Page, Observation, Direction, Destination...) may coincide:
     // each locale has its own ceiling, set just above what it legitimately shares.
     // de shares 14 words with English today (Name, Zone, Status, Plan, Gateway...): room for two more.
-    const ceilings: Record<string, number> = { fr: 21, de: 16, es: 5, ko: 3, 'zh-CN': 3 }
+    // fr shares one more since the count of exceptions on a link of the map ("# exception", "# exceptions"): the same word in both languages.
+    // And one more with the count of exceptions of a revision in the history ("{counts}, # exception(s)"), for the same reason.
+    // And one more with the "Services" column of the table of the exceptions of a zone: the same word in both languages.
+    const ceilings: Record<string, number> = { fr: 24, de: 16, es: 5, ko: 3, 'zh-CN': 3 }
     for (const [locale, ceiling] of Object.entries(ceilings)) {
       const flat = flatten(locales[locale].microsegPilot)
       // The names of the gateway services (DNS, NTP, Ping) are protocol names, the same everywhere.
@@ -83,7 +86,7 @@ describe('microsegPilot i18n parity across the 6 served locales', () => {
         'outboundStates.off': 'Non contrôlée',
         'outboundStates.observe': 'Observation',
         'outboundStates.enforce': 'Blocage',
-        'tips.isolate': 'Les VM de cette zone ne se joignent entre elles que par un flux déclaré. Décochée, elles communiquent librement.',
+        'tips.isolate': 'Les VM de cette zone ne se joignent entre elles que par un flux déclaré ou une exception, qui autorise des VM choisies à joindre des membres choisis. Décochée, elles communiquent librement.',
         'tips.inbound.disabled': 'La zone n\'est pas appliquée sur Proxmox.',
         'tips.inbound.observe': 'Rien n\'est bloqué : le trafic entrant hors politique est journalisé et proposé en suggestions.',
         'tips.inbound.enforce': 'Seuls les flux de la politique entrent ; le reste est bloqué et visible dans Bloqués.',

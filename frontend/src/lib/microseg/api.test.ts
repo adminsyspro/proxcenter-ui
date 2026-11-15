@@ -121,6 +121,38 @@ describe('microsegApi requests', () => {
     expect(lastCall()).toMatchObject({ url: '/api/v1/firewall/microseg/c1/flows/f1', method: 'PUT' })
   })
 
+  it('creates, edits and deletes an exception like a flow: the version in the body, the id in the path', async () => {
+    const exception = {
+      id: 'e1', policy_id: 'p1', zone_id: 'zd', sources: [{ type: 'qemu', vmid: 100, name: 'web-1' }],
+      destinations: [{ type: 'lxc', vmid: 200, name: 'db-1' }], services: [{ proto: 'tcp', dport: '5432' }], comment: 'backup', created_by: 'admin',
+    }
+    fetchMock.mockResolvedValue(reply(200, { version: 6, exception }))
+    const api = microsegApi('c1')
+    const input = {
+      version: 5, zone_id: 'zd', sources: [{ type: 'qemu' as const, vmid: 100, name: 'web-1' }],
+      destinations: [{ type: 'lxc' as const, vmid: 200, name: 'db-1' }], services: [{ proto: 'tcp', dport: '5432' }], comment: 'backup',
+    }
+    await expect(api.saveException(input)).resolves.toEqual({ version: 6, exception })
+    expect(lastCall()).toEqual({ url: '/api/v1/firewall/microseg/c1/exceptions', method: 'POST', body: input })
+    await api.saveException({ id: 'e 1', ...input })
+    expect(lastCall()).toEqual({ url: '/api/v1/firewall/microseg/c1/exceptions/e%201', method: 'PUT', body: input })
+    fetchMock.mockResolvedValue(reply(200, { version: 7 }))
+    await expect(api.deleteException('e1', 6)).resolves.toEqual({ version: 7 })
+    expect(lastCall()).toEqual({ url: '/api/v1/firewall/microseg/c1/exceptions/e1', method: 'DELETE', body: { version: 6 } })
+  })
+
+  it('reads a policy without exceptions (an older orchestrator) as an empty list, and keeps the ones it gets', async () => {
+    const api = microsegApi('c1')
+    fetchMock.mockResolvedValue(reply(200, { zones: [], flows: [], version: 2 }))
+    expect((await api.getPolicy()).exceptions).toEqual([])
+    expect((await api.discardDraft(2)).exceptions).toEqual([])
+    fetchMock.mockResolvedValue(reply(200, { zones: [], flows: [], exceptions: null, version: 2 }))
+    expect((await api.getPolicy()).exceptions).toEqual([])
+    fetchMock.mockResolvedValue(reply(200, { zones: [], flows: [], exceptions: [{ id: 'e1' }], version: 2 }))
+    expect((await api.getPolicy()).exceptions).toEqual([{ id: 'e1' }])
+    expect((await api.discardDraft(2)).exceptions).toEqual([{ id: 'e1' }])
+  })
+
   it('sends members with an empty zone_id to remove, resolve with ids and action', async () => {
     fetchMock.mockResolvedValue(reply(200, { version: 6 }))
     const api = microsegApi('c1')

@@ -1,19 +1,24 @@
 'use client'
 
-import { useCallback, useState, type MouseEvent, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
 import { Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import { zoneEgress, type MicrosegFlow, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
+import { zoneEgress, type MicrosegException, type MicrosegFlow, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
 
 import { useDialogAction } from './dialogParts'
 import DiscardDraft from './DiscardDraft'
+import ExceptionDialog from './ExceptionDialog'
+import { exceptionDraft, exceptionsOfZone, zoneDeleteBody, type ExceptionDraft } from './exceptionModel'
+import { ExceptionLine } from './ExceptionLine'
 import FlowDialog, { type FlowSaveValues } from './FlowDialog'
 import FlowSummary from './FlowSummary'
 import { PagedList } from './PolicyPager'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
-import type { ZoneEdits } from './useZoneEdits'
+import { usePendingChanges } from './usePendingChanges'
+import type { ExceptionCreated, ZoneEdits } from './useZoneEdits'
+import { useZoneGuests } from './useZoneGuests'
 import { zoneGateOf } from './zoneGate'
 import ZoneDialog from './ZoneDialog'
 import ZoneEgressDialog from './ZoneEgressDialog'
@@ -131,8 +136,8 @@ export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted, spread = f
   const egressChange = useEgressChange(edits)
   const close = () => setOpen(null)
 
-  const save = async (values: ZoneFormValues) => {
-    await edits.saveZone(zone, values)
+  const save = async (values: ZoneFormValues, onExceptionCreated: ExceptionCreated) => {
+    await edits.saveZone(zone, values, onExceptionCreated)
     close()
   }
   const confirmDelete = async () => {
@@ -153,13 +158,13 @@ export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted, spread = f
       <WriteIcon label={t('delete')} icon='ri-delete-bin-line' onClick={() => { removal.reset(); setOpen({ kind: 'delete' }) }} />
       <WriteIcon label={t('assign')} icon='ri-add-circle-line' onClick={onAssign} />
       <ZoneStateMenu zone={zone} anchor={anchor} onClose={() => setAnchor(null)} onPick={state => setOpen({ kind: 'state', state })} />
-      {open?.kind === 'edit' && <ZoneDialog zone={zone} connectionId={edits.connectionId} readyAfterHours={edits.readyAfterHours} onSave={save} flows={edits.flows} onClose={close} gate={zoneGateOf(edits, close)} />}
+      {open?.kind === 'edit' && <ZoneDialog zone={zone} connectionId={edits.connectionId} readyAfterHours={edits.readyAfterHours} onSave={save} flows={edits.flows} policy={edits.policy} onClose={close} gate={zoneGateOf(edits, close)} />}
       {open?.kind === 'state' && <ZoneStateConfirm zone={zone} state={open.state} edits={edits} onClose={close} />}
       {egressChange.dialog}
       <MicrosegConfirmDialog
         open={open?.kind === 'delete'}
         title={tp('delete.zoneTitle', { name: zone.name })}
-        body={tp('delete.zoneBody')}
+        body={zoneDeleteBody(tp, zone.id, edits.policy.exceptions)}
         confirmLabel={tp('delete.confirm')}
         color='error'
         busy={removal.busy}
@@ -289,4 +294,96 @@ export function useFlowEditor(edits: ZoneEdits): FlowEditor {
   const remove = useCallback((flow: MicrosegFlow) => { reset(); setDeleting(flow) }, [reset])
 
   return { edit, create, remove, dialogs }
+}
+
+type ExceptionEditor = {
+  /** How many exceptions the zone has. */
+  count: number
+  /** Opens the exception dialog empty. */
+  create: () => void
+  /** The exceptions of the zone, `size` a page. */
+  list: (size: number) => ReactNode
+  dialogs: ReactNode
+}
+
+/**
+ * The exceptions of the zone of the panel, written at once (each write carries the draft version): one line each,
+ * paged, the pencil opening the exception dialog prefilled, the bin its confirmation, as for a flow of the panel.
+ * The guests are the list the tab already holds (no new request when warm): any of them may be a source.
+ * `only` keeps the exceptions of the zone with these ids (the panel of a link of the map lists the ones it stands for).
+ * As the flows do, the list shows what the draft changes over the last applied revision, once that revision is read:
+ * an exception added or changed carries the draft mark, and one removed from the draft, still enforced until the next
+ * apply, stays listed struck, after the others.
+ */
+export function useExceptionEditor(
+  edits: ZoneEdits, zone: MicrosegZone, members: ZoneMember[], membersKnown: boolean, only?: ReadonlySet<string>,
+): ExceptionEditor {
+  const t = useTranslations('microsegPilot.policy')
+  const { canWrite } = useMicrosegWrite()
+  const { guests, status } = useZoneGuests(edits.connectionId)
+  // While the guests or the members are not known, a status read from them would be a false warning.
+  const guestsKnown = membersKnown && status === 'ready'
+  // The exception being edited, `null` for a new one; undefined while the dialog is closed.
+  const [editing, setEditing] = useState<ExceptionDraft | null | undefined>(undefined)
+  const [deleting, setDeleting] = useState<MicrosegException | null>(null)
+  const removal = useDialogAction()
+  const all = edits.policy.exceptions
+  const exceptions = useMemo(() => exceptionsOfZone(zone.id, all).filter(e => !only || only.has(e.id)), [zone.id, all, only])
+  const { diff } = usePendingChanges(edits.connectionId, edits.policy)
+  const rows = useMemo(() => {
+    const gone = exceptionsOfZone(zone.id, diff?.removedExceptions ?? []).filter(e => !only || only.has(e.id))
+    const draft = (e: MicrosegException) => (diff?.exceptions.has(e.id) ? 'draft' as const : undefined)
+    return [...exceptions.map(e => ({ e, mark: draft(e) })), ...gone.map(e => ({ e, mark: 'removed' as const }))]
+  }, [exceptions, diff, zone.id, only])
+
+  const save = async (draft: ExceptionDraft) => {
+    await edits.saveException(zone.id, draft)
+    setEditing(undefined)
+  }
+  const confirmDelete = async () => {
+    if (deleting && await removal.run(() => edits.deleteException(deleting.id))) setDeleting(null)
+  }
+
+  const list = (size: number) => (
+    <>
+      {rows.length === 0 && <Typography variant='body2' color='text.disabled'>{t('exceptions.none')}</Typography>}
+      <PagedList items={rows} size={size} render={page => (
+        <Box role='list'>
+          {page.map(({ e, mark }) => (
+            <ExceptionLine
+              key={`${mark === 'removed' ? 'removed' : 'draft'}-${e.id}`}
+              mark={mark}
+              exception={exceptionDraft(e)}
+              guests={guests}
+              members={members}
+              zoneState={zone.state}
+              guestsKnown={guestsKnown}
+              disabled={!canWrite}
+              onEdit={() => setEditing(exceptionDraft(e))}
+              onDelete={() => { removal.reset(); setDeleting(e) }}
+            />
+          ))}
+        </Box>
+      )} />
+    </>
+  )
+
+  const dialogs = (
+    <>
+      <ExceptionDialog open={editing !== undefined} exception={editing ?? null} guests={guests} members={members} onSave={save} onClose={() => setEditing(undefined)} />
+      <MicrosegConfirmDialog
+        open={deleting !== null}
+        title={t('delete.exceptionTitle')}
+        body={t('delete.exceptionBody')}
+        confirmLabel={t('delete.confirm')}
+        color='error'
+        busy={removal.busy}
+        error={removal.error}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleting(null)}
+      />
+    </>
+  )
+
+  return { count: exceptions.length, create: () => setEditing(null), list, dialogs }
 }

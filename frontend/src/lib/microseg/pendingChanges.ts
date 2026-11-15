@@ -1,10 +1,12 @@
 // src/lib/microseg/pendingChanges.ts
 
-import type { MicrosegFlow, MicrosegRevision, MicrosegZone, PendingMember } from './types'
+import type { GuestRefLite, MicrosegException, MicrosegFlow, MicrosegRevision, MicrosegZone, PendingMember } from './types'
 
 export type MicrosegDraft = {
   zones: MicrosegZone[]
   flows: MicrosegFlow[]
+  /** Absent: read as none. */
+  exceptions?: MicrosegException[]
   pending_members: PendingMember[]
   tag_prefix?: string
 }
@@ -23,11 +25,20 @@ function sameFlow(a: MicrosegFlow, b: MicrosegFlow): boolean {
     && a.origin === b.origin
 }
 
+const sameGuests = (a: GuestRefLite[], b: GuestRefLite[]) =>
+  a.length === b.length && a.every((g, i) => g.type === b[i].type && g.vmid === b[i].vmid && g.name === b[i].name)
+
+/** By value, guests and services in their order (the orchestrator stores and compares them in order). Who wrote it does not count. */
+function sameException(a: MicrosegException, b: MicrosegException): boolean {
+  return a.zone_id === b.zone_id && a.comment === b.comment && sameGuests(a.sources, b.sources) && sameGuests(a.destinations, b.destinations)
+    && a.services.length === b.services.length && a.services.every((s, i) => s.proto === b.services[i].proto && s.dport === b.services[i].dport)
+}
+
 export type DiffKind = 'added' | 'changed' | 'removed'
 
 /**
- * What the draft changes over the last applied revision: each zone and flow added, changed (by value) or removed, by
- * id; the items removed (from the revision's snapshot, to show them until the next apply); the pending members; the
+ * What the draft changes over the last applied revision: each zone, flow and exception added, changed (by value) or
+ * removed, by id; the items removed (from the revision's snapshot, to show them until the next apply); the pending members; the
  * tag prefix moved. Without a revision everything is added. Null when the revision came without its snapshot.
  */
 export type PolicyDiff = {
@@ -35,6 +46,9 @@ export type PolicyDiff = {
   flows: ReadonlyMap<string, DiffKind>
   removedZones: MicrosegZone[]
   removedFlows: MicrosegFlow[]
+  exceptions: ReadonlyMap<string, DiffKind>
+  /** The exceptions the draft removed, as the revision holds them: still enforced until the next apply. */
+  removedExceptions: MicrosegException[]
   /** The name each renamed zone had in the revision (the history logged it under that name). */
   renamedZones: ReadonlyMap<string, string>
   members: number
@@ -60,6 +74,8 @@ export function policyDiff(draft: MicrosegDraft, last: MicrosegRevision | null):
   if (last && !snap) return null
   const zones = diffById(draft.zones, snap ? snap.zones : null, sameZone)
   const flows = diffById(draft.flows, snap ? snap.flows : null, sameFlow)
+  // A revision taken before the exceptions existed has no list: it held none.
+  const exceptions = diffById(draft.exceptions ?? [], snap ? snap.exceptions ?? [] : null, sameException)
   const before = new Map((snap ? snap.zones : []).map(z => [z.id, z.name]))
   const renamedZones = new Map(draft.zones.filter(z => before.has(z.id) && before.get(z.id) !== z.name).map(z => [z.id, before.get(z.id)!]))
   return {
@@ -67,20 +83,22 @@ export function policyDiff(draft: MicrosegDraft, last: MicrosegRevision | null):
     flows: flows.kinds,
     removedZones: zones.removed,
     removedFlows: flows.removed,
+    exceptions: exceptions.kinds,
+    removedExceptions: exceptions.removed,
     renamedZones,
     members: draft.pending_members.length,
     prefix: !!snap && draft.tag_prefix !== undefined && draft.tag_prefix !== snap.tag_prefix,
   }
 }
 
-/** The number of changes a diff holds: one per zone, flow and pending member, plus one for a moved tag prefix. */
+/** The number of changes a diff holds: one per zone, flow, exception and pending member, plus one for a moved tag prefix. */
 export function diffCount(diff: PolicyDiff): number {
-  return diff.zones.size + diff.flows.size + diff.members + (diff.prefix ? 1 : 0)
+  return diff.zones.size + diff.flows.size + diff.exceptions.size + diff.members + (diff.prefix ? 1 : 0)
 }
 
 /**
- * Number of changes the draft holds over the last applied revision: zones and
- * flows added, removed or edited (by value), plus every pending member, plus
+ * Number of changes the draft holds over the last applied revision: zones,
+ * flows and exceptions added, removed or edited (by value), plus every pending member, plus
  * one when the tag prefix moved. Without a revision everything counts.
  *
  * GET /policy returns `last_revision` without its snapshot; fetch it from

@@ -13305,6 +13305,11 @@
         "changed": "更改流量规则 {flow}",
         "removed": "删除流量规则 {flow}"
       },
+      "exceptions": {
+        "added": "{count, plural, other {新增 # 条例外}}",
+        "changed": "{count, plural, other {更改 # 条例外}}",
+        "removed": "{count, plural, other {删除 # 条例外}}"
+      },
       "members": "{count, plural, other {# 项成员更改}}",
       "membersTo": "{count, plural, other {# 个来宾加入 {zone}}}",
       "tagPrefix": "标签前缀已更改",
@@ -13445,12 +13450,10 @@
         "gatewayTip": "网关 {ip}"
       },
       "flow": {
-        "notApplied": "未应用（出站未受控）",
         "learned": "已学习",
         "edit": "编辑流量规则",
         "delete": "删除流量规则",
-        "createdBy": "创建者：{user}",
-        "observed": "出站观察中"
+        "createdBy": "创建者：{user}"
       },
       "zoneDialog": {
         "createTitle": "新建区域",
@@ -13480,7 +13483,7 @@
         "egressAllWarning": "仅按 IP 地址过滤:域名背后的服务可能会更改地址。",
         "egressNeedsState": "区域必须处于观察或阻止状态",
         "tips": {
-          "isolate": "此区域的虚拟机之间只能通过已声明的流量互通。取消勾选后，它们可以自由通信。",
+          "isolate": "此区域的虚拟机之间只能通过已声明的流量或例外互通，例外允许所选虚拟机访问所选成员。取消勾选后，它们可以自由通信。",
           "inbound": {
             "disabled": "该区域未在 Proxmox 上应用。",
             "observe": "不阻止任何流量：策略之外的入站流量会被记录并作为建议提出。",
@@ -13565,8 +13568,11 @@
       "delete": {
         "zoneTitle": "删除区域 {name}？",
         "flowTitle": "删除此流量规则？",
+        "exceptionTitle": "删除此例外？",
         "zoneBody": "该区域将从草稿中移除。在应用之前，Proxmox 上不会有任何变化。",
+        "zoneBodyExceptions": "该区域及其 {count} 个例外将从草稿中移除。在应用之前，Proxmox 上不会有任何变化。",
         "flowBody": "该流量规则将从草稿中移除。在应用之前，Proxmox 上不会有任何变化。",
+        "exceptionBody": "该例外将从草稿中移除。在应用之前，Proxmox 上不会有任何变化。",
         "confirm": "删除"
       },
       "enforce": {
@@ -13692,6 +13698,51 @@
         "confirm": {
           "block": "阻断出站",
           "reopen": "重新开放出站"
+        }
+      },
+      "exceptions": {
+        "title": "虚拟机例外",
+        "tip": "例外允许所选虚拟机通过指定的服务访问区域中所选的成员，不受区域的流量和隔离设置影响。",
+        "add": "添加例外",
+        "edit": "编辑例外",
+        "delete": "删除例外",
+        "none": "无例外",
+        "createTitle": "新建例外",
+        "sources": "源虚拟机",
+        "destinations": "目标虚拟机",
+        "services": "允许的服务",
+        "guestsPlaceholder": "选择虚拟机",
+        "membersGroup": "区域成员",
+        "notMembersGroup": "尚未成为成员",
+        "count": "{count, plural, =0 {无例外} other {# 条例外}}",
+        "manage": "管理",
+        "notActive": "{count, plural, other {# 条未生效}}",
+        "notActiveHint": "部分例外未生效：打开列表查看原因。",
+        "filter": "按虚拟机、VMID 或服务筛选",
+        "noMatch": "没有符合筛选条件的例外",
+        "columns": {
+          "services": "服务",
+          "status": "状态"
+        },
+        "alreadySource": "已是源",
+        "alreadyDestination": "已是目标",
+        "notInInventory": "不在清单中",
+        "ruleCount": "{count, plural, other {# 条规则}}",
+        "tooManyRules": "{count} 条规则，最多 {max} 条：请改为允许区域的流量",
+        "overlap": "虚拟机不能同时是源和目标：{names}",
+        "status": {
+          "inactive_zone": "区域未应用",
+          "no_destination": "区域内没有目标",
+          "missing_guest": "未找到虚拟机",
+          "waiting_address": "地址未知",
+          "renamed": "名称已更改"
+        },
+        "statusHint": {
+          "inactive_zone": "区域既未观察也未阻止：此例外的任何内容都不会写入 Proxmox。",
+          "no_destination": "它的目标都不是区域成员：在有目标加入之前，例外不允许任何流量。",
+          "missing_guest": "某个源或目标已不在清单中。",
+          "waiting_address": "清单尚不知道某个源的地址：在读取到地址之前，其规则可能不放行任何流量。",
+          "renamed": "某台虚拟机的名称与记录的不同：它已被重命名，或其 VMID 被重新使用。请确认例外仍指向正确的虚拟机。"
         }
       }
     },
@@ -13954,6 +14005,9 @@
       "asCidr": "按 CIDR",
       "acceptTip": "在草稿中创建流 {from} → {to} {service}。",
       "cidrTip": "以来源 {ip} 作为地址范围创建相同的流：当来源是未知 IP 时需要这样做。",
+      "exceptionOnly": "仅允许此流量",
+      "exceptionOnlyTip": "打开已预填的区域例外：仅 {from} 通过 {service} 访问 {to}，而不是整个区域对。",
+      "exceptionSaved": "例外已添加到草稿：下次应用时写入。",
       "dismissTip": "隐藏此配对的这条建议。",
       "bulkLabel": "已选的流",
       "bulkAcceptTip": "为每条所选建议在草稿中创建区域之间的流。",
@@ -14035,7 +14089,8 @@
         "allowed": "允许",
         "unprotected": "未受保护",
         "blocked": "已阻止",
-        "draft": "允许，尚未应用"
+        "draft": "允许，尚未应用",
+        "exception": "虚拟机之间的例外"
       },
       "node": {
         "members": "{count, plural, other {# 个成员}}",
@@ -14055,6 +14110,9 @@
         "guestPending": "已排队加入该区域，随下一个计划应用",
         "moreHint": "{count, plural, other {还有 # 个成员}}：区域面板列出全部",
         "moreUnzonedHint": "{count, plural, other {还有 # 个无区域客户机}}：偏差中列出全部",
+        "morePveHint": "{count, plural, other {此节点上还有 # 个客户机}}",
+        "guestZone": "区域：{zone}",
+        "guestNoZone": "不在任何区域中",
         "ipHint": "{ip}：与此区域通信、不属于任何区域或虚拟机的地址",
         "inside": "{count, plural, other {区域内观察到的流 # 条}}",
         "observed": "出站观察中",
@@ -14077,7 +14135,11 @@
         "countUnprotected": "{count, plural, other {# 个未受保护的流量}}",
         "countBlocked": "{count, plural, other {# 个已阻止的流量}}",
         "hitsTotal": "{count, plural, other {日志中共 # 次}}",
-        "noCounter": "允许的流量没有计数：Proxmox 不会记录其放行的流量"
+        "noCounter": "允许的流量没有计数：Proxmox 不会记录其放行的流量",
+        "exception": "例外：{services}",
+        "exceptionCount": "{count, plural, other {# 条例外}}",
+        "exceptionsBetween": "{count, plural, other {两个区域的虚拟机之间有 # 条例外}}",
+        "pairsSampled": "引擎保留的示例对："
       },
       "panel": {
         "label": "区域 {name}",
@@ -14172,7 +14234,19 @@
         "guests": "虚拟机视图",
         "guestsHint": "一个区域及其虚拟机，以及与之通信的对象",
         "sankey": "桑基图",
-        "sankeyHint": "以条带显示观察到的流量，命中越多越宽"
+        "sankeyHint": "以条带显示观察到的流量，命中越多越宽",
+        "nodes": "节点",
+        "nodesHint": "各 Proxmox 节点上的客户机，以及节点之间观察到的流量和例外（区域之间允许的流量仍在分组中显示）"
+      },
+      "pve": {
+        "aria": "Proxmox 节点 {name}，{guests}",
+        "guests": "{count, plural, other {# 个客户机}}",
+        "zoneShare": "区域 {zone}：{count, plural, other {# 个客户机}}",
+        "unzonedShare": "无区域：{count, plural, other {# 个客户机}}",
+        "inside": "{count, plural, other {# 条内部流量}}",
+        "insideHint": "此节点上两个客户机之间观察到的流量：不为其绘制连线",
+        "unavailable": "客户机列表不可用",
+        "none": "没有可绘制的客户机：没有区域拥有成员，也没有客户机在运行"
       },
       "matrix": {
         "label": "区域之间的流：来源 × 目标",
@@ -14428,6 +14502,7 @@
         "version": "版本 {version}",
         "by": "作者 {author}",
         "counts": "{zones} 个区域，{flows} 条流量规则",
+        "countsWithExceptions": "{counts}，{exceptions} 个例外",
         "latest": "最新",
         "restore": "恢复",
         "restoreTitle": "恢复版本 {version}？",
@@ -14804,7 +14879,10 @@
       "removalPending": "删除待处理（下次应用）",
       "flowChanged": "已更改",
       "flowChangedHint": "已在草稿中更改：下次应用时生效",
-      "engineFlowRule": "引擎规则：作为其流量编辑（菜单或双击）"
+      "engineFlowRule": "引擎规则：作为其流量编辑（菜单或双击）",
+      "exceptionRule": "例外：{source} → {destination}（在其区域中编辑）",
+      "exceptionRuleRemoved": "例外：{source} → {destination}，待移除（下次应用）",
+      "knownZoneRule": "区域 {zone} 为已知区域：处于观察状态的区域发往它的流量不会被记录"
     },
     "discard": {
       "button": "放弃更改",

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import type { MicrosegRevision, MicrosegRun } from '@/lib/microseg/types'
+import type { MicrosegException, MicrosegRevision, MicrosegRun } from '@/lib/microseg/types'
 
 import { historyRows, revisionDiff } from './historyModel'
-import { flow, zone } from './microsegTestKit'
+import { exception, flow, zone } from './microsegTestKit'
 
 const rev = (version: number, at: string, zones = [zone('web')], flows = [flow('f1')]): MicrosegRevision => ({
   id: `rev-${version}`, version, author: 'ana', created_at: at, snapshot: { tag_prefix: 'zone-', zones, flows },
@@ -45,5 +45,35 @@ describe('the history rows', () => {
     const all = historyRows(revs, [run('r1', '2026-11-03T10:00:00Z')])
     const only = historyRows(revs, [], 'revisions')
     expect(only.map(r => (r.type === 'revision' ? r.diff : null))).toEqual(all.filter(r => r.type === 'revision').map(r => (r.type === 'revision' ? r.diff : null)))
+  })
+})
+
+describe('the exceptions of a revision', () => {
+  const at = '2026-11-01T10:00:00Z'
+  const withExceptions = (version: number, exceptions?: MicrosegException[]): MicrosegRevision => {
+    const r = rev(version, at)
+    return exceptions ? { ...r, snapshot: { ...r.snapshot!, exceptions } } : r
+  }
+  const two = [{ type: 'qemu' as const, vmid: 200, name: 'app-01' }, { type: 'qemu' as const, vmid: 201, name: 'app-02' }]
+
+  it('counts the exceptions a revision added and removed, by id', () => {
+    expect(revisionDiff(withExceptions(2, [exception('x1')]), withExceptions(1, []))).toEqual({ added: 1, removed: 0, changed: 0 })
+    expect(revisionDiff(withExceptions(2, [exception('x2')]), withExceptions(1, [exception('x1')]))).toEqual({ added: 1, removed: 1, changed: 0 })
+    expect(revisionDiff(withExceptions(2, [exception('x1')]), withExceptions(1, [exception('x1')]))).toEqual({ added: 0, removed: 0, changed: 0 })
+  })
+
+  it('counts a change of the sources, the destinations or the services, their order included, and not of the comment', () => {
+    const before = withExceptions(1, [exception('x1', { sources: two })])
+    const diff = (over: Partial<MicrosegException>) => revisionDiff(withExceptions(2, [exception('x1', { sources: two, ...over })]), before)
+    expect(diff({ sources: [two[1], two[0]] })).toEqual({ added: 0, removed: 0, changed: 1 })
+    expect(diff({ destinations: [{ type: 'qemu', vmid: 101, name: 'web-2' }] })).toEqual({ added: 0, removed: 0, changed: 1 })
+    expect(diff({ services: [{ proto: 'tcp', dport: '22' }] })).toEqual({ added: 0, removed: 0, changed: 1 })
+    expect(diff({ comment: 'why' })).toEqual({ added: 0, removed: 0, changed: 0 })
+  })
+
+  it('reads a revision taken before the exceptions existed as having none', () => {
+    expect(revisionDiff(withExceptions(2), withExceptions(1))).toEqual({ added: 0, removed: 0, changed: 0 })
+    expect(revisionDiff(withExceptions(2, [exception('x1')]), withExceptions(1))).toEqual({ added: 1, removed: 0, changed: 0 })
+    expect(revisionDiff(withExceptions(2), withExceptions(1, [exception('x1')]))).toEqual({ added: 0, removed: 1, changed: 0 })
   })
 })

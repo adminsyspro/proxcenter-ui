@@ -8,6 +8,7 @@ import {
   filterTargets, involvesTarget, matchesTarget, targetCandidates, targetFocus, targetNodeId, targetPeers, targetRibbons, targetRing, targetSankey, targetSuggestions,
   type TargetGuest,
 } from './targetModel'
+import { buildNodeView } from './nodeViewModel'
 import { ALL_FLOWS, buildZoneGraph } from './zoneGraph'
 import type { PolicyGuest, ZoneMember } from './zoneModel'
 
@@ -155,6 +156,19 @@ describe('the focus a target locks on the map', () => {
     const many = Array.from({ length: 14 }, (_, i) => ({ ...d.members.get('zw')![0], key: `qemu/${500 + i}`, name: `w-${String(i).padStart(2, '0')}`, vmid: 500 + i, ips: [] }))
     const graph = buildZoneGraph({ ...d, members: new Map([...d.members, ['zw', many]]) })
     expect(targetNodeId(graph, target({ key: 'qemu/513', vmid: 513 }))).toBe('more:zw')
+  })
+
+  it('finds the guest in the circle of its Proxmox node on the node view, its "+N" past the guests drawn, and lights its node to node edges', () => {
+    const d = input()
+    const graph = buildNodeView({ ...d, members: new Map([...d.members].map(([id, list]) => [id, list.map(m => ({ ...m, node: id === 'zw' ? 'pve1' : 'pve2' }))])) })
+    const focus = targetFocus(graph, target())!
+    expect(focus.node).toBe('guest:pve:pve1:qemu/100')
+    expect(focus.nodes.has('pve:pve1')).toBe(true)
+    expect([...focus.edges].every(id => /^(unprotected|blocked):pve:pve1>pve:pve2$/.test(id))).toBe(true)
+    expect(focus.edges.size).toBeGreaterThan(0)
+    const many = Array.from({ length: 14 }, (_, i) => ({ ...d.members.get('zw')![0], key: `qemu/${500 + i}`, name: `w-${String(i).padStart(2, '0')}`, vmid: 500 + i, ips: [], node: 'pve7' }))
+    const crowded = buildNodeView({ ...d, members: new Map([['zw', many]]), unzoned: [] })
+    expect(targetNodeId(crowded, target({ key: 'qemu/513', vmid: 513, node: 'pve7' }))).toBe('more:pve:pve7')
   })
 
   it('finds a guest in no zone in the dashed circle', () => {

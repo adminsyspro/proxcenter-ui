@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 
-import type { MicrosegFlow, MicrosegRun, MicrosegSuggestion, MicrosegZone, PendingMember } from '@/lib/microseg/types'
+import type { MicrosegException, MicrosegFlow, MicrosegRun, MicrosegSuggestion, MicrosegZone, PendingMember } from '@/lib/microseg/types'
 
 import { GUESTS_ROUTE, mock, policy, renderTab, reply, resetMocks, zone, REVISION_HEAD } from './microsegTestKit'
 
@@ -34,6 +34,7 @@ export const SUGGESTIONS_ROUTE = 'GET /suggestions?kind=would_block&status=pendi
 export function setup(opts: {
   zones?: MicrosegZone[]
   flows?: MicrosegFlow[]
+  exceptions?: MicrosegException[]
   pending_members?: PendingMember[]
   vms?: unknown[]
   /** The draft has unapplied changes. */
@@ -41,7 +42,7 @@ export function setup(opts: {
 } = {}) {
   window.localStorage.setItem('microseg.subTab', 'policy')
   mock.routes['GET /policy'] = () => reply(200, policy({
-    zones: opts.zones ?? [], flows: opts.flows ?? [], pending_members: opts.pending_members ?? [], last_revision: REVISION_HEAD,
+    zones: opts.zones ?? [], flows: opts.flows ?? [], exceptions: opts.exceptions ?? [], pending_members: opts.pending_members ?? [], last_revision: REVISION_HEAD,
     pending_changes: opts.pending_changes ?? false,
   }))
   mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: opts.vms ?? [] } })

@@ -16,6 +16,7 @@ import { defaultCentre } from './guestViewModel'
 import { MapNamesContext, edgeAria, type EdgeT, type MapNames } from './FlowEdge'
 import MapToolbar, { useFlowFilters, useMapView, type MapView } from './MapToolbar'
 import { mapViewGraph } from './mapViewGraph'
+import { applyInsideFilters } from './nodeViewModel'
 import { pairEndOf } from './pairModel'
 import { buildMatrix, matrixEdge, type MatrixEnd } from './matrixModel'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
@@ -29,7 +30,7 @@ import TargetPicker from './TargetPicker'
 import { targetFocus, targetRing, targetSankey, targetSuggestions, type TargetGuest } from './targetModel'
 import { useMapTarget } from './useMapTarget'
 import {
-  EXTERNAL_ID, OUTSIDE_ID, UNZONED_ID, filterEdges, focusSets, zoneNodeId,
+  EXTERNAL_ID, OUTSIDE_ID, UNZONED_ID, filterEdges, focusSets, isPveGroup, pveNodeName, zoneNodeId,
   type MapEdgeData, type MapInput, type MapMember, type MapNodeData, type PanelEdgeData,
 } from './zoneGraph'
 import { guestKey, zoneMembers, type PolicyGuest, type ZoneMember } from './zoneModel'
@@ -73,16 +74,18 @@ const sameFlow = (a: MicrosegFlow, b: MicrosegFlow) => a.src_zone_id === b.src_z
   && a.dst_zone_id === b.dst_zone_id && a.dst_cidr === b.dst_cidr && a.proto === b.proto && a.dport === b.dport
 
 /**
- * The Overview sub-tab: the draft as a map, in one of five renderings chosen in the toolbar (kept in the browser).
+ * The Overview sub-tab: the draft as a map, in one of six renderings chosen in the toolbar (kept in the browser).
  * Groups, like the security groups view of NSX: a circle per zone holding its guests, the running guests in no zone
  * in a dashed circle, the allowed flows circle to circle, the observed ones (unprotected, blocked) guest to guest.
  * Compact zones: a box per zone, every flow zone to zone. Matrix: sources by destinations. Guest view: one zone and
  * its guests in the centre, what talks to it on the left, what it talks to on the right. Sankey: the traffic as
- * ribbons from the sources to the destinations, wider with more hits. Hover or select something
+ * ribbons from the sources to the destinations, wider with more hits. Nodes: a circle per Proxmox node holding its
+ * guests in the colour of their zone, the observed flows and the exceptions from node to node (a click on a guest
+ * targets it, an edge opens no panel). Hover or select something
  * to light it and its flows; click a zone for its panel, an edge (or a cell) for its flows. Nothing polls beyond the
  * shared hooks (one inventory read, one suggestions read).
  */
-export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan, targetVm }: MicrosegSubTabProps) {
+export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan, targetVm, pveNodes: nodeNames, pveNodeStatus }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.overview')
   const tObs = useTranslations('microsegPilot.observation')
   const { guests, status: guestsStatus } = useZoneGuests(connectionId)
@@ -100,7 +103,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const [view, setView] = useMapView()
   const [centre, setCentre] = useState<string | null>(null)
 
-  const { zones, flows, pending_members: pendingMembers } = policy
+  const { zones, flows, exceptions, pending_members: pendingMembers } = policy
   const tagPrefix = policy.policy.tag_prefix
   const membersByZone = useMemo(
     () => new Map(zones.map(z => [z.id, zoneMembers(z, tagPrefix, guests, pendingMembers, zones)])),
@@ -125,8 +128,12 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     const members = membersKnown ? new Map([...membersByZone].map(([id, list]) => [id, list.map(toMapMember)])) : null
     const zoned = new Set([...membersByZone.values()].flatMap(list => list.map(m => guestKey(m.ref))))
     const unzoned = membersKnown ? guests.filter(g => g.status === 'running' && !zoned.has(guestKey(g))).map(guestToMember) : null
-    return { zones, flows, suggestions: suggestions.data ?? [], members, unzoned, unapplied }
-  }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied])
+    // The nodes of the node view: those the page knows and those of the guests, each with every guest it holds.
+    const perNode = new Map<string, number>((nodeNames ?? []).map(name => [name, 0]))
+    for (const g of guests) if (g.node) perNode.set(g.node, (perNode.get(g.node) ?? 0) + 1)
+    const pveNodes = membersKnown ? [...perNode].map(([node, count]) => ({ node, guests: count, status: pveNodeStatus?.[node] })) : null
+    return { zones, flows, suggestions: suggestions.data ?? [], members, unzoned, unapplied, exceptions, pveNodes }
+  }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied, exceptions, nodeNames, pveNodeStatus])
   // The zone of the guest view: the one picked, else (or once it is deleted) the one with the most observed traffic.
   const centreId = useMemo(
     () => (centre && zonesById.has(centre) ? centre : defaultCentre(zones, input.suggestions)),
@@ -152,7 +159,9 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const matrix = useMemo(() => (view === 'matrix' || view === 'sankey' ? buildMatrix(input) : null), [view, input])
   // The Sankey diagram lays the pairs out itself, for the size of the map box.
   const sankey = view === 'sankey' ? matrix : null
-  const graph = useMemo(() => mapViewGraph(view, input, centreId), [view, input, centreId])
+  const drawn = useMemo(() => mapViewGraph(view, input, centreId), [view, input, centreId])
+  // The circle of a Proxmox node counts the flows inside it for the kinds the checkboxes show.
+  const graph = useMemo(() => (view === 'nodes' ? applyInsideFilters(drawn, filters) : drawn), [view, drawn, filters])
   const sankeyTarget = useMemo(
     () => (target && matrix && sankey ? targetSankey(matrix, filters, target) : null),
     [target, matrix, sankey, filters],
@@ -163,7 +172,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   // The flow panel: the selected cell of the matrix, or the selected edge of the canvas.
   const graphEdge = graph.edges.find(e => selection?.kind === 'edge' && e.id === selection.id)
   const cellEdge = matrix && selection?.kind === 'edge' ? matrixEdge(matrix, selection.id, filters, unapplied) : null
-  const selectedEdge = panelEdgeOf(cellEdge, graphEdge)
+  // An edge of the node view links two Proxmox nodes, not two zones: it is lit, it opens no flow panel.
+  const selectedEdge = view === 'nodes' ? null : panelEdgeOf(cellEdge, graphEdge)
   const selectedNode = selectedNodeOf(selectedZone, selection)
   const selectedFocus = selectedNode ?? (selection?.kind === 'edge' ? selection.id : null)
   const focusId = hover ?? keyFocus ?? selectedFocus
@@ -181,10 +191,12 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     if (nodeId === OUTSIDE_ID) return tNode('outside')
     if (nodeId.startsWith('zone:')) return zonesById.get(nodeId.slice(5))?.name ?? nodeId
     if (nodeId.startsWith('ip:')) return nodeId.slice(3)
+    if (isPveGroup(nodeId)) return pveNodeName(nodeId)
     const node = graph.nodes.find(n => n.id === nodeId)
     const d = node?.data as unknown as MapNodeData | undefined
     if (!d) return nodeId
-    const groupName = (groupId: string) => (groupId === UNZONED_ID ? tNode('unzoned', { count: (graph.nodes.find(n => n.id === UNZONED_ID)?.data as { count?: number } | undefined)?.count ?? 0 }) : zonesById.get(groupId)?.name ?? groupId)
+    const zoneGroupName = (groupId: string) => (groupId === UNZONED_ID ? tNode('unzoned', { count: (graph.nodes.find(n => n.id === UNZONED_ID)?.data as { count?: number } | undefined)?.count ?? 0 }) : zonesById.get(groupId)?.name ?? groupId)
+    const groupName = (groupId: string) => (isPveGroup(groupId) ? pveNodeName(groupId) : zoneGroupName(groupId))
     if (d.kind === 'guest') return `${d.member.name} (${groupName(d.groupId)})`
     if (d.kind === 'more') return `+${d.count} (${groupName(d.groupId)})`
     if (d.kind === 'unzoned') return tNode('unzoned', { count: d.count })
@@ -253,7 +265,6 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     setSelection(s => (s?.kind === 'zone' ? s : null))
   }, [])
   const endName = useCallback((e: Pick<MatrixEnd, 'kind' | 'zone'>) => e.zone?.name ?? tNode(e.kind === 'outside' ? 'outside' : 'external'), [tNode])
-  const selectGuest = useCallback((nodeId: string) => setSelection({ kind: 'guest', id: nodeId }), [])
   const selectEdge = useCallback((edgeId: string) => { setSelection({ kind: 'edge', id: edgeId }); setResolved(null) }, [])
   const clear = useCallback(() => setSelection(null), [])
   // A guest picked (or cleared): its panel replaces the open one; a zone or an edge picked afterwards keeps the lock.
@@ -264,6 +275,17 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     setResolved(null)
   }, [pick])
   const showTarget = useCallback(() => { showPanel(); setSelection(null) }, [showPanel])
+  // A guest of the node view has no edge of its own to isolate: a click targets it (its panel opens, the map locks on it).
+  const { candidates } = mapTarget
+  const selectGuest = useCallback((nodeId: string) => {
+    if (view !== 'nodes') {
+      setSelection({ kind: 'guest', id: nodeId })
+      return
+    }
+    const d = graph.nodes.find(n => n.id === nodeId)?.data as unknown as MapNodeData | undefined
+    const guest = d?.kind === 'guest' ? candidates.find(c => c.key === d.member.key) : undefined
+    if (guest) changeTarget(guest)
+  }, [view, graph.nodes, candidates, changeTarget])
   const openTargetZone = useCallback((zoneId: string) => { setResolved(null); setSelection({ kind: 'zone', id: zoneId }) }, [])
 
   if (zones.length === 0) {
@@ -275,6 +297,10 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     )
   }
 
+  // The node view draws guests only: it says so when their list could not be read, or when there is none to draw.
+  let nodesNote: 'unavailable' | 'none' | null = null
+  if (view === 'nodes' && guestsStatus === 'error') nodesNote = 'unavailable'
+  else if (view === 'nodes' && membersKnown && graph.nodes.length === 0) nodesNote = 'none'
   const targetPanel = !!target && mapTarget.panelOpen && !selectedZone && !selectedEdge
   const panelOpen = !!selectedZone || !!selectedEdge || targetPanel
   return (
@@ -353,6 +379,11 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
                 </Button>
               </Box>
             )}
+            {nodesNote && (
+              <Typography color='text.secondary' sx={{ position: 'absolute', inset: 0, zIndex: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, textAlign: 'center', pointerEvents: 'none' }}>
+                {t(`pve.${nodesNote}`)}
+              </Typography>
+            )}
             {!matrix && (
               <ZoneCanvas
                 nodes={nodes}
@@ -425,6 +456,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
               edits={edits}
               partialLimit={(suggestions.data?.length ?? 0) >= PENDING_LIMIT ? PENDING_LIMIT : null}
               peers={mapTarget.peers}
+              members={membersByZone.get(selectedEdge.groups[1].replace(/^zone:/, '')) ?? []}
+              membersKnown={membersKnown}
               connectionId={connectionId}
               version={policy.version}
               reloadPolicy={reloadPolicy}

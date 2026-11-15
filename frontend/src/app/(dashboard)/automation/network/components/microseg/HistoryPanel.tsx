@@ -39,9 +39,11 @@ function RevisionLine({ row, latestId, onRestore }: Omit<RowProps, 'onDetails'> 
   const t = useTranslations('microsegPilot.history')
   const format = useFormatter()
   const { canWrite } = useMicrosegWrite()
-  const { revision, zones, flows, diff } = row
+  const { revision, zones, flows, exceptions, diff } = row
   const version = t('revisions.version', { version: revision.version })
-  const counts = zones === null || flows === null ? '-' : t('revisions.counts', { zones, flows })
+  let counts = zones === null || flows === null ? '-' : t('revisions.counts', { zones, flows })
+  // Told only when the revision holds some: most have none, and an older one never had the list.
+  if (exceptions > 0) counts = t('revisions.countsWithExceptions', { counts, exceptions })
   const summary = diff ? `${counts} · ${t('table.diff', { added: diff.added, removed: diff.removed, changed: diff.changed })}` : counts
   const author = revision.author?.trim()
   return (

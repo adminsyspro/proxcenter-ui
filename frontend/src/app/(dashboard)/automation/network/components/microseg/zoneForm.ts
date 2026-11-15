@@ -5,6 +5,8 @@
 
 import type { EgressMode, EgressState, ZoneState } from '@/lib/microseg/types'
 
+import type { ExceptionDraft } from './exceptionModel'
+
 const V = 'microsegPilot.policy.validation'
 
 export const ZONE_NAME_RE = /^[a-z][a-z0-9-]{0,13}$/
@@ -30,6 +32,10 @@ export type ZoneFormValues = {
   gateway: string
   /** What the zone may reach on its gateway, a listed service or a typed one ("tcp/8443"): a flow is created for each one it does not have yet. */
   gateway_services: string[]
+  /** The exceptions of the zone as the dialog leaves them: one without id is created, one that differs from the stored one is updated. */
+  exceptions: ExceptionDraft[]
+  /** The ids of the stored exceptions the dialog removed. Only these are deleted: an exception the dialog never listed stays. */
+  removed_exceptions: string[]
 }
 
 /**

@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { toFields } from '@/lib/firewall/draft'
-import type { MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
+import type { MicrosegException, MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
 
 import { draftZoneOf, matchZoneRule, occurrences, type PolicyView } from './zoneRuleMatch'
 
@@ -77,5 +77,113 @@ describe('matchZoneRule against the applied revision, resolved in the draft', ()
     expect(matchZoneRule(rule('+pcz-app', 'tcp', '5432'), 'app', APPLIED, APPLIED)).toBeNull()
     expect(matchZoneRule({ ...rule('+pcz-app', 'tcp', '5432'), action: 'DROP' }, 'db', APPLIED, APPLIED)).toBeNull()
     expect(matchZoneRule(rule('+pcz-app', 'tcp', '5432'), 'nowhere', APPLIED, APPLIED)).toBeNull()
+  })
+})
+
+describe('matchZoneRule: the rules of an exception (+pcz-_vm<source> to +pcz-_vm<destination>)', () => {
+  const guest = (vmid: number, name: string) => ({ type: 'qemu' as const, vmid, name })
+  const exception = (over: Partial<MicrosegException> = {}): MicrosegException => ({
+    id: 'e1', policy_id: 'p1', zone_id: 'z-db', sources: [guest(101, 'app-01'), guest(103, '')], destinations: [guest(102, 'db-01')],
+    services: [{ proto: 'tcp', dport: '5432' }, { proto: 'any', dport: '' }], comment: '', created_by: 'x', ...over,
+  })
+  const WITH: PolicyView = { ...APPLIED, exceptions: [exception()] }
+  const vmRule = (src: number, dst: number, proto = 'tcp', dport = '5432', type = 'in') =>
+    toFields({ type, action: 'ACCEPT', source: `+pcz-_vm${src}`, dest: `+pcz-_vm${dst}`, proto, dport, comment: `[pc-microseg] vm${src} -> vm${dst}` })
+
+  it('finds the exception by its zone, the two guests and the service, with the guests as the exception names them', () => {
+    expect(matchZoneRule(vmRule(101, 102), 'db', WITH, WITH)).toMatchObject({
+      kind: 'exception', exception: { id: 'e1' }, source: { vmid: 101, name: 'app-01' }, destination: { vmid: 102, name: 'db-01' }, removed: false,
+    })
+    // A service on every protocol is a rule without protocol nor port.
+    expect(matchZoneRule(vmRule(103, 102, '', ''), 'db', WITH, WITH)).toMatchObject({ kind: 'exception', source: { vmid: 103 } })
+  })
+
+  it('the outbound twin in the group of the source zone is the same exception', () => {
+    expect(matchZoneRule(vmRule(101, 102, 'tcp', '5432', 'out'), 'app', WITH, WITH)).toMatchObject({ kind: 'exception', exception: { id: 'e1' }, removed: false })
+  })
+
+  it('an exception deleted from the draft, or that no longer opens the rule: a removal pending', () => {
+    expect(matchZoneRule(vmRule(101, 102), 'db', APPLIED, WITH)).toMatchObject({ kind: 'exception', exception: { id: 'e1' }, removed: true })
+    const narrowed: PolicyView = { ...APPLIED, exceptions: [exception({ services: [{ proto: 'tcp', dport: '5433' }] })] }
+    expect(matchZoneRule(vmRule(101, 102), 'db', narrowed, WITH)).toMatchObject({ kind: 'exception', removed: true })
+  })
+
+  it('without a revision, or one taken before the exceptions existed, the draft is matched directly', () => {
+    expect(matchZoneRule(vmRule(101, 102), 'db', WITH, null)).toMatchObject({ kind: 'exception', removed: false })
+    expect(matchZoneRule(vmRule(101, 102), 'db', WITH, APPLIED)).toMatchObject({ kind: 'exception', removed: false })
+  })
+
+  it('is null for a drift: another port, a guest the exception does not name, another zone, no marker, not an ACCEPT', () => {
+    expect(matchZoneRule(vmRule(101, 102, 'tcp', '22'), 'db', WITH, WITH)).toBeNull()
+    expect(matchZoneRule(vmRule(104, 102), 'db', WITH, WITH)).toBeNull()
+    expect(matchZoneRule(vmRule(101, 102), 'web', WITH, WITH)).toBeNull()
+    expect(matchZoneRule({ ...vmRule(101, 102), comment: 'by hand' }, 'db', WITH, WITH)).toBeNull()
+    expect(matchZoneRule({ ...vmRule(101, 102), action: 'DROP' }, 'db', WITH, WITH)).toBeNull()
+    expect(matchZoneRule(vmRule(101, 102), 'db', APPLIED, APPLIED)).toBeNull()
+  })
+})
+
+describe('matchZoneRule: the outbound rules of a zone that controls what its members send', () => {
+  // Zone app sends to db (tcp/5432 and tcp/8000:8010), to a CIDR and to itself; web isolates its members.
+  const OUT_FLOWS = [
+    ...FLOWS,
+    flow('f-out-cidr', { src_zone_id: 'z-app', dst_zone_id: '', dst_cidr: '192.0.2.0/24', proto: 'tcp', dport: '443' }),
+    flow('f-out-web', { src_zone_id: 'z-app', dst_zone_id: 'z-web', proto: 'tcp', dport: '443' }),
+  ]
+  const VIEW: PolicyView = { zones: ZONES, flows: OUT_FLOWS }
+  const out = (dest: string, proto = '', dport = '', comment = '[pc-microseg] app -> x') => toFields({ type: 'out', action: 'ACCEPT', dest, proto, dport, comment })
+
+  it('finds the flow leaving the zone by its destination (zone or CIDR), protocol and port', () => {
+    const same = (r: ReturnType<typeof out>) => matchZoneRule(r, 'app', VIEW, VIEW)
+    expect(same(out('+pcz-db', 'tcp', '5432'))).toMatchObject({ kind: 'flow', flow: { id: 'f-app' }, zone: { id: 'z-app' }, changed: false })
+    expect(same(out('+pcz-db', 'tcp', '8000:8010'))).toMatchObject({ kind: 'flow', flow: { id: 'f-range' } })
+    expect(same(out('192.0.2.0/24', 'tcp', '443'))).toMatchObject({ kind: 'flow', flow: { id: 'f-out-cidr' } })
+    expect(same(out('+pcz-web', 'tcp', '443'))).toMatchObject({ kind: 'flow', flow: { id: 'f-out-web' } })
+  })
+
+  it('resolves it in the draft as an inbound rule: changed, removed, or the draft alone without a revision', () => {
+    const edited = { zones: ZONES, flows: OUT_FLOWS.map(f => (f.id === 'f-app' ? { ...f, dport: '5433' } : f)) }
+    expect(matchZoneRule(out('+pcz-db', 'tcp', '5432'), 'app', edited, VIEW)).toMatchObject({ kind: 'flow', flow: { id: 'f-app', dport: '5433' }, changed: true })
+    const dropped = { zones: ZONES, flows: OUT_FLOWS.filter(f => f.id !== 'f-app') }
+    expect(matchZoneRule(out('+pcz-db', 'tcp', '5432'), 'app', dropped, VIEW)).toMatchObject({ kind: 'removed', flow: { id: 'f-app' } })
+    expect(matchZoneRule(out('+pcz-db', 'tcp', '5432'), 'app', VIEW, null)).toMatchObject({ kind: 'flow', flow: { id: 'f-app' }, changed: false })
+  })
+
+  it('the outbound rule of the members among themselves is the zone setting, unless the zone isolates them', () => {
+    expect(matchZoneRule(out('+pcz-app'), 'app', VIEW, VIEW)).toMatchObject({ kind: 'intra', zone: { id: 'z-app' } })
+    expect(matchZoneRule(out('+pcz-web'), 'web', VIEW, VIEW)).toBeNull()
+    // A flow of the zone to itself wins over the members rule.
+    expect(matchZoneRule(out('+pcz-db', 'udp', '53'), 'db', VIEW, VIEW)).toMatchObject({ kind: 'flow', flow: { id: 'f-db-db' } })
+  })
+
+  it('inbound and outbound rules of the same service, and outbound ones to different destinations, each count on their own', () => {
+    const rules = [
+      rule('+pcz-app', 'tcp', '443'), out('+pcz-db', 'tcp', '443'), out('+pcz-web', 'tcp', '443'), out('+pcz-web', 'tcp', '443'),
+    ]
+    expect(occurrences(rules)).toEqual([0, 0, 0, 1])
+  })
+
+  it('is null for a drift: another port, an unknown destination, a rule with a source, the group of another zone', () => {
+    expect(matchZoneRule(out('+pcz-db', 'tcp', '22'), 'app', VIEW, VIEW)).toBeNull()
+    expect(matchZoneRule(out('+pcz-gone', 'tcp', '5432'), 'app', VIEW, VIEW)).toBeNull()
+    expect(matchZoneRule({ ...out('+pcz-db', 'tcp', '5432'), source: '10.0.0.1' }, 'app', VIEW, VIEW)).toBeNull()
+    expect(matchZoneRule(out('+pcz-db', 'tcp', '5432'), 'web', VIEW, VIEW)).toBeNull()
+  })
+})
+
+describe('matchZoneRule: the group of the known zones (pcz-_known)', () => {
+  const known = (zoneName: string) => toFields({ type: 'out', action: 'ACCEPT', dest: `+pcz-${zoneName}`, comment: `[pc-microseg] ${zoneName}` })
+
+  it('each rule stands for a zone, of the applied revision first, by id in the draft', () => {
+    expect(matchZoneRule(known('db'), '_known', APPLIED, APPLIED)).toMatchObject({ kind: 'known', zone: { id: 'z-db' } })
+    const renamed = { zones: ZONES.map(z => (z.id === 'z-db' ? { ...z, name: 'databases' } : z)), flows: FLOWS }
+    expect(matchZoneRule(known('db'), '_known', renamed, APPLIED)).toMatchObject({ kind: 'known', zone: { id: 'z-db', name: 'databases' } })
+    expect(matchZoneRule(known('db'), '_known', APPLIED, null)).toMatchObject({ kind: 'known', zone: { id: 'z-db' } })
+  })
+
+  it('is null for a zone nobody knows, a rule with a service, or one not written by the engine', () => {
+    expect(matchZoneRule(known('gone'), '_known', APPLIED, APPLIED)).toBeNull()
+    expect(matchZoneRule({ ...known('db'), proto: 'tcp', dport: '22' }, '_known', APPLIED, APPLIED)).toBeNull()
+    expect(matchZoneRule({ ...known('db'), comment: 'by hand' }, '_known', APPLIED, APPLIED)).toBeNull()
   })
 })

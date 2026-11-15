@@ -13305,6 +13305,11 @@
         "changed": "flujo {flow} modificado",
         "removed": "flujo {flow} eliminado"
       },
+      "exceptions": {
+        "added": "{count, plural, one {# excepción añadida} other {# excepciones añadidas}}",
+        "changed": "{count, plural, one {# excepción modificada} other {# excepciones modificadas}}",
+        "removed": "{count, plural, one {# excepción eliminada} other {# excepciones eliminadas}}"
+      },
       "members": "{count, plural, one {# cambio de miembro} other {# cambios de miembros}}",
       "membersTo": "{count, plural, one {# invitado a {zone}} other {# invitados a {zone}}}",
       "tagPrefix": "prefijo de etiquetas modificado",
@@ -13445,12 +13450,10 @@
         "gatewayTip": "Puerta de enlace {ip}"
       },
       "flow": {
-        "notApplied": "No aplicado (salida no controlada)",
         "learned": "Aprendido",
         "edit": "Editar flujo",
         "delete": "Eliminar flujo",
-        "createdBy": "Creado por {user}",
-        "observed": "Salida en observación"
+        "createdBy": "Creado por {user}"
       },
       "zoneDialog": {
         "createTitle": "Nueva zona",
@@ -13480,7 +13483,7 @@
         "egressAllWarning": "Solo filtrado por dirección IP: un servicio tras un nombre de dominio puede cambiar de dirección.",
         "egressNeedsState": "La zona debe estar en observación o en bloqueo",
         "tips": {
-          "isolate": "Las VM de esta zona solo se comunican entre sí mediante un flujo declarado. Sin marcar, se comunican libremente.",
+          "isolate": "Las VM de esta zona solo se comunican entre sí mediante un flujo declarado o una excepción, que permite a las VM elegidas alcanzar a los miembros elegidos. Sin marcar, se comunican libremente.",
           "inbound": {
             "disabled": "La zona no se aplica en Proxmox.",
             "observe": "No se bloquea nada: el tráfico entrante fuera de la política se registra y se propone como sugerencia.",
@@ -13565,8 +13568,11 @@
       "delete": {
         "zoneTitle": "¿Eliminar la zona {name}?",
         "flowTitle": "¿Eliminar este flujo?",
+        "exceptionTitle": "¿Eliminar esta excepción?",
         "zoneBody": "La zona se quita del borrador. Nada cambia en Proxmox hasta que aplique.",
+        "zoneBodyExceptions": "La zona y {count, plural, one {su excepción} other {sus # excepciones}} se quitan del borrador. Nada cambia en Proxmox hasta que aplique.",
         "flowBody": "El flujo se quita del borrador. Nada cambia en Proxmox hasta que aplique.",
+        "exceptionBody": "La excepción se quita del borrador. Nada cambia en Proxmox hasta que aplique.",
         "confirm": "Eliminar"
       },
       "enforce": {
@@ -13692,6 +13698,51 @@
         "confirm": {
           "block": "Bloquear la salida",
           "reopen": "Reabrir la salida"
+        }
+      },
+      "exceptions": {
+        "title": "Excepciones por VM",
+        "tip": "Una excepción permite que las VM elegidas alcancen a los miembros elegidos de la zona en los servicios indicados, digan lo que digan los flujos y el aislamiento de la zona.",
+        "add": "Añadir una excepción",
+        "edit": "Editar la excepción",
+        "delete": "Eliminar la excepción",
+        "none": "Ninguna excepción",
+        "createTitle": "Nueva excepción",
+        "sources": "VM de origen",
+        "destinations": "VM de destino",
+        "services": "Servicios permitidos",
+        "guestsPlaceholder": "Elegir VM",
+        "membersGroup": "Miembros de la zona",
+        "notMembersGroup": "Aún no son miembros",
+        "count": "{count, plural, =0 {Ninguna excepción} one {# excepción} other {# excepciones}}",
+        "manage": "Gestionar",
+        "notActive": "{count, plural, one {# no activa} other {# no activas}}",
+        "notActiveHint": "Algunas excepciones no están activas: abra la lista para ver el motivo.",
+        "filter": "Filtrar por VM, VMID o servicio",
+        "noMatch": "Ninguna excepción coincide con el filtro",
+        "columns": {
+          "services": "Servicios",
+          "status": "Estado"
+        },
+        "alreadySource": "Ya es origen",
+        "alreadyDestination": "Ya es destino",
+        "notInInventory": "No está en el inventario",
+        "ruleCount": "{count, plural, one {# regla} other {# reglas}}",
+        "tooManyRules": "{count} reglas, {max} como máximo: permita mejor un flujo de la zona",
+        "overlap": "Una VM no puede ser a la vez origen y destino: {names}",
+        "status": {
+          "inactive_zone": "Zona no aplicada",
+          "no_destination": "Ningún destino en la zona",
+          "missing_guest": "VM no encontrada",
+          "waiting_address": "Dirección desconocida",
+          "renamed": "Nombre cambiado"
+        },
+        "statusHint": {
+          "inactive_zone": "La zona no está en observación ni en bloqueo: nada de esta excepción se escribe en Proxmox.",
+          "no_destination": "Ninguno de sus destinos es miembro de la zona: la excepción no permite nada hasta que uno se una.",
+          "missing_guest": "Un origen o un destino ya no está en el inventario.",
+          "waiting_address": "El inventario aún no conoce ninguna dirección de un origen: puede que sus reglas no dejen pasar nada hasta que se lea una.",
+          "renamed": "Una VM ya no tiene el nombre registrado: se renombró, o su VMID se reutilizó. Compruebe que la excepción sigue designando la VM correcta."
         }
       }
     },
@@ -13954,6 +14005,9 @@
       "asCidr": "Como CIDR",
       "acceptTip": "Crea el flujo {from} → {to} {service} en el borrador.",
       "cidrTip": "Crea el mismo flujo con el origen {ip} como rango de direcciones: necesario cuando el origen es una IP desconocida.",
+      "exceptionOnly": "Permitir solo este flujo",
+      "exceptionOnlyTip": "Abre una excepción de la zona, ya rellenada: solo {from} alcanza {to} en {service}, no todo el par de zonas.",
+      "exceptionSaved": "Excepción añadida al borrador: la próxima aplicación la escribe.",
       "dismissTip": "Oculta esta sugerencia para este par.",
       "bulkLabel": "Flujos seleccionados",
       "bulkAcceptTip": "Crea en el borrador el flujo entre las zonas de cada sugerencia seleccionada.",
@@ -14035,7 +14089,8 @@
         "allowed": "Permitido",
         "unprotected": "Sin protección",
         "blocked": "Bloqueado",
-        "draft": "Permitido, aún no aplicado"
+        "draft": "Permitido, aún no aplicado",
+        "exception": "Excepción entre VM"
       },
       "node": {
         "members": "{count, plural, one {# miembro} other {# miembros}}",
@@ -14055,6 +14110,9 @@
         "guestPending": "En cola para la zona, se aplica con el próximo plan",
         "moreHint": "{count, plural, one {# miembro más} other {# miembros más}}: el panel de la zona los lista todos",
         "moreUnzonedHint": "{count, plural, one {# invitado más} other {# invitados más}} sin zona: Desviaciones los lista todos",
+        "morePveHint": "{count, plural, one {# invitado más} other {# invitados más}} en este nodo",
+        "guestZone": "Zona: {zone}",
+        "guestNoZone": "En ninguna zona",
         "ipHint": "{ip}: una dirección sin zona y sin invitado que habló con esta zona",
         "inside": "{count, plural, one {# flujo observado} other {# flujos observados}} dentro de la zona",
         "observed": "salida en observación",
@@ -14077,7 +14135,11 @@
         "countUnprotected": "{count, plural, one {# flujo sin protección} other {# flujos sin protección}}",
         "countBlocked": "{count, plural, one {# flujo bloqueado} other {# flujos bloqueados}}",
         "hitsTotal": "{count, plural, one {# ocurrencia} other {# ocurrencias}} en el registro en total",
-        "noCounter": "Los flujos permitidos no tienen contador: Proxmox no registra lo que deja pasar"
+        "noCounter": "Los flujos permitidos no tienen contador: Proxmox no registra lo que deja pasar",
+        "exception": "Excepción: {services}",
+        "exceptionCount": "{count, plural, one {# excepción} other {# excepciones}}",
+        "exceptionsBetween": "{count, plural, one {# excepción} other {# excepciones}} entre VM de las dos zonas",
+        "pairsSampled": "Pares de ejemplo conservados por el motor:"
       },
       "panel": {
         "label": "Zona {name}",
@@ -14172,7 +14234,19 @@
         "guests": "Vista por invitado",
         "guestsHint": "una zona y sus invitados, con lo que les habla",
         "sankey": "Diagrama de Sankey",
-        "sankeyHint": "el tráfico observado como cintas, más anchas con más impactos"
+        "sankeyHint": "el tráfico observado como cintas, más anchas con más impactos",
+        "nodes": "Nodos",
+        "nodesHint": "los invitados en su nodo Proxmox, los flujos observados y las excepciones de nodo a nodo (los flujos permitidos entre zonas siguen en Grupos)"
+      },
+      "pve": {
+        "aria": "Nodo Proxmox {name}, {guests}",
+        "guests": "{count, plural, one {# invitado} other {# invitados}}",
+        "zoneShare": "Zona {zone}: {count, plural, one {# invitado} other {# invitados}}",
+        "unzonedShare": "Sin zona: {count, plural, one {# invitado} other {# invitados}}",
+        "inside": "{count, plural, one {# flujo interno} other {# flujos internos}}",
+        "insideHint": "Flujos observados entre dos invitados de este nodo: no se dibuja ninguna línea para ellos",
+        "unavailable": "Lista de invitados no disponible",
+        "none": "Ningún invitado que dibujar: ninguna zona tiene miembros y ningún invitado está en ejecución"
       },
       "matrix": {
         "label": "Flujos entre las zonas: orígenes por destinos",
@@ -14428,6 +14502,7 @@
         "version": "Versión {version}",
         "by": "por {author}",
         "counts": "{zones, plural, one {# zona} other {# zonas}}, {flows, plural, one {# flujo} other {# flujos}}",
+        "countsWithExceptions": "{counts}, {exceptions, plural, one {# excepción} other {# excepciones}}",
         "latest": "Última",
         "restore": "Restaurar",
         "restoreTitle": "¿Restaurar la versión {version}?",
@@ -14804,7 +14879,10 @@
       "removalPending": "Eliminación pendiente (próxima aplicación)",
       "flowChanged": "cambiado",
       "flowChangedHint": "Cambiado en el borrador: se aplica en la próxima aplicación",
-      "engineFlowRule": "Regla del motor: edítela como su flujo (menú o doble clic)"
+      "engineFlowRule": "Regla del motor: edítela como su flujo (menú o doble clic)",
+      "exceptionRule": "Excepción: {source} → {destination} (se edita en su zona)",
+      "exceptionRuleRemoved": "Excepción: {source} → {destination}, eliminación pendiente (próxima aplicación)",
+      "knownZoneRule": "La zona {zone} es conocida: lo que una zona observada le envía no se registra"
     },
     "discard": {
       "button": "Descartar cambios",

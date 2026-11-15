@@ -127,7 +127,8 @@ export function ZoneAddFlow({ zoneName, title, open }: { zoneName: string; title
 
 /**
  * A rule of a zone group: the flow it is compiled from is edited and deleted from its menu or a double-click; the
- * rule of the members among themselves is a zone setting; a rule matching no flow of the draft keeps its lock.
+ * rule of the members among themselves is a zone setting; the rule of an exception names it (edited in its zone); a
+ * rule matching no flow of the draft keeps its lock.
  */
 /** A double-click on a control of the row (checkbox, switch, button, link) is that control's, not the row's. */
 const onControl = (e: ReactMouseEvent) => !!(e.target as HTMLElement).closest('button, input, a, [role="switch"], [role="checkbox"], [role="combobox"]')
@@ -135,6 +136,11 @@ const onControl = (e: ReactMouseEvent) => !!(e.target as HTMLElement).closest('b
 function lockTitleOf(match: ZoneRuleMatch, t: ReturnType<typeof useTranslations<'microsegPilot.dfw'>>): string {
   if (match?.kind === 'intra') return t('intraRule')
   if (match?.kind === 'removed') return t('removalPending')
+  if (match?.kind === 'known') return t('knownZoneRule', { zone: match.zone.name })
+  if (match?.kind === 'exception') {
+    const name = (g: { name: string; vmid: number }) => g.name || String(g.vmid)
+    return t(match.removed ? 'exceptionRuleRemoved' : 'exceptionRule', { source: name(match.source), destination: name(match.destination) })
+  }
   return t('notInDraft')
 }
 
@@ -145,7 +151,7 @@ export function ZoneRuleRow({ zoneName, occurrence, ...row }: RuleRowProps & { z
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const match = tools?.match(row.rule, zoneName, occurrence) ?? null
   if (!tools || match?.kind !== 'flow') {
-    return <RuleRow {...row} lockTitle={tools ? lockTitleOf(match, t) : undefined} struck={match?.kind === 'removed'} />
+    return <RuleRow {...row} lockTitle={tools ? lockTitleOf(match, t) : undefined} struck={match?.kind === 'removed' || (match?.kind === 'exception' && match.removed)} />
   }
   const { flow, changed } = match
   // Still the engine's rule: the lock stays, it says the rule is edited as its flow.

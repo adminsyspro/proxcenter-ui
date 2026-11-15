@@ -325,6 +325,46 @@ describe('microseg proxy route audit', () => {
     })
   })
 
+  it('relays the three exception writes under node.manage, each audited by the relay under its own action', async () => {
+    const { POST, PUT, DELETE } = await import('./route')
+    const exception = { zone_id: 'zd', sources: [{ type: 'qemu', vmid: 100, name: 'web-1' }], destinations: [{ type: 'qemu', vmid: 200, name: 'db-1' }], services: [{ proto: 'tcp', dport: '5432' }] }
+
+    // One answer per call: the body of a Response is read once.
+    relayMock.mockImplementation(async () => upstream(200, { version: 5, exception: { id: 'e1', ...exception } }))
+    await callRoute(POST as any, { ...ctx(['exceptions']), body: { version: 4, ...exception } })
+    await callRoute(PUT as any, { ...ctx(['exceptions', 'e1']), method: 'PUT', body: { version: 5, ...exception } })
+    relayMock.mockResolvedValue(upstream(200, { version: 7 }))
+    await callRoute(DELETE as any, { ...ctx(['exceptions', 'e1']), method: 'DELETE', body: { version: 6 } })
+
+    expect(checkPermissionMock.mock.calls).toEqual(Array(3).fill(['node.manage', 'connection', 'c1']))
+    expect(relayMock.mock.calls.map(c => [c[1].method, c[0], JSON.parse(c[1].body)])).toEqual([
+      ['POST', '/microseg/c1/exceptions', { version: 4, ...exception }],
+      ['PUT', '/microseg/c1/exceptions/e1', { version: 5, ...exception }],
+      ['DELETE', '/microseg/c1/exceptions/e1', { version: 6 }],
+    ])
+    expect(auditMock.mock.calls.map(c => c[0])).toEqual([
+      { category: 'firewall', action: 'microseg.exception.create', resourceType: 'microseg_policy', resourceId: 'c1', status: 'success', errorMessage: undefined, details: { path: 'exceptions', method: 'POST', status: 200, version: 4 } },
+      { category: 'firewall', action: 'microseg.exception.update', resourceType: 'microseg_policy', resourceId: 'c1', status: 'success', errorMessage: undefined, details: { path: 'exceptions/e1', method: 'PUT', status: 200, version: 5 } },
+      { category: 'firewall', action: 'microseg.exception.delete', resourceType: 'microseg_policy', resourceId: 'c1', status: 'success', errorMessage: undefined, details: { path: 'exceptions/e1', method: 'DELETE', status: 200, version: 6 } },
+    ])
+  })
+
+  it('refuses a neighbouring verb or path of the exceptions: 404, no relay, no audit', async () => {
+    const { GET, POST, PUT, DELETE } = await import('./route')
+    const refused = [
+      await callRoute(GET as any, ctx(['exceptions'])),
+      await callRoute(GET as any, ctx(['exceptions', 'e1'])),
+      await callRoute(POST as any, { ...ctx(['exceptions', 'e1']), body: { version: 1 } }),
+      await callRoute(PUT as any, { ...ctx(['exceptions']), method: 'PUT', body: { version: 1 } }),
+      await callRoute(DELETE as any, { ...ctx(['exceptions']), method: 'DELETE', body: { version: 1 } }),
+      await callRoute(PUT as any, { ...ctx(['exceptions', 'e1', 'state']), method: 'PUT', body: { version: 1 } }),
+    ]
+
+    expect(refused.map(r => r.status)).toEqual(Array(6).fill(404))
+    expect(relayMock).not.toHaveBeenCalled()
+    expect(auditMock).not.toHaveBeenCalled()
+  })
+
   it('records a draft write without a body, version absent', async () => {
     const { POST } = await import('./route')
 

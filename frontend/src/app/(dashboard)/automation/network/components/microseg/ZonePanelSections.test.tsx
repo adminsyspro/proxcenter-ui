@@ -9,12 +9,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { within } from '@testing-library/react'
 
+import { getVmIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import RBACContext, { type RBACContextValue } from '@/contexts/RBACContext'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
 // The test kit first: it stands in for @xyflow/react before the tab loads it.
-import { GUESTS_ROUTE, REVISION_HEAD, calls, mock, policy, renderTab, reply } from './microsegTestKit'
+import { GUESTS_ROUTE, REVISION_HEAD, calls, exception, mock, policy, renderTab, reply } from './microsegTestKit'
 import MicrosegTab from './MicrosegTab'
 import { PANEL_SECTIONS_KEY } from './PanelSection'
 import { body, db, installFreshMocks, vm, web } from './policyTestKit'
@@ -43,7 +44,7 @@ describe('zone panel sections', () => {
     const panel = await openDb()
 
     const titles = [...panel.querySelectorAll('section[data-section]')].map(s => s.getAttribute('aria-label'))
-    expect(titles).toEqual(['Observed traffic', 'Top sources and destinations', 'Pending suggestions', 'Members', 'Incoming flows', 'Outgoing flows'])
+    expect(titles).toEqual(['Observed traffic', 'Top sources and destinations', 'Pending suggestions', 'Members', 'VM exceptions', 'Incoming flows', 'Outgoing flows'])
     await waitFor(() => expect(within(panel).getByTestId('section-zone.members-count').textContent).toBe('1'))
     expect(within(panel).getByTestId('section-zone.suggestions-count').textContent).toBe('1')
     expect(within(panel).getByTestId('panel-body')).toBeTruthy()
@@ -65,6 +66,83 @@ describe('zone panel sections', () => {
     fireEvent.click(within(panel).getByTestId('section-zone.members'))
     expect(await within(panel).findByText('db1')).toBeTruthy()
     expect(JSON.parse(window.localStorage.getItem(PANEL_SECTIONS_KEY) ?? '[]')).toEqual([])
+  })
+})
+
+describe('zone panel: exceptions', () => {
+  const toDb = (id: string, source: string, vmid: number) => exception(id, {
+    zone_id: 'zd', sources: [{ type: 'qemu', vmid, name: source }], destinations: [{ type: 'qemu', vmid: 101, name: 'db1' }],
+  })
+  const vms = [vm(101, 'db1', ['zone-db'], { ips: ['10.0.0.2'] }), ...[1, 2, 3, 4, 5, 6, 7].map(n => vm(200 + n, `app-0${n}`, [], { ips: [`10.0.1.${n}`] }))]
+
+  it('counts the exceptions of the zone only, one line each with the VM icon first, and says when there is none', async () => {
+    setup({ vms, exceptions: [toDb('e1', 'app-01', 201), toDb('e2', 'app-02', 202), exception('other')] })
+    const panel = await openDb()
+    const region = section(panel, 'VM exceptions')
+    expect(within(panel).getByTestId('section-zone.exceptions-count').textContent).toBe('2')
+    const rows = await within(region).findAllByRole('listitem')
+    expect(rows.map(r => r.getAttribute('aria-label'))).toEqual(['app-01 → db1 · PostgreSQL', 'app-02 → db1 · PostgreSQL'])
+    // The VM icon of the first source leads the line, not the unknown-guest mark.
+    await waitFor(() => expect(within(region).getAllByRole('listitem')[0].firstElementChild?.querySelector('i')?.className).toBe(getVmIcon('qemu')))
+    expect(within(region).getByRole('button', { name: 'Add an exception' })).toBeTruthy()
+    expect(within(region).queryByText('No exception')).toBeNull()
+  })
+
+  it('says there is no exception in a zone without one', async () => {
+    setup({ vms, exceptions: [exception('other')] })
+    const region = section(await openDb(), 'VM exceptions')
+    expect(within(region).getByText('No exception')).toBeTruthy()
+    expect(within(region).queryAllByRole('listitem')).toHaveLength(0)
+  })
+
+  it('pages the exceptions like the flows, five a page', async () => {
+    setup({ vms, exceptions: [1, 2, 3, 4, 5, 6, 7].map(n => toDb(`e${n}`, `app-0${n}`, 200 + n)) })
+    const panel = await openDb()
+    const region = section(panel, 'VM exceptions')
+    expect(within(panel).getByTestId('section-zone.exceptions-count').textContent).toBe('7')
+    expect(await within(region).findAllByRole('listitem')).toHaveLength(5)
+    expect(within(region).getByText('1-5 of 7')).toBeTruthy()
+    fireEvent.click(within(region).getByRole('button', { name: 'Next page' }))
+    await waitFor(() => expect(within(region).getAllByRole('listitem').map(r => r.getAttribute('aria-label'))).toEqual(['app-06 → db1 · PostgreSQL', 'app-07 → db1 · PostgreSQL']))
+  })
+
+  it('says cautiously that the inventory knows no address of a source', async () => {
+    setup({ vms: [vm(101, 'db1', ['zone-db'], { ips: ['10.0.0.2'] }), vm(201, 'app-01', [])], exceptions: [toDb('e1', 'app-01', 201)] })
+    const region = section(await openDb(), 'VM exceptions')
+    expect(await within(region).findByText('Address unknown')).toBeTruthy()
+  })
+
+  it('shows no status chip while the guest list is unknown, and still says a zone that is not applied', async () => {
+    window.localStorage.setItem('microseg.subTab', 'overview')
+    mock.routes['GET /policy'] = () => reply(200, policy({
+      zones: [web({ state: 'disabled' }), db()], exceptions: [toDb('e1', 'app-01', 201), exception('e2')], last_revision: REVISION_HEAD,
+    }))
+    mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(500, { error: 'boom' })
+    mock.routes[SUGGESTIONS] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
+    renderTab()
+    let panel = await openDb()
+    await waitFor(() => expect(calls(`GET ${GUESTS_ROUTE}`).length).toBeGreaterThan(0))
+    const row = await within(section(panel, 'VM exceptions')).findByRole('listitem', { name: 'app-01 → db1 · PostgreSQL' })
+    expect(within(panel).getByText('The guest list could not be read.')).toBeTruthy()
+    expect(row.querySelector('.MuiChip-root')).toBeNull()
+    // What does not depend on the guests is still said.
+    fireEvent.click(within(panel).getByRole('button', { name: 'Close' }))
+    fireEvent.click(await node('zone:zw'))
+    panel = await screen.findByRole('complementary', { name: 'Zone web' })
+    expect(await within(section(panel, 'VM exceptions')).findByText('Zone not applied')).toBeTruthy()
+  })
+
+  it('lists the exceptions in a sub-tab of the dialog view, between the members and the incoming flows, with its add button', async () => {
+    setup({ vms, exceptions: [toDb('e1', 'app-01', 201)] })
+    const panel = await openDb()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Expand' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Data' }))
+    const subs = within(dialog).getAllByRole('tab').map(x => x.textContent)
+    expect(subs.slice(subs.indexOf('Members (1)'))).toEqual(['Members (1)', 'VM exceptions (1)', 'Incoming flows (0)', 'Outgoing flows (0)'])
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'VM exceptions (1)' }))
+    expect(await within(dialog).findByRole('listitem', { name: 'app-01 → db1 · PostgreSQL' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Add an exception' })).toBeTruthy()
   })
 })
 
@@ -163,7 +241,7 @@ describe('zone panel: expanded in a dialog', () => {
 
     fireEvent.click(within(dialog).getByRole('tab', { name: 'Data' }))
     const subs = within(dialog).getAllByRole('tab').map(t => t.textContent)
-    expect(subs.slice(3)).toEqual(['Pending suggestions (1)', 'Members (0)', 'Incoming flows (0)', 'Outgoing flows (0)'])
+    expect(subs.slice(3)).toEqual(['Pending suggestions (1)', 'Members (0)', 'VM exceptions (0)', 'Incoming flows (0)', 'Outgoing flows (0)'])
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(1)
     fireEvent.click(within(dialog).getByRole('tab', { name: 'Members (0)' }))
     expect(within(dialog).queryAllByRole('listitem')).toHaveLength(0)

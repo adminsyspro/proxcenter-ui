@@ -7,7 +7,8 @@ import { within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 import { calls, fetchMock, mock, reply } from './microsegTestKit'
-import { body, hoursAgo, run, setup, SUGGESTIONS_ROUTE, suggestion, installFreshMocks, web } from './policyTestKit'
+import { body, db, hoursAgo, run, setup, SUGGESTIONS_ROUTE, suggestion, installFreshMocks, web } from './policyTestKit'
+import { node, setup as setupMap, wouldBlock } from './zoneMapTestKit'
 
 installFreshMocks()
 
@@ -86,7 +87,7 @@ describe('zone state', () => {
     expect(await within(dialog).findByText(/^Apply or discard your \d+ pending changes? first\.$/)).toBeTruthy()
     expect((within(dialog).getByRole('button', { name: 'Observe' }) as HTMLButtonElement).disabled).toBe(true)
 
-    fireEvent.click(within(dialog).getByRole('button', { name: 'View plan' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Review and apply' }))
     expect(await screen.findByRole('dialog', { name: 'Micro-segmentation plan' })).toBeTruthy()
     expect(screen.queryByRole('dialog', { name: 'Observe zone web?' })).toBeNull()
     expect(calls('POST /zones/zw/state')).toHaveLength(0)
@@ -156,6 +157,16 @@ describe('enforcing a zone', () => {
     await waitFor(() => expect(calls('POST /zones/zw/state')).toHaveLength(1))
   })
 
+  it('reads the inbound suggestions of the zone with the inbound direction, so outbound rows of the zone never count', async () => {
+    mock.routes[SUGGESTIONS_ROUTE] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
+    setup({ zones: [web({ state: 'observe', observe_since: hoursAgo(48) })] })
+    const dialog = await chooseEnforce()
+    await waitFor(() => expect((within(dialog).getByRole('button', { name: 'Enforce' }) as HTMLButtonElement).disabled).toBe(false))
+    const reads = calls(SUGGESTIONS_ROUTE)
+    expect(reads.length).toBeGreaterThan(0)
+    expect(String(reads[0][0])).toContain('direction=in')
+  })
+
   it('treats a zone observed for less than the window as not ready', async () => {
     mock.routes[SUGGESTIONS_ROUTE] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
     setup({ zones: [web({ state: 'observe', observe_since: hoursAgo(2) })] })
@@ -181,7 +192,7 @@ describe('enforcing a zone', () => {
     expect(await within(dialog).findByText(/Nothing would have been blocked/)).toBeTruthy()
     expect(within(dialog).getByText('The state change is applied to Proxmox right away, as a new revision.')).toBeTruthy()
     expect((within(dialog).getByRole('button', { name: 'Enforce' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(within(dialog).getByRole('button', { name: 'View plan' })).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Review and apply' })).toBeTruthy()
   })
 
   it('sends nothing when the dialog is cancelled', async () => {
@@ -191,5 +202,148 @@ describe('enforcing a zone', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(fetchMock.mock.calls.some(([u, i]) => String(u).endsWith('/state') && (i as RequestInit)?.method === 'POST')).toBe(false)
+  })
+})
+
+describe('outbound state of a zone in its panel', () => {
+  const OUT_ROUTE = 'GET /suggestions?kind=would_block&status=pending&zone=zw&direction=out&limit=200'
+  const openPanel = async () => {
+    fireEvent.click(await node('zone:zw'))
+    return screen.findByRole('complementary', { name: 'Zone web' })
+  }
+  const outbound = (id: string, lastSeen: string) => wouldBlock(id, { direction: 'out', src_key: 'zw', src_zone_id: 'zw', dst_zone_id: '', dst_ip: '8.8.8.8', last_seen: lastSeen })
+  const observing = (over = {}) => web({ state: 'enforce', egress_state: 'observe', egress_observe_since: hoursAgo(48), ...over })
+
+  it('shows the chip as ready when the window elapsed with no outbound flow seen in it', async () => {
+    setupMap({ zones: [observing()], suggestions: [outbound('o1', hoursAgo(30))] })
+    const panel = await openPanel()
+    expect(await within(panel).findByText('Outbound: ready')).toBeTruthy()
+  })
+
+  it('shows the chip as observing while an outbound flow was seen inside the window, and ignores inbound ones', async () => {
+    setupMap({ zones: [observing()], suggestions: [outbound('o1', hoursAgo(1))] })
+    const panel = await openPanel()
+    expect(await within(panel).findByText('Outbound: observing')).toBeTruthy()
+  })
+
+  it('has no outbound action while the outbound is off', async () => {
+    setupMap({ zones: [web({ state: 'enforce' })] })
+    const panel = await openPanel()
+    expect(await within(panel).findByText('Outbound: not controlled')).toBeTruthy()
+    expect(within(panel).queryByRole('button', { name: 'Block outbound' })).toBeNull()
+    expect(within(panel).queryByRole('button', { name: 'Reopen outbound' })).toBeNull()
+  })
+
+  it('reopens the outbound in one click, without a dialog, even when the inbound is enforced', async () => {
+    mock.routes['POST /zones/zw/egress-state'] = () => reply(202, { run_id: 'r1' })
+    mock.routes['GET /runs/r1'] = () => reply(200, run('running'))
+    setupMap({ zones: [web({ state: 'enforce', egress_state: 'enforce' })] })
+    const panel = await openPanel()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Reopen outbound' }))
+    await waitFor(() => expect(calls('POST /zones/zw/egress-state')).toHaveLength(1))
+    expect(body(calls('POST /zones/zw/egress-state')[0][1] as RequestInit)).toEqual({ version: 3, state: 'observe' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('refuses to reopen the outbound while the draft has pending changes, with the way to the plan', async () => {
+    setupMap({ zones: [web({ state: 'enforce', egress_state: 'enforce' })], pending_changes: true })
+    const panel = await openPanel()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Reopen outbound' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Reopen outbound of zone web?' })
+    expect(await within(dialog).findByText(/^Apply or discard your \d+ pending changes? first\.$/)).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Review and apply' })).toBeTruthy()
+    expect((within(dialog).getByRole('button', { name: 'Reopen outbound' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
+  })
+
+  it('asks for the zone name to block the outbound of a zone that is not ready', async () => {
+    mock.routes[OUT_ROUTE] = () => reply(200, { suggestions: [outbound('o1', hoursAgo(1))], limit: 200, offset: 0 })
+    mock.routes['POST /zones/zw/egress-state'] = () => reply(202, { run_id: 'r1' })
+    mock.routes['GET /runs/r1'] = () => reply(200, run('running'))
+    setupMap({ zones: [observing()] })
+    const panel = await openPanel()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Block outbound' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Block outbound of zone web?' })
+    const confirm = await within(dialog).findByRole('button', { name: 'Block outbound' }) as HTMLButtonElement
+    const field = await within(dialog).findByLabelText('Type web to confirm')
+    expect(await within(dialog).findByText(/not ready/)).toBeTruthy()
+    expect(confirm.disabled).toBe(true)
+    fireEvent.change(field, { target: { value: 'web' } })
+    expect(confirm.disabled).toBe(false)
+    fireEvent.click(confirm)
+    await waitFor(() => expect(calls('POST /zones/zw/egress-state')).toHaveLength(1))
+    expect(body(calls('POST /zones/zw/egress-state')[0][1] as RequestInit)).toEqual({ version: 3, state: 'enforce' })
+  })
+
+  it('treats the zone as not ready, and asks its name, when the outbound suggestions cannot be read', async () => {
+    mock.routes[OUT_ROUTE] = () => reply(502, { code: 'ORCHESTRATOR_ERROR', error: 'x' })
+    setupMap({ zones: [observing()] })
+    const panel = await openPanel()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Block outbound' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Block outbound of zone web?' })
+    expect(await within(dialog).findByLabelText('Type web to confirm')).toBeTruthy()
+    expect(within(dialog).getByText(/could not be checked/)).toBeTruthy()
+  })
+
+  it('treats a full page of outbound suggestions as not ready, even when none is inside the window', async () => {
+    const page = Array.from({ length: 200 }, (_, i) => outbound(`o${i}`, hoursAgo(30)))
+    mock.routes[OUT_ROUTE] = () => reply(200, { suggestions: page, limit: 200, offset: 0 })
+    setupMap({ zones: [observing()] })
+    const panel = await openPanel()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Block outbound' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Block outbound of zone web?' })
+    expect(await within(dialog).findByLabelText('Type web to confirm')).toBeTruthy()
+  })
+
+  it('does not say ready in the panel when the map read only a first page of pending flows', async () => {
+    const page = Array.from({ length: 200 }, (_, i) => wouldBlock(`i${i}`, { src_zone_id: 'zd', dst_zone_id: 'zd' }))
+    setupMap({ zones: [observing(), db()], suggestions: page })
+    const panel = await openPanel()
+    expect(await within(panel).findByText('Outbound: observing')).toBeTruthy()
+  })
+
+  it('asks a plain confirmation to block the outbound of a ready zone', async () => {
+    mock.routes[OUT_ROUTE] = () => reply(200, { suggestions: [outbound('o1', hoursAgo(30))], limit: 200, offset: 0 })
+    setupMap({ zones: [observing()] })
+    const panel = await openPanel()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Block outbound' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Block outbound of zone web?' })
+    const confirm = await within(dialog).findByRole('button', { name: 'Block outbound' }) as HTMLButtonElement
+    await waitFor(() => expect(confirm.disabled).toBe(false))
+    expect(within(dialog).queryByLabelText(/Type web to confirm/)).toBeNull()
+  })
+
+  it('refuses to block the outbound while the draft has pending changes', async () => {
+    mock.routes[OUT_ROUTE] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
+    setupMap({ zones: [observing()], pending_changes: true })
+    const panel = await openPanel()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Block outbound' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Block outbound of zone web?' })
+    expect(await within(dialog).findByText(/^Apply or discard your \d+ pending changes? first\.$/)).toBeTruthy()
+    expect((within(dialog).getByRole('button', { name: 'Block outbound' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+describe('outbound readiness read of the zone list', () => {
+  const LIST_ROUTE = 'GET /suggestions?kind=would_block&status=pending&direction=out&limit=200'
+  const outboundOf = (lastSeen: string) => ({ ...suggestion(lastSeen), direction: 'out', src_key: 'zw', src_zone_id: 'zw', dst_zone_id: '' })
+
+  it('reads the pending outbound flows once, with the direction, when a zone observes its outbound, and shows it ready', async () => {
+    mock.routes[LIST_ROUTE] = () => reply(200, { suggestions: [outboundOf(hoursAgo(30))], limit: 200, offset: 0 })
+    setup({ zones: [web({ state: 'enforce', egress_state: 'observe', egress_observe_since: hoursAgo(48) })] })
+    expect(await screen.findByText('Outbound: ready')).toBeTruthy()
+    expect(calls(LIST_ROUTE)).toHaveLength(1)
+  })
+
+  it('keeps the chip observing while a flow was seen inside the window', async () => {
+    mock.routes[LIST_ROUTE] = () => reply(200, { suggestions: [outboundOf(hoursAgo(1))], limit: 200, offset: 0 })
+    setup({ zones: [web({ state: 'enforce', egress_state: 'observe', egress_observe_since: hoursAgo(48) })] })
+    expect(await screen.findByText('Outbound: observing')).toBeTruthy()
+  })
+
+  it('reads nothing outbound when no zone observes its outbound', async () => {
+    setup({ zones: [web({ state: 'enforce', egress_state: 'enforce' }), db()] })
+    expect(await screen.findByText('Outbound: blocking')).toBeTruthy()
+    expect(calls(LIST_ROUTE)).toHaveLength(0)
   })
 })

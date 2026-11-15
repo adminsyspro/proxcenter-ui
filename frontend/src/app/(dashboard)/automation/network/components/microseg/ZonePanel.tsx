@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Alert, Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -8,15 +8,19 @@ import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/component
 import { useMicrosegDrifts } from '@/lib/microseg/useMicrosegLists'
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
 
-import FlowSummary from './FlowSummary'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
-import { ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
+import { DirectionGlyph, ObservedKindGlyph, ResolveActions, outboundZoneAcceptTip, ServiceHits, useResolveSuggestions } from './observationParts'
 import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
-import PolicyPager, { usePaged } from './PolicyPager'
+import { PagedList, POLICY_PAGE_SIZE } from './PolicyPager'
 import { SelectionTrafficChart, TOP_TITLE, TopSourcesList, TrafficSummaryLine, useSelectionTraffic } from './SelectionTraffic'
 import { MemberChangeChip } from './ZoneRow'
+import EgressChip, { useZoneEgress } from './EgressChip'
+import ExpandDialog, { withCount, type DataTab } from './ExpandDialog'
 import ZoneStateChip from './ZoneStateChip'
-import { FlowRowActions, MemberAction, NewFlowButton, ZoneHeaderActions, useFlowEditor } from './ZonePanelActions'
+import { destinationName, endpoint } from './ObservationRow'
+import { useGatewayName } from './useGatewayName'
+import { bareIp } from './zoneGraph'
+import { ExpandAddButton, FlowsList, MemberAction, NewFlowButton, ZoneHeaderActions, useFlowEditor } from './ZonePanelActions'
 import type { ZoneEdits } from './useZoneEdits'
 import { useIgnoredDrifts } from './driftIgnore'
 import { OneLine } from './dialogParts'
@@ -49,9 +53,9 @@ type Props = {
   onOpenDrifts?: (zoneId: string) => void
   /** The map read only the first `limit` pending observed flows: the suggestions may miss some. */
   partialLimit?: number | null
+  /** The guest name of each address the inventory knows, to name the destination of an outbound row. */
+  peers?: ReadonlyMap<string, string>
 }
-
-type FlowEditor = ReturnType<typeof useFlowEditor>
 
 function MemberLine({ member, zoneId, edits, firewallOff }: { member: ZoneMember; zoneId: string; edits: ZoneEdits; firewallOff: boolean }) {
   const t = useTranslations('microsegPilot.overview.panel')
@@ -81,63 +85,55 @@ function MemberLine({ member, zoneId, edits, firewallOff }: { member: ZoneMember
   )
 }
 
-function FlowsList({ flows, zonesById, editor }: { flows: MicrosegFlow[]; zonesById: Map<string, MicrosegZone>; editor: FlowEditor }) {
-  const t = useTranslations('microsegPilot.overview.panel')
-  const paged = usePaged(flows, FLOWS_PAGE_SIZE)
-  return (
-    <>
-      {flows.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noFlows')}</Typography>}
-      {paged.rows.map(flow => (
-        <Box key={flow.id} sx={{ display: 'flex', minHeight: 28, alignItems: 'center', gap: 0.5, minWidth: 0 }}>
-          <FlowSummary flow={flow} zonesById={zonesById} />
-          <FlowRowActions flow={flow} onEdit={editor.edit} onDelete={editor.remove} />
-        </Box>
-      ))}
-      <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
-    </>
-  )
-}
-
 /** A pending suggestion towards the zone on one line: kind, source, service and hits, the ways out of Observation. */
-function SuggestionLine({ suggestion: s, zonesById, busy, onResolve }: {
+function SuggestionLine({ suggestion: s, zonesById, peers, busy, onResolve }: {
   suggestion: MicrosegSuggestion
   zonesById: Map<string, MicrosegZone>
+  peers?: ReadonlyMap<string, string>
   busy: boolean
-  onResolve: (action: SuggestionAction) => void
+  onResolve: (action: SuggestionAction, prefixLen?: number) => void
 }) {
   const to = useTranslations('microsegPilot.observation')
-  const source = s.src_zone_id ? zonesById.get(s.src_zone_id)?.name ?? to('deletedZone') : s.src_ip || to('unknownEndpoint')
+  const gatewayName = useGatewayName(zonesById.values())
+  // The peer of an inbound row is its source, the peer of an outbound row (emitted by this zone) is its destination.
+  const source = s.direction === 'out'
+    ? destinationName(s, zonesById, ip => peers?.get(bareIp(ip)) ?? gatewayName(ip), to as (key: string) => string)
+    : endpoint(s.src_zone_id, s.src_ip, zonesById, to as (key: string) => string, gatewayName)
   return (
     <Box role='listitem' aria-label={source} data-suggestion={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minHeight: 36, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>
+      <DirectionGlyph direction={s.direction} />
       <ObservedKindGlyph kind={s.kind} />
       <TruncatedText text={source} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
       <ServiceHits suggestion={s} />
-      <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} />
+      <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} acceptTip={outboundZoneAcceptTip(to, s, s.src_zone_id ? zonesById.get(s.src_zone_id)?.name ?? to('deletedZone') : s.src_ip || to('unknownEndpoint'), s.dst_zone_id ? zonesById.get(s.dst_zone_id)?.name ?? to('deletedZone') : '')} />
     </Box>
   )
 }
 
+type WorkProps = Omit<Props, 'onClose'> & {
+  /** The member errors show here; the Policy sub-tab says them above its zones already. */
+  memberErrors?: boolean
+}
+
 /**
- * The zone clicked on the map, as tall as the map with its body scrolling, in foldable sections (remembered per
- * browser): the observed traffic over time (the Dashboard's chart filtered on this zone, inbound or outbound, with a
- * one-line summary), its top sources (or destinations), the pending suggestions towards it (resolved as in
- * Observation), its members (ten per page; NIC firewall off and stopped told on each), the flows in and out, all
- * editable in place. A chip in the header says the zone's drifts and opens the Drifts sub-tab on them. The engine's
- * drifts are read once per selection (the Drifts sub-tab's key), no refresh on focus.
+ * What the zone panel shows, shared by the panel of the map and the details of a zone card on the Policy sub-tab: the
+ * observed traffic and its top sources, then the pending suggestions, the members and the flows in and out, all
+ * editable in place, with the bodies again for the expanded dialog.
  */
-export default function ZonePanel({
-  zone, members, membersKnown, flows, zonesById, edits, onClose, onAssign,
-  connectionId, version, suggestions, reloadPolicy, reloadSuggestions, onResolved, onOpenDrifts, partialLimit = null,
-}: Props) {
+export function useZoneWork({
+  zone, members, membersKnown, flows, zonesById, edits, onAssign,
+  connectionId, version, suggestions, reloadPolicy, reloadSuggestions, onResolved, partialLimit = null, peers, memberErrors = true,
+}: WorkProps) {
   const t = useTranslations('microsegPilot.overview.panel')
   const tz = useTranslations('microsegPilot.overview.zonePanel')
   const tsec = useTranslations('microsegPilot.overview.sections')
   const ts = useTranslations('microsegPilot.policy.zone')
   const tt = useTranslations('microsegPilot.overview.target.panel')
-  const paged = usePaged(members)
   const editor = useFlowEditor(edits)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
   const zones = useMemo(() => [...zonesById.values()], [zonesById])
+  // The map reads every pending observed flow, outbound ones included: the readiness needs no read of its own, unless that read was cut (partialLimit).
+  const { state: egress, ready: egressReady } = useZoneEgress(zone, suggestions, edits.readyAfterHours, partialLimit !== null)
   const trafficSection = usePanelSection('zone.traffic')
   const sourcesSection = usePanelSection('zone.sources')
   // Nothing is read for the chart while both sections it feeds are folded.
@@ -149,43 +145,15 @@ export default function ZonePanel({
     [zone, members, drifts, zones, ignored],
   )
   const pending = useMemo(() => zoneSuggestions(suggestions, zone.id), [suggestions, zone.id])
-  const pendingPage = usePaged(pending, FLOWS_PAGE_SIZE)
   const { busy, failure, clearFailure, resolve } = useResolveSuggestions(connectionId, version, reloadPolicy, reloadSuggestions)
 
-  async function resolveOne(id: string, action: SuggestionAction) {
-    const outcome = await resolve([id], action)
+  async function resolveOne(id: string, action: SuggestionAction, prefixLen?: number) {
+    const outcome = await resolve([id], action, prefixLen)
     if (outcome?.resolved) onResolved(action)
   }
 
-  const header = (
+  const trafficSections = (
     <>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-        <i className='ri-shield-fill' style={{ fontSize: 18, color: zone.color || undefined }} />
-        <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
-        {!!signals?.count && (
-          <Chip
-            size='small'
-            color='warning'
-            variant='outlined'
-            data-testid='zone-drifts-chip'
-            icon={<i className='ri-error-warning-line' />}
-            label={tsec('drifts', { count: signals.count })}
-            onClick={onOpenDrifts ? () => onOpenDrifts(zone.id) : undefined}
-            sx={{ flexShrink: 0 }}
-          />
-        )}
-        <ZoneStateChip state={zone.state} />
-        <IconButton size='small' aria-label={t('close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
-      </Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, mt: 1 }}>
-        <TruncatedText text={zone.label} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
-        <ZoneHeaderActions zone={zone} edits={edits} onAssign={onAssign} onDeleted={onClose} />
-      </Box>
-    </>
-  )
-
-  return (
-    <PanelFrame label={t('label', { name: zone.name })} width={400} header={header}>
       <PanelSection id='zone.traffic' title={tsec('traffic')} state={trafficSection}>
         <SelectionTrafficChart traffic={traffic} />
         <TrafficSummaryLine traffic={traffic} />
@@ -200,35 +168,128 @@ export default function ZonePanel({
         <TopSourcesList top={traffic.summary.top} phase={traffic.phase} mode={traffic.direction} />
       </PanelSection>
 
-      <PanelSection id='zone.suggestions' title={tsec('suggestions')} count={pending.length}>
-        {failure && <Alert severity='error' onClose={clearFailure} sx={{ mb: 1 }}>{failure}</Alert>}
-        {partialLimit !== null && <OneLine text={tt('partial', { count: partialLimit })} />}
-        {pending.length === 0 && <Typography variant='body2' color='text.disabled'>{tsec('suggestionsEmpty')}</Typography>}
+    </>
+  )
+
+  const suggestionsBody = (size = FLOWS_PAGE_SIZE) => (
+    <>
+      {failure && <Alert severity='error' onClose={clearFailure} sx={{ mb: 1 }}>{failure}</Alert>}
+      {partialLimit !== null && <OneLine text={tt('partial', { count: partialLimit })} />}
+      {pending.length === 0 && <Typography variant='body2' color='text.disabled'>{tsec('suggestionsEmpty')}</Typography>}
+      <PagedList items={pending} size={size} render={rows => (
         <Box role='list'>
-          {pendingPage.rows.map(s => (
-            <SuggestionLine key={s.id} suggestion={s} zonesById={zonesById} busy={busy} onResolve={action => { void resolveOne(s.id, action) }} />
+          {rows.map(s => (
+            <SuggestionLine key={s.id} suggestion={s} zonesById={zonesById} peers={peers} busy={busy} onResolve={(action, prefixLen) => { void resolveOne(s.id, action, prefixLen) }} />
           ))}
         </Box>
-        <PolicyPager count={pendingPage.count} page={pendingPage.page} size={pendingPage.size} onPage={pendingPage.setPage} />
-      </PanelSection>
-
-      <PanelSection id='zone.members' title={t('members')} count={membersKnown ? members.length : null}>
-        {edits.memberError != null && <MicrosegErrorAlert error={edits.memberError} onClose={edits.clearMemberError} />}
-        {!membersKnown && <Typography variant='body2' color='text.disabled'>{t('membersUnknown')}</Typography>}
-        {membersKnown && members.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noMembers')}</Typography>}
+      )} />
+    </>
+  )
+  const membersBody = (size = POLICY_PAGE_SIZE) => (
+    <>
+      {memberErrors && edits.memberError != null && <MicrosegErrorAlert error={edits.memberError} onClose={edits.clearMemberError} />}
+      {!membersKnown && <Typography variant='body2' color='text.disabled'>{t('membersUnknown')}</Typography>}
+      {membersKnown && members.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noMembers')}</Typography>}
+      <PagedList items={members} size={size} render={rows => (
         <Box role='list'>
-          {paged.rows.map(m => <MemberLine key={`${m.ref.type}/${m.ref.vmid}`} member={m} zoneId={zone.id} edits={edits} firewallOff={!!signals?.firewallOff.has(guestKey(m.ref))} />)}
+          {rows.map(m => <MemberLine key={`${m.ref.type}/${m.ref.vmid}`} member={m} zoneId={zone.id} edits={edits} firewallOff={!!signals?.firewallOff.has(guestKey(m.ref))} />)}
         </Box>
-        <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
-      </PanelSection>
+      )} />
+    </>
+  )
+  const newIncoming = <NewFlowButton label={tz('newIncoming')} onClick={() => editor.create({ dst_zone_id: zone.id })} />
+  const newOutgoing = <NewFlowButton label={tz('newOutgoing')} onClick={() => editor.create({ src_zone_id: zone.id })} />
+  const incomingBody = (size = FLOWS_PAGE_SIZE) => <FlowsList flows={incoming} zonesById={zonesById} editor={editor} size={size} />
+  const outgoingBody = (size = FLOWS_PAGE_SIZE) => <FlowsList flows={outgoing} zonesById={zonesById} editor={editor} size={size} />
 
-      <PanelSection id='zone.incoming' title={ts('incoming')} count={incoming.length} action={<NewFlowButton label={tz('newIncoming')} onClick={() => editor.create({ dst_zone_id: zone.id })} />}>
-        <FlowsList flows={incoming} zonesById={zonesById} editor={editor} />
-      </PanelSection>
-      <PanelSection id='zone.outgoing' title={ts('outgoing')} count={outgoing.length} action={<NewFlowButton label={tz('newOutgoing')} onClick={() => editor.create({ src_zone_id: zone.id })} />}>
-        <FlowsList flows={outgoing} zonesById={zonesById} editor={editor} />
-      </PanelSection>
-      {editor.dialogs}
+  const dataSections = (
+    <>
+      <PanelSection id='zone.suggestions' title={tsec('suggestions')} count={pending.length}>{suggestionsBody()}</PanelSection>
+      <PanelSection id='zone.members' title={t('members')} count={membersKnown ? members.length : null}>{membersBody()}</PanelSection>
+      <PanelSection id='zone.incoming' title={ts('incoming')} count={incoming.length} action={newIncoming}>{incomingBody()}</PanelSection>
+      <PanelSection id='zone.outgoing' title={ts('outgoing')} count={outgoing.length} action={newOutgoing}>{outgoingBody()}</PanelSection>
+    </>
+  )
+
+  // The same bodies in the dialog, one sub-tab each, the count in the label and the add button above the flows.
+  const dataTabs: DataTab[] = [
+    { id: 'suggestions', label: withCount(tz('subSuggestions'), pending.length), content: suggestionsBody },
+    { id: 'members', label: withCount(tz('subMembers'), membersKnown ? members.length : null), action: <ExpandAddButton label={tz('addMembers')} onClick={onAssign} />, content: membersBody },
+    { id: 'incoming', label: withCount(tz('subIncoming'), incoming.length), action: <ExpandAddButton label={tz('addFlow')} onClick={() => editor.create({ dst_zone_id: zone.id })} />, content: incomingBody },
+    { id: 'outgoing', label: withCount(tz('subOutgoing'), outgoing.length), action: <ExpandAddButton label={tz('addFlow')} onClick={() => editor.create({ src_zone_id: zone.id })} />, content: outgoingBody },
+  ]
+
+  return { trafficSections, dataSections, dataTabs, dialogs: editor.dialogs, signals, egress, egressReady }
+}
+
+/**
+ * The zone clicked on the map, as tall as the map with its body scrolling, in foldable sections (remembered per
+ * browser): the observed traffic over time (the Dashboard's chart filtered on this zone, inbound or outbound, with a
+ * one-line summary), its top sources (or destinations), the pending suggestions towards it (resolved as in
+ * Observation), its members (ten per page; NIC firewall off and stopped told on each), the flows in and out, all
+ * editable in place. A chip in the header says the zone's drifts and opens the Drifts sub-tab on them. The engine's
+ * drifts are read once per selection (the Drifts sub-tab's key), no refresh on focus.
+ */
+export default function ZonePanel(props: Props) {
+  const { zone, onClose, onAssign, edits, connectionId, onOpenDrifts } = props
+  const t = useTranslations('microsegPilot.overview.panel')
+  const tz = useTranslations('microsegPilot.overview.zonePanel')
+  const tsec = useTranslations('microsegPilot.overview.sections')
+  const { trafficSections, dataSections, dataTabs, dialogs, signals, egress, egressReady } = useZoneWork(props)
+  const [expanded, setExpanded] = useState(false)
+
+  const header = (
+    <>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+        <i className='ri-shield-fill' style={{ fontSize: 18, color: zone.color || undefined, flexShrink: 0 }} />
+        <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '0 1 auto', minWidth: 0 }} />
+        {!!signals?.count && (
+          <Chip
+            size='small'
+            color='warning'
+            variant='outlined'
+            data-testid='zone-drifts-chip'
+            icon={<i className='ri-error-warning-line' />}
+            label={tsec('drifts', { count: signals.count })}
+            onClick={onOpenDrifts ? () => onOpenDrifts(zone.id) : undefined}
+            sx={{ flexShrink: 0 }}
+          />
+        )}
+        {/* One row over the whole width: the states as icons (their words in the tooltips), the actions, enlarge and close. */}
+        <Box data-testid='zone-panel-controls' sx={{ flex: '1 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.25, ml: 1 }}>
+          <ZoneStateChip state={zone.state} iconOnly />
+          <EgressChip state={egress} ready={egressReady} iconOnly />
+          <ZoneHeaderActions zone={zone} edits={edits} onAssign={onAssign} onDeleted={onClose} spread />
+          <IconButton size='small' aria-label={tz('expand')} onClick={() => setExpanded(true)}><i className='ri-fullscreen-line' /></IconButton>
+          <IconButton size='small' aria-label={t('close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
+        </Box>
+      </Box>
+      {zone.label && <TruncatedText text={zone.label} variant='body2' color='text.secondary' sx={{ mt: 0.5, minWidth: 0 }} />}
+    </>
+  )
+
+  return (
+    <PanelFrame label={t('label', { name: zone.name })} width={400} header={header}>
+      {trafficSections}
+      {dataSections}
+      {dialogs}
+      {expanded && (
+        <ExpandDialog
+          scope={{
+            label: tz('detailsTitle', { name: zone.name }),
+            lead: <i className='ri-shield-fill' style={{ fontSize: 20, color: zone.color || undefined }} />,
+            title: tz('detailsTitle', { name: zone.name }),
+            subtitle: <Typography component='span' variant='body2' color='text.secondary' noWrap sx={{ minWidth: 0 }}>{zone.label}</Typography>,
+            chips: <><ZoneStateChip state={zone.state} /><EgressChip state={egress} ready={egressReady} /></>,
+            keepEvent: e => e.zone === zone.name || e.src_zone === zone.name,
+            logsEmpty: tz('logsEmpty'),
+          }}
+          connectionId={connectionId}
+          traffic={trafficSections}
+          dataTabs={dataTabs}
+          onClose={() => setExpanded(false)}
+        />
+      )}
     </PanelFrame>
   )
 }

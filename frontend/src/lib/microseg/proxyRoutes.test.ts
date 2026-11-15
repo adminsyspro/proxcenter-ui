@@ -13,7 +13,7 @@ describe('matchMicrosegRoute', () => {
   it('knows the exact route table of the orchestrator', () => {
     const table = MICROSEG_ROUTES.map(r => `${r.method} ${r.pattern.source}`).sort()
 
-    expect(MICROSEG_ROUTES).toHaveLength(28)
+    expect(MICROSEG_ROUTES).toHaveLength(29)
     expect(table).toHaveLength(new Set(table).size)
 
     const cases: Array<[string, string[], boolean]> = [
@@ -29,6 +29,7 @@ describe('matchMicrosegRoute', () => {
       ['POST', ['plan'], true],
       ['POST', ['apply'], true],
       ['POST', ['zones', 'z1', 'state'], true],
+      ['POST', ['zones', 'z1', 'egress-state'], true],
       ['GET', ['revisions'], false],
       ['POST', ['revisions', '7', 'restore'], true],
       ['GET', ['suggestions'], false],
@@ -54,7 +55,7 @@ describe('matchMicrosegRoute', () => {
     }
   })
 
-  it('names who audits each route: the orchestrator its five lifecycle actions, the relay every other write, nobody a read', () => {
+  it('names who audits each route: the orchestrator its six lifecycle actions, the relay every other write, nobody a read', () => {
     const owner = (method: string, path: string[]) => {
       const route = matchMicrosegRoute(method, path)
 
@@ -63,6 +64,9 @@ describe('matchMicrosegRoute', () => {
 
     expect(owner('POST', ['apply'])).toBe('orchestrator microseg.apply')
     expect(owner('POST', ['zones', 'z1', 'state'])).toBe('orchestrator microseg.state')
+    expect(owner('POST', ['zones', 'z1', 'egress-state'])).toBe('orchestrator microseg.egress_state')
+    expect(matchMicrosegRoute('POST', ['zones', 'z1', 'egress-state'])?.write).toBe(true)
+    expect(matchMicrosegRoute('GET', ['zones', 'z1', 'egress-state'])).toBeNull()
     expect(owner('POST', ['emergency-stop'])).toBe('orchestrator microseg.emergency_stop')
     expect(owner('POST', ['revisions', '7', 'restore'])).toBe('orchestrator microseg.restore')
     expect(owner('POST', ['remove'])).toBe('orchestrator microseg.remove')
@@ -84,7 +88,7 @@ describe('matchMicrosegRoute', () => {
     expect(owner('POST', ['plan'])).toBe('none')
     expect(owner('GET', ['traffic'])).toBe('none')
     for (const route of MICROSEG_ROUTES.filter(r => !r.write)) expect(route.audit).toBe('none')
-    expect(MICROSEG_ROUTES.filter(r => r.audit === 'orchestrator')).toHaveLength(5)
+    expect(MICROSEG_ROUTES.filter(r => r.audit === 'orchestrator')).toHaveLength(6)
   })
 
   it('refuses a verb the orchestrator does not serve on a known path', () => {

@@ -1,14 +1,14 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useContext, type ReactNode } from 'react'
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { serviceTitle } from '@/lib/network/serviceNames'
-import type { MicrosegSuggestion, SuggestionAction, SuggestionKind } from '@/lib/microseg/types'
+import { isAggregateDst, type MicrosegSuggestion, type SuggestionAction, type SuggestionKind } from '@/lib/microseg/types'
 
-import { ObservedKindGlyph } from './observationParts'
-import { WriteTip, useMicrosegWrite } from './microsegAccess'
+import { AggregateHint, ObservedKindGlyph, outboundZoneAcceptTip, usePrefixChoice } from './observationParts'
+import { MicrosegActionsSlot, WriteTip, useMicrosegWrite } from './microsegAccess'
 
 const ACTION_SX = { minWidth: 0, px: 1, py: 0, lineHeight: 1.6, whiteSpace: 'nowrap' } as const
 
@@ -18,7 +18,8 @@ type FlowActionsProps = {
   source: string
   destination: string
   busy: boolean
-  onResolve: (action: SuggestionAction) => void
+  /** `prefixLen` comes with As CIDR on an outbound flow, whose dialog chooses it. */
+  onResolve: (action: SuggestionAction, prefixLen?: number) => void
   /** Coloured icons for the rows of the table (the default), labelled buttons where there is room (the flow dialog). */
   variant?: 'icons' | 'buttons'
 }
@@ -30,6 +31,14 @@ const FLOW_ACTIONS = [
   { action: 'dismiss', icon: 'ri-close-circle-line', color: 'error' },
 ] as const
 
+type Translate = ReturnType<typeof useTranslations<'microsegPilot.observation'>>
+
+/** The tooltip of Accept: the flow between the zones, which for an outbound flow to a zone also opens its inbound. */
+function acceptTipOf(t: Translate, s: MicrosegSuggestion, flow: { from: string; to: string; service: string }): string {
+  if (!s.src_zone_id) return t('acceptUnknownSource')
+  return outboundZoneAcceptTip(t, s, flow.from, flow.to) ?? t('acceptTip', flow)
+}
+
 /**
  * The three ways out of an observed flow, whose tooltip says what each does: Accept (a flow between the zones in the
  * draft), As CIDR (the same with the source as an address range) and Dismiss. In the rows they are coloured icons
@@ -39,31 +48,41 @@ export function FlowActions({ suggestion: s, source, destination, busy, onResolv
   const t = useTranslations('microsegPilot.observation')
   const { canWrite } = useMicrosegWrite()
   const service = serviceTitle(s.proto, s.dport)
+  const outbound = s.direction === 'out'
+  const prefix = usePrefixChoice(s.dst_ip, onResolve)
   const spec = {
-    accept: { label: t('accept'), tip: s.src_zone_id ? t('acceptTip', { from: source, to: destination, service }) : t('acceptUnknownSource'), off: !s.src_zone_id },
-    accept_cidr: { label: t('asCidr'), tip: s.src_ip ? t('cidrTip', { ip: s.src_ip }) : t('acceptCidrNoIp'), off: !s.src_ip },
+    accept: { label: t('accept'), tip: acceptTipOf(t, s, { from: source, to: destination, service }), off: !s.src_zone_id },
+    accept_cidr: outbound
+      ? { label: t('asCidr'), tip: t('cidrOutTip', { from: source, ip: s.dst_ip, service }), off: !s.dst_ip }
+      : { label: t('asCidr'), tip: s.src_ip ? t('cidrTip', { ip: s.src_ip }) : t('acceptCidrNoIp'), off: !s.src_ip },
     dismiss: { label: t('dismiss'), tip: t('dismissTip'), off: false },
   }
+  // Many destinations never make one flow in one click, nor one network: the backend refuses both, so neither is offered.
+  const aggregate = outbound && isAggregateDst(s)
+  const actions = FLOW_ACTIONS.filter(({ action }) => !(aggregate && action !== 'dismiss'))
+  const run = (action: SuggestionAction) => (action === 'accept_cidr' && outbound ? prefix.choose() : onResolve(action))
 
   return (
     <Box sx={{ display: 'inline-flex', gap: variant === 'icons' ? 0 : 0.5 }}>
-      {FLOW_ACTIONS.map(({ action, icon, color }) => {
+      {aggregate && <AggregateHint />}
+      {actions.map(({ action, icon, color }) => {
         const { label, tip, off } = spec[action]
         const disabled = !canWrite || busy || off
         return (
           <WriteTip key={action} title={variant === 'icons' ? t('actionTip', { action: label, tip }) : tip}>
             {variant === 'icons' ? (
-              <IconButton size='small' color={color} aria-label={label} disabled={disabled} onClick={() => onResolve(action)}>
+              <IconButton size='small' color={color} aria-label={label} disabled={disabled} onClick={() => run(action)}>
                 <i className={icon} />
               </IconButton>
             ) : (
-              <Button size='small' variant='outlined' color={action === 'dismiss' ? 'inherit' : 'primary'} disabled={disabled} onClick={() => onResolve(action)} sx={ACTION_SX}>
+              <Button size='small' variant='outlined' color={action === 'dismiss' ? 'inherit' : 'primary'} disabled={disabled} onClick={() => run(action)} sx={ACTION_SX}>
                 {label}
               </Button>
             )}
           </WriteTip>
         )
       })}
+      {prefix.dialog}
     </Box>
   )
 }
@@ -74,11 +93,30 @@ type BulkBarProps = {
   /** A selected flow has no source zone (Accept impossible) / no source IP (As CIDR impossible). */
   noZone: boolean
   noIp: boolean
+  /** A selected flow is outbound: its network is accepted one by one (its prefix is chosen in a dialog). */
+  outbound?: boolean
+  /** A selected flow goes to many destinations: Accept is off (the flow is created by hand). */
+  aggregate?: boolean
+  /** A selected flow is outbound to a zone: its Accept also opens that zone's inbound. */
+  outboundZone?: boolean
   onResolve: (action: SuggestionAction) => void
 }
 
+/** The tooltip of the bulk As CIDR: why it is off (an outbound flow, a flow without an address), or what it does. */
+function bulkCidrTipOf(t: Translate, outbound: boolean, noIp: boolean): string {
+  if (outbound) return t('bulkCidrOutbound')
+  return noIp ? t('bulkCidrBlocked') : t('bulkCidrTip')
+}
+
+/** The tooltip of the bulk Accept: why it is off (no source zone, many destinations), or what it does. */
+function bulkAcceptTipOf(t: Translate, c: { noZone: boolean; aggregate: boolean; outboundZone: boolean }): string {
+  if (c.noZone) return t('bulkAcceptBlocked')
+  if (c.aggregate) return t('aggregateHint')
+  return t(c.outboundZone ? 'bulkAcceptOutZoneTip' : 'bulkAcceptTip')
+}
+
 /** "3 selected · Accept · As CIDR · Dismiss": the same three ways out for every checked flow of the page. */
-export function BulkBar({ count, busy, noZone, noIp, onResolve }: BulkBarProps) {
+export function BulkBar({ count, busy, noZone, noIp, outbound = false, aggregate = false, outboundZone = false, onResolve }: BulkBarProps) {
   const t = useTranslations('microsegPilot.observation')
   const { canWrite } = useMicrosegWrite()
 
@@ -89,13 +127,13 @@ export function BulkBar({ count, busy, noZone, noIp, onResolve }: BulkBarProps) 
       sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, px: 1, py: 0.5, borderRadius: 1, bgcolor: 'action.selected' }}
     >
       <Typography noWrap variant='body2' fontWeight={600} sx={{ flexShrink: 0, mr: 0.5 }}>{t('selected', { count })}</Typography>
-      <WriteTip title={noZone ? t('bulkAcceptBlocked') : t('bulkAcceptTip')}>
-        <Button size='small' variant='outlined' aria-label={t('bulkAccept')} disabled={!canWrite || busy || noZone} onClick={() => onResolve('accept')} sx={ACTION_SX}>
+      <WriteTip title={bulkAcceptTipOf(t, { noZone, aggregate, outboundZone })}>
+        <Button size='small' variant='outlined' aria-label={t('bulkAccept')} disabled={!canWrite || busy || noZone || aggregate} onClick={() => onResolve('accept')} sx={ACTION_SX}>
           {t('accept')}
         </Button>
       </WriteTip>
-      <WriteTip title={noIp ? t('bulkCidrBlocked') : t('bulkCidrTip')}>
-        <Button size='small' variant='outlined' aria-label={t('bulkAcceptCidr')} disabled={!canWrite || busy || noIp} onClick={() => onResolve('accept_cidr')} sx={ACTION_SX}>
+      <WriteTip title={bulkCidrTipOf(t, outbound, noIp)}>
+        <Button size='small' variant='outlined' aria-label={t('bulkAcceptCidr')} disabled={!canWrite || busy || noIp || outbound} onClick={() => onResolve('accept_cidr')} sx={ACTION_SX}>
           {t('asCidr')}
         </Button>
       </WriteTip>
@@ -129,19 +167,22 @@ const KINDS: SuggestionKind[] = ['would_block', 'blocked']
  */
 export function ObservationLegend({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const t = useTranslations('microsegPilot.observation')
+  // Under a tab row, its gear opens the settings: no link of its own.
+  const tabRow = useContext(MicrosegActionsSlot) !== null
 
+  // On the row of the pager, left of it.
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 2, rowGap: 0.5, mb: 1.5, minWidth: 0 }}>
-      <Box component='ul' aria-label={t('legend.title')} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 2, rowGap: 0.5, m: 0, p: 0, listStyle: 'none', minWidth: 0 }}>
+    <Box data-testid='observation-legend' sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 1, rowGap: 0.5, minWidth: 0 }}>
+      <Box component='ul' aria-label={t('legend.title')} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 1.5, rowGap: 0.5, m: 0, p: 0, listStyle: 'none', minWidth: 0 }}>
         {KINDS.map(kind => <LegendItem key={kind} mark={<ObservedKindGlyph kind={kind} />} text={t(`legend.${kind}`)} />)}
         <LegendItem mark={<Dot color='primary.main' />} text={t('legend.zoneDot')} />
         <LegendItem mark={<Dot color='error.main' />} text={t('legend.unknownDot')} />
       </Box>
-      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, ml: 'auto' }}>
+      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}>
         <Tooltip title={t('sampling')}>
           <IconButton size='small' aria-label={t('legend.about')}><i className='ri-information-line' /></IconButton>
         </Tooltip>
-        <Button size='small' disabled={!onOpenSettings} onClick={onOpenSettings} sx={{ whiteSpace: 'nowrap' }}>{t('openSettings')}</Button>
+        {!tabRow && <Button size='small' disabled={!onOpenSettings} onClick={onOpenSettings} sx={{ whiteSpace: 'nowrap' }}>{t('openSettings')}</Button>}
       </Box>
     </Box>
   )

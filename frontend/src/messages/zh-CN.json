@@ -9385,40 +9385,8 @@
     "loadErrorDetails": "详情",
     "loadErrorHideDetails": "隐藏详情",
     "dashboard": {
-      "stopHeldTitle": "紧急停止已关闭集群防火墙",
-      "coverageDefinition": "受保护：客户机选项及其某个网络接口上均已启用防火墙，即 Proxmox 实际应用的状态",
-      "coverageSampled": "超过 {max, number} 台客户机时，仅测量均匀抽取的样本。",
-      "todoTitle": "待办",
-      "todoNothing": "无待办事项",
-      "todoUnavailable": "无法读取防火墙数据时不可用",
-      "todoFirewallOff": "集群防火墙已关闭",
-      "todoManagementRules": "没有集群规则放行管理访问（{count, plural, other {端口 {ports}}}）",
-      "todoPolicyIn": "入站策略为 ACCEPT：任何未被规则丢弃的流量都会进入",
-      "todoUnprotected": "{count, plural, other {# 个客户机没有防火墙}}",
-      "todoUnzoned": "{count, plural, other {# 个运行中的客户机不在任何区域}}",
-      "todoPendingFlows": "{count, plural, other {# 个待审查的观察流量}}",
-      "todoPendingFlowsMore": "至少 {count, number} 个待审查的观察流量",
-      "todoResume": "恢复",
-      "todoOpenWizard": "打开向导",
-      "todoOpenOptions": "修改",
-      "todoShowThem": "查看",
-      "todoOpenDrifts": "打开偏差",
-      "todoOpenObservation": "审查",
       "filterUnprotected": "{count, plural, other {# 个客户机没有防火墙}}",
       "filterClear": "显示所有客户机",
-      "postureChipCluster": "集群防火墙 {state} · 入站 {policy}",
-      "postureChipHost": "主机防火墙 {state} · 入站 {policy}",
-      "postureOn": "开启",
-      "postureOff": "关闭",
-      "postureChipClusterUnknown": "集群防火墙不可用",
-      "postureChipStopped": "紧急停止已启用",
-      "postureChipZones": "强制执行的区域 {enforced, number} / {total, number}",
-      "postureChipZonesUnknown": "强制执行的区域 -",
-      "postureChipGuests": "受保护的客户机 {protected, number} / {running, number} 运行中",
-      "postureChipGuestsSampled": "受保护的客户机 {protected, number} / {running, number} 已测量 · {total, number} 运行中",
-      "postureChipGuestsUnknown": "受保护的客户机 -",
-      "postureChipLastCheck": "上次检查 {time}",
-      "postureChipNoCheck": "尚未检查",
       "postureTrafficByZone": "按区域的流量",
       "postureTrafficByVlan": "按 VLAN 的流量",
       "postureTrafficByNode": "按节点的流量",
@@ -9432,6 +9400,7 @@
       "postureHits": "{count, plural, other {# 次命中}}",
       "postureMembers": "{count, plural, other {# 个客户机}}",
       "postureUnknownExternal": "未知 / 外部",
+      "postureOutside": "区域之外",
       "postureUnzoned": "无区域",
       "postureOther": "其他",
       "postureNoVlan": "无 VLAN",
@@ -9446,23 +9415,29 @@
       "postureAllowed": "已允许",
       "postureWouldBlock": "将被阻止",
       "postureBlocked": "已阻止",
-      "postureNotCovered": "未覆盖",
       "postureFlows": "{count, plural, other {# 个流量}}",
       "postureNoCounter": "无计数器",
+      "postureNoCounterHint": "策略允许的流量不会被记录，因此不统计其命中次数。",
       "postureAwaitingDecision": "等待决定",
       "postureBlockedIn": "在 {zones} 中",
+      "postureBlockedOut": "{zones} 的出站",
       "postureBlockedNone": "无丢弃",
       "postureServicesTitle": "按命中次数排列的主要服务",
+      "postureServicesShown": "{total, number} 个服务中的 {shown, number} 个",
+      "postureServicesAll": "所有观察到的流量",
       "postureColService": "服务",
       "postureColFlows": "流量",
       "postureColHits": "命中",
       "postureColStatus": "状态",
       "postureNoServices": "没有观察到或允许的服务",
+      "postureConversationsTitle": "主要通信",
+      "postureConversationsCaption": "源到目标，按命中次数",
+      "postureColSource": "源",
+      "postureColDestination": "目标",
+      "postureColServices": "服务",
+      "postureNoConversations": "没有待审查的观察流",
+      "postureConversationsShown": "{total} 个通信中的 {shown} 个",
       "postureUnknownIncludesUnzoned": "在读取客户机列表之前，未知来源包含不在区域内的客户机（按 VLAN 或节点分组）",
-      "postureRefresh": "重新计算覆盖率",
-      "postureRefreshAgo": "{time}计算 · 重新计算",
-      "postureRefreshSoon": "{time}计算 · 数据不足 30 秒",
-      "postureRefreshComputing": "正在计算覆盖率",
       "postureTimelineTitle": "观察流量随时间变化",
       "postureTimelineWindow": "覆盖窗口：{minutes, plural, other {最近 # 分钟}}（编排器内存）",
       "postureTimelineVerdict": "判定",
@@ -9514,54 +9489,31 @@
     }
   },
   "deployWizard": {
-    "bannerTitle": "集群防火墙未配置",
-    "bannerDescription": "您的集群没有防火墙规则且防火墙已禁用。请在激活防火墙之前部署基本规则，以避免丢失连接。",
-    "bannerButton": "部署防火墙",
     "dialogTitle": "集群防火墙部署",
     "stepAnalysis": "分析",
-    "stepPreview": "预览",
-    "stepApply": "应用",
     "stepActivate": "激活",
     "stepDone": "完成",
     "analysisTitle": "当前集群状态",
     "analysisNodes": "检测到 {count} 个节点",
     "analysisFirewallOff": "集群防火墙已禁用",
-    "analysisNoRules": "未配置集群防火墙规则",
-    "analysisPolicyAccept": "默认策略：ACCEPT（允许所有流量）",
-    "analysisWarning": "在没有白名单规则的情况下使用 DROP 策略激活防火墙将中断集群通信（Corosync、Ceph、迁移…）。此向导将首先创建基本规则。",
-    "previewTitle": "将要创建的规则",
-    "previewDescription": "以下 {count} 条规则将添加到集群防火墙，以白名单方式允许 Proxmox 基本服务。",
-    "previewService": "服务",
-    "previewProtocol": "协议",
-    "previewPorts": "端口",
-    "previewDirection": "方向",
-    "previewAction": "操作",
-    "applyTitle": "正在应用规则",
-    "applyCreating": "正在创建规则：{service}",
-    "applySuccess": "规则已创建：{service}",
-    "applyError": "规则创建失败：{service}",
-    "applyComplete": "所有 {count} 条规则创建成功！",
-    "applyPartial": "已创建 {success}/{total} 条规则。{failed} 条失败。",
+    "analysisNodesReading": "正在读取节点防火墙…",
+    "analysisNodesOff": "所有节点的防火墙均已关闭：启用集群防火墙只会过滤来宾",
+    "analysisNodesFollow": "{count, plural, other {# 个节点会随集群一起启用自身防火墙：{nodes}}}",
+    "analysisInfo": "此向导会启用集群防火墙，来宾防火墙和微分段都需要它。它不会在节点上写入任何内容：既不写规则，也不改入站策略。",
+    "analysisNodesWarning": "在 {nodes} 上，节点防火墙未关闭（不是 enable: 0）：Proxmox 会随集群防火墙一起启用它，并按其管理员设置的规则过滤该节点。ProxCenter 不会添加任何规则：请确认 Web 界面 (8006) 和 SSH (22) 仍可访问，或关闭该节点的防火墙。",
+    "analysisNodesUnknown": "无法读取 {nodes} 的防火墙：请在启用集群防火墙之前检查。",
     "activateTitle": "激活防火墙",
-    "activateEnableFirewall": "启用集群防火墙",
-    "activateSetDrop": "将入站策略设为 DROP",
-    "activateWarning": "启用 DROP 策略意味着所有未被规则明确允许的入站流量将被阻止。上一步创建的规则确保集群服务保持可访问。",
+    "activateDescription": "将启用集群防火墙。其他一切不变：规则、策略和节点防火墙保持原样。",
+    "activateFailed": "无法启用集群防火墙。请重试，或在 防火墙 > 选项 中启用。",
     "activateButton": "激活",
     "activateSkip": "暂时跳过",
     "activating": "激活中...",
     "doneTitle": "部署完成！",
-    "doneRulesCreated": "已创建 {count} 条集群规则",
     "doneFirewallEnabled": "集群防火墙已启用",
     "doneFirewallNotEnabled": "集群防火墙未启用（需要手动激活）",
-    "donePolicyDrop": "入站策略已设为 DROP",
-    "donePolicyAccept": "入站策略保持 ACCEPT",
-    "doneViewRules": "查看规则",
     "doneClose": "关闭",
     "next": "下一步",
-    "cancel": "取消",
-    "customAdd": "添加",
-    "customComment": "描述",
-    "customCommentPlaceholder": "例如：HTTPS、监控…"
+    "cancel": "取消"
   },
   "firewall": {
     "type": "类型",
@@ -13304,7 +13256,9 @@
         "done": "已完成",
         "failed": "失败",
         "running": "运行中"
-      }
+      },
+      "logNode": "{node} · {rate} 行/分钟 · 延迟 {lag}",
+      "logBehind": "日志滞后"
     },
     "stop": {
       "button": "紧急停止",
@@ -13320,29 +13274,45 @@
       "infoObjects": "微分段对象保持不变；恢复时会重新启用集群防火墙并重新应用策略",
       "infoUse": "当分段阻止了不应阻止的流量时使用",
       "resumeInfoReenable": "重新启用集群防火墙，然后重新应用最新修订",
-      "resumeInfoSocle": "如果缺少管理规则（SSH 22、Web 8006）将被拒绝：请先在仪表板的部署向导中修复",
-      "openWizard": "打开部署向导",
+      "resumeInfoSocle": "如果某个自身防火墙已启用的节点不允许 Web 界面 (8006) 和 SSH (22) 进入，则会被拒绝：请先在该节点防火墙中允许它们，或将其关闭",
       "clusterFirewallOff": "集群防火墙已禁用",
-      "notDeployed": "尚未部署任何内容"
+      "notDeployed": "尚未部署任何内容",
+      "socleUncovered": "规则未接受的地址：{ips}",
+      "socleUncoveredNodes": "规则未接受的地址：{ips}（{nodes}）"
     },
     "pending": {
-      "noCount": "未应用的更改",
-      "viewPlan": "查看计划",
+      "noCount": "更改尚未应用。",
+      "viewPlan": "检查并应用",
       "prefixed": "{prefix}：{text}",
-      "whatWillChange": "将要更改的内容：{list}",
+      "whatWillChange": "尚未应用：{list}。",
       "zones": {
         "added": "{count, plural, other {新增 # 个区域}}",
         "changed": "{count, plural, other {更改 # 个区域}}",
         "removed": "{count, plural, other {删除 # 个区域}}"
+      },
+      "zonesNamed": {
+        "added": "{count, plural, other {新增区域 {names}}}",
+        "changed": "{count, plural, other {更改区域 {names}}}",
+        "removed": "{count, plural, other {删除区域 {names}}}"
       },
       "flows": {
         "added": "{count, plural, other {新增 # 条流量规则}}",
         "changed": "{count, plural, other {更改 # 条流量规则}}",
         "removed": "{count, plural, other {删除 # 条流量规则}}"
       },
+      "flowsNamed": {
+        "added": "新增流量规则 {flow}",
+        "changed": "更改流量规则 {flow}",
+        "removed": "删除流量规则 {flow}"
+      },
       "members": "{count, plural, other {# 项成员更改}}",
+      "membersTo": "{count, plural, other {# 个来宾加入 {zone}}}",
       "tagPrefix": "标签前缀已更改",
-      "whatWillChangeInline": "将要更改的内容：{list}"
+      "whatWillChangeInline": "尚未应用：{list}。",
+      "untilApplied": "在应用计划之前，Proxmox 中不会有任何更改。",
+      "applying": "正在应用：{list}",
+      "applyingInline": "正在应用：{list}",
+      "applyingNoCount": "正在应用更改"
     },
     "firstRun": {
       "title": "设置微分段",
@@ -13377,7 +13347,7 @@
       "NETWORK": "无法连接到 ProxCenter。请检查网络连接。",
       "CHECK_PENDING": "已有一次检查在排队：引擎会在下一轮运行时启动它。",
       "generic": "出了点问题。请重试。",
-      "SOCLE_MISSING": "缺少管理规则（SSH 22、Web 8006），因此未重新启用集群防火墙。请使用部署向导添加后再恢复。",
+      "SOCLE_MISSING": "某个自身防火墙已启用的节点不允许 Web 界面 (8006) 和 SSH (22) 进入，因此未重新启用集群防火墙。请在该节点防火墙中允许它们，或将其关闭，然后恢复。",
       "NOT_DEPLOYED": "尚未部署任何内容：请先应用计划，紧急停止作用于已部署的策略。"
     },
     "policy": {
@@ -13409,6 +13379,7 @@
         "outgoing": "出站流量规则",
         "noFlows": "无",
         "changeState": "更改状态",
+        "stateChanging": "正在更改状态",
         "edit": "编辑区域",
         "delete": "删除区域",
         "state": {
@@ -13449,15 +13420,37 @@
           "loading": "正在读取历史记录...",
           "disabled": "区域已禁用：其流量未被记录",
           "aria": "最近 24 小时的未覆盖流量：{count} 次命中",
-          "bar": "{from} 至 {to}：{count} 次命中"
-        }
+          "bar": "{from} 至 {to}：{count} 次命中",
+          "barBoth": "{from} 至 {to}：入站 {count, plural, other {# 次}}，出站 {out, plural, other {# 次}}",
+          "legendIn": "入站",
+          "legendOut": "出站",
+          "outBlocked": "出站已阻断 {short}",
+          "outWouldBlock": "出站将阻断 {short}",
+          "outConnections": "{short} 个出站连接"
+        },
+        "egress": {
+          "state": {
+            "off": "出站：未受控",
+            "observe": "出站：观察中",
+            "ready": "出站：就绪",
+            "enforce": "出站：阻断中"
+          },
+          "hint": {
+            "off": "出站流量未受控制",
+            "observe": "出站流量会被记录，不会阻断任何流量",
+            "ready": "在整个观察窗口内，出站方向没有任何流量会被阻断",
+            "enforce": "只有策略中的流可以离开该区域"
+          }
+        },
+        "gatewayTip": "网关 {ip}"
       },
       "flow": {
-        "notApplied": "未应用（v1 不管理出站）",
+        "notApplied": "未应用（出站未受控）",
         "learned": "已学习",
         "edit": "编辑流量规则",
         "delete": "删除流量规则",
-        "createdBy": "创建者：{user}"
+        "createdBy": "创建者：{user}",
+        "observed": "出站观察中"
       },
       "zoneDialog": {
         "createTitle": "新建区域",
@@ -13467,8 +13460,74 @@
         "label": "标签",
         "color": "颜色",
         "isolate": "使成员之间相互隔离",
+        "members": "成员",
+        "inboundSection": "入站",
+        "inboundStates": {
+          "disabled": "已禁用",
+          "observe": "观察",
+          "enforce": "阻止"
+        },
+        "egressSection": "出站",
+        "outboundStates": {
+          "off": "不控制",
+          "observe": "观察",
+          "enforce": "阻止"
+        },
+        "egressFilter": "过滤出站流量到:",
+        "egressFilterTo": "过滤到",
+        "egressLocal": "本地网络",
+        "egressAll": "本地网络和互联网",
+        "egressAllWarning": "仅按 IP 地址过滤:域名背后的服务可能会更改地址。",
+        "egressNeedsState": "区域必须处于观察或阻止状态",
+        "tips": {
+          "isolate": "此区域的虚拟机之间只能通过已声明的流量互通。取消勾选后，它们可以自由通信。",
+          "inbound": {
+            "disabled": "该区域未在 Proxmox 上应用。",
+            "observe": "不阻止任何流量：策略之外的入站流量会被记录并作为建议提出。",
+            "enforce": "只有策略中的流量可以进入；其余流量被阻止，并显示在已阻止中。"
+          },
+          "outbound": {
+            "off": "区域内的虚拟机可自由出站，不记录任何内容。",
+            "observe": "不阻止任何流量：策略之外的出站流量会被记录并作为建议提出。",
+            "enforce": "只有流量规则允许的出站流量可以通过；其余流量被阻止，并显示在已阻止中。"
+          },
+          "local": "过滤发往区域内虚拟机子网的出站流量，包括无区域的虚拟机。互联网保持开放。",
+          "all": "过滤所有出站流量，包括互联网：只有策略中的流量可以通过。"
+        },
+        "statesTitle": "更改区域 {name} 的状态？",
+        "statesConfirm": "应用状态",
+        "inboundRunFailed": "入站状态更改失败：出站未被修改。",
+        "egressOnTitle": "控制区域 {name} 的出站流量?",
+        "egressOffTitle": "停止控制区域 {name} 的出站流量?",
+        "egressOnBody": "该区域的出站流量将进入观察状态。",
+        "egressOffBody": "该区域的出站过滤将被移除。",
+        "egressIsolateNote": "隔离设置的更改也会一并应用。",
+        "egressOnConfirm": "控制",
+        "egressOffConfirm": "停止控制",
         "create": "创建",
-        "save": "保存"
+        "save": "保存",
+        "gateway": "网关",
+        "gatewayHint": "区域网络的路由器，可选",
+        "gatewayAllow": "允许访问网关",
+        "gatewayServices": {
+          "dns": "DNS",
+          "ntp": "NTP",
+          "ping": "Ping",
+          "http": "HTTP",
+          "https": "HTTPS",
+          "ssh": "SSH",
+          "snmp": "SNMP",
+          "syslog": "Syslog",
+          "proxy": "HTTP 代理",
+          "all": "所有协议"
+        },
+        "gatewayAllowed": "草稿中已有流允许",
+        "gatewayFlowComment": "区域网关",
+        "gatewayFirst": "请先输入网关",
+        "gatewayServicesHint": "从列表中选择，或输入协议及端口：tcp/8443、udp/5000:5010、icmp、any",
+        "gatewayTypedInvalid": "无法识别的服务：带端口的 tcp 或 udp（tcp/8443、udp/53,123、tcp/5000:5010），或 icmp、icmpv6、any",
+        "gatewayTypeHint": "选择或输入服务",
+        "gatewayAdd": "添加 {service}"
       },
       "flowDialog": {
         "createTitle": "新建流量规则",
@@ -13500,7 +13559,8 @@
         "cidrBoth": "流量规则不能两侧都是 CIDR。",
         "protoInvalid": "协议无效",
         "portInvalid": "端口无效。请使用 80、80,443 或 8000:8100（1 到 65535）。",
-        "portNotAllowed": "此协议不允许指定端口。"
+        "portNotAllowed": "此协议不允许指定端口。",
+        "gatewayInvalid": "IPv4 或 IPv6 地址，不带前缀"
       },
       "delete": {
         "zoneTitle": "删除区域 {name}？",
@@ -13522,11 +13582,21 @@
         "running": {
           "disabled": "{label}：正在切换到停用",
           "observe": "{label}：正在切换到观察",
-          "enforce": "{label}：正在切换到强制执行"
+          "enforce": "{label}：正在切换到强制执行",
+          "egressObserve": "{label}:正在控制出站流量",
+          "egressOff": "{label}:正在移除出站流量控制",
+          "egressReopen": "{label}：正在重新开放出站",
+          "egressEnforce": "{label}：正在阻断出站"
         },
         "done": "{label}：{done} 个已完成，{failed} 个失败，{notRun} 个未执行",
         "failed": "{label}：运行失败",
-        "unavailable": "{label}：无法获取进度"
+        "unavailable": "{label}：无法获取进度",
+        "progress": {
+          "waiting": "正在等待进行中的操作",
+          "readingStart": "正在读取 Proxmox",
+          "reading": "正在读取 Proxmox，客户机 {done, number} / {total, number}",
+          "writing": "正在写入 Proxmox，{done, number} / {total, number}"
+        }
       },
       "assign": {
         "title": "将客户机分配到 {zone}",
@@ -13598,13 +13668,31 @@
           "pendingChangeHint": "下次应用时更改",
           "pendingRemoval": "待删除",
           "pendingRemovalHint": "下次应用时删除",
-          "notApplied": "v1 中未应用",
-          "notAppliedHint": "未应用（v1 不管理出站）",
-          "unknownHint": "正在与已应用的修订版比较..."
+          "notApplied": "未应用",
+          "notAppliedHint": "未应用（出站未受控）",
+          "unknownHint": "正在与已应用的修订版比较...",
+          "observed": "出站观察中",
+          "observedHint": "出站观察中：该区域记录这些流量，但尚未阻断"
         },
         "uncovered": "{count, plural, other {未覆盖 24 小时：# 次命中}}",
         "uncoveredHint": "进入该区域且未被任何流量规则覆盖的流量（由该区域成员在过去 24 小时内记录）",
         "noFlowInto": "没有流向该区域的流量规则"
+      },
+      "egressState": {
+        "title": {
+          "block": "阻断区域 {name} 的出站？",
+          "reopen": "重新开放区域 {name} 的出站？"
+        },
+        "reopenBody": "出站将回到观察状态，不再阻断任何流量。",
+        "checking": "正在检查出站观察...",
+        "ready": "过去 {hours} 小时内，出站方向没有任何流量会被阻断。",
+        "notReady": "该区域尚未就绪：需要 {hours} 小时的出站观察，且没有待处理的将被阻断的流量。",
+        "unchecked": "无法检查出站观察，该区域按未就绪处理。",
+        "typeName": "输入 {name} 以确认",
+        "confirm": {
+          "block": "阻断出站",
+          "reopen": "重新开放出站"
+        }
       }
     },
     "plan": {
@@ -13624,6 +13712,13 @@
       "nothing": "无需更改：Proxmox 已与草稿一致。",
       "clusterGroup": "集群对象",
       "stepCount": "{count, plural, one {# 个步骤} other {# 个步骤}}",
+      "stepState": {
+        "waiting": "等待中",
+        "running": "正在写入",
+        "done": "已完成",
+        "failed": "失败",
+        "notRun": "未执行"
+      },
       "collisions": "已阻止：以下 Proxmox 对象使用了我们的名称但并非我们创建，请重命名或删除：{names}",
       "foreignRules": "手动添加到我们安全组中的规则将被保留，不会被改动：{names}",
       "unread": "{count, plural, one {# 个客户机无法读取，将在下一轮处理} other {# 个客户机无法读取，将在下一轮处理}}：{names}",
@@ -13693,6 +13788,46 @@
           "title": "名称已在 Proxmox 中使用",
           "detail": "{object} 已存在于 Proxmox 中，不是由 ProxCenter 创建的，不会被改动。",
           "hint": "Proxmox 中存在名为 pcz-* 且没有微分段标记的对象：请在 Proxmox 中重命名或删除。"
+        },
+        "egress_rule_missing": {
+          "title": "缺少出站规则",
+          "detail": "Proxmox 中缺少 {name} 的最终出站规则。",
+          "detailCollision": "{name} 无法阻断其出站流量：在 Proxmox 中 pcz-_local 属于他人。",
+          "hintCollision": "Proxmox 中存在名为 pcz-_local 且没有微分段标记的对象：请在 Proxmox 中重命名或删除它。"
+        },
+        "egress_rule_misplaced": {
+          "title": "出站规则位置错误",
+          "detail": "{name} 的最终出站规则不是最后一条规则，或出现了两次。",
+          "detailKnown": "{name} 的已知目标规则不在其最终出站规则之前。"
+        },
+        "egress_rule_verdict": {
+          "title": "出站规则判定不符",
+          "detail": "{name} 的最终出站规则是 {have}，应为 {want}。",
+          "detailCollision": "{name} 无法阻断：在 Proxmox 中 pcz-_local 属于他人，因此其出站规则仍为 {have}。",
+          "detailDest": "{name} 的出站规则指向 {haveDest}，而不是 {wantDest}。",
+          "hintCollision": "Proxmox 中存在名为 pcz-_local 且没有微分段标记的对象：请在 Proxmox 中重命名或删除它。"
+        },
+        "known_rule_missing": {
+          "title": "缺少已知目标规则",
+          "detail": "{name} 缺少 pcz-_known 组的规则。"
+        },
+        "known_rule_extra": {
+          "title": "多余的已知目标规则",
+          "detail": "{name} 仍保留一条其出站状态不再需要的 pcz-_known 组规则。"
+        },
+        "local_set_desync": {
+          "title": "本地网络集合不同步",
+          "detail": "{object} 包含 {actual}，应为 {desired}。"
+        },
+        "egress_no_subnet": {
+          "title": "出站无已知子网",
+          "detail": "{zone} 中的 {name} 没有已知子网：其本地网络仅限于自身 IP。",
+          "hint": "未知子网：请在 Proxmox 中检查客户机的网络配置（带前缀长度的 IP，或 QEMU 客户机代理）。"
+        },
+        "destinationAll": "所有目的地",
+        "destinationLocal": "本地网络",
+        "verdict": {
+          "disabled": "已禁用"
         }
       },
       "chip": {
@@ -13703,7 +13838,14 @@
         "member_without_ip": "无 IP",
         "ambiguous_zone": "多个区域",
         "object_collision": "名称已占用",
-        "generic": "偏差"
+        "generic": "偏差",
+        "egress_rule_missing": "缺少出站规则",
+        "egress_rule_misplaced": "出站规则位置错误",
+        "egress_rule_verdict": "出站判定不符",
+        "known_rule_missing": "缺少已知规则",
+        "known_rule_extra": "多余的已知规则",
+        "local_set_desync": "本地集合不同步",
+        "egress_no_subnet": "无子网"
       },
       "zoneFilter": "仅区域 {name}",
       "zoneFilterClear": "显示所有区域",
@@ -13715,6 +13857,13 @@
         "member_without_ip": "没有已知 IP 的成员（{count, number}）",
         "ambiguous_zone": "位于多个区域的客户机（{count, number}）",
         "object_collision": "Proxmox 中已使用的名称（{count, number}）",
+        "egress_rule_missing": "缺失的出站规则（{count, number}）",
+        "egress_rule_misplaced": "位置错误的出站规则（{count, number}）",
+        "egress_rule_verdict": "判定错误的出站规则（{count, number}）",
+        "known_rule_missing": "缺失的已知地址规则（{count, number}）",
+        "known_rule_extra": "多余的已知地址规则（{count, number}）",
+        "local_set_desync": "未同步的本地网络集（{count, number}）",
+        "egress_no_subnet": "没有本地子网的出站（{count, number}）",
         "generic": "{kind}（{count, number}）"
       },
       "noneZone": "无",
@@ -13747,7 +13896,11 @@
         "status": "状态",
         "statusAll": "所有状态",
         "zone": "区域",
-        "zoneAll": "所有区域"
+        "zoneAll": "所有区域",
+        "direction": "方向",
+        "directionAll": "全部",
+        "directionIn": "入站",
+        "directionOut": "出站"
       },
       "kind": {
         "would_block": "将被阻止",
@@ -13804,6 +13957,7 @@
       "dismissTip": "隐藏此配对的这条建议。",
       "bulkLabel": "已选的流",
       "bulkAcceptTip": "为每条所选建议在草稿中创建区域之间的流。",
+      "bulkAcceptOutZoneTip": "在草稿中创建每个所选建议的区域之间的流。指向某个区域的出站流同时允许从源区域到目标区域的入站流量。",
       "bulkCidrTip": "以每个来源作为地址范围创建相同的流。",
       "bulkDismissTip": "隐藏所选建议。",
       "legend": {
@@ -13815,8 +13969,14 @@
         "about": "关于命中数"
       },
       "acceptUnknownSource": "未知来源：请使用“按 CIDR”",
+      "aggregateHint": "请手动创建流量规则，以允许此服务访问任意地址。",
+      "acceptOutZoneTip": "添加流 {from} → {to}：同时允许 {from} 到 {to} 的入站流量。",
       "zoneBanner": "{zone} 区域的建议 · 24 小时内 {count, plural, other {# 次未覆盖命中}}",
       "zoneBannerNoCount": "{zone} 区域的建议",
+      "serviceBanner": "已按服务 {service} 筛选（{ports}）",
+      "serviceBannerClear": "显示所有服务",
+      "sourceBanner": "已筛选来源不在任何区域内的流量",
+      "sourceBannerClear": "显示所有来源",
       "dialog": {
         "open": "详情",
         "openFor": "从 {source} 到 {destination} 的流量详情",
@@ -13843,9 +14003,25 @@
         "colSource": "来源",
         "colGuest": "到达的客户机",
         "colNode": "节点",
-        "guest": "{name}（{vmid}）· IP {ip}"
+        "guest": "{name}（{vmid}）· IP {ip}",
+        "direction": "方向",
+        "colDestination": "目标",
+        "trafficScopeOutside": "此判定下从 {source} 到区域外地址的所有服务：历史记录保存的是区域，而不是地址。"
       },
-      "actionTip": "{action}：{tip}"
+      "actionTip": "{action}：{tip}",
+      "direction": {
+        "in": "入站",
+        "out": "出站"
+      },
+      "manyDestinations": "大量目标",
+      "prefix": {
+        "title": "作为网络接受",
+        "length": "前缀长度",
+        "cancel": "取消",
+        "accept": "接受"
+      },
+      "cidrOutTip": "按所选前缀，在草稿中创建流 {from} → {ip} 所在网络 {service}。",
+      "bulkCidrOutbound": "出站网络需逐个接受，以便分别选择前缀。"
     },
     "overview": {
       "empty": "还没有可绘制的区域。",
@@ -13855,7 +14031,7 @@
       "mapLabel": "区域及其流量规则地图",
       "suggestionsError": "无法读取待处理的流量。地图仅显示已允许的流量。",
       "legend": {
-        "outside": "到外部：v1 中不应用",
+        "outside": "发往外部：出站未阻断",
         "allowed": "允许",
         "unprotected": "未受保护",
         "blocked": "已阻止",
@@ -13866,8 +14042,8 @@
         "external": "未知 / 外部",
         "externalHint": "不匹配任何客户机的来源：IP 地址或网络（CIDR）",
         "outside": "区域之外",
-        "outsideHint": "区域之外的目标（CIDR）。发往这些目标的流量在 v1 中不会被应用。",
-        "notApplied": "v1 中未应用",
+        "outsideHint": "区域之外的目标（CIDR）。源区域阻断其出站流量后，发往这些目标的流量才会生效。",
+        "notApplied": "出站未受控",
         "aria": "区域 {name}，{state}，{members}",
         "membersUnknown": "成员数未知",
         "unzoned": "无区域的客户机（{count, number}）",
@@ -13880,10 +14056,13 @@
         "moreHint": "{count, plural, other {还有 # 个成员}}：区域面板列出全部",
         "moreUnzonedHint": "{count, plural, other {还有 # 个无区域客户机}}：偏差中列出全部",
         "ipHint": "{ip}：与此区域通信、不属于任何区域或虚拟机的地址",
-        "inside": "{count, plural, other {区域内观察到的流 # 条}}"
+        "inside": "{count, plural, other {区域内观察到的流 # 条}}",
+        "observed": "出站观察中",
+        "gateway": "网关",
+        "gatewayHint": "{zones} 的网关（{ip}）：其流量在地图和“观察”子选项卡中显示名称"
       },
       "edge": {
-        "outside": "v1 中未应用：{services}",
+        "outside": "出站未阻断：{services}",
         "aria": "{from} 到 {to}：{services}",
         "allowed": "允许：{services}",
         "unprotected": "{count, plural, other {# 个观察到的流量}}没有任何流量规则允许（未受保护）",
@@ -13896,7 +14075,9 @@
         "sourceHits": "从 {from} 到区域 {to} 在 {service} 上 {count, plural, other {# 次命中}}",
         "sourceHitsSampled": "从 {from} 到区域 {to} 在 {service} 上 {count, plural, other {# 次命中}}（显示示例对）",
         "countUnprotected": "{count, plural, other {# 个未受保护的流量}}",
-        "countBlocked": "{count, plural, other {# 个已阻止的流量}}"
+        "countBlocked": "{count, plural, other {# 个已阻止的流量}}",
+        "hitsTotal": "{count, plural, other {日志中共 # 次}}",
+        "noCounter": "允许的流量没有计数：Proxmox 不会记录其放行的流量"
       },
       "panel": {
         "label": "区域 {name}",
@@ -13909,6 +14090,21 @@
         "noFlows": "无"
       },
       "zonePanel": {
+        "detailsTitle": "区域详情 · {name}",
+        "subSuggestions": "待处理建议",
+        "subMembers": "成员",
+        "addMembers": "添加成员",
+        "addFlow": "新建流量规则",
+        "subIncoming": "入站流",
+        "subOutgoing": "出站流",
+        "colDirection": "方向",
+        "colVerdict": "判定",
+        "expand": "放大",
+        "tabTraffic": "流量",
+        "tabData": "数据",
+        "tabLogs": "日志",
+        "logsEmpty": "引擎内存中没有此区域的事件",
+        "logsOlder": "加载更早的",
         "edit": "编辑区域",
         "changeState": "更改状态",
         "delete": "删除区域",
@@ -13918,15 +14114,21 @@
         "editFlow": "编辑流量规则",
         "deleteFlow": "删除流量规则",
         "newIncoming": "新建入站流量规则",
-        "newOutgoing": "新建出站流量规则"
+        "newOutgoing": "新建出站流量规则",
+        "egressBlock": "阻断出站",
+        "egressReopen": "重新开放出站"
+      },
+      "edgePanel": {
+        "detailsTitle": "流量详情",
+        "dialogLabel": "流量详情 · {from} → {to}",
+        "declaredFlows": "已声明的流量规则",
+        "newFlow": "在这些区域之间新建流量规则",
+        "suggestionsEmpty": "此区域对没有待处理的建议",
+        "logsEmpty": "引擎内存中没有此区域对的事件"
       },
       "partial": "部分显示：仅绘制前 {count, number} 条待处理流量。",
       "filters": {
         "title": "流量："
-      },
-      "toolbar": {
-        "refreshedAt": "刷新于 {time}",
-        "refresh": "刷新地图"
       },
       "flowPanel": {
         "label": "从 {from} 到 {to} 的流量",
@@ -13943,6 +14145,12 @@
       "zoomIn": "放大",
       "zoomOut": "缩小",
       "fitView": "使地图适应视图",
+      "isolate": {
+        "only": "仅显示 {name} 的流量",
+        "all": "所有流量",
+        "showAll": "显示所有流量",
+        "showOnly": "仅显示其流量"
+      },
       "a11y": {
         "nodeDescription": "按 Enter 键或空格键打开其详细信息。",
         "nodeDescriptionKeyboard": "按 Enter 键或空格键打开其详细信息。",
@@ -14018,6 +14226,7 @@
           "noZoneFlows": "此客户机不在任何区域：没有适用于它的允许流量。",
           "incoming": "入站，来自 {peer}",
           "outgoing": "出站，前往 {peer}",
+          "fromZone": "来自区域 {zone}",
           "acceptTip": "接受为流量 {from} → {to} {service}：引擎为每条观测流量只保留一对示例客户机，因此该流量覆盖整个区域对。",
           "partial": "地图只读取前 {count} 条待处理的观测流量：此列表可能有遗漏。"
         },
@@ -14036,6 +14245,7 @@
         "topSourcesEmpty": "此时间范围内没有来源",
         "suggestionsEmpty": "此区域没有待处理的建议",
         "summaryOut": "{hits, plural, other {# 次命中}} · 主要目的地 {source}（{share}%）· 将被阻止 {wouldBlock, number}，已阻止 {blocked, number}",
+        "summaryOutBlockedHelp": "已阻止：被目的地区域（其入站）或本区域出站阻止的连接。",
         "topDestinations": "主要目的地",
         "topDestinationsEmpty": "此时间范围内没有目的地",
         "memberRunning": "运行中",
@@ -14062,6 +14272,7 @@
       "checking": "正在检查集群...",
       "runAgain": "重新检查",
       "openWizard": "打开部署向导",
+      "raiseLogRate": "观察期间提高",
       "busy": "正在应用，请稍后重试。",
       "noClient": "此连接没有可用的 Proxmox 客户端。",
       "readFailed": "无法读取 Proxmox：{error}",
@@ -14074,20 +14285,27 @@
         "cluster_firewall": {
           "title": "集群防火墙",
           "pass": "集群防火墙已开启。",
-          "off": "集群防火墙已关闭。部署向导会先添加管理规则，再将其开启。",
+          "off": "集群防火墙已关闭。部署向导会启用它，且不会在节点上写入任何内容。",
           "heldByStop": "集群防火墙被紧急停止保持关闭：解除停止以重新启用"
         },
         "socle_rules": {
           "title": "管理访问",
           "pass": "Web（8006）和 SSH（22）仍可访问。",
           "nodesOff": "节点防火墙已关闭，不会切断任何访问。",
-          "missing": "没有任何规则允许从任意来源访问端口 {ports}：开启防火墙可能会切断您的访问。"
+          "missing": "没有任何规则允许从任意来源访问端口 {ports}：开启防火墙可能会切断您的访问。",
+          "missingFor": "没有规则从 {ips} 保持端口 {ports} 开放：启用防火墙可能会切断 ProxCenter。",
+          "dockerInternal": "没有规则为 ProxCenter 保持端口 {ports} 开放：检测到的地址是 Docker 内部地址，请在 设置 > 高级 中填写 Proxmox 看到的主机地址。",
+          "groupUnreadable": "无法读取安全组 {group} 的规则：无法检查管理访问。",
+          "hostRulesUnreadable": "无法读取节点 {node} 的防火墙规则：无法检查管理访问。",
+          "missingForNodes": "{nodes} 上没有规则从 {ips} 保持端口 {ports} 开放：启用防火墙可能会切断 ProxCenter。",
+          "missingOn": "{nodes} 上没有规则保持端口 {ports} 开放：启用防火墙可能会切断您的访问。"
         },
         "log_ratelimit": {
           "title": "日志速率限制",
-          "default": "PVE 以默认速率（{rate}）记录日志，观察会漏掉部分流量。请在设置中调高。",
+          "default": "PVE 以默认速率（{rate}）记录日志，因此观察会遗漏流量。",
           "pass": "PVE 最多记录 {rate}。",
-          "disabled": "PVE 不限制防火墙日志。"
+          "disabled": "PVE 不限制防火墙日志。",
+          "planned": "在观察区域期间提高到 {rate}，之后恢复原值（设置）。"
         },
         "self_in_zone": {
           "title": "ProxCenter 地址",
@@ -14095,7 +14313,14 @@
           "unknown": "无法检测 ProxCenter 的地址，此项检查无法判断。请在设置中指定。",
           "inZone": "ProxCenter（{self_ip}）位于区域 {zone} 内：强制执行可能会切断连接。",
           "uncheckedTimeout": "{count, plural, other {有 # 个成员无法检查}}（收集被中断）：ProxCenter 可能位于其中之一。",
-          "uncheckedCap": "{count, plural, other {有 # 个成员无法检查}}（超出收集上限）：ProxCenter 可能位于其中之一。"
+          "uncheckedCap": "{count, plural, other {有 # 个成员无法检查}}（超出收集上限）：ProxCenter 可能位于其中之一。",
+          "inZoneEgress": "ProxCenter（{self_ip}）位于控制出站流量的区域 {zone} 内：阻断前请先放行通往 Proxmox 节点的流量，否则 ProxCenter 可能失去与节点的连接。",
+          "dockerInternal": "检测到的地址是 Docker 内部地址：请在 设置 > 高级 中填写 Proxmox 看到的主机地址。"
+        },
+        "egress_subnets": {
+          "title": "出站子网",
+          "pass": "启用出站控制的区域中，每个成员都有已知子网。",
+          "warn": "{count} 个成员没有已知子网（{guests}）：其本地网络仅限于自身 IP。"
         }
       },
       "rateUnits": {
@@ -14113,8 +14338,8 @@
         "load": "Proxmox 负载",
         "enforcement": "强制执行",
         "observation": "观察",
-        "address": "ProxCenter 地址",
         "notifications": "通知我",
+        "advanced": "高级",
         "removal": "移除"
       },
       "fields": {
@@ -14123,12 +14348,12 @@
         "ips_interval_sec": "客户机 IP 读取间隔",
         "full_interval_sec": "完整检查间隔",
         "log_interval_sec": "防火墙日志读取间隔",
-        "ready_after_hours": "强制执行前的观察时长",
+        "ready_after_hours": "阻止前的观察时长（入站和出站）",
         "write_cap": "每次运行的写入上限",
         "rate": "日志速率限制",
         "rateUnit": "日志速率单位",
         "burst": "日志突发量",
-        "selfIps": "ProxCenter 地址列表",
+        "selfIps": "Proxmox 看到的地址",
         "notify_drift": "偏差",
         "notify_paused": "引擎已暂停",
         "notify_unprotected": "未受保护的客户机",
@@ -14137,8 +14362,7 @@
       "hints": {
         "tagPrefix": "客户机上的区域标签由此前缀加上区域名称组成。",
         "write_cap": "单次运行允许向 Proxmox 写入的次数。超过后引擎会暂停并请您确认。",
-        "rate": "留空则不改动 Proxmox 的日志速率限制。否则在观察区域期间设置该值。",
-        "selfIps": "ProxCenter 连接客户机所用的地址，以逗号分隔。留空则自动检测。"
+        "rate": "留空则不改动 Proxmox 的日志速率限制。否则在观察区域期间设置该值。"
       },
       "unitsLong": {
         "seconds": "秒",
@@ -14151,8 +14375,14 @@
         "hour": "每小时",
         "day": "每天"
       },
-      "leaveAsIs": "保持不变",
+      "leaveAsIs": "不变",
       "detectedAutomatically": "自动检测",
+      "selfIpsSource": {
+        "settings": "设置",
+        "install": "安装脚本",
+        "detected": "自动检测"
+      },
+      "dockerInternalHint": "Docker 内部地址：Proxmox 看到的是主机地址，请在此填写。",
       "validation": {
         "tagPrefix": "标签前缀为 1 到 16 个字符：小写字母、数字、. _ + -",
         "range": "{label}必须在 {min} 到 {max} {unit}之间。",
@@ -14181,6 +14411,13 @@
         "body": "客户机仍保留旧标签，因此在重新打标签之前，它们会在下次应用时离开所在区域。",
         "typeName": "输入 {prefix} 以确认",
         "confirm": "更改前缀"
+      },
+      "tips": {
+        "rate": "每条规则的日志行数上限，观察期间会调高以免丢失任何记录；应用于 Proxmox 集群。",
+        "logInterval": "每个节点两次读取防火墙日志之间的间隔：每个节点每个间隔读取一次。",
+        "readyAfter": "在没有新的会被阻止的流量的情况下持续该时长后，区域才会显示为就绪；这不是锁定。",
+        "writeCap": "超过后引擎会停止并请求确认。",
+        "selfIps": "ProxCenter 访问节点时使用的地址。预检会确认这些地址不会被切断。留空则使用自动检测。"
       }
     },
     "history": {
@@ -14308,6 +14545,8 @@
       "title": "完整检查",
       "runningText": "完整检查进行中",
       "queued": "等待引擎（最多 60 秒）",
+      "queuedFor": "已排队 {seconds, number} 秒：引擎会在下一次巡检时启动，最多 60 秒",
+      "queuedLate": "引擎正在完成此集群上的另一项操作：检查将随后进行",
       "inProgress": "进行中，已用 {seconds, number} 秒",
       "progress": "{calls, plural, other {# 次 API 调用}}，{writes, plural, other {# 次写入}}，{seconds, number} 秒",
       "doneSummary": "用时 {seconds, number} 秒完成检查，{calls, plural, other {# 次 API 调用}}",
@@ -14381,7 +14620,12 @@
         "failed": "失败",
         "notRun": "未运行"
       },
-      "runAgain": "重新运行"
+      "runAgain": "重新运行",
+      "stages": {
+        "title": "检查的内容",
+        "ips": "成员的 IP 地址",
+        "guests": "重新读取来宾并与策略比较，修复偏差"
+      }
     },
     "trafficLens": {
       "connection": "连接",
@@ -14428,7 +14672,6 @@
     },
     "dfw": {
       "hits24h": "24 小时命中",
-      "selectAll": "选择显示的所有规则",
       "any": "任意",
       "actionLabel": "规则动作",
       "action": {
@@ -14442,25 +14685,14 @@
       "rowEdited": "未发布",
       "rowMoved": "已移动",
       "rowDisabled": "已禁用",
-      "selectRule": "选择规则 {pos}",
+      "deleteRule": "删除规则 {pos}",
       "enableLabel": "规则 {pos} 启用",
       "logLabel": "规则 {pos} 记录日志",
-      "selectSection": "选择 {name} 的规则",
       "collapse": "折叠 {name}",
       "expand": "展开 {name}",
-      "lastPublished": "上次成功发布：{date} {time}",
       "publish": "发布 ({count})",
       "discard": "放弃更改",
       "status": {
-        "rules": "{count, plural, other {规则：共 # 条}}",
-        "rulesAtLeast": "{count, plural, other {规则：至少共 # 条}}",
-        "rulesHint": "只计算已读取的部分：主机或虚拟机的规则在展开时读取",
-        "unpublished": "未发布",
-        "disabled": "已禁用 {count}",
-        "sections": "部分：{count}",
-        "managed": "由微分段管理 {count}",
-        "covered": "受保护的虚拟机：{covered} / {running} 运行中",
-        "coveredUnknown": "受保护的虚拟机：尚未读取",
         "scope": "范围"
       },
       "scope": {
@@ -14469,17 +14701,6 @@
         "vms": "虚拟机",
         "all": "全部"
       },
-      "bulk": {
-        "enable": "启用",
-        "disable": "禁用",
-        "clone": "克隆",
-        "up": "上移",
-        "down": "下移",
-        "moveTo": "移到部分"
-      },
-      "selection": "{count, plural, =0 {未选择规则} other {已选择 # 条规则}}",
-      "dragHint": "拖动 ⋮⋮ 重新排序",
-      "clearSelection": "清除选择",
       "filter": "筛选：IP、端口、组、虚拟机",
       "moveDialog": {
         "title": "{count, plural, other {将 # 条规则移到}}",
@@ -14560,10 +14781,6 @@
       "publishedPart": "已发布 {total} 项中的 {applied} 项：请再次发布其余更改",
       "publishFailed": "已应用 {applied} 项更改后发布停止：",
       "conflict": "某部分的规则在读取后已在 Proxmox 中更改。请放弃该部分的更改后再次发布：其他部分的更改保留",
-      "mode": {
-        "cluster": "{count, plural, other {集群 · # 个节点}}",
-        "standalone": "单节点"
-      },
       "defaultDeny": "区域默认拒绝",
       "denyBlock": "阻止",
       "denyWouldBlock": "将被阻止",
@@ -14571,8 +14788,6 @@
       "discardSection": "放弃此部分",
       "conflictOptions": "某部分的防火墙选项在读取后已在 Proxmox 中更改。请放弃该部分的更改后再次发布：其他部分的更改保留",
       "publishAgain": "请再次发布：未应用的更改仍在草稿中。",
-      "summary": "上次发布：已应用 {total} 项中的 {applied} 项",
-      "summaryStopped": "上次发布：已应用 {total} 项中的 {applied} 项，在 {scope} 的 {kind} 处停止",
       "addRuleShort": "添加规则",
       "addRuleTo": "向 {name} 添加规则",
       "addARule": "添加一条规则",
@@ -14597,6 +14812,9 @@
       "titleNoCount": "放弃未应用的更改？",
       "body": "草稿将恢复为上次应用的修订版。",
       "confirm": "放弃"
+    },
+    "gateway": {
+      "name": "{zones} 的网关"
     }
   },
   "bulkPower": {

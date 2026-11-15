@@ -7,10 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, within } from '@testing-library/react'
 
 import { screen, fireEvent, renderWithProviders, waitFor } from '@/__tests__/setup/renderWithProviders'
+import { MicrosegApiError } from '@/lib/microseg/api'
 import type { PreflightCheck } from '@/lib/microseg/types'
 
 import { calls, mock, reply, resetMocks } from './microsegTestKit'
 import PreflightPanel from './PreflightPanel'
+import { RECOMMENDED_OBSERVE_LOG_RATE } from './preflightModel'
 
 beforeEach(resetMocks)
 afterEach(() => {
@@ -69,6 +71,57 @@ describe('checks', () => {
     expect(within(line).getByText(/web/)).toBeTruthy()
   })
 
+  it('sends to Settings > Advanced when the detected address is internal to Docker', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'self_in_zone', status: 'warn', detail: { self_ip: '172.17.0.3', reason: 'docker_internal' } }],
+    })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'ProxCenter address: warning' })
+    expect(within(line).getByText('The detected address is internal to Docker: in Settings > Advanced, enter the address of the host as Proxmox sees it.')).toBeTruthy()
+  })
+
+  it('sends to Settings > Advanced when the socle fails on a Docker internal address', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'socle_rules', status: 'fail', fix: 'socle', detail: { web: false, ssh: false, reason: 'docker_internal', self_ip: '172.17.0.3' } }],
+    })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'Management access: failed' })
+    expect(within(line).getByText(/the detected address is internal to Docker, in Settings > Advanced enter the address of the host/)).toBeTruthy()
+  })
+
+  it('names the security group whose rules could not be read', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'socle_rules', status: 'fail', fix: 'socle', detail: { web: false, ssh: false, reason: 'group_unreadable', group: 'sg-gone' } }],
+    })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'Management access: failed' })
+    expect(within(line).getByText('The rules of the security group sg-gone could not be read: the management access cannot be checked.')).toBeTruthy()
+  })
+
+  it('says every reason of a socle failure on its line', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'socle_rules', status: 'fail', fix: 'socle', detail: {
+        web: false, ssh: false, reason: 'host_rules_unreadable',
+        reasons: [{ reason: 'host_rules_unreadable', node: 'pve2' }, { reason: 'group_unreadable', group: 'sg-gone' }],
+        uncovered: ['10.0.0.1'], uncovered_nodes: ['pve1', 'pve2'],
+      } }],
+    })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'Management access: failed' })
+    expect(within(line).getByText('The firewall rules of node pve2 could not be read: the management access cannot be checked. ' +
+      'The rules of the security group sg-gone could not be read: the management access cannot be checked. ' +
+      'No rule keeps port 8006, 22 open from 10.0.0.1 on pve1: turning the firewall on could cut ProxCenter off.')).toBeTruthy()
+  })
+
+  it('names the address the socle rules do not accept', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'socle_rules', status: 'fail', fix: 'socle', detail: { web: true, ssh: false, uncovered: ['192.168.5.1'] } }],
+    })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'Management access: failed' })
+    expect(within(line).getByText('No rule keeps port 22 open from 192.168.5.1: turning the firewall on could cut ProxCenter off.')).toBeTruthy()
+  })
+
   it('warns, with the count in the right plural, when members could not be checked', async () => {
     mock.routes['GET /preflight'] = () => reply(200, {
       checks: [{ id: 'self_in_zone', status: 'warn', detail: { unchecked: 1, reason: 'collect_cap' } }],
@@ -105,13 +158,12 @@ describe('checks', () => {
 })
 
 describe('fixes', () => {
-  it('opens the deployment wizard from a failed socle check', async () => {
+  it('offers no wizard on a failed socle check: the wizard writes nothing on the nodes', async () => {
     mock.routes['GET /preflight'] = () => reply(200, { checks: CHECKS })
-    const { onOpenWizard } = open()
+    open()
 
     const socle = await screen.findByRole('listitem', { name: 'Management access: failed' })
-    fireEvent.click(within(socle).getByRole('button', { name: 'Open the deployment wizard' }))
-    expect(onOpenWizard).toHaveBeenCalledTimes(1)
+    expect(within(socle).queryByRole('button', { name: 'Open the deployment wizard' })).toBeNull()
   })
 
   it('explains the cluster firewall fix and points to the same wizard, which turns it on', async () => {
@@ -140,6 +192,38 @@ describe('fixes', () => {
 })
 
 describe('errors', () => {
+  it('raises the log rate from the check: one click sets the rate of the settings, nothing is written to Proxmox', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, { checks: CHECKS })
+    const onRaise = vi.fn(async () => {})
+    renderWithProviders(<PreflightPanel open connectionId='c1' onClose={vi.fn()} rateLimit={{ observe: '', onRaise }} />)
+
+    const row = await screen.findByRole('listitem', { name: 'Log rate limit: warning' })
+    expect(row.textContent).toContain('PVE logs at its default rate (1 per second), so the observation misses flows.')
+    fireEvent.click(within(row).getByRole('button', { name: 'Raise while observing' }))
+    await waitFor(() => expect(onRaise).toHaveBeenCalledTimes(1))
+  })
+
+  it('says the rate the engine raises the log to once the settings hold one, with no button', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, { checks: CHECKS })
+    renderWithProviders(<PreflightPanel open connectionId='c1' onClose={vi.fn()} rateLimit={{ observe: RECOMMENDED_OBSERVE_LOG_RATE, onRaise: vi.fn() }} />)
+
+    const row = await screen.findByRole('listitem', { name: 'Log rate limit: warning' })
+    expect(row.textContent).toContain('Raised to 20 per second while a zone is observed, then set back (settings).')
+    expect(within(row).queryByRole('button', { name: 'Raise while observing' })).toBeNull()
+  })
+
+  it('shows why the rate could not be set, and keeps the button', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, { checks: CHECKS })
+    const onRaise = vi.fn(async () => { throw new MicrosegApiError(409, 'VERSION_CONFLICT', 'x') })
+    renderWithProviders(<PreflightPanel open connectionId='c1' onClose={vi.fn()} rateLimit={{ observe: '', onRaise }} />)
+
+    const row = await screen.findByRole('listitem', { name: 'Log rate limit: warning' })
+    fireEvent.click(within(row).getByRole('button', { name: 'Raise while observing' }))
+    await waitFor(() => expect(within(row).getByRole('button', { name: 'Raise while observing' })).not.toBeDisabled())
+    expect(onRaise).toHaveBeenCalledTimes(1)
+    expect(row.querySelector('.MuiTypography-caption')?.textContent).toBeTruthy()
+  })
+
   it('tells an apply is running on 409 BUSY and checks again on request', async () => {
     let busy = true
     mock.routes['GET /preflight'] = () => (busy

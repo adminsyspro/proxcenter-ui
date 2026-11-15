@@ -1,14 +1,16 @@
 'use client'
 
-import { Alert, Box, Button, Chip, Paper, Typography } from '@mui/material'
+import { Alert, Box, Button, Chip, Paper, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { microsegErrorKeyOf } from '@/lib/microseg/api'
 import type { MicrosegPolicy } from '@/lib/microseg/types'
 
+import LogNodeLines from './LogNodeLines'
 import MicrosegConfirmDialog, { type ConfirmInfoLine } from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PendingChangesBar from './PendingChangesBar'
+import { socleRefusalLines } from './preflightModel'
 import { clusterFirewallOff, formatWhen, stillPaused } from './summaryModel'
 import type { ControlAction, MicrosegControls } from './useMicrosegControls'
 import { NOW_REFRESH_MS, useNow } from './useNow'
@@ -19,8 +21,6 @@ type Props = {
   policy: MicrosegPolicy
   controls: MicrosegControls
   onOpenPlan?: () => void
-  /** Opens the deployment wizard, where the management rules a refused resume asks for are added (absent: no wizard here). */
-  onOpenWizard?: () => void
 }
 
 /**
@@ -29,11 +29,15 @@ type Props = {
  * nothing is drawn, not even an empty strip (UA27). The Emergency stop button is in the sub-tabs row; the engine
  * state and the coverage are on the page's Dashboard tab. The confirmation dialog is always mounted here.
  */
-export default function MicrosegBanner({ connectionId, policy, controls, onOpenPlan, onOpenWizard }: Props) {
+export default function MicrosegBanner({ connectionId, policy, controls, onOpenPlan }: Props) {
   const t = useTranslations()
   const { canWrite } = useMicrosegWrite()
   const format = useFormatter()
   const { status, statusError, reload, action, open, busy, actionError, dialogError, notice } = controls
+  // A socle refusal names the addresses the rules leave out, and the Docker reason, in the user's language.
+  const refusalLines = dialogError?.code === 'SOCLE_MISSING'
+    ? socleRefusalLines(dialogError.detail).map(line => t(`microsegPilot.${line.key}`, line.values))
+    : []
 
   const dialog: Record<ControlAction, { title: string; body: string; label: string; color: 'primary' | 'warning' | 'error' }> = {
     stop: { title: t('microsegPilot.stop.title'), body: t('microsegPilot.stop.body'), label: t('microsegPilot.stop.button'), color: 'error' },
@@ -63,8 +67,12 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
   const stale = !!statusError && !!status
   const statusFailed = !!statusError && !status
 
+  // A reader that met a full page of the log in 24 hours may have missed lines: the strip says so, the load per node on hover.
+  const logNodes = status?.engine.log_nodes ?? []
+  const logBehind = logNodes.some(n => n.full_pages_24h > 0)
+
   const hasContent = !!status?.emergency_stop || !!status?.engine.held || !!shownNotice || actionError != null
-    || statusFailed || stale || pausedShown || !!policy.pending_changes
+    || statusFailed || stale || pausedShown || logBehind || !!policy.pending_changes
 
   return (
     <>
@@ -106,7 +114,7 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
           {actionError != null && <MicrosegErrorAlert error={actionError} onClose={controls.clearActionError} />}
           {statusFailed && <MicrosegErrorAlert error={statusError} onRetry={reload} />}
 
-          {(pausedShown || stale) && (
+          {(pausedShown || stale || logBehind) && (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 4 }}>
               {pausedShown && (
                 <Chip
@@ -119,6 +127,12 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
 
               {stale && (
                 <Chip size='small' color='warning' variant='outlined' icon={<i className='ri-wifi-off-line' />} label={t('microsegPilot.banner.statusStale')} />
+              )}
+
+              {logBehind && (
+                <Tooltip title={<LogNodeLines nodes={logNodes} />} describeChild>
+                  <Chip size='small' color='warning' variant='outlined' icon={<i className='ri-file-list-3-line' />} label={t('microsegPilot.banner.logBehind')} />
+                </Tooltip>
               )}
             </Box>
           )}
@@ -136,8 +150,8 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
         color={dialog[action].color}
         busy={busy}
         error={dialogError ? t(microsegErrorKeyOf(dialogError)) : null}
-        errorDetail={dialogError?.serverMessage}
-        extraAction={dialogError && onOpenWizard ? { label: t('microsegPilot.stop.openWizard'), onClick: () => { controls.close(); onOpenWizard() } } : undefined}
+        errorDetail={refusalLines.length > 0 ? null : dialogError?.serverMessage}
+        errorLines={refusalLines}
         onConfirm={controls.run}
         onCancel={controls.close}
       />

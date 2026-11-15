@@ -43,7 +43,7 @@ function setupPolicy() {
   mock.routes['GET /api/v1/vms?connId=c1'] = () => reply(200, { data: { vms: [vm(100, 'web-1', ['zone-web'])] } })
 }
 
-const WRITE_BUTTONS = ['New zone', 'Change state', 'Assign guests', 'Edit zone', 'Delete zone', 'New flow', 'New flow into web', 'Edit flow', 'Delete flow', 'Emergency stop', 'View plan']
+const WRITE_BUTTONS = ['New zone', 'Change state', 'Assign guests', 'Edit zone', 'Delete zone', 'New flow', 'New flow into web', 'Edit flow', 'Delete flow', 'Emergency stop', 'Review and apply']
 
 describe('read-only user', () => {
   it('disables every write control of the Policy sub-tab and says why', async () => {
@@ -51,7 +51,7 @@ describe('read-only user', () => {
     const value = rbac(false)
     renderAs(value)
     const zoneRow = await screen.findByRole('listitem', { name: 'web' })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'View plan' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review and apply' })).toBeTruthy())
 
     for (const name of WRITE_BUTTONS) {
       const button = within(name.includes('zone') && name !== 'New zone' ? zoneRow : document.body).getAllByRole('button', { name })[0] as HTMLButtonElement
@@ -105,7 +105,7 @@ describe('user with node.manage', () => {
     setupPolicy()
     renderAs(rbac(true))
     const zoneRow = await screen.findByRole('listitem', { name: 'web' })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'View plan' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review and apply' })).toBeTruthy())
     for (const name of WRITE_BUTTONS) {
       const button = within(name.includes('zone') && name !== 'New zone' ? zoneRow : document.body).getAllByRole('button', { name })[0] as HTMLButtonElement
       expect(button.disabled, name).toBe(false)

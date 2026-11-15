@@ -38,6 +38,8 @@ const field = (name: string) => screen.getByRole('textbox', { name }) as HTMLInp
 const type = (name: string, value: string) => fireEvent.change(field(name), { target: { value } })
 const save = () => screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
 const put = () => calls('PUT /policy')
+const ADDRESSES = 'Addresses Proxmox sees'
+const openAdvanced = () => fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
 
 describe('form', () => {
   it('shows the current values and keeps Save off until something changes', () => {
@@ -67,7 +69,7 @@ describe('form', () => {
     ['IP read interval', 'Guest IP read interval', '299', 300, 86400, 'seconds'],
     ['full interval', 'Full check interval', '86401', 600, 86400, 'seconds'],
     ['log interval', 'Firewall log read interval', '601', 30, 600, 'seconds'],
-    ['ready after', 'Observation before enforcing', '169', 1, 168, 'hours'],
+    ['ready after', 'Observation before blocking (inbound and outbound)', '169', 1, 168, 'hours'],
     ['write cap', 'Write cap per run', '0', 1, 500, 'writes'],
   ])('refuses the %s out of bounds', (_name, label, value, min, max, unit) => {
     open()
@@ -81,6 +83,55 @@ describe('form', () => {
     type('Tag prefix', 'Zone Prefix')
     expect(screen.getByText(/The tag prefix is 1 to 16 characters/)).toBeTruthy()
     expect(save().disabled).toBe(true)
+  })
+})
+
+describe('layout', () => {
+  it('puts the checkboxes in the control column, flush left, under the same left edge as the fields', () => {
+    open()
+    for (const name of ['Drifts', 'Engine paused', 'Unprotected guests', 'Blocked flows']) {
+      const box = screen.getByRole('checkbox', { name })
+      const grid = box.closest('div[class*="MuiBox"]')?.parentElement?.parentElement as HTMLElement
+      expect(grid.children).toHaveLength(2)
+      expect(grid.children[1].contains(box)).toBe(true)
+      expect(grid.children[0].contains(box)).toBe(false)
+      expect(grid.children[0].textContent).toBe(name)
+    }
+  })
+
+  it('separates every section after the first with a divider', () => {
+    open()
+    const sections = screen.getAllByTestId('settings-section')
+    expect(sections.length).toBeGreaterThanOrEqual(6)
+    sections.forEach((section, i) => {
+      const divider = section.querySelector('[data-testid="settings-section-divider"]')
+      expect(!!divider).toBe(i > 0)
+    })
+  })
+
+  it('shows the write cap unit and the gear icon', () => {
+    open()
+    expect(screen.getByText('writes')).toBeTruthy()
+    expect(screen.getByTestId('settings-dialog-icon').className).toContain('ri-settings-3-line')
+  })
+
+  it('has an info tooltip on the rate limit, the log interval, the observation and the write cap', async () => {
+    open()
+    const tips = screen.getAllByTestId('form-row-tip')
+    expect(tips.length).toBeGreaterThanOrEqual(4)
+    const expected: Array<[string, string]> = [
+      ['Log rate limit', 'Cap on log lines per rule'],
+      ['Firewall log read interval', 'Delay between two reads of the firewall log'],
+      ['Observation before blocking (inbound and outbound)', 'it is not a lock'],
+      ['Write cap per run', 'Past it, the engine stops'],
+    ]
+    for (const [label, text] of expected) {
+      const row = screen.getByText(label).parentElement as HTMLElement
+      const icon = within(row).getByTestId('form-row-tip')
+      fireEvent.mouseOver(icon)
+      expect((await screen.findAllByText(new RegExp(text))).length).toBeGreaterThan(0)
+      fireEvent.mouseLeave(icon)
+    }
   })
 })
 
@@ -139,14 +190,16 @@ describe('log rate limit', () => {
 describe('self IPs', () => {
   it('names the address that is not valid and refuses to save', () => {
     open()
-    type('ProxCenter addresses', '10.0.0.5, 10.0.0.999')
+    openAdvanced()
+    type(ADDRESSES, '10.0.0.5, 10.0.0.999')
     expect(screen.getByText('10.0.0.999 is not a valid IP address.')).toBeTruthy()
     expect(save().disabled).toBe(true)
   })
 
   it('refuses more than 16', () => {
     open()
-    type('ProxCenter addresses', Array.from({ length: 17 }, (_, i) => `10.0.0.${i + 1}`).join(' '))
+    openAdvanced()
+    type(ADDRESSES, Array.from({ length: 17 }, (_, i) => `10.0.0.${i + 1}`).join(' '))
     expect(screen.getByText('At most 16 addresses.')).toBeTruthy()
     expect(save().disabled).toBe(true)
   })
@@ -154,8 +207,9 @@ describe('self IPs', () => {
   it('sends the list, and an empty list when they are cleared', async () => {
     mock.routes['PUT /policy'] = () => reply(200, { version: 4, policy: policy().policy })
     open({ self_ips: ['10.0.0.5'] })
-    expect(field('ProxCenter addresses').value).toBe('10.0.0.5')
-    type('ProxCenter addresses', '10.0.0.5, fd00::1')
+    openAdvanced()
+    expect(field(ADDRESSES).value).toBe('10.0.0.5')
+    type(ADDRESSES, '10.0.0.5, fd00::1')
     fireEvent.click(save())
     await waitFor(() => expect(put()).toHaveLength(1))
     expect(body(put()[0][1]).settings).toEqual({ self_ips: ['10.0.0.5', 'fd00::1'] })
@@ -164,10 +218,79 @@ describe('self IPs', () => {
   it('clears them with an empty list', async () => {
     mock.routes['PUT /policy'] = () => reply(200, { version: 4, policy: policy().policy })
     open({ self_ips: ['10.0.0.5'] })
-    type('ProxCenter addresses', '')
+    openAdvanced()
+    type(ADDRESSES, '')
     fireEvent.click(save())
     await waitFor(() => expect(put()).toHaveLength(1))
     expect(body(put()[0][1]).settings).toEqual({ self_ips: [] })
+  })
+})
+
+describe('advanced section', () => {
+  const openWith = (extra: Record<string, unknown>, settings: Partial<MicrosegSettings> = {}) =>
+    open(settings, { policy: { ...policy(), ...extra, policy: { ...policy().policy, settings: { ...SETTINGS, ...settings } } } as never })
+
+  it('is closed at opening, last before the removal, and holds the addresses with their tooltip', async () => {
+    open()
+    const toggle = screen.getByRole('button', { name: 'Advanced' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('textbox', { name: ADDRESSES })).toBeNull()
+    const sections = screen.getAllByTestId('settings-section')
+    expect(sections[sections.length - 2].contains(toggle)).toBe(true)
+    expect(sections[sections.length - 1].textContent).toBe('Removal')
+
+    openAdvanced()
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    const input = field(ADDRESSES)
+    const row = input.closest('div[class*="MuiBox"]')?.parentElement?.parentElement as HTMLElement
+    fireEvent.mouseOver(within(row).getByTestId('form-row-tip'))
+    expect(await screen.findByText(/Addresses ProxCenter reaches the nodes from\. The preflight checks they are not cut off\./)).toBeTruthy()
+  })
+
+  it.each([
+    ['install', ['10.42.0.250', '2001:db8::250'], '10.42.0.250, 2001:db8::250 (install script)'],
+    ['detected', ['172.17.0.3'], '172.17.0.3 (detected)'],
+  ])('shows the %s addresses an empty field stands for', (source, ips, text) => {
+    openWith({ self_ips_effective: ips, self_ips_source: source })
+    openAdvanced()
+    expect(field(ADDRESSES).placeholder).toBe(text)
+    expect(field(ADDRESSES).title).toBe(text)
+    expect(field(ADDRESSES).value).toBe('')
+  })
+
+  it('shows the addresses of the settings in the field, and the detection as placeholder', () => {
+    openWith({ self_ips_effective: ['10.0.0.5'], self_ips_source: 'settings' }, { self_ips: ['10.0.0.5'] })
+    openAdvanced()
+    expect(field(ADDRESSES).value).toBe('10.0.0.5')
+    expect(field(ADDRESSES).placeholder).toBe('Detected automatically')
+  })
+
+  it('warns that a lone container address is not what Proxmox sees, until an address is typed', async () => {
+    openWith({ self_ips_effective: ['172.17.0.3'], self_ips_source: 'detected', self_ips_docker_internal: true })
+    openAdvanced()
+    expect(field(ADDRESSES).placeholder).toBe('172.17.0.3 (detected)')
+    const warning = screen.getByTestId('settings-field-warning')
+    expect(warning.getAttribute('aria-label')).toBe("Address internal to Docker: Proxmox sees the host's address, enter it here.")
+    type(ADDRESSES, '10.42.0.250')
+    expect(screen.queryByTestId('settings-field-warning')).toBeNull()
+  })
+
+  it('has no warning for a host address', () => {
+    openWith({ self_ips_effective: ['10.42.0.250'], self_ips_source: 'install', self_ips_docker_internal: false })
+    openAdvanced()
+    expect(screen.queryByTestId('settings-field-warning')).toBeNull()
+  })
+
+  it('falls back to the detection wording on an older orchestrator', () => {
+    open()
+    openAdvanced()
+    expect(field(ADDRESSES).placeholder).toBe('Detected automatically')
+  })
+
+  it('says Unchanged in the empty log rate fields', () => {
+    open()
+    expect(field('Log rate limit').placeholder).toBe('Unchanged')
+    expect(field('Log burst').placeholder).toBe('Unchanged')
   })
 })
 

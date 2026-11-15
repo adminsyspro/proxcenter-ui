@@ -1,18 +1,22 @@
 'use client'
 
 import { useCallback, useState, type MouseEvent, type ReactNode } from 'react'
-import { Box, IconButton } from '@mui/material'
+import { Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import type { MicrosegFlow, MicrosegZone, ZoneState } from '@/lib/microseg/types'
+import { zoneEgress, type MicrosegFlow, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
 
 import { useDialogAction } from './dialogParts'
 import DiscardDraft from './DiscardDraft'
 import FlowDialog, { type FlowSaveValues } from './FlowDialog'
+import FlowSummary from './FlowSummary'
+import { PagedList } from './PolicyPager'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import type { ZoneEdits } from './useZoneEdits'
+import { zoneGateOf } from './zoneGate'
 import ZoneDialog from './ZoneDialog'
+import ZoneEgressDialog from './ZoneEgressDialog'
 import ZoneEnforceDialog from './ZoneEnforceDialog'
 import { ZoneStateMenu } from './ZoneRow'
 import ZoneStateDialog from './ZoneStateDialog'
@@ -81,15 +85,50 @@ export function ZoneStateConfirm({ zone, state, edits, onClose }: { zone: Micros
   )
 }
 
+export type EgressAction = 'block' | 'reopen'
+
+/**
+ * Blocking or reopening the outbound of a zone, the same from the zone panel and from the Policy sub-tab. Blocking
+ * always asks (the readiness, the name when not ready). Reopening is one click; with pending changes in the draft
+ * it goes through the refusal, as the change applies the whole draft.
+ */
+export function useEgressChange(edits: ZoneEdits) {
+  const [change, setChange] = useState<{ zone: MicrosegZone; action: EgressAction } | null>(null)
+  const close = () => setChange(null)
+  const ask = (zone: MicrosegZone, action: EgressAction) => {
+    if (action === 'reopen' && !edits.pendingChanges.pending) {
+      edits.setZoneEgressState(zone, 'observe').catch(edits.reportError)
+      return
+    }
+    setChange({ zone, action })
+  }
+  const dialog = change ? (
+    <ZoneEgressDialog
+      connectionId={edits.connectionId}
+      zone={change.zone}
+      action={change.action}
+      readyAfterHours={edits.readyAfterHours}
+      gate={zoneGateOf(edits, close)}
+      onConfirm={async () => {
+        await edits.setZoneEgressState(change.zone, change.action === 'block' ? 'enforce' : 'observe')
+        close()
+      }}
+      onCancel={close}
+    />
+  ) : null
+  return { ask, dialog }
+}
+
 type ZoneDialogOpen = { kind: 'edit' } | { kind: 'delete' } | { kind: 'state'; state: ZoneState } | null
 
 /** Edit, state, delete and assign of the zone of the panel, one row of icons, with their dialogs. */
-export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted }: { zone: MicrosegZone; edits: ZoneEdits; onAssign: () => void; onDeleted: () => void }) {
+export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted, spread = false }: { zone: MicrosegZone; edits: ZoneEdits; onAssign: () => void; onDeleted: () => void; spread?: boolean }) {
   const t = useTranslations('microsegPilot.overview.zonePanel')
   const tp = useTranslations('microsegPilot.policy')
   const [open, setOpen] = useState<ZoneDialogOpen>(null)
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const removal = useDialogAction()
+  const egressChange = useEgressChange(edits)
   const close = () => setOpen(null)
 
   const save = async (values: ZoneFormValues) => {
@@ -102,16 +141,21 @@ export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted }: { zone: 
       onDeleted()
     }
   }
+  const egress = zoneEgress(zone)
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+    // `spread`: the icons are laid out by the row they sit in (spread over its width), not grouped.
+    <Box sx={spread ? { display: 'contents' } : { display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
       <WriteIcon label={t('edit')} icon='ri-pencil-line' onClick={() => setOpen({ kind: 'edit' })} />
+      {egress === 'observe' && <WriteIcon label={t('egressBlock')} icon='ri-lock-line' onClick={() => egressChange.ask(zone, 'block')} />}
+      {egress === 'enforce' && <WriteIcon label={t('egressReopen')} icon='ri-lock-unlock-line' onClick={() => egressChange.ask(zone, 'reopen')} />}
       <WriteIcon label={t('changeState')} icon='ri-toggle-line' aria-haspopup='menu' onClick={e => setAnchor(e.currentTarget)} />
       <WriteIcon label={t('delete')} icon='ri-delete-bin-line' onClick={() => { removal.reset(); setOpen({ kind: 'delete' }) }} />
       <WriteIcon label={t('assign')} icon='ri-add-circle-line' onClick={onAssign} />
       <ZoneStateMenu zone={zone} anchor={anchor} onClose={() => setAnchor(null)} onPick={state => setOpen({ kind: 'state', state })} />
-      {open?.kind === 'edit' && <ZoneDialog zone={zone} onSave={save} onClose={close} />}
+      {open?.kind === 'edit' && <ZoneDialog zone={zone} connectionId={edits.connectionId} readyAfterHours={edits.readyAfterHours} onSave={save} flows={edits.flows} onClose={close} gate={zoneGateOf(edits, close)} />}
       {open?.kind === 'state' && <ZoneStateConfirm zone={zone} state={open.state} edits={edits} onClose={close} />}
+      {egressChange.dialog}
       <MicrosegConfirmDialog
         open={open?.kind === 'delete'}
         title={tp('delete.zoneTitle', { name: zone.name })}
@@ -150,20 +194,64 @@ export function FlowRowActions({ flow, onEdit, onDelete }: { flow: MicrosegFlow;
   )
 }
 
+/**
+ * A paged list of declared flows, one line each with its edit and delete; the ones the last applied revision does not
+ * have marked Draft when `unapplied` is known.
+ */
+export function FlowsList({ flows, zonesById, editor, size, unapplied = null }: {
+  flows: MicrosegFlow[]
+  zonesById: Map<string, MicrosegZone>
+  editor: Pick<FlowEditor, 'edit' | 'remove'>
+  size: number
+  unapplied?: ReadonlySet<string> | null
+}) {
+  const t = useTranslations('microsegPilot.overview')
+  return (
+    <>
+      {flows.length === 0 && <Typography variant='body2' color='text.disabled'>{t('panel.noFlows')}</Typography>}
+      <PagedList items={flows} size={size} render={rows => (
+        <Box role='list'>
+          {rows.map(flow => (
+            <Box role='listitem' key={flow.id} sx={{ display: 'flex', minHeight: 28, alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+              <FlowSummary flow={flow} zonesById={zonesById} />
+              {unapplied?.has(flow.id) && (
+                <Tooltip title={t('edge.draft')}><Chip size='small' color='warning' variant='outlined' label={t('flowPanel.draft')} sx={{ flexShrink: 0 }} /></Tooltip>
+              )}
+              <FlowRowActions flow={flow} onEdit={editor.edit} onDelete={editor.remove} />
+            </Box>
+          ))}
+        </Box>
+      )} />
+    </>
+  )
+}
+
 export function NewFlowButton({ label, onClick }: { label: string; onClick: () => void }) {
   return <WriteIcon label={label} icon='ri-add-line' onClick={onClick} />
+}
+
+/** The add action of a sub-tab of the expand dialog: a small outlined button, icon and label, disabled without the write right. */
+export function ExpandAddButton({ label, onClick }: { label: string; onClick: () => void }) {
+  const { canWrite } = useMicrosegWrite()
+  return (
+    <WriteTip>
+      <Button size='small' variant='outlined' disabled={!canWrite} onClick={onClick} startIcon={<i className='ri-add-line' />} sx={{ height: 30, flexShrink: 0, whiteSpace: 'nowrap' }}>{label}</Button>
+    </WriteTip>
+  )
 }
 
 type FlowInitial = Partial<Pick<FlowSaveValues, 'src_zone_id' | 'dst_zone_id'>>
 type FlowEditing = { flow: MicrosegFlow | null; initial?: FlowInitial } | null
 
-/** The flow dialog (edit, or a new flow prefilled) and the delete confirmation of the panel. */
-export function useFlowEditor(edits: ZoneEdits): {
+type FlowEditor = {
   edit: (flow: MicrosegFlow) => void
   create: (initial: FlowInitial) => void
   remove: (flow: MicrosegFlow) => void
   dialogs: ReactNode
-} {
+}
+
+/** The flow dialog (edit, or a new flow prefilled) and the delete confirmation of the panel. */
+export function useFlowEditor(edits: ZoneEdits): FlowEditor {
   const tp = useTranslations('microsegPilot.policy')
   const [editing, setEditing] = useState<FlowEditing>(null)
   const [deleting, setDeleting] = useState<MicrosegFlow | null>(null)

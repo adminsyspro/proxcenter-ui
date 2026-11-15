@@ -56,6 +56,8 @@ export interface FirewallLogViewProps {
   guests?: Record<number, LogGuestInfo>
   /** Controls rendered above the filters (the guest's log levels). */
   headerExtra?: ReactNode
+  /** Rendered first on the row of the filters (the log picker of the Logging tab), the row then held on one line. */
+  filtersStart?: ReactNode
   /** Only the lines one rule may have written. */
   ruleFilter?: LogRuleFilter
   /**
@@ -95,7 +97,7 @@ export const EMPTY_TEXT_SX = { maxWidth: 520, mx: 'auto', whiteSpace: 'normal', 
 const SMALL_SELECT_SX = { '& .MuiInputBase-input.MuiSelect-select': { minHeight: '1.4375em', lineHeight: '1.4375em' } }
 
 /** Keyed by its scope where the scope changes: every read starts from fresh state. */
-export default function FirewallLogView({ connectionId, scope: scopeProp, guests, headerExtra, ruleFilter, maxHeight = 520 }: FirewallLogViewProps) {
+export default function FirewallLogView({ connectionId, scope: scopeProp, guests, headerExtra, filtersStart, ruleFilter, maxHeight = 520 }: FirewallLogViewProps) {
   const theme = useTheme()
   const t = useTranslations()
   const locale = useLocale()
@@ -298,7 +300,8 @@ export default function FirewallLogView({ connectionId, scope: scopeProp, guests
       )}
 
       {/* Filters */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, flexWrap: 'wrap' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, flexWrap: filtersStart ? { xs: 'wrap', lg: 'nowrap' } : 'wrap' }}>
+        {filtersStart}
         <TextField
           size="small"
           placeholder={t('firewallLog.searchPlaceholder')}

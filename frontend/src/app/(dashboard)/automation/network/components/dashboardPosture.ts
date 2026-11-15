@@ -1,6 +1,6 @@
 import type { FirewallCoverage } from '@/hooks/useZeroTrust'
-import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, UNZONED_KEY, zoneKey } from '@/lib/microseg/trafficLens'
-import type { MicrosegFlow, MicrosegStatus, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
+import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, OUTSIDE_KEY, UNZONED_KEY, zoneKey } from '@/lib/microseg/trafficLens'
+import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 import { serviceTokenLabel } from '@/lib/network/serviceNames'
 
 import { flowService } from './microseg/FlowSummary'
@@ -60,7 +60,7 @@ export function postureGuests(rows: FirewallCoverage['guests'] | undefined, gues
   return [...byKey.values()]
 }
 
-export type SliceKind = 'zone' | 'unzoned' | 'external' | 'other' | 'vlan' | 'novlan' | 'node'
+export type SliceKind = 'zone' | 'unzoned' | 'external' | 'outside' | 'other' | 'vlan' | 'novlan' | 'node'
 
 /** One slice of the donut: a group, its hits, and how many guests it holds (null when that cannot be told). */
 export type PostureSlice = {
@@ -115,7 +115,7 @@ function groupOf(groupBy: GroupBy, zoneId: string, ip: string, look: Lookup): st
   return guest.vlans.length ? vlanKey(guest.vlans[0]) : NO_VLAN_KEY
 }
 
-const NAMED_KINDS: Record<string, SliceKind> = { [UNZONED_KEY]: 'unzoned', [EXTERNAL_KEY]: 'external', [OTHER_KEY]: 'other', [NO_VLAN_KEY]: 'novlan' }
+const NAMED_KINDS: Record<string, SliceKind> = { [UNZONED_KEY]: 'unzoned', [EXTERNAL_KEY]: 'external', [OUTSIDE_KEY]: 'outside', [OTHER_KEY]: 'other', [NO_VLAN_KEY]: 'novlan' }
 
 function sliceKind(key: string): SliceKind {
   const named = NAMED_KINDS[key]
@@ -125,13 +125,13 @@ function sliceKind(key: string): SliceKind {
 }
 
 const NAMED_COLORS: Partial<Record<SliceKind, string>> = {
-  unzoned: GROUP_COLORS.unzoned, external: GROUP_COLORS.external, other: GROUP_COLORS.other, novlan: GROUP_COLORS.zone,
+  unzoned: GROUP_COLORS.unzoned, external: GROUP_COLORS.external, outside: GROUP_COLORS.external, other: GROUP_COLORS.other, novlan: GROUP_COLORS.zone,
 }
 
 /** How many guests a group holds: zone members by tag, guests in no zone, per VLAN (first NIC) or node. */
 function membersOf(kind: SliceKind, name: string, zone: MicrosegZone | undefined, guests: readonly PostureGuest[], look: Lookup): number | null {
-  if (!guests.length || kind === 'external' || kind === 'other') return null
-  const counts: Record<Exclude<SliceKind, 'external' | 'other'>, (g: PostureGuest) => boolean> = {
+  if (!guests.length || kind === 'external' || kind === 'outside' || kind === 'other') return null
+  const counts: Record<Exclude<SliceKind, 'external' | 'outside' | 'other'>, (g: PostureGuest) => boolean> = {
     zone: g => look.zoneOfGuest(g)?.id === zone?.id,
     unzoned: g => !look.zoneOfGuest(g),
     vlan: g => String(g.vlans[0]) === name,
@@ -163,9 +163,12 @@ export function postureTraffic(input: {
 }): PostureTraffic {
   const { groupBy, zones, suggestions, guests } = input
   const look = lookupOf(zones, input.tagPrefix, guests, input.addresses)
-  const side = (s: MicrosegSuggestion, end: 'src' | 'dst') => (end === 'src'
-    ? groupOf(groupBy, s.src_zone_id, s.src_ip, look)
-    : groupOf(groupBy, s.dst_zone_id, s.dst_ip, look))
+  const side = (s: MicrosegSuggestion, end: 'src' | 'dst') => {
+    if (end === 'src') return groupOf(groupBy, s.src_zone_id, s.src_ip, look)
+    const group = groupOf(groupBy, s.dst_zone_id, s.dst_ip, look)
+    // Grouped by destination zone, an address outside the zones (an outbound flow) is "Outside", not an unknown source.
+    return groupBy === 'dstzone' && group === EXTERNAL_KEY ? OUTSIDE_KEY : group
+  }
   const sliceSide = groupBy === 'zone' ? 'src' : 'dst'
 
   const sums = new Map<string, number>()
@@ -259,8 +262,10 @@ export type PostureDistribution = {
   allowed: number
   wouldBlock: number
   blocked: number
-  /** Names of the zones the blocked flows were dropped in. */
+  /** Names of the zones the blocked inbound flows were dropped in. */
   blockedZones: string[]
+  /** Names of the zones whose outbound flows were blocked (the emitting zone, not the destination). */
+  blockedOutZones: string[]
 }
 
 const shareOf = (hits: number, total: number): Share => ({ hits, percent: total > 0 ? (hits / total) * 100 : 0 })
@@ -278,12 +283,17 @@ export function postureDistribution(input: {
   let eastWest = 0
   let unknown = 0
   const blockedZones = new Set<string>()
+  const blockedOutZones = new Set<string>()
   for (const s of input.suggestions) {
+    if (s.direction === 'out' && s.kind === 'blocked') {
+      const emitter = look.zonesById.get(s.src_zone_id || s.src_key)
+      if (emitter) blockedOutZones.add(emitter.name)
+    }
     // A flow is only logged towards a zone (the outside is not filtered in v1): one to a zone gone since is left out.
     if (!look.zonesById.has(s.dst_zone_id)) continue
     if (groupOf('zone', s.src_zone_id, s.src_ip, look) === EXTERNAL_KEY) unknown += s.hits
     else eastWest += s.hits
-    if (s.kind === 'blocked') {
+    if (s.kind === 'blocked' && s.direction !== 'out') {
       const zone = look.zonesById.get(s.dst_zone_id)
       if (zone) blockedZones.add(zone.name)
     }
@@ -297,68 +307,70 @@ export function postureDistribution(input: {
     wouldBlock: input.suggestions.filter(s => s.kind === 'would_block').length,
     blocked: input.suggestions.filter(s => s.kind === 'blocked').length,
     blockedZones: [...blockedZones].sort(byText),
+    blockedOutZones: [...blockedOutZones].sort(byText),
   }
 }
 
 export type ServiceStatus = 'allowed' | 'not_covered' | 'blocked'
 
+/** What one service does under one status: its flows, their hits (null for the allowed flows, which carry no counter) and what they are made of. */
+export type ServicePart = { status: ServiceStatus; flows: number; hits: number | null; tokens: string[] }
+
 /**
- * One row of the top services: a service by its name ("SSH", or the raw "tcp/9999" for a port without one) and status,
- * the protocol/port tokens it was seen or allowed on ("tcp/22", "udp/22"), its flows and hits.
+ * One row of the top services: a service by its name ("SSH", or the raw "tcp/9999" for a port without one), with one
+ * part per status it is seen under (SSH blocked into one zone and still only observed into another is one row with
+ * two parts). `hits` sums the observed parts, null when the service is only allowed.
  */
-export type ServiceRow = { key: string; label: string; tokens: string[]; flows: number; hits: number | null; status: ServiceStatus }
+export type ServiceRow = { key: string; label: string; tokens: string[]; flows: number; hits: number | null; parts: ServicePart[] }
 
 const tokenOf = (proto: string, dport: string) => flowService({ proto: proto.toLowerCase(), dport })
 
-/** Adds one flow of `token` to the row of its service name and status. */
+/** Adds one flow of `token` to the part of `status` of the row of its service name. */
 function addTo(rows: Map<string, ServiceRow>, status: ServiceStatus, token: string, hits: number | null) {
   const label = serviceTokenLabel(token)
-  const key = `${status}|${label}`
-  const row = rows.get(key) ?? { key, label, tokens: [], flows: 0, hits: hits === null ? null : 0, status }
+  const row = rows.get(label) ?? { key: label, label, tokens: [], flows: 0, hits: null, parts: [] }
+  let part = row.parts.find(p => p.status === status)
+  if (!part) {
+    part = { status, flows: 0, hits: hits === null ? null : 0, tokens: [] }
+    row.parts.push(part)
+  }
+  if (!part.tokens.includes(token)) part.tokens.push(token)
   if (!row.tokens.includes(token)) row.tokens.push(token)
+  part.flows += 1
   row.flows += 1
-  if (hits !== null) row.hits = (row.hits ?? 0) + hits
-  rows.set(key, row)
+  if (hits !== null) {
+    part.hits = (part.hits ?? 0) + hits
+    row.hits = (row.hits ?? 0) + hits
+  }
+  rows.set(label, row)
 }
 
+/** The observed parts first, the busiest first, then the allowed one. */
+const byPart = (a: ServicePart, b: ServicePart) => (b.hits ?? -1) - (a.hits ?? -1) || byText(a.status, b.status)
+
 /**
- * The services by hits, one row per service name and status: the pending observed flows (not covered while observing,
- * blocked while enforcing), the busiest first, then the services the policy allows (its flows, which carry no counter).
- * The tokens of one name ("tcp/22" and "udp/22" are both SSH) sum their flows and hits; the row keeps them for its
- * tooltip.
+ * The services by hits, one row per service name: the pending observed flows (not covered while observing, blocked
+ * while enforcing) and the flows the policy allows (which carry no counter), each status a part of the row. The
+ * busiest observed services first, then the services that are only allowed, by flows. The tokens of one name
+ * ("tcp/22" and "udp/22" are both SSH) sum their flows and hits; the row and its parts keep them.
  */
 export function topServices(suggestions: readonly MicrosegSuggestion[], flows: readonly MicrosegFlow[], max = MAX_SERVICES): ServiceRow[] {
-  const observed = new Map<string, ServiceRow>()
-  for (const s of suggestions) addTo(observed, s.kind === 'blocked' ? 'blocked' : 'not_covered', tokenOf(s.proto, s.dport), s.hits)
-  const allowed = new Map<string, ServiceRow>()
-  for (const f of flows) addTo(allowed, 'allowed', tokenOf(f.proto, f.dport), null)
-  for (const row of [...observed.values(), ...allowed.values()]) row.tokens.sort(byText)
-  const busiest = [...observed.values()].sort((a, b) => (b.hits ?? 0) - (a.hits ?? 0) || byText(a.key, b.key))
-  const allowedRows = [...allowed.values()].sort((a, b) => b.flows - a.flows || byText(a.key, b.key))
-  return [...busiest, ...allowedRows].slice(0, max)
+  const rows = new Map<string, ServiceRow>()
+  for (const s of suggestions) addTo(rows, s.kind === 'blocked' ? 'blocked' : 'not_covered', tokenOf(s.proto, s.dport), s.hits)
+  for (const f of flows) addTo(rows, 'allowed', tokenOf(f.proto, f.dport), null)
+  for (const row of rows.values()) {
+    row.tokens.sort(byText)
+    row.parts.sort(byPart)
+    for (const part of row.parts) part.tokens.sort(byText)
+  }
+  const observed = [...rows.values()].filter(r => r.hits !== null).sort((x, y) => (y.hits ?? 0) - (x.hits ?? 0) || byText(x.key, y.key))
+  const allowedOnly = [...rows.values()].filter(r => r.hits === null).sort((x, y) => y.flows - x.flows || byText(x.key, y.key))
+  return [...observed, ...allowedOnly].slice(0, max)
 }
 
-/** Zones that enforce, of all the zones; null while the status is not read. */
-export function zonesEnforced(status: Pick<MicrosegStatus, 'zones_by_state'> | undefined): { enforced: number; total: number } | null {
-  const z = status?.zones_by_state
-  if (!z) return null
-  return { enforced: z.enforce ?? 0, total: (z.enforce ?? 0) + (z.observe ?? 0) + (z.disabled ?? 0) }
-}
-
-/**
- * Running guests filtered by Proxmox, of the running guests the coverage route asked; null until it measured them.
- * Above its guest cap the route asks an even sample: `running` then counts the running guests asked, `total` every
- * running guest and `asked` the size of the sample (the cap), and a guest the cap left out is not taken for an
- * unprotected one.
- */
-export type ProtectedRunning = { protected: number; running: number; total: number; asked: number }
-
-export function protectedRunning(coverage: Pick<FirewallCoverage, 'computedAt' | 'guests'> | null | undefined): ProtectedRunning | null {
-  if (!coverage?.computedAt || !coverage.guests) return null
-  const asked = coverage.guests.filter(r => !r.sampledOut)
-  const running = asked.filter(r => r.status === 'running')
-  const total = coverage.guests.filter(r => r.status === 'running').length
-  return { protected: running.filter(r => r.enabled === true).length, running: running.length, total, asked: asked.length }
+/** The tokens of the observed parts of a service: what the Observation list can be filtered on. */
+export function observedTokens(row: Pick<ServiceRow, 'parts'>): string[] {
+  return [...new Set(row.parts.filter(p => p.status !== 'allowed').flatMap(p => p.tokens))].sort(byText)
 }
 
 /**
@@ -369,5 +381,6 @@ export function zoneSeries(zones: readonly MicrosegZone[]): Pick<PostureSlice, '
   return [
     ...zones.map(z => ({ key: zoneKey(z.id), kind: 'zone' as const, name: z.name, color: z.color || objectColour(`zone:${z.name}`, zones) })),
     { key: EXTERNAL_KEY, kind: 'external' as const, name: '', color: GROUP_COLORS.external },
+    { key: OUTSIDE_KEY, kind: 'outside' as const, name: '', color: GROUP_COLORS.external },
   ]
 }

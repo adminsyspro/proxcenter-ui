@@ -6,11 +6,12 @@ import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
-import { serviceTitle } from '@/lib/network/serviceNames'
+import { serviceTitle, sharedServiceNames } from '@/lib/network/serviceNames'
 
 import { OneLine } from './dialogParts'
 import FlowSummary from './FlowSummary'
-import { ObservedKindGlyph, ResolveActions, ServiceHits, useResolveSuggestions } from './observationParts'
+import { ObservedKindGlyph, ResolveActions, outboundZoneAcceptTip, ServiceHits, useResolveSuggestions } from './observationParts'
+import { destinationName } from './ObservationRow'
 import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { SelectionTrafficChart, useSelectionTraffic } from './SelectionTraffic'
@@ -45,22 +46,33 @@ type Props = {
 const Empty = ({ text }: { text: string }) => <Typography variant='body2' color='text.disabled'>{text}</Typography>
 
 /** An observed flow of the guest on one line: direction, peer, service, hits, kind, the three ways out. */
-function ObservedLine({ row, peers, zonesById, busy, onResolve }: {
+function ObservedLine({ row, peers, zonesById, sharedServices, busy, onResolve }: {
   row: TargetFlow
   peers: ReadonlyMap<string, string>
   zonesById: Map<string, MicrosegZone>
+  sharedServices: ReadonlySet<string>
   busy: boolean
-  onResolve: (action: SuggestionAction) => void
+  onResolve: (action: SuggestionAction, prefixLen?: number) => void
 }) {
   const t = useTranslations('microsegPilot.overview')
   const to = useTranslations('microsegPilot.observation')
   const s = row.suggestion
-  const peer = (row.peerIp && peers.get(bareIp(row.peerIp))) || row.peerIp || to('unknownEndpoint')
+  const emitter = row.peerZoneId ? zonesById.get(row.peerZoneId)?.name ?? to('deletedZone') : ''
+  const guestOf = (ip: string) => peers.get(bareIp(ip))
+  // An outbound row's peer is its destination (never the zone that emits it), an inbound row's its source.
+  const peer = s.direction === 'out' && row.direction === 'out'
+    ? destinationName(s, zonesById, guestOf, to as (key: string) => string)
+    : (row.peerIp && guestOf(row.peerIp)) || row.peerIp || emitter || to('unknownEndpoint')
   const where = t(row.direction === 'out' ? 'target.panel.outgoing' : 'target.panel.incoming', { peer })
   const service = serviceTitle(s.proto, s.dport)
-  const zoneName = (id: string) => zonesById.get(id)?.name ?? to('deletedZone')
-  const accept = t('flowPanel.acceptAs', { from: s.src_zone_id ? zoneName(s.src_zone_id) : to('unknownEndpoint'), to: zoneName(s.dst_zone_id), service })
-  const acceptTip = t('target.panel.acceptTip', { from: s.src_zone_id ? zoneName(s.src_zone_id) : to('unknownEndpoint'), to: zoneName(s.dst_zone_id), service })
+  const from = s.src_zone_id ? zonesById.get(s.src_zone_id)?.name ?? to('deletedZone') : to('unknownEndpoint')
+  // The other end as the Observation table names it: its zone, else the guest or the address, else many destinations.
+  const destination = destinationName(s, zonesById, guestOf, to as (key: string) => string)
+  const accept = t('flowPanel.acceptAs', { from, to: destination, service })
+  const sampleTip = t('target.panel.acceptTip', { from, to: destination, service })
+  const zoneTip = outboundZoneAcceptTip(to, s, from, destination)
+  const acceptTip = zoneTip ? `${zoneTip} ${sampleTip}` : sampleTip
+  const fromZone = row.fromZone ? t('target.panel.fromZone', { zone: zonesById.get(row.fromZone)?.name ?? to('deletedZone') }) : ''
   const kind = s.kind === 'blocked' ? 'blocked' : 'unprotected'
   return (
     <Box role='listitem' aria-label={where} data-suggestion={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minHeight: 36, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>
@@ -68,7 +80,8 @@ function ObservedLine({ row, peers, zonesById, busy, onResolve }: {
         <i className={row.direction === 'out' ? 'ri-arrow-right-up-line' : 'ri-arrow-left-down-line'} style={{ flexShrink: 0 }} aria-hidden />
       </Tooltip>
       <TruncatedText text={peer} title={where} fontWeight={600} sx={{ flex: '1 1 0', minWidth: NAME_MIN_WIDTH }} />
-      <ServiceHits suggestion={s} />
+      {fromZone && <TruncatedText text={fromZone} color='text.secondary' variant='caption' sx={{ flex: '0 1 auto', minWidth: 0, maxWidth: 110 }} />}
+      <ServiceHits suggestion={s} sharedServices={sharedServices} />
       {/* The kind gives way before the peer's name: it is cut first, its full label stays in the tooltip. */}
       <Tooltip title={t(`legend.${kind}`)}>
         <Chip
@@ -96,6 +109,7 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
   const t = useTranslations('microsegPilot.overview')
   const zone = target.zoneId ? zonesById.get(target.zoneId) ?? null : null
   const observed = useMemo(() => targetSuggestions(suggestions, target), [suggestions, target])
+  const sharedServices = useMemo(() => sharedServiceNames(observed.map(r => r.suggestion)), [observed])
   const allowed = useMemo(() => (zone ? flows.filter(f => f.src_zone_id === zone.id || f.dst_zone_id === zone.id) : []), [flows, zone])
   const observedPage = usePaged(observed, ROWS_PER_PAGE)
   const allowedPage = usePaged(allowed, ROWS_PER_PAGE)
@@ -105,8 +119,8 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
   const traffic = useSelectionTraffic(connectionId, zones, { kind: 'guest', type: target.type, vmid: target.vmid, ips: target.ips }, trafficSection[0])
   const ips = target.ips.length ? t('node.guestIps', { ips: target.ips.join(', ') }) : t('node.guestNoIp')
 
-  async function resolve(id: string, action: SuggestionAction) {
-    const outcome = await resolveIds([id], action)
+  async function resolve(id: string, action: SuggestionAction, prefixLen?: number) {
+    const outcome = await resolveIds([id], action, prefixLen)
     if (outcome?.resolved) onResolved(action)
   }
 
@@ -157,7 +171,7 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
         {observedEmpty && <Empty text={observedEmpty} />}
         <Box role='list'>
           {observedPage.rows.map(row => (
-            <ObservedLine key={row.suggestion.id} row={row} peers={peers} zonesById={zonesById} busy={busy} onResolve={action => resolve(row.suggestion.id, action)} />
+            <ObservedLine key={row.suggestion.id} row={row} peers={peers} zonesById={zonesById} sharedServices={sharedServices} busy={busy} onResolve={(action, prefixLen) => resolve(row.suggestion.id, action, prefixLen)} />
           ))}
         </Box>
         <PolicyPager count={observedPage.count} page={observedPage.page} size={observedPage.size} onPage={observedPage.setPage} />

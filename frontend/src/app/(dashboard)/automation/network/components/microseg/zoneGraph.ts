@@ -3,12 +3,13 @@ import type { CSSProperties } from 'react'
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
 
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, ZoneState } from '@/lib/microseg/types'
-import { serviceName } from '@/lib/network/serviceNames'
+import { serviceLabelIn, serviceName, sharedServiceNames } from '@/lib/network/serviceNames'
 
 import { flowService } from './FlowSummary'
+import { outboundFlowStatus, type OutboundFlowStatus } from './outboundStatus'
 import { placeEdges, type EdgeEnds, type Obstacle, type PlacedEdge } from './zoneGraphEdges'
 import type { Point } from './edgeGeometry'
-import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, byText, circleRadius, layerZones, memberSlots, orderLayers, slotPositions } from './zoneLayout'
+import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, byText, circleRadius, foldColumns, layerZones, memberSlots, orderLayers, slotPositions } from './zoneLayout'
 
 /** Size of the External and Outside boxes. */
 export const NODE_W = 200
@@ -59,9 +60,10 @@ export type GuestNodeData = {
   target?: string
 }
 export type MoreNodeData = { kind: 'more'; count: number; groupId: string }
-export type BoundaryNodeData = { kind: 'external' | 'outside' }
+/** `egress`, on the Outside box: the worst state of the outbound traffic of the zones that send a flow to it. */
+export type BoundaryNodeData = { kind: 'external' | 'outside'; egress?: OutboundFlowStatus }
 /** An address that talks to a zone and is no guest (the guest view draws the busiest ones on their own). */
-export type IpNodeData = { kind: 'ip'; ip: string }
+export type IpNodeData = { kind: 'ip'; ip: string; /** The zones whose gateway the address is, by name. */ gatewayOf?: string[] }
 export type MapNodeData = ZoneNodeData | UnzonedNodeData | GuestNodeData | MoreNodeData | BoundaryNodeData | IpNodeData
 
 export type MapEdgeKind = 'allowed' | 'unprotected' | 'blocked' | 'outside'
@@ -73,6 +75,11 @@ export type MapEdgeData = {
   /** The label: the ports grouped per protocol. */
   label: string
   count: number
+  /**
+   * The log occurrences of the observed flows of the edge, summed (shown after its services); null on an allowed edge:
+   * PVE does not log what it lets through, so it has no counter.
+   */
+  hits: number | null
   /** The allowed flows of the edge (allowed and outside edges). */
   flows: MicrosegFlow[]
   /** The observed flows of the edge (unprotected and blocked edges). */
@@ -184,12 +191,14 @@ export function groupServices(services: string[]): string {
     ports.set(proto, set)
   }
   const protos = [...ports.keys()].sort(byText)
+  // A name that several protocols share ("DNS" on tcp and udp) says its protocol.
+  const shared = sharedServiceNames(protos.flatMap(proto => [...ports.get(proto)!].map(dport => ({ proto, dport }))))
   const part = (proto: string, sep: string) => {
     const list = [...ports.get(proto)!].sort(portOrder)
     if (!list.length) return proto
     const names = list.map(p => serviceName(proto, p))
     if (names.every(n => n === null)) return `${proto}${sep}${list.join(', ')}`
-    return [...new Set(list.map((p, i) => names[i] ?? `${proto}/${p}`))].join(', ')
+    return [...new Set(list.map((p, i) => (names[i] ? serviceLabelIn(proto, p, shared) : `${proto}/${p}`)))].join(', ')
   }
   return protos.length === 1 ? part(protos[0], '/') : protos.map(p => part(p, ' ')).join(' · ')
 }
@@ -267,14 +276,35 @@ function allowedEnd(cidr: string, zoneId: string, box: string, known: ReadonlyMa
   return known.has(zoneId) ? zoneNodeId(zoneId) : null
 }
 
-/** The allowed flows, circle to circle (a CIDR source from External, a CIDR destination to Outside). */
-export function addAllowedPairs(pairs: Map<string, Pair>, flows: MicrosegFlow[], known: ReadonlyMap<string, MicrosegZone>) {
+/**
+ * The allowed flows, circle to circle (a CIDR source from External, a CIDR destination to Outside). `address` may name
+ * the node of a CIDR drawn on its own (the guest view draws a zone's gateway).
+ */
+export function addAllowedPairs(pairs: Map<string, Pair>, flows: MicrosegFlow[], known: ReadonlyMap<string, MicrosegZone>, address?: (cidr: string) => string | undefined) {
   for (const f of flows) {
-    const source = allowedEnd(f.src_cidr, f.src_zone_id, EXTERNAL_ID, known)
-    const target = allowedEnd(f.dst_cidr, f.dst_zone_id, OUTSIDE_ID, known)
-    if (!source || !target || (source === EXTERNAL_ID && target === OUTSIDE_ID)) continue
-    addPair(pairs, target === OUTSIDE_ID ? 'outside' : 'allowed', source, target, flowService(f), f)
+    if (f.src_cidr && f.dst_cidr) continue
+    const source = (f.src_cidr && address?.(f.src_cidr)) || allowedEnd(f.src_cidr, f.src_zone_id, EXTERNAL_ID, known)
+    const target = (f.dst_cidr && address?.(f.dst_cidr)) || allowedEnd(f.dst_cidr, f.dst_zone_id, OUTSIDE_ID, known)
+    if (!source || !target) continue
+    // A flow to a CIDR is outbound, whether it ends on Outside or on a gateway drawn on its own.
+    const toOutside = !!f.dst_cidr
+    // A flow to Outside is solid once its source zone enforces the outbound traffic, dashed while it only observes it or not at all.
+    const applied = toOutside && outboundFlowStatus(f, known.get(f.src_zone_id)) === 'applied'
+    addPair(pairs, toOutside && !applied ? 'outside' : 'allowed', source, target, flowService(f), f)
   }
+}
+
+const OUTSIDE_RANK: Record<OutboundFlowStatus, number> = { applied: 0, observed: 1, notApplied: 2 }
+
+/** What the Outside box says: the worst state among the flows to it (not applied, then observed, then applied); undefined with no flow to it. */
+export function outsideEgressOf(flows: readonly MicrosegFlow[], known: ReadonlyMap<string, MicrosegZone>): OutboundFlowStatus | undefined {
+  let worst: OutboundFlowStatus | undefined
+  for (const f of flows) {
+    if (!f.dst_cidr || f.src_cidr || !known.has(f.src_zone_id)) continue
+    const status = outboundFlowStatus(f, known.get(f.src_zone_id))
+    if (worst === undefined || OUTSIDE_RANK[status] > OUTSIDE_RANK[worst]) worst = status
+  }
+  return worst
 }
 
 /** The source of an observed flow: its guest (or its zone's circle), a guest in no zone, or External. */
@@ -331,10 +361,10 @@ export function cellCenters(grid: Cell[][], colGap = COL_GAP, rowGap = ROW_GAP):
   return centers
 }
 
-export function placeBoundary(out: Placement, id: string, c: Point) {
+export function placeBoundary(out: Placement, id: string, c: Point, egress?: OutboundFlowStatus) {
   out.nodes.push({
     id, type: 'boundary', position: { x: c.x - NODE_W / 2, y: c.y - NODE_H / 2 }, width: NODE_W, height: NODE_H, focusable: false,
-    data: { kind: id === EXTERNAL_ID ? 'external' : 'outside' } satisfies BoundaryNodeData,
+    data: { kind: id === EXTERNAL_ID ? 'external' : 'outside', ...(id === OUTSIDE_ID && egress ? { egress } : {}) } satisfies BoundaryNodeData,
   })
   out.obstacles.push({ id, center: c, shape: BOX_SHAPE })
   out.endShapes.set(id, { center: c, shape: BOX_SHAPE, group: id })
@@ -358,13 +388,13 @@ export function placeGroup(out: Placement, group: Group, c: Point) {
 }
 
 /** The nodes in grid order, with the obstacles the edges avoid and the outline every edge end clips on. */
-function buildNodes(grid: Cell[][], centers: Map<string, Point>, groups: Map<string, Group>): Placement {
+function buildNodes(grid: Cell[][], centers: Map<string, Point>, groups: Map<string, Group>, outsideEgress?: OutboundFlowStatus): Placement {
   const out: Placement = { nodes: [], obstacles: [], endShapes: new Map() }
   for (const cell of grid.flat()) {
     const c = centers.get(cell.id)!
     const group = groups.get(cell.id)
     if (group) placeGroup(out, group, c)
-    else placeBoundary(out, cell.id, c)
+    else placeBoundary(out, cell.id, c, outsideEgress)
   }
   return out
 }
@@ -378,6 +408,28 @@ function edgeDash(kind: MapEdgeKind, draft: boolean): string | undefined {
 function dashStyle(dash: string | undefined, draft: boolean): Pick<CSSProperties, 'strokeDasharray' | 'strokeLinecap'> {
   if (!dash) return {}
   return { strokeDasharray: dash, strokeLinecap: draft ? 'round' : undefined }
+}
+
+/** The log occurrences of an observed edge, summed; null on an allowed one. */
+export function edgeHits(p: Pick<Pair, 'kind' | 'observed'>): number | null {
+  return isObserved(p.kind) ? p.observed.reduce((sum, s) => sum + (s.hits ?? 0), 0) : null
+}
+
+/**
+ * The occurrences as the label shows them, to size the label before the page formats them (`compact` notation: "158",
+ * "1.4K"): the same length, whatever the language.
+ */
+export function shortHits(hits: number): string {
+  if (hits < 1000) return String(hits)
+  if (hits < 1_000_000) return `${(hits / 1000).toFixed(hits < 10_000 ? 1 : 0)}K`
+  return `${(hits / 1_000_000).toFixed(1)}M`
+}
+
+/** The text an edge label is sized for: its services, and the occurrences of an observed edge. */
+function labelText(p: Pair): string {
+  const services = groupServices([...p.services])
+  const hits = edgeHits(p)
+  return hits === null ? services : `${services} · ${shortHits(hits)}`
 }
 
 function toEdge(p: Pair, place: PlacedEdge, endShapes: Map<string, EdgeEnds>, unapplied: ReadonlySet<string> | null): Edge {
@@ -399,6 +451,7 @@ function toEdge(p: Pair, place: PlacedEdge, endShapes: Map<string, EdgeEnds>, un
       services: [...p.services].sort(byText),
       label: groupServices([...p.services]),
       count: observed ? p.observed.length : p.flows.length,
+      hits: edgeHits(p),
       flows: [...p.flows].sort((a, b) => byText(a.id, b.id)),
       observed: [...p.observed].sort((a, b) => byText(a.id, b.id)),
       draft,
@@ -434,9 +487,9 @@ export function buildZoneGraph({ zones, flows, suggestions, members = null, unzo
   addObservedPairs(pairs, suggestions, known, books)
   const ordered = [...pairs.values()].sort(comparePairs)
 
-  // Grid: longest-path layer as the column, barycenter order as the row.
-  const grid = buildGrid(columns, groups, ordered.some(p => p.source === EXTERNAL_ID), ordered.some(p => p.target === OUTSIDE_ID))
-  const { nodes, obstacles, endShapes } = buildNodes(grid, cellCenters(grid), groups)
+  // Grid: longest-path layer as the column, barycenter order as the row; the columns of a map too tall to read are folded.
+  const grid = foldColumns(buildGrid(columns, groups, ordered.some(p => p.source === EXTERNAL_ID), ordered.some(p => p.target === OUTSIDE_ID)), COL_GAP, ROW_GAP)
+  const { nodes, obstacles, endShapes } = buildNodes(grid, cellCenters(grid), groups, outsideEgressOf(flows, known))
   return { nodes, edges: placePairs(ordered, endShapes, obstacles, unapplied) }
 }
 
@@ -458,7 +511,7 @@ export function zoneColumns(zones: MicrosegZone[], flows: MicrosegFlow[]): { sor
 /** The edges of the pairs, in their order, each placed (lanes, bows, label) between the outlines of its ends. */
 export function placePairs(ordered: Pair[], endShapes: Map<string, EdgeEnds>, obstacles: Obstacle[], unapplied: ReadonlySet<string> | null): Edge[] {
   const placed = placeEdges(
-    ordered.map(p => ({ id: pairKey(p), source: p.source, target: p.target, label: groupServices([...p.services]), small: isObserved(p.kind) })),
+    ordered.map(p => ({ id: pairKey(p), source: p.source, target: p.target, label: labelText(p), small: isObserved(p.kind) })),
     endShapes,
     obstacles,
   )

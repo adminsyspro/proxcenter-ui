@@ -23,6 +23,8 @@ type Props = {
   error?: string | null
   /** A second line under the error, such as the wording the server gave. */
   errorDetail?: string | null
+  /** Lines that say more about the error, each on one line under it. */
+  errorLines?: string[]
   /** Next to Cancel: a way out of the dialog toward what cures the error. */
   extraAction?: { label: string; onClick: () => void }
   onConfirm: () => void
@@ -30,7 +32,7 @@ type Props = {
 }
 
 /** Themed confirmation of an action of the Micro-segmentation tab (never a native confirm). */
-export default function MicrosegConfirmDialog({ open, title, body, infoLines = [], confirmLabel, color = 'primary', busy = false, error = null, errorDetail = null, extraAction, onConfirm, onCancel }: Props) {
+export default function MicrosegConfirmDialog({ open, title, body, infoLines = [], confirmLabel, color = 'primary', busy = false, error = null, errorDetail = null, errorLines = [], extraAction, onConfirm, onCancel }: Props) {
   const t = useTranslations()
 
   return (
@@ -54,6 +56,7 @@ export default function MicrosegConfirmDialog({ open, title, body, infoLines = [
           <Stack spacing={1} sx={{ mt: 2 }}>
             <DialogErrorLine message={error} />
             {errorDetail && <OneLine text={errorDetail} />}
+            {errorLines.map(line => <OneLine key={line} text={line} />)}
           </Stack>
         )}
       </DialogContent>

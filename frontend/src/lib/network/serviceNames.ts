@@ -23,6 +23,22 @@ export function serviceLabel(proto: string, port?: string | number): string {
   return serviceName(proto, text) ?? `${proto}/${text}`
 }
 
+/** The service names that two protocols share among `items` (DNS on udp/53 and tcp/53): they need their protocol to be told apart. */
+export function sharedServiceNames(items: ReadonlyArray<{ proto: string; dport?: string | number }>): ReadonlySet<string> {
+  const protos = new Map<string, Set<string>>()
+  for (const { proto, dport } of items) {
+    const name = serviceName(proto, dport)
+    if (name) protos.set(name, (protos.get(name) ?? new Set<string>()).add(proto.toLowerCase()))
+  }
+  return new Set([...protos].filter(([, set]) => set.size > 1).map(([name]) => name))
+}
+
+/** serviceLabel, with the protocol added ("DNS (udp)") to a name of `shared` (see sharedServiceNames). */
+export function serviceLabelIn(proto: string, port: string | number | undefined, shared: ReadonlySet<string>): string {
+  const label = serviceLabel(proto, port)
+  return shared.has(label) ? `${label} (${proto})` : label
+}
+
 /** "SSH (tcp/22)" for a tooltip, else the raw "tcp/9999". */
 export function serviceTitle(proto: string, port?: string | number): string {
   const text = String(port ?? '').trim()

@@ -1,6 +1,6 @@
 import type { GuestRef, MembersInput, MicrosegZone, PendingMember } from '@/lib/microseg/types'
 
-import { guestKey, memberChange, type MemberChange, type PolicyGuest } from './zoneModel'
+import { byGuestName, guestKey, memberChange, type MemberChange, type PolicyGuest } from './zoneModel'
 
 /** Most guests one POST /members accepts. */
 export const MAX_ASSIGN = 1000
@@ -19,7 +19,7 @@ export type AssignRow = {
   otherZones: string[]
 }
 
-/** One row per guest, with its membership of `zone` and the other zones it is in (tag or queued). */
+/** One row per guest, by name, with its membership of `zone` and the other zones it is in (tag or queued). */
 export function assignRows(
   zone: MicrosegZone,
   zones: MicrosegZone[],
@@ -32,7 +32,7 @@ export function assignRows(
   const queuedByGuest = new Map(pending.map(p => [guestKey(p), p]))
   const zoneById = new Map(zones.map(z => [z.id, z]))
 
-  return guests.map(guest => {
+  return [...guests].sort(byGuestName).map(guest => {
     const tags = new Set(guest.tags.map(tag => tag.toLowerCase()))
     const key = guestKey(guest)
     const queued = queuedByGuest.get(key)

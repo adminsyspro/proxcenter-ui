@@ -1,5 +1,5 @@
-import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, UNZONED_KEY, buildResolver, groupKeyOf, zoneKey, type LensPair } from '@/lib/microseg/trafficLens'
-import type { MicrosegEvent, MicrosegTraffic, MicrosegZone, SuggestionKind } from '@/lib/microseg/types'
+import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, OUTSIDE_KEY, UNZONED_KEY, buildResolver, groupKeyOf, zoneKey, type LensPair } from '@/lib/microseg/trafficLens'
+import type { FlowDirection, MicrosegEvent, MicrosegTraffic, MicrosegZone, SuggestionKind } from '@/lib/microseg/types'
 
 import { NO_VLAN_KEY, type GroupBy, type PostureGuest, type PostureSlice } from './dashboardPosture'
 import { bareIp } from './microseg/zoneGraph'
@@ -87,9 +87,14 @@ export type PostureTimeline = {
 function groupOfEvent(
   e: MicrosegEvent, groupBy: GroupBy, zoneByName: ReadonlyMap<string, MicrosegZone>, guestByKey: ReadonlyMap<string, PostureGuest>, guestIps: ReadonlySet<string> | null,
 ): string {
+  // An outbound event is logged by the emitting zone (`zone`) and names the destination in `src_zone`.
+  const out = e.direction === 'out'
   if (groupBy === 'dstzone') {
-    // The zone that received it: the zone of the guest that logged it.
-    const zone = zoneByName.get(e.zone.toLowerCase())
+    // The zone that received it: the zone of the guest that logged it, or for an outbound event the destination zone.
+    const received = out ? e.src_zone : e.zone
+    // An outbound event to an address outside the zones names no zone: "Outside", as on the map.
+    if (!received) return OUTSIDE_KEY
+    const zone = zoneByName.get(received.toLowerCase())
     return zone ? zoneKey(zone.id) : OTHER_KEY
   }
   if (groupBy !== 'zone') {
@@ -99,8 +104,9 @@ function groupOfEvent(
     if (groupBy === 'node') return `node:${e.node}`
     return guest.vlans.length ? `vlan:${guest.vlans[0]}` : NO_VLAN_KEY
   }
-  if (e.src_zone) {
-    const zone = zoneByName.get(e.src_zone.toLowerCase())
+  const emitter = out ? e.zone : e.src_zone
+  if (emitter) {
+    const zone = zoneByName.get(emitter.toLowerCase())
     // A zone renamed or deleted since the event: no slice of the donut is it.
     return zone ? zoneKey(zone.id) : OTHER_KEY
   }
@@ -146,6 +152,26 @@ export function postureTimeline(input: {
   return { ...stack(first, last, items, slices, BUCKET_MS), windowMinutes }
 }
 
+/** One ordered pair of zones of the map (their names as the history and the events carry them, '' for an end in no zone). */
+export type TrafficPair = { emitter: string; receiver: string }
+
+type Logged = { direction?: FlowDirection; zone: string; src_zone: string }
+
+/**
+ * Who emitted and who received a bucket or an event: an inbound one is logged by the receiving zone (`zone`, the emitter
+ * in `src_zone`), an outbound one by the emitting zone (`zone`, the destination in `src_zone`, empty outside the zones).
+ */
+export function loggedEnds(x: Logged): TrafficPair {
+  return x.direction === 'out' ? { emitter: x.zone, receiver: x.src_zone } : { emitter: x.src_zone, receiver: x.zone }
+}
+
+/** The bucket or event belongs to the pair and was logged in that direction (inbound by the receiver, outbound by the emitter). */
+export function onPair(pair: TrafficPair, direction: FlowDirection, x: Logged): boolean {
+  const ends = loggedEnds(x)
+  return (x.direction ?? 'in') === direction
+    && ends.emitter.toLowerCase() === pair.emitter.toLowerCase() && ends.receiver.toLowerCase() === pair.receiver.toLowerCase()
+}
+
 /**
  * The window asked of the history route: up to the next 5-minute edge (the last bucket is in progress), back by the
  * range, the start on the step grid so the first bucket is whole and the range never reaches past what was asked.
@@ -175,21 +201,28 @@ export function postureHistory(input: {
    * (inbound); grouped by destination, the flows it emitted (outbound).
    */
   zone?: string | null
+  /** One pair of the map instead of a zone: by source, what its receiver logged (inbound); by destination, what its emitter logged (outbound). */
+  pair?: TrafficPair | null
 }): PostureTimeline {
-  const { history, range, verdict, slices, by = 'src' } = input
+  const { history, range, verdict, slices, by = 'src', pair = null } = input
   const only = input.zone?.toLowerCase() ?? null
   const stepMs = stepMsOf(range)
   const zoneByName = new Map(input.zones.map(z => [z.name.toLowerCase(), z]))
   const groupOf = (name: string) => {
-    if (!name) return EXTERNAL_KEY
+    // Grouped by destination, an empty zone is an outbound flow to an address outside the zones.
+    if (!name) return by === 'dst' ? OUTSIDE_KEY : EXTERNAL_KEY
     const zone = zoneByName.get(name.toLowerCase())
     return zone ? zoneKey(zone.id) : OTHER_KEY
   }
   // The side the chart groups on, and the side one zone is kept on: the other one.
-  const grouped = (b: MicrosegTraffic['buckets'][number]) => (by === 'src' ? b.src_zone : b.zone)
-  const kept = (b: MicrosegTraffic['buckets'][number]) => (by === 'src' ? b.zone : b.src_zone)
+  const grouped = (b: MicrosegTraffic['buckets'][number]) => (by === 'src' ? loggedEnds(b).emitter : loggedEnds(b).receiver)
+  const kept = (b: MicrosegTraffic['buckets'][number]) => (by === 'src' ? loggedEnds(b).receiver : loggedEnds(b).emitter)
+  const inScope = (b: MicrosegTraffic['buckets'][number]) => {
+    if (pair) return onPair(pair, by === 'src' ? 'in' : 'out', b)
+    return only === null || kept(b).toLowerCase() === only
+  }
   const items = history.buckets
-    .filter(b => (verdict === 'all' || b.verdict === verdict) && (only === null || kept(b).toLowerCase() === only))
+    .filter(b => (verdict === 'all' || b.verdict === verdict) && inScope(b))
     .map(b => ({ at: Date.parse(b.at), group: groupOf(grouped(b)), value: b.hits }))
   const first = Math.ceil(Date.parse(history.from) / stepMs) * stepMs
   const last = Math.floor((Date.parse(history.to) - 1) / stepMs) * stepMs
@@ -329,12 +362,57 @@ export function bucketXs(count: number, box: PlotBox): number[] {
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 
+type Point = readonly [number, number]
+
 /**
- * The stacked areas of the series, in their order (the first on the baseline): for each, the closed path of its band
- * and the line on its outer edge, straight segments from bucket to bucket. `invert` stacks downwards from the top of
- * the box (the lower half of a mirrored chart).
+ * The tangents of a monotone cubic through the points (Fritsch-Carlson, as d3's curveMonotoneX the inventory charts
+ * draw with): flat where the curve turns or rests, so it never overshoots a bucket's value.
  */
-export function areaPaths(timeline: Pick<PostureTimeline, 'buckets' | 'series' | 'max'>, box: PlotBox, invert = false): { key: string; area: string; line: string }[] {
+function monotoneTangents(points: readonly Point[]): number[] {
+  const n = points.length
+  const h = (i: number) => points[i + 1][0] - points[i][0]
+  const s = (i: number) => (h(i) ? (points[i + 1][1] - points[i][1]) / h(i) : 0)
+  const m = points.map(() => 0)
+  for (let i = 1; i < n - 1; i++) {
+    const s0 = s(i - 1)
+    const s1 = s(i)
+    if (s0 * s1 <= 0) continue
+    const p = (s0 * h(i) + s1 * h(i - 1)) / (h(i - 1) + h(i))
+    m[i] = (Math.sign(s0) + Math.sign(s1)) * Math.min(Math.abs(s0), Math.abs(s1), 0.5 * Math.abs(p))
+  }
+  if (n > 2) {
+    m[0] = (3 * s(0) - m[1]) / 2
+    m[n - 1] = (3 * s(n - 2) - m[n - 2]) / 2
+  }
+  return m
+}
+
+/**
+ * The segments of a smooth curve through the points, after its first point (" C ..."; two points are a straight
+ * segment). `reverse` draws the same curve from the last point back to the first, to close a band on it.
+ */
+export function smoothSegments(points: readonly Point[], reverse = false): string {
+  if (points.length < 2) return ''
+  if (points.length === 2) return ` L ${r2(points[reverse ? 0 : 1][0])} ${r2(points[reverse ? 0 : 1][1])}`
+  const m = monotoneTangents(points)
+  const segments = points.slice(1).map((end, k) => {
+    const start = points[k]
+    const third = (end[0] - start[0]) / 3
+    const c1: Point = [start[0] + third, start[1] + third * m[k]]
+    const c2: Point = [end[0] - third, end[1] - third * m[k + 1]]
+    const [a, b, to] = reverse ? [c2, c1, start] : [c1, c2, end]
+    return ` C ${r2(a[0])} ${r2(a[1])} ${r2(b[0])} ${r2(b[1])} ${r2(to[0])} ${r2(to[1])}`
+  })
+  return (reverse ? segments.reverse() : segments).join('')
+}
+
+/**
+ * The stacked areas of the series, in their order (the first on the baseline): for each, the closed path of its band,
+ * the line on its outer edge, a smooth monotone curve through the buckets like the inventory charts, and the y of that
+ * edge at each bucket (the hover dots). `invert` stacks downwards from the top of the box (the lower half of a
+ * mirrored chart).
+ */
+export function areaPaths(timeline: Pick<PostureTimeline, 'buckets' | 'series' | 'max'>, box: PlotBox, invert = false): { key: string; area: string; line: string; tops: number[] }[] {
   const { buckets, series, max } = timeline
   if (!buckets.length || max <= 0) return []
   const xs = bucketXs(buckets.length, box)
@@ -347,9 +425,13 @@ export function areaPaths(timeline: Pick<PostureTimeline, 'buckets' | 'series' |
     const lower = below.map(v => y(v))
     values.forEach((b, i) => { below[i] += b.counts[s.key] ?? 0 })
     const upper = below.map(v => y(v))
-    const top = xs.map((x, i) => `${r2(x)} ${r2(upper[i])}`)
-    const bottom = xs.map((x, i) => `${r2(x)} ${r2(lower[i])}`).reverse()
-    return { key: s.key, line: `M ${top.join(' L ')}`, area: `M ${top.join(' L ')} L ${bottom.join(' L ')} Z` }
+    const top = xs.map((x, i): Point => [x, upper[i]])
+    const bottom = xs.map((x, i): Point => [x, lower[i]])
+    const line = `M ${r2(top[0][0])} ${r2(top[0][1])}${smoothSegments(top)}`
+    const last = bottom[bottom.length - 1]
+    // The band closes along the edge of the band under it, the same curve drawn backwards.
+    const area = `${line} L ${r2(last[0])} ${r2(last[1])}${smoothSegments(bottom, true)} Z`
+    return { key: s.key, line, area, tops: upper.map(r2) }
   })
 }
 

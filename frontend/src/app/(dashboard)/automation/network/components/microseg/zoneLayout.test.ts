@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   CELL_H, CELL_W, GUEST_H, GUEST_W, MAX_R, MAX_SHOWN, MIN_R, circleRadius, gridShape, layerZones, memberSlots, orderLayers, slotPositions,
+  foldColumns, gridExtent,
 } from './zoneLayout'
 
 describe('zone circles', () => {
@@ -107,5 +108,47 @@ describe('layering with External', () => {
     const edges: Array<[string, string]> = [['app', 'web'], ['web', 'app'], ['app', 'db']]
     const layer = layerZones(['app', 'db', 'web'], edges, ['web'])
     expect([layer.get('web'), layer.get('app'), layer.get('db')]).toEqual([1, 2, 3])
+  })
+})
+
+describe('foldColumns', () => {
+  const cell = (id: string, size = 300) => ({ id, w: size, h: size })
+  const column = (prefix: string, count: number, size = 300) => Array.from({ length: count }, (_, i) => cell(`${prefix}${i + 1}`, size))
+  const ids = (grid: { id: string }[][]) => grid.map(c => c.map(x => x.id).join(' '))
+
+  it('leaves a map that reads well as it is: its columns are its layers', () => {
+    const grid = [column('a', 2), column('b', 3), column('c', 1)]
+    expect(foldColumns(grid, 240, 90)).toBe(grid)
+  })
+
+  it('folds one long column of zones into even columns, the order kept top to bottom then left to right', () => {
+    // 11 circles of 300 one above the other: 4 200 px tall, fitted at 0.17. Three rows fit the view best.
+    const folded = foldColumns([column('z', 11)], 240, 90)
+    expect(ids(folded)).toEqual(['z1 z2 z3', 'z4 z5 z6', 'z7 z8 z9', 'z10 z11'])
+    const before = gridExtent([column('z', 11)], 240, 90)
+    const after = gridExtent(folded, 240, 90)
+    expect(before).toEqual({ width: 300, height: 4200 })
+    expect(after).toEqual({ width: 1920, height: 1080 })
+  })
+
+  it('keeps the columns of one layer next to each other, between the layers before and after it', () => {
+    const folded = foldColumns([column('ext', 1, 100), column('z', 8), column('out', 1, 100)], 240, 90)
+    expect(ids(folded)).toEqual(['ext1', 'z1 z2 z3', 'z4 z5 z6', 'z7 z8', 'out1'])
+  })
+
+  it('folds every column that is too tall, not only the tallest', () => {
+    const folded = foldColumns([column('a', 9), column('b', 6)], 240, 90)
+    expect(folded.every(c => c.length <= 3)).toBe(true)
+    expect(folded.flat().map(c => c.id)).toEqual([...column('a', 9), ...column('b', 6)].map(c => c.id))
+  })
+
+  it('judges the boxes of the compact view by their own size: eleven small boxes still need folding, five do not', () => {
+    const box = (count: number) => Array.from({ length: count }, (_, i) => ({ id: `b${i}`, w: 190, h: 64 }))
+    expect(foldColumns([box(5)], 130, 80)).toHaveLength(1)
+    expect(foldColumns([box(11)], 130, 80).length).toBeGreaterThan(1)
+  })
+
+  it('returns an empty grid as it is', () => {
+    expect(foldColumns([], 240, 90)).toEqual([])
   })
 })

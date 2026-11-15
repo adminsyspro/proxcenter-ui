@@ -1,6 +1,17 @@
 import type { GuestRef, MicrosegFlow, MicrosegSuggestion, MicrosegZone, PendingMember } from '@/lib/microseg/types'
 
 /** A guest of the connection, as /api/v1/vms?connId= lists it. */
+const guestNames = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+/**
+ * Guests in the order a person reads a list: by name whatever the case ("app" before "Debian"), a number in a name
+ * by its value ("web2" before "web10"), the VMID between two guests of one name. The order of the inventory tree
+ * sorted by name.
+ */
+export function byGuestName(a: Pick<PolicyGuest, 'name' | 'vmid'>, b: Pick<PolicyGuest, 'name' | 'vmid'>): number {
+  return guestNames.compare(a.name ?? '', b.name ?? '') || a.vmid - b.vmid
+}
+
 export type PolicyGuest = {
   vmid: number
   name: string
@@ -96,4 +107,22 @@ export function isZoneReady(
   const since = zone.observe_since ? Date.parse(zone.observe_since) : NaN
   if (Number.isNaN(since) || now - since < windowMs) return false
   return !pending.some(s => now - Date.parse(s.last_seen) < windowMs)
+}
+
+/**
+ * Same rule as `isZoneReady`, on the outbound: observed for at least `ready_after_hours` since `egress_observe_since`
+ * and no pending outbound would-block suggestion of the zone seen inside that window (`pendingOut`, see `pendingOutboundOf`).
+ */
+export function isEgressReady(
+  zone: Pick<MicrosegZone, 'egress_state' | 'egress_observe_since'>,
+  pendingOut: Pick<MicrosegSuggestion, 'last_seen'>[],
+  readyAfterHours: number | undefined,
+  now: number,
+): boolean {
+  return isZoneReady({ state: 'observe', observe_since: zone.egress_observe_since ?? null }, pendingOut, readyAfterHours, now)
+}
+
+/** The pending outbound would-block suggestions the zone emits (an absent direction is inbound). */
+export function pendingOutboundOf(suggestions: readonly MicrosegSuggestion[], zoneId: string): MicrosegSuggestion[] {
+  return suggestions.filter(s => s.direction === 'out' && s.kind === 'would_block' && s.status === 'pending' && s.src_key === zoneId)
 }

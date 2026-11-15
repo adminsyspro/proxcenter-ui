@@ -4,10 +4,12 @@
  * the panels.
  */
 
-import { describe, expect, it, vi } from 'vitest'
-import { within } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { act, within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
+
+import { SUGGESTIONS_REFRESH_MS } from '@/lib/microseg/useMicrosegLists'
 
 import { calls, mock, policy, reply, REVISION_HEAD } from './microsegTestKit'
 import { body, db, installFreshMocks, vm, web } from './policyTestKit'
@@ -154,8 +156,8 @@ describe('the matrix', () => {
     await waitFor(() => expect(cell('web', 'db').getAttribute('data-tone')).toBe('unprotected'))
     fireEvent.click(cell('web', 'db'))
     const panel = await screen.findByRole('complementary', { name: 'Flow web to db' })
-    expect(within(panel).getByText('Observed flows')).toBeTruthy()
-    expect(within(panel).getByText('Allowed flows')).toBeTruthy()
+    expect(within(panel).getByRole('region', { name: 'Pending suggestions' })).toBeTruthy()
+    expect(within(panel).getByRole('region', { name: 'Declared flows' })).toBeTruthy()
     expect(within(panel).getAllByRole('listitem').length).toBeGreaterThanOrEqual(3)
     expect(cell('web', 'db').getAttribute('aria-selected')).toBe('true')
     fireEvent.click(screen.getAllByRole('button', { name: 'Open the panel of zone db' })[0])
@@ -207,8 +209,8 @@ describe('the matrix', () => {
     expect(body(calls('POST /suggestions/resolve')[0][1] as RequestInit)).toEqual({ version: 3, ids: ['s1'], action: 'accept' })
     await waitFor(() => expect(cell('web', 'db').getAttribute('data-tone')).toBe('allowed'))
     const after = screen.getByRole('complementary', { name: 'Flow web to db' })
-    expect(within(after).getByText('Allowed flows')).toBeTruthy()
-    expect(within(after).queryByText('Observed flows')).toBeNull()
+    expect(within(within(after).getByRole('region', { name: 'Declared flows' })).getAllByRole('listitem')).toHaveLength(1)
+    expect(within(within(after).getByRole('region', { name: 'Pending suggestions' })).queryAllByRole('listitem')).toHaveLength(0)
     expect(screen.getByText('1 flow accepted into the draft')).toBeTruthy()
   })
 
@@ -238,6 +240,9 @@ describe('the matrix', () => {
 })
 
 describe('the guest view', () => {
+  // A test that runs the minute timer of the observed flows leaves real timers behind, even when it fails.
+  afterEach(() => { vi.useRealTimers() })
+
   it('opens on the zone with the most observed traffic, its guests in the centre, the sample pairs said so', async () => {
     window.localStorage.setItem('microseg.map.view', 'guests')
     demo({ zones: [web(), db(), { ...web(), id: 'zq', name: 'quiet' }] })
@@ -262,14 +267,18 @@ describe('the guest view', () => {
   })
 
   it('keeps its zone in the centre when a refresh brings more traffic elsewhere', async () => {
+    // From the start: the minute timer of the observed flows is set at their first read.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     window.localStorage.setItem('microseg.map.view', 'guests')
     demo()
     const picker = await screen.findByRole('combobox', { name: 'Zone in the centre' })
     await waitFor(() => expect(picker.textContent).toBe('db · 12 hits'))
     // 500 hits from outside into web: unpinned, the default would move to web.
     mock.routes[SUGGESTIONS] = () => reply(200, { suggestions: [...observed, wouldBlock('s9', { src_zone_id: '', src_ip: '203.0.113.9', dst_zone_id: 'zw', dst_ip: '10.0.0.1', hits: 500 })], limit: 200, offset: 0 })
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh the map' }))
+    // The observed flows are read again on their own, every minute.
+    await act(async () => { await vi.advanceTimersByTimeAsync(SUGGESTIONS_REFRESH_MS + 1_000) })
     await waitFor(() => expect(calls(SUGGESTIONS).length).toBeGreaterThan(1))
+    vi.useRealTimers()
     fireEvent.mouseDown(picker)
     expect(await screen.findByRole('option', { name: 'web · 512 hits' })).toBeTruthy()
     fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
@@ -323,8 +332,8 @@ describe('the Sankey diagram', () => {
     expect(opacity('allowed:cell:zone:zw>zone:zd')).toBe('0.55')
     fireEvent.click(ribbon('blocked:cell:zone:zw>zone:zd')!)
     const panel = await screen.findByRole('complementary', { name: 'Flow web to db' })
-    expect(within(panel).getByText('Observed flows')).toBeTruthy()
-    expect(within(panel).getByText('Allowed flows')).toBeTruthy()
+    expect(within(panel).getByRole('region', { name: 'Pending suggestions' })).toBeTruthy()
+    expect(within(panel).getByRole('region', { name: 'Declared flows' })).toBeTruthy()
     const target = document.querySelector('[data-node="target:zone:zd"]')!
     fireEvent.mouseEnter(target)
     fireEvent.mouseLeave(target)

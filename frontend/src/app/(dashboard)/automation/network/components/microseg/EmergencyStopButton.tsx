@@ -25,7 +25,7 @@ export default function EmergencyStopButton({ controls, deployed }: { controls: 
       startIcon={<i className='ri-stop-circle-line' />}
       onClick={() => controls.ask('stop')}
       disabled={!canWrite || !deployed}
-      sx={{ flexShrink: 0 }}
+      sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
     >
       {t('button')}
     </Button>

@@ -61,6 +61,7 @@ describe('edges', () => {
     expect(path.getAttribute('data-dash')).toBe('')
     expect(path.getAttribute('data-stroke')).toBe('#2e7d32')
     expect(screen.getAllByTestId(/^edge-/)).toHaveLength(1)
+    // An allowed edge has no counter: PVE does not log what it lets through.
     expect(await screen.findByText('SSH, HTTPS · DNS')).toBeTruthy()
   })
 
@@ -69,7 +70,9 @@ describe('edges', () => {
     const path = await pathOf('unprotected:zone:zw>zone:zd')
     expect(path.getAttribute('data-dash')).not.toBe('')
     expect(path.getAttribute('data-stroke')).toBe('#e53935')
-    expect(await screen.findByText('SSH, HTTP')).toBeTruthy()
+    // An observed edge says how often its flows were logged: 3 + 3.
+    expect(await screen.findByText('SSH, HTTP · 6')).toBeTruthy()
+    expect(screen.getByTestId('flow-label-blocked:zone:zw>zone:zd').textContent).toBe('RDP · 3')
     const blocked = await pathOf('blocked:zone:zw>zone:zd')
     expect(blocked.getAttribute('data-dash')).toBe('')
     expect(blocked.getAttribute('data-stroke')).toBe('#1565c0')
@@ -88,11 +91,11 @@ describe('edges', () => {
     expect(await pathOf('unprotected:external>zone:zd')).toBeTruthy()
   })
 
-  it('draws a CIDR destination as a dashed grey edge to an Outside node labelled not applied in v1', async () => {
+  it('draws a CIDR destination as a dashed grey edge to an Outside node labelled outbound not controlled', async () => {
     setup({ flows: [flowOf('f1', { dst_zone_id: '', dst_cidr: '8.8.8.0/24', proto: 'udp', dport: '53' })] })
     const out = await node('outside')
     expect(within(out).getByText('Outside')).toBeTruthy()
-    expect(within(out).getByText('not applied in v1')).toBeTruthy()
+    expect(within(out).getByText('outbound not controlled')).toBeTruthy()
     const path = await pathOf('outside:zone:zw>outside')
     expect(path.getAttribute('data-dash')).not.toBe('')
     expect(path.getAttribute('data-stroke')).toBe('#9e9e9e')

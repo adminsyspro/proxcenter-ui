@@ -9385,40 +9385,8 @@
     "loadErrorDetails": "Details",
     "loadErrorHideDetails": "Hide details",
     "dashboard": {
-      "stopHeldTitle": "Cluster firewall held off by the emergency stop",
-      "coverageDefinition": "Protected: firewall on in the guest options and on one of its network interfaces, what Proxmox applies",
-      "coverageSampled": "Above {max, number} guests, only an even sample is measured.",
-      "todoTitle": "To do",
-      "todoNothing": "Nothing to do",
-      "todoUnavailable": "Not available while the firewall data cannot be read",
-      "todoFirewallOff": "Cluster firewall off",
-      "todoManagementRules": "No cluster rule lets the administration in ({count, plural, one {port {ports}} other {ports {ports}}})",
-      "todoPolicyIn": "Inbound policy ACCEPT: whatever no rule drops comes in",
-      "todoUnprotected": "{count, plural, one {# guest without firewall} other {# guests without firewall}}",
-      "todoUnzoned": "{count, plural, one {# running guest in no zone} other {# running guests in no zone}}",
-      "todoPendingFlows": "{count, plural, one {# observed flow to review} other {# observed flows to review}}",
-      "todoPendingFlowsMore": "At least {count, number} observed flows to review",
-      "todoResume": "Resume",
-      "todoOpenWizard": "Open the wizard",
-      "todoOpenOptions": "Change it",
-      "todoShowThem": "Show them",
-      "todoOpenDrifts": "Open Drifts",
-      "todoOpenObservation": "Review them",
       "filterUnprotected": "{count, plural, one {# guest without firewall} other {# guests without firewall}}",
       "filterClear": "Show every guest",
-      "postureChipCluster": "Cluster firewall {state} · IN {policy}",
-      "postureChipHost": "Host firewall {state} · IN {policy}",
-      "postureOn": "ON",
-      "postureOff": "OFF",
-      "postureChipClusterUnknown": "Cluster firewall not available",
-      "postureChipStopped": "Emergency stop active",
-      "postureChipZones": "Zones enforced {enforced, number} / {total, number}",
-      "postureChipZonesUnknown": "Zones enforced -",
-      "postureChipGuests": "Guests protected {protected, number} / {running, number} running",
-      "postureChipGuestsSampled": "Guests protected {protected, number} / {running, number} measured · {total, number} running",
-      "postureChipGuestsUnknown": "Guests protected -",
-      "postureChipLastCheck": "Last check {time}",
-      "postureChipNoCheck": "No check yet",
       "postureTrafficByZone": "Traffic by zone",
       "postureTrafficByVlan": "Traffic by VLAN",
       "postureTrafficByNode": "Traffic by node",
@@ -9432,6 +9400,7 @@
       "postureHits": "{count, plural, one {# hit} other {# hits}}",
       "postureMembers": "{count, plural, one {# guest} other {# guests}}",
       "postureUnknownExternal": "Unknown / External",
+      "postureOutside": "Outside",
       "postureUnzoned": "Unzoned",
       "postureOther": "Other",
       "postureNoVlan": "No VLAN",
@@ -9446,23 +9415,29 @@
       "postureAllowed": "Allowed",
       "postureWouldBlock": "Would be blocked",
       "postureBlocked": "Blocked",
-      "postureNotCovered": "Not covered",
       "postureFlows": "{count, plural, one {# flow} other {# flows}}",
       "postureNoCounter": "no counter",
+      "postureNoCounterHint": "The flows the policy allows are not logged, so their hits are not counted.",
       "postureAwaitingDecision": "awaiting a decision",
       "postureBlockedIn": "in {zones}",
+      "postureBlockedOut": "outbound from {zones}",
       "postureBlockedNone": "none dropped",
       "postureServicesTitle": "Top services by hits",
+      "postureServicesShown": "{shown, number} of {total, number} services",
+      "postureServicesAll": "All observed flows",
       "postureColService": "Service",
       "postureColFlows": "Flows",
       "postureColHits": "Hits",
       "postureColStatus": "Status",
       "postureNoServices": "No service observed or allowed",
+      "postureConversationsTitle": "Top conversations",
+      "postureConversationsCaption": "source to destination, by hits",
+      "postureColSource": "Source",
+      "postureColDestination": "Destination",
+      "postureColServices": "Services",
+      "postureNoConversations": "No observed flow to review",
+      "postureConversationsShown": "{shown} of {total} conversations",
       "postureUnknownIncludesUnzoned": "unknown sources include the guests in no zone until the guest list is read (group by VLAN or node)",
-      "postureRefresh": "Compute the coverage again",
-      "postureRefreshAgo": "Computed {time} · compute again",
-      "postureRefreshSoon": "Computed {time} · new figures less than 30 seconds ago",
-      "postureRefreshComputing": "Computing the coverage",
       "postureTimelineTitle": "Observed traffic over time",
       "postureTimelineWindow": "covered window: last {minutes, plural, one {# min} other {# min}} (orchestrator memory)",
       "postureTimelineVerdict": "Verdict",
@@ -9514,54 +9489,31 @@
     }
   },
   "deployWizard": {
-    "bannerTitle": "Cluster firewall not configured",
-    "bannerDescription": "Your cluster has no firewall rules and the firewall is disabled. Deploy essential rules before activating the firewall to avoid losing connectivity.",
-    "bannerButton": "Deploy Firewall",
     "dialogTitle": "Cluster Firewall Deployment",
     "stepAnalysis": "Analysis",
-    "stepPreview": "Preview",
-    "stepApply": "Apply",
     "stepActivate": "Activate",
     "stepDone": "Done",
     "analysisTitle": "Current cluster state",
     "analysisNodes": "{count} nodes detected",
     "analysisFirewallOff": "Cluster firewall is disabled",
-    "analysisNoRules": "No cluster firewall rules configured",
-    "analysisPolicyAccept": "Default policy: ACCEPT (all traffic allowed)",
-    "analysisWarning": "Activating the firewall with a DROP policy without whitelist rules will break cluster communication (Corosync, Ceph, migrations…). This wizard will create the essential rules first.",
-    "previewTitle": "Rules to be created",
-    "previewDescription": "The following {count} rules will be added to the cluster firewall to whitelist essential Proxmox services.",
-    "previewService": "Service",
-    "previewProtocol": "Protocol",
-    "previewPorts": "Ports",
-    "previewDirection": "Direction",
-    "previewAction": "Action",
-    "applyTitle": "Applying rules",
-    "applyCreating": "Creating rule: {service}",
-    "applySuccess": "Rule created: {service}",
-    "applyError": "Failed to create rule: {service}",
-    "applyComplete": "All {count} rules created successfully!",
-    "applyPartial": "{success} of {total} rules created. {failed} failed.",
+    "analysisNodesReading": "Reading the firewall of the nodes…",
+    "analysisNodesOff": "The firewall of every node is off: turning the cluster firewall on filters the guests only",
+    "analysisNodesFollow": "{count, plural, one {1 node turns its own firewall on with the cluster: {nodes}} other {# nodes turn their own firewall on with the cluster: {nodes}}}",
+    "analysisInfo": "This wizard turns the cluster firewall on, which the guests' firewalls and the micro-segmentation need. It writes nothing on the nodes: no rule, no inbound policy.",
+    "analysisNodesWarning": "On {nodes}, the node's own firewall is not set to off (enable: 0), so Proxmox turns it on with the cluster firewall and filters the node with the rules its admin set up. ProxCenter adds none: check that the web UI (8006) and SSH (22) stay reachable, or set the node's firewall to off.",
+    "analysisNodesUnknown": "The firewall of {nodes} could not be read: check it before turning the cluster firewall on.",
     "activateTitle": "Activate firewall",
-    "activateEnableFirewall": "Enable cluster firewall",
-    "activateSetDrop": "Set inbound policy to DROP",
-    "activateWarning": "Enabling DROP policy means all inbound traffic not explicitly allowed by a rule will be blocked. The rules created in the previous step ensure cluster services remain accessible.",
+    "activateDescription": "The cluster firewall is turned on. Nothing else changes: the rules, the policies and the nodes' firewalls stay as they are.",
+    "activateFailed": "The cluster firewall could not be turned on. Try again, or turn it on in Firewalling > Options.",
     "activateButton": "Activate",
     "activateSkip": "Skip for now",
     "activating": "Activating...",
     "doneTitle": "Deployment complete!",
-    "doneRulesCreated": "{count} cluster rules created",
     "doneFirewallEnabled": "Cluster firewall enabled",
     "doneFirewallNotEnabled": "Cluster firewall not enabled (manual activation needed)",
-    "donePolicyDrop": "Inbound policy set to DROP",
-    "donePolicyAccept": "Inbound policy remains ACCEPT",
-    "doneViewRules": "View rules",
     "doneClose": "Close",
     "next": "Next",
-    "cancel": "Cancel",
-    "customAdd": "Add",
-    "customComment": "Description",
-    "customCommentPlaceholder": "e.g. HTTPS, Monitoring…"
+    "cancel": "Cancel"
   },
   "firewall": {
     "type": "Type",
@@ -13304,7 +13256,9 @@
         "done": "Done",
         "failed": "Failed",
         "running": "Running"
-      }
+      },
+      "logNode": "{node} · {rate} lines/min · {lag} behind",
+      "logBehind": "Log behind"
     },
     "stop": {
       "button": "Emergency stop",
@@ -13320,29 +13274,45 @@
       "infoObjects": "The micro-segmentation objects stay in place; Resume re-enables the cluster firewall and re-applies the policy",
       "infoUse": "Use it when the segmentation blocks something it should not",
       "resumeInfoReenable": "Re-enables the cluster firewall, then re-applies the last revision",
-      "resumeInfoSocle": "Refused if the management rules (SSH 22, web 8006) are missing: fix them in the Dashboard deployment wizard first",
-      "openWizard": "Open the deployment wizard",
+      "resumeInfoSocle": "Refused if a node whose own firewall is on does not let the web UI (8006) and SSH (22) in: allow them in that node's firewall, or turn it off, first",
       "clusterFirewallOff": "Cluster firewall disabled",
-      "notDeployed": "Nothing deployed"
+      "notDeployed": "Nothing deployed",
+      "socleUncovered": "Addresses the rules do not accept: {ips}",
+      "socleUncoveredNodes": "Addresses the rules do not accept: {ips} (on {nodes})"
     },
     "pending": {
-      "noCount": "Unapplied changes",
-      "viewPlan": "View plan",
+      "noCount": "Changes not applied yet.",
+      "viewPlan": "Review and apply",
       "prefixed": "{prefix}: {text}",
-      "whatWillChange": "What will change: {list}",
+      "whatWillChange": "Not applied yet: {list}.",
       "zones": {
         "added": "{count, plural, one {# zone added} other {# zones added}}",
         "changed": "{count, plural, one {# zone changed} other {# zones changed}}",
         "removed": "{count, plural, one {# zone removed} other {# zones removed}}"
+      },
+      "zonesNamed": {
+        "added": "{count, plural, one {zone {names} added} other {zones {names} added}}",
+        "changed": "{count, plural, one {zone {names} changed} other {zones {names} changed}}",
+        "removed": "{count, plural, one {zone {names} removed} other {zones {names} removed}}"
       },
       "flows": {
         "added": "{count, plural, one {# flow added} other {# flows added}}",
         "changed": "{count, plural, one {# flow changed} other {# flows changed}}",
         "removed": "{count, plural, one {# flow removed} other {# flows removed}}"
       },
+      "flowsNamed": {
+        "added": "flow {flow} added",
+        "changed": "flow {flow} changed",
+        "removed": "flow {flow} removed"
+      },
       "members": "{count, plural, one {# member change} other {# member changes}}",
+      "membersTo": "{count, plural, one {# guest to {zone}} other {# guests to {zone}}}",
       "tagPrefix": "tag prefix changed",
-      "whatWillChangeInline": "what will change: {list}"
+      "whatWillChangeInline": "not applied yet: {list}.",
+      "untilApplied": "Nothing changes in Proxmox until you apply the plan.",
+      "applying": "Being applied: {list}",
+      "applyingInline": "being applied: {list}",
+      "applyingNoCount": "Changes being applied"
     },
     "firstRun": {
       "title": "Set up micro-segmentation",
@@ -13377,7 +13347,7 @@
       "NETWORK": "ProxCenter cannot be reached. Check your network connection.",
       "CHECK_PENDING": "A check is already queued: the engine starts it at its next pass.",
       "generic": "Something went wrong. Try again.",
-      "SOCLE_MISSING": "The management rules (SSH 22, web 8006) are missing, so the cluster firewall was not re-enabled. Add them with the deployment wizard, then resume.",
+      "SOCLE_MISSING": "A node whose own firewall is on does not let the web UI (8006) and SSH (22) in, so the cluster firewall was not re-enabled. Allow them in that node's firewall, or turn it off, then resume.",
       "NOT_DEPLOYED": "Nothing is deployed yet: apply a plan first, the emergency stop acts on a deployed policy."
     },
     "policy": {
@@ -13409,6 +13379,7 @@
         "outgoing": "Outgoing flows",
         "noFlows": "None",
         "changeState": "Change state",
+        "stateChanging": "State change in progress",
         "edit": "Edit zone",
         "delete": "Delete zone",
         "state": {
@@ -13449,15 +13420,37 @@
           "loading": "Reading the history...",
           "disabled": "Zone disabled: its traffic is not logged",
           "aria": "{count, plural, one {Uncovered traffic over the last 24 hours: # hit} other {Uncovered traffic over the last 24 hours: # hits}}",
-          "bar": "{from} to {to}: {count, plural, one {# hit} other {# hits}}"
-        }
+          "bar": "{from} to {to}: {count, plural, one {# hit} other {# hits}}",
+          "barBoth": "{from} to {to}: {count, plural, one {# hit} other {# hits}} inbound, {out, plural, one {# hit} other {# hits}} outbound",
+          "legendIn": "Inbound",
+          "legendOut": "Outbound",
+          "outBlocked": "{short} outbound blocked",
+          "outWouldBlock": "{short} outbound would be blocked",
+          "outConnections": "{short} outbound connections"
+        },
+        "egress": {
+          "state": {
+            "off": "Outbound: not controlled",
+            "observe": "Outbound: observing",
+            "ready": "Outbound: ready",
+            "enforce": "Outbound: blocking"
+          },
+          "hint": {
+            "off": "Outbound traffic is not controlled",
+            "observe": "Outbound traffic is logged, nothing is blocked",
+            "ready": "Nothing would have been blocked outbound for the whole observation window",
+            "enforce": "Only the flows of the policy leave the zone"
+          }
+        },
+        "gatewayTip": "Gateway {ip}"
       },
       "flow": {
-        "notApplied": "Not applied (egress not managed in v1)",
+        "notApplied": "Not applied (outbound not controlled)",
         "learned": "Learned",
         "edit": "Edit flow",
         "delete": "Delete flow",
-        "createdBy": "Created by {user}"
+        "createdBy": "Created by {user}",
+        "observed": "Outbound observed"
       },
       "zoneDialog": {
         "createTitle": "New zone",
@@ -13467,8 +13460,74 @@
         "label": "Label",
         "color": "Color",
         "isolate": "Isolate members from each other",
+        "members": "Members",
+        "inboundSection": "Inbound",
+        "inboundStates": {
+          "disabled": "Disabled",
+          "observe": "Observing",
+          "enforce": "Blocking"
+        },
+        "egressSection": "Outbound",
+        "outboundStates": {
+          "off": "Not controlled",
+          "observe": "Observing",
+          "enforce": "Blocking"
+        },
+        "egressFilter": "Filter outbound traffic to:",
+        "egressFilterTo": "Filter to",
+        "egressLocal": "Local network",
+        "egressAll": "Local network and Internet",
+        "egressAllWarning": "IP filtering only: a service behind a domain name can change address.",
+        "egressNeedsState": "The zone must be in observation or blocking",
+        "tips": {
+          "isolate": "The VMs of this zone reach each other only through a declared flow. Unchecked, they talk to each other freely.",
+          "inbound": {
+            "disabled": "The zone is not applied on Proxmox.",
+            "observe": "Nothing is blocked: inbound traffic outside the policy is logged and offered as suggestions.",
+            "enforce": "Only the flows of the policy come in; the rest is blocked and visible in Blocked."
+          },
+          "outbound": {
+            "off": "The VMs of the zone go out freely, nothing is logged.",
+            "observe": "Nothing is blocked: outbound traffic outside the policy is logged and offered as suggestions.",
+            "enforce": "Only the outbound traffic allowed by a flow goes through; the rest is blocked and visible in Blocked."
+          },
+          "local": "Filters outbound traffic to the subnets of the zoned VMs, unzoned VMs included. Internet stays open.",
+          "all": "Filters all outbound traffic, Internet included: only the flows of the policy go through."
+        },
+        "statesTitle": "Change the states of zone {name}?",
+        "statesConfirm": "Apply the states",
+        "inboundRunFailed": "The inbound state change failed: the outbound was not changed.",
+        "egressOnTitle": "Control outbound traffic of zone {name}?",
+        "egressOffTitle": "Stop controlling outbound traffic of zone {name}?",
+        "egressOnBody": "The outbound traffic of the zone goes to observation.",
+        "egressOffBody": "The outbound filtering of the zone is removed.",
+        "egressIsolateNote": "The isolation change is applied with it.",
+        "egressOnConfirm": "Control",
+        "egressOffConfirm": "Stop controlling",
         "create": "Create",
-        "save": "Save"
+        "save": "Save",
+        "gateway": "Gateway",
+        "gatewayHint": "The router of the zone's network, optional",
+        "gatewayAllow": "Allow to the gateway",
+        "gatewayServices": {
+          "dns": "DNS",
+          "ntp": "NTP",
+          "ping": "Ping",
+          "http": "HTTP",
+          "https": "HTTPS",
+          "ssh": "SSH",
+          "snmp": "SNMP",
+          "syslog": "Syslog",
+          "proxy": "HTTP proxy",
+          "all": "All protocols"
+        },
+        "gatewayAllowed": "Already allowed by a flow of the draft",
+        "gatewayFlowComment": "Gateway of the zone",
+        "gatewayFirst": "Enter the gateway first",
+        "gatewayServicesHint": "Pick in the list, or type a protocol and its ports: tcp/8443, udp/5000:5010, icmp, any",
+        "gatewayTypedInvalid": "Not a service: tcp or udp with ports (tcp/8443, udp/53,123, tcp/5000:5010), or icmp, icmpv6, any",
+        "gatewayTypeHint": "Pick or type a service",
+        "gatewayAdd": "Add {service}"
       },
       "flowDialog": {
         "createTitle": "New flow",
@@ -13500,7 +13559,8 @@
         "cidrBoth": "A flow cannot have a CIDR on both sides.",
         "protoInvalid": "Invalid protocol",
         "portInvalid": "Invalid port. Use 80, 80,443 or 8000:8100 (1 to 65535).",
-        "portNotAllowed": "A port is not allowed with this protocol."
+        "portNotAllowed": "A port is not allowed with this protocol.",
+        "gatewayInvalid": "An IPv4 or IPv6 address, without prefix"
       },
       "delete": {
         "zoneTitle": "Delete zone {name}?",
@@ -13522,11 +13582,21 @@
         "running": {
           "disabled": "{label}: change to disabled in progress",
           "observe": "{label}: change to observation in progress",
-          "enforce": "{label}: change to enforcement in progress"
+          "enforce": "{label}: change to enforcement in progress",
+          "egressObserve": "{label}: outbound control in progress",
+          "egressOff": "{label}: outbound control removal in progress",
+          "egressReopen": "{label}: outbound reopening in progress",
+          "egressEnforce": "{label}: outbound blocking in progress"
         },
         "done": "{label}: {done} done, {failed} failed, {notRun} not run",
         "failed": "{label}: the run failed",
-        "unavailable": "{label}: progress is not available"
+        "unavailable": "{label}: progress is not available",
+        "progress": {
+          "waiting": "waiting for the operation in progress",
+          "readingStart": "reading Proxmox",
+          "reading": "reading Proxmox, {done, number} / {total, number} guests",
+          "writing": "writing to Proxmox, {done, number} / {total, number}"
+        }
       },
       "assign": {
         "title": "Assign guests to {zone}",
@@ -13598,13 +13668,31 @@
           "pendingChangeHint": "Changed on the next apply",
           "pendingRemoval": "Pending removal",
           "pendingRemovalHint": "Removed on the next apply",
-          "notApplied": "Not applied in v1",
-          "notAppliedHint": "Not applied (egress not managed in v1)",
-          "unknownHint": "Comparing with the applied revision..."
+          "notApplied": "Not applied",
+          "notAppliedHint": "Not applied (outbound not controlled)",
+          "unknownHint": "Comparing with the applied revision...",
+          "observed": "Outbound observed",
+          "observedHint": "Outbound observed: the zone logs these flows without blocking them yet"
         },
         "uncovered": "{count, plural, one {Uncovered 24 h: # hit} other {Uncovered 24 h: # hits}}",
         "uncoveredHint": "Traffic into this zone that no flow covers (logged by the zone's members over the last 24 h)",
         "noFlowInto": "No flow into this zone"
+      },
+      "egressState": {
+        "title": {
+          "block": "Block outbound of zone {name}?",
+          "reopen": "Reopen outbound of zone {name}?"
+        },
+        "reopenBody": "The outbound goes back to observation: nothing is blocked any more.",
+        "checking": "Checking the outbound observation...",
+        "ready": "Nothing would have been blocked outbound in the last {hours} hours.",
+        "notReady": "This zone is not ready: it needs {hours} hours of outbound observation with no pending traffic that would be blocked.",
+        "unchecked": "The outbound observation could not be checked, the zone is treated as not ready.",
+        "typeName": "Type {name} to confirm",
+        "confirm": {
+          "block": "Block outbound",
+          "reopen": "Reopen outbound"
+        }
       }
     },
     "plan": {
@@ -13624,6 +13712,13 @@
       "nothing": "Nothing to change: Proxmox already matches the draft.",
       "clusterGroup": "Cluster objects",
       "stepCount": "{count, plural, one {# step} other {# steps}}",
+      "stepState": {
+        "waiting": "Waiting",
+        "running": "Being written",
+        "done": "Done",
+        "failed": "Failed",
+        "notRun": "Not run"
+      },
       "collisions": "Blocked: these Proxmox objects use our names without being ours, rename or remove them: {names}",
       "foreignRules": "Rules added by hand in our security groups are kept, not touched: {names}",
       "unread": "{count, plural, one {# guest} other {# guests}} could not be read, they will be handled on the next pass: {names}",
@@ -13693,6 +13788,46 @@
           "title": "Name already used in Proxmox",
           "detail": "{object} already exists in Proxmox and was not created by ProxCenter: it is left untouched.",
           "hint": "An object named pcz-* exists in Proxmox without the micro-segmentation marker: rename or delete it in Proxmox."
+        },
+        "egress_rule_missing": {
+          "title": "Outbound rule missing",
+          "detail": "The final outbound rule of {name} is missing in Proxmox.",
+          "detailCollision": "{name} cannot block its outbound traffic: pcz-_local belongs to someone else in Proxmox.",
+          "hintCollision": "An object named pcz-_local exists in Proxmox without the micro-segmentation marker: rename or delete it in Proxmox."
+        },
+        "egress_rule_misplaced": {
+          "title": "Outbound rule misplaced",
+          "detail": "The final outbound rule of {name} is not the last rule, or appears twice.",
+          "detailKnown": "The known-destinations rule of {name} is not right before its final outbound rule."
+        },
+        "egress_rule_verdict": {
+          "title": "Outbound rule at the wrong verdict",
+          "detail": "The final outbound rule of {name} is {have} instead of {want}.",
+          "detailCollision": "{name} cannot block: pcz-_local belongs to someone else in Proxmox, so its outbound rule stays {have}.",
+          "detailDest": "The outbound rule of {name} targets {haveDest} instead of {wantDest}.",
+          "hintCollision": "An object named pcz-_local exists in Proxmox without the micro-segmentation marker: rename or delete it in Proxmox."
+        },
+        "known_rule_missing": {
+          "title": "Known destinations rule missing",
+          "detail": "The rule of the group pcz-_known is missing on {name}."
+        },
+        "known_rule_extra": {
+          "title": "Known destinations rule in excess",
+          "detail": "{name} still has a rule of the group pcz-_known that its outbound state no longer needs."
+        },
+        "local_set_desync": {
+          "title": "Local network set out of sync",
+          "detail": "{object} holds {actual} instead of {desired}."
+        },
+        "egress_no_subnet": {
+          "title": "Outbound without a known subnet",
+          "detail": "{name} of {zone} has no known subnet: its local network is reduced to its own IPs.",
+          "hint": "No subnet known: check the network configuration of the guest in Proxmox (an IP with its prefix length, or the QEMU guest agent)."
+        },
+        "destinationAll": "all destinations",
+        "destinationLocal": "the local network",
+        "verdict": {
+          "disabled": "disabled"
         }
       },
       "chip": {
@@ -13703,7 +13838,14 @@
         "member_without_ip": "No IP",
         "ambiguous_zone": "Several zones",
         "object_collision": "Name taken",
-        "generic": "Drift"
+        "generic": "Drift",
+        "egress_rule_missing": "No outbound rule",
+        "egress_rule_misplaced": "Outbound misplaced",
+        "egress_rule_verdict": "Outbound verdict",
+        "known_rule_missing": "Known rule missing",
+        "known_rule_extra": "Known rule extra",
+        "local_set_desync": "Local set out of sync",
+        "egress_no_subnet": "No subnet"
       },
       "zoneFilter": "Zone {name} only",
       "zoneFilterClear": "Show every zone",
@@ -13715,6 +13857,13 @@
         "member_without_ip": "Members without a known IP ({count, number})",
         "ambiguous_zone": "Guests in several zones ({count, number})",
         "object_collision": "Names already used in Proxmox ({count, number})",
+        "egress_rule_missing": "Outbound rule missing ({count, number})",
+        "egress_rule_misplaced": "Outbound rule misplaced ({count, number})",
+        "egress_rule_verdict": "Outbound rule with the wrong verdict ({count, number})",
+        "known_rule_missing": "Known-address rule missing ({count, number})",
+        "known_rule_extra": "Known-address rule left over ({count, number})",
+        "local_set_desync": "Local network set out of sync ({count, number})",
+        "egress_no_subnet": "Outbound without a local subnet ({count, number})",
         "generic": "{kind} ({count, number})"
       },
       "noneZone": "none",
@@ -13747,7 +13896,11 @@
         "status": "Status",
         "statusAll": "All statuses",
         "zone": "Zone",
-        "zoneAll": "All zones"
+        "zoneAll": "All zones",
+        "direction": "Direction",
+        "directionAll": "All",
+        "directionIn": "Inbound",
+        "directionOut": "Outbound"
       },
       "kind": {
         "would_block": "Would be blocked",
@@ -13804,6 +13957,7 @@
       "dismissTip": "Hides this suggestion for this pair.",
       "bulkLabel": "Selected flows",
       "bulkAcceptTip": "Creates in the draft the flow between the zones of each selected suggestion.",
+      "bulkAcceptOutZoneTip": "Creates in the draft the flow between the zones of each selected suggestion. An outbound flow to a zone also allows the inbound of its destination zone from the source zone.",
       "bulkCidrTip": "Creates the same flows with each source as an address range.",
       "bulkDismissTip": "Hides the selected suggestions.",
       "legend": {
@@ -13815,8 +13969,14 @@
         "about": "About the hit counts"
       },
       "acceptUnknownSource": "Unknown source: use As CIDR",
+      "aggregateHint": "Create a flow by hand to allow this service to any address.",
+      "acceptOutZoneTip": "Adds the flow {from} → {to}: it also allows {to}'s inbound from {from}.",
       "zoneBanner": "Suggestions for zone {zone} · {count, plural, one {# uncovered hit} other {# uncovered hits}} in 24 h",
       "zoneBannerNoCount": "Suggestions for zone {zone}",
+      "serviceBanner": "Filtered on the service {service} ({ports})",
+      "serviceBannerClear": "Show every service",
+      "sourceBanner": "Filtered on the flows whose source is in no zone",
+      "sourceBannerClear": "Show every source",
       "dialog": {
         "open": "Details",
         "openFor": "Details of the flow from {source} to {destination}",
@@ -13843,9 +14003,25 @@
         "colSource": "Source",
         "colGuest": "Guest reached",
         "colNode": "Node",
-        "guest": "{name} ({vmid}) · {ip}"
+        "guest": "{name} ({vmid}) · {ip}",
+        "direction": "Direction",
+        "colDestination": "Destination",
+        "trafficScopeOutside": "Every service from {source} to the addresses outside the zones with this verdict: the history keeps the zones, not the addresses."
       },
-      "actionTip": "{action}: {tip}"
+      "actionTip": "{action}: {tip}",
+      "direction": {
+        "in": "Inbound",
+        "out": "Outbound"
+      },
+      "manyDestinations": "Many destinations",
+      "prefix": {
+        "title": "Accept as a network",
+        "length": "Prefix length",
+        "cancel": "Cancel",
+        "accept": "Accept"
+      },
+      "cidrOutTip": "Creates the flow {from} → the network of {ip} {service} in the draft, with the prefix you choose.",
+      "bulkCidrOutbound": "Outbound networks are accepted one by one, to choose each prefix."
     },
     "overview": {
       "empty": "No zone to draw yet.",
@@ -13855,7 +14031,7 @@
       "mapLabel": "Map of the zones and their flows",
       "suggestionsError": "The pending flows could not be read. The map shows the allowed flows only.",
       "legend": {
-        "outside": "To Outside: not applied in v1",
+        "outside": "To Outside: outbound not enforced",
         "allowed": "Allowed",
         "unprotected": "Unprotected",
         "blocked": "Blocked",
@@ -13866,8 +14042,8 @@
         "external": "Unknown / External",
         "externalHint": "Sources that match no guest: an IP address or a network (CIDR)",
         "outside": "Outside",
-        "outsideHint": "Destinations outside the zones (a CIDR). Flows to them are not applied in v1.",
-        "notApplied": "not applied in v1",
+        "outsideHint": "Destinations outside the zones (a CIDR). Flows to them are applied once the source zone enforces its outbound traffic.",
+        "notApplied": "outbound not controlled",
         "aria": "Zone {name}, {state}, {members}",
         "membersUnknown": "members unknown",
         "unzoned": "Unzoned guests ({count, number})",
@@ -13880,10 +14056,13 @@
         "moreHint": "{count, plural, one {# more member} other {# more members}}: the zone panel lists them all",
         "moreUnzonedHint": "{count, plural, one {# more guest} other {# more guests}} in no zone: Drifts lists them all",
         "ipHint": "{ip}: an address in no zone and no guest that talked to this zone",
-        "inside": "{count, plural, one {# observed flow} other {# observed flows}} inside the zone"
+        "inside": "{count, plural, one {# observed flow} other {# observed flows}} inside the zone",
+        "observed": "outbound observed",
+        "gateway": "Gateway",
+        "gatewayHint": "Gateway of {zones} ({ip}): its traffic is named on the map and in the Observation sub-tab"
       },
       "edge": {
-        "outside": "Not applied in v1: {services}",
+        "outside": "Outbound not blocked: {services}",
         "aria": "{from} to {to}: {services}",
         "allowed": "Allowed: {services}",
         "unprotected": "{count, plural, one {# observed flow} other {# observed flows}} that no flow allows (unprotected)",
@@ -13896,7 +14075,9 @@
         "sourceHits": "{count, plural, one {# hit} other {# hits}} from {from} to zone {to} on {service}",
         "sourceHitsSampled": "{count, plural, one {# hit} other {# hits}} from {from} to zone {to} on {service} (sample pair shown)",
         "countUnprotected": "{count, plural, one {# unprotected flow} other {# unprotected flows}}",
-        "countBlocked": "{count, plural, one {# blocked flow} other {# blocked flows}}"
+        "countBlocked": "{count, plural, one {# blocked flow} other {# blocked flows}}",
+        "hitsTotal": "{count, plural, one {# log occurrence} other {# log occurrences}} in all",
+        "noCounter": "Allowed flows have no counter: Proxmox does not log what it lets through"
       },
       "panel": {
         "label": "Zone {name}",
@@ -13909,6 +14090,21 @@
         "noFlows": "None"
       },
       "zonePanel": {
+        "detailsTitle": "Zone details · {name}",
+        "subSuggestions": "Pending suggestions",
+        "subMembers": "Members",
+        "addMembers": "Add members",
+        "addFlow": "New flow",
+        "subIncoming": "Incoming flows",
+        "subOutgoing": "Outgoing flows",
+        "colDirection": "Direction",
+        "colVerdict": "Verdict",
+        "expand": "Expand",
+        "tabTraffic": "Traffic",
+        "tabData": "Data",
+        "tabLogs": "Logs",
+        "logsEmpty": "No event of this zone in the engine's memory",
+        "logsOlder": "Load older",
         "edit": "Edit zone",
         "changeState": "Change state",
         "delete": "Delete zone",
@@ -13918,15 +14114,21 @@
         "editFlow": "Edit flow",
         "deleteFlow": "Delete flow",
         "newIncoming": "New incoming flow",
-        "newOutgoing": "New outgoing flow"
+        "newOutgoing": "New outgoing flow",
+        "egressBlock": "Block outbound",
+        "egressReopen": "Reopen outbound"
+      },
+      "edgePanel": {
+        "detailsTitle": "Flow details",
+        "dialogLabel": "Flow details · {from} → {to}",
+        "declaredFlows": "Declared flows",
+        "newFlow": "New flow between these zones",
+        "suggestionsEmpty": "No pending suggestion for this pair",
+        "logsEmpty": "No event of this pair in the engine's memory"
       },
       "partial": "Partial: only the first {count, number} pending flows are drawn.",
       "filters": {
         "title": "Flows:"
-      },
-      "toolbar": {
-        "refreshedAt": "Refreshed at {time}",
-        "refresh": "Refresh the map"
       },
       "flowPanel": {
         "label": "Flow {from} to {to}",
@@ -13943,6 +14145,12 @@
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
       "fitView": "Fit the map to the view",
+      "isolate": {
+        "only": "Flows of {name} only",
+        "all": "All flows",
+        "showAll": "Show all flows",
+        "showOnly": "Only its flows"
+      },
       "a11y": {
         "nodeDescription": "Press enter or space to open its details.",
         "nodeDescriptionKeyboard": "Press enter or space to open its details.",
@@ -14018,6 +14226,7 @@
           "noZoneFlows": "This guest is in no zone: no allowed flow applies to it.",
           "incoming": "Incoming, from {peer}",
           "outgoing": "Outgoing, to {peer}",
+          "fromZone": "from zone {zone}",
           "acceptTip": "Accept as flow {from} → {to} {service}: the engine keeps one sample pair of guests per observed flow, so the flow covers the whole zone pair.",
           "partial": "Only the first {count} pending observed flows of the map are read: this list may miss some."
         },
@@ -14036,6 +14245,7 @@
         "topSourcesEmpty": "No source in this range",
         "suggestionsEmpty": "No pending suggestion for this zone",
         "summaryOut": "{hits, plural, one {# hit} other {# hits}} · top destination {source} ({share}%) · {wouldBlock, number} would be blocked, {blocked, number} blocked",
+        "summaryOutBlockedHelp": "Blocked: connections blocked by the destination zone (its inbound) or by this zone's outbound.",
         "topDestinations": "Top destinations",
         "topDestinationsEmpty": "No destination in this range",
         "memberRunning": "Running",
@@ -14062,6 +14272,7 @@
       "checking": "Checking the cluster...",
       "runAgain": "Run again",
       "openWizard": "Open the deployment wizard",
+      "raiseLogRate": "Raise while observing",
       "busy": "An apply is running, retry in a moment.",
       "noClient": "No Proxmox client is available for this connection.",
       "readFailed": "Proxmox could not be read: {error}",
@@ -14074,20 +14285,27 @@
         "cluster_firewall": {
           "title": "Cluster firewall",
           "pass": "The cluster firewall is on.",
-          "off": "The cluster firewall is off. The deployment wizard adds the management rules, then turns it on.",
+          "off": "The cluster firewall is off. The deployment wizard turns it on, without writing anything on the nodes.",
           "heldByStop": "Cluster firewall held off by the emergency stop: lift the stop to re-enable it"
         },
         "socle_rules": {
           "title": "Management access",
           "pass": "Web (8006) and SSH (22) stay reachable.",
           "nodesOff": "The node firewalls are off, so nothing can be cut.",
-          "missing": "No rule keeps port {ports} open from anywhere: turning the firewall on could cut your access."
+          "missing": "No rule keeps port {ports} open from anywhere: turning the firewall on could cut your access.",
+          "missingFor": "No rule keeps port {ports} open from {ips}: turning the firewall on could cut ProxCenter off.",
+          "dockerInternal": "No rule keeps port {ports} open for ProxCenter: the detected address is internal to Docker, in Settings > Advanced enter the address of the host as Proxmox sees it.",
+          "groupUnreadable": "The rules of the security group {group} could not be read: the management access cannot be checked.",
+          "hostRulesUnreadable": "The firewall rules of node {node} could not be read: the management access cannot be checked.",
+          "missingForNodes": "No rule keeps port {ports} open from {ips} on {nodes}: turning the firewall on could cut ProxCenter off.",
+          "missingOn": "No rule keeps port {ports} open on {nodes}: turning the firewall on could cut your access."
         },
         "log_ratelimit": {
           "title": "Log rate limit",
-          "default": "PVE logs at its default rate ({rate}), so the observation misses flows. Raise it in the settings.",
+          "default": "PVE logs at its default rate ({rate}), so the observation misses flows.",
           "pass": "PVE logs up to {rate}.",
-          "disabled": "PVE does not limit the firewall log."
+          "disabled": "PVE does not limit the firewall log.",
+          "planned": "Raised to {rate} while a zone is observed, then set back (settings)."
         },
         "self_in_zone": {
           "title": "ProxCenter address",
@@ -14095,7 +14313,14 @@
           "unknown": "The address of ProxCenter could not be detected, so this check cannot tell. Set it in the settings.",
           "inZone": "ProxCenter ({self_ip}) is inside the zone {zone}: enforcing it could cut the connection.",
           "uncheckedTimeout": "{count, plural, one {# member} other {# members}} could not be checked (collection cut short): ProxCenter may be inside one of them.",
-          "uncheckedCap": "{count, plural, one {# member} other {# members}} could not be checked (more than the collection cap): ProxCenter may be inside one of them."
+          "uncheckedCap": "{count, plural, one {# member} other {# members}} could not be checked (more than the collection cap): ProxCenter may be inside one of them.",
+          "inZoneEgress": "ProxCenter ({self_ip}) is inside the zone {zone}, which controls its outbound traffic: allow a flow to the Proxmox nodes before blocking, or ProxCenter could lose them.",
+          "dockerInternal": "The detected address is internal to Docker: in Settings > Advanced, enter the address of the host as Proxmox sees it."
+        },
+        "egress_subnets": {
+          "title": "Outbound subnets",
+          "pass": "Every member of a zone with outbound control has a known subnet.",
+          "warn": "{count, plural, one {# member has no known subnet} other {# members have no known subnet}} ({guests}): their local network is reduced to their own IPs."
         }
       },
       "rateUnits": {
@@ -14113,8 +14338,8 @@
         "load": "Load on Proxmox",
         "enforcement": "Enforcement",
         "observation": "Observation",
-        "address": "ProxCenter address",
         "notifications": "Notify me about",
+        "advanced": "Advanced",
         "removal": "Removal"
       },
       "fields": {
@@ -14123,12 +14348,12 @@
         "ips_interval_sec": "Guest IP read interval",
         "full_interval_sec": "Full check interval",
         "log_interval_sec": "Firewall log read interval",
-        "ready_after_hours": "Observation before enforcing",
+        "ready_after_hours": "Observation before blocking (inbound and outbound)",
         "write_cap": "Write cap per run",
         "rate": "Log rate limit",
         "rateUnit": "Log rate unit",
         "burst": "Log burst",
-        "selfIps": "ProxCenter addresses",
+        "selfIps": "Addresses Proxmox sees",
         "notify_drift": "Drifts",
         "notify_paused": "Engine paused",
         "notify_unprotected": "Unprotected guests",
@@ -14137,8 +14362,7 @@
       "hints": {
         "tagPrefix": "The zone tags on the guests are this prefix followed by the zone name.",
         "write_cap": "Writes to Proxmox allowed in one run. Past it the engine holds and asks you to confirm.",
-        "rate": "Empty leaves the Proxmox log rate limit untouched. Otherwise it is set while a zone is observed.",
-        "selfIps": "The addresses ProxCenter reaches the guests from, separated by commas. Empty: detected automatically."
+        "rate": "Empty leaves the Proxmox log rate limit untouched. Otherwise it is set while a zone is observed."
       },
       "unitsLong": {
         "seconds": "seconds",
@@ -14151,8 +14375,14 @@
         "hour": "per hour",
         "day": "per day"
       },
-      "leaveAsIs": "Leave as is",
+      "leaveAsIs": "Unchanged",
       "detectedAutomatically": "Detected automatically",
+      "selfIpsSource": {
+        "settings": "settings",
+        "install": "install script",
+        "detected": "detected"
+      },
+      "dockerInternalHint": "Address internal to Docker: Proxmox sees the host's address, enter it here.",
       "validation": {
         "tagPrefix": "The tag prefix is 1 to 16 characters: lowercase letters, digits, . _ + -",
         "range": "{label} must be between {min} and {max} {unit}.",
@@ -14181,6 +14411,13 @@
         "body": "Guests keep their old tags, so they leave their zones at the next apply until they are tagged again.",
         "typeName": "Type {prefix} to confirm",
         "confirm": "Change the prefix"
+      },
+      "tips": {
+        "rate": "Cap on log lines per rule, raised during observation so that nothing is lost; applied to the Proxmox cluster.",
+        "logInterval": "Delay between two reads of the firewall log of each node: one read per node and per interval.",
+        "readyAfter": "Time without a new flow that would be blocked before a zone is shown as ready; it is not a lock.",
+        "writeCap": "Past it, the engine stops and asks for a confirmation.",
+        "selfIps": "Addresses ProxCenter reaches the nodes from. The preflight checks they are not cut off. Leave empty to use the detection."
       }
     },
     "history": {
@@ -14308,6 +14545,8 @@
       "title": "Full check",
       "runningText": "Full check in progress",
       "queued": "Waiting for the engine (up to 60 s)",
+      "queuedFor": "Queued for {seconds, number} s: the engine starts it at its next pass, within 60 s",
+      "queuedLate": "The engine is finishing another operation on this cluster: the check comes next",
       "inProgress": "In progress, {seconds, number} s elapsed",
       "progress": "{calls, plural, one {# API call} other {# API calls}}, {writes, plural, one {# write} other {# writes}}, {seconds, number} s",
       "doneSummary": "Checked in {seconds, number} s with {calls, plural, one {# API call} other {# API calls}}",
@@ -14381,7 +14620,12 @@
         "failed": "failed",
         "notRun": "not run"
       },
-      "runAgain": "Run again"
+      "runAgain": "Run again",
+      "stages": {
+        "title": "What the check does",
+        "ips": "IP addresses of the members",
+        "guests": "Guests read again and compared with the policy, drifts repaired"
+      }
     },
     "trafficLens": {
       "connection": "Connection",
@@ -14428,7 +14672,6 @@
     },
     "dfw": {
       "hits24h": "Hits 24 h",
-      "selectAll": "Select every rule shown",
       "any": "any",
       "actionLabel": "Rule action",
       "action": {
@@ -14442,25 +14685,14 @@
       "rowEdited": "unpublished",
       "rowMoved": "moved",
       "rowDisabled": "disabled",
-      "selectRule": "Select rule {pos}",
+      "deleteRule": "Delete rule {pos}",
       "enableLabel": "Rule {pos} enabled",
       "logLabel": "Rule {pos} logged",
-      "selectSection": "Select the rules of {name}",
       "collapse": "Collapse {name}",
       "expand": "Expand {name}",
-      "lastPublished": "Last successful publish on {date} at {time}",
       "publish": "Publish ({count})",
       "discard": "Discard changes",
       "status": {
-        "rules": "{count, plural, one {Rules: # in total} other {Rules: # in total}}",
-        "rulesAtLeast": "{count, plural, one {Rules: at least # in total} other {Rules: at least # in total}}",
-        "rulesHint": "Counts the sections read: the rules of a host or a guest are read when it is opened",
-        "unpublished": "Unpublished",
-        "disabled": "Disabled {count}",
-        "sections": "Sections: {count}",
-        "managed": "Managed by the micro-segmentation {count}",
-        "covered": "VMs covered: {covered} / {running} running",
-        "coveredUnknown": "VMs covered: not read yet",
         "scope": "Scope"
       },
       "scope": {
@@ -14469,17 +14701,6 @@
         "vms": "VMs",
         "all": "All"
       },
-      "bulk": {
-        "enable": "Enable",
-        "disable": "Disable",
-        "clone": "Clone",
-        "up": "Move up",
-        "down": "Move down",
-        "moveTo": "Move to section"
-      },
-      "selection": "{count, plural, =0 {No rule selected} one {# rule selected} other {# rules selected}}",
-      "dragHint": "drag ⋮⋮ to reorder",
-      "clearSelection": "Clear selection",
       "filter": "Filter: IP, port, group, VM",
       "moveDialog": {
         "title": "{count, plural, one {Move # rule to} other {Move # rules to}}",
@@ -14560,10 +14781,6 @@
       "publishedPart": "{applied} of {total} changes published: publish again for the rest",
       "publishFailed": "Publish stopped after {applied} changes applied:",
       "conflict": "the rules of a section were changed in Proxmox since they were read. Discard this section's changes, then publish again: the other sections keep theirs",
-      "mode": {
-        "cluster": "{count, plural, one {cluster · # node} other {cluster · # nodes}}",
-        "standalone": "single node"
-      },
       "defaultDeny": "Zone default deny",
       "denyBlock": "Block",
       "denyWouldBlock": "Would block",
@@ -14571,8 +14788,6 @@
       "discardSection": "Discard this section",
       "conflictOptions": "the firewall options of a section were changed in Proxmox since they were read. Discard this section's changes, then publish again: the other sections keep theirs",
       "publishAgain": "Publish again: the changes not applied are still in the draft.",
-      "summary": "Last publish: {applied} of {total} changes applied",
-      "summaryStopped": "Last publish: {applied} of {total} changes applied, stopped on {kind} in {scope}",
       "addRuleShort": "Add rule",
       "addRuleTo": "Add a rule to {name}",
       "addARule": "Add a rule",
@@ -14597,6 +14812,9 @@
       "titleNoCount": "Discard the unapplied changes?",
       "body": "The draft goes back to the last applied revision.",
       "confirm": "Discard"
+    },
+    "gateway": {
+      "name": "Gateway of {zones}"
     }
   },
   "bulkPower": {

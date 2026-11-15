@@ -29,6 +29,8 @@ export type ZoneRowProps = {
   onEdit: (zone: MicrosegZone) => void
   onDelete: (zone: MicrosegZone) => void
   onSetState: (zone: MicrosegZone, state: ZoneState) => void
+  /** Blocks or reopens the outbound of the zone; without it the zone only shows its outbound state. */
+  onSetEgress?: (zone: MicrosegZone, action: 'block' | 'reopen') => void
   onAssign: (zone: MicrosegZone) => void
   onRemoveMember: (ref: GuestRef) => void
   /** A member removal is in flight: the remove buttons wait. */

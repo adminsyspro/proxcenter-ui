@@ -167,3 +167,57 @@ export function orderLayers(layer: Map<string, number>, edges: Array<[string, st
   for (let l = 2; l <= count; l++) sweep(l, other => other < l)
   return columns
 }
+
+/** A cell of the grid of the map: what a column stacks. */
+type Box = { w: number; h: number }
+
+/**
+ * The view a map is judged in to decide whether its columns are folded: wider than tall, as the map area of the page
+ * is. The real view only changes how much the result is zoomed, not which grid is the most readable.
+ */
+export const FOLD_VIEW = { w: 1600, h: 720 }
+/** A map shown at this zoom or more is left as it is: its columns are its layers, and it reads well. */
+export const FOLD_BELOW = 0.5
+
+/** The size of a grid: its columns side by side (`colGap` apart), each as tall as its cells and their gaps. */
+export function gridExtent(grid: Box[][], colGap: number, rowGap: number): { width: number; height: number } {
+  const widths = grid.map(column => Math.max(...column.map(c => c.w)))
+  const heights = grid.map(column => column.reduce((sum, c) => sum + c.h, 0) + rowGap * (column.length - 1))
+  return { width: widths.reduce((sum, w) => sum + w, 0) + colGap * (grid.length - 1), height: Math.max(...heights) }
+}
+
+/** The zoom at which a grid fits FOLD_VIEW, never above 1 (the map is not enlarged past its natural size). */
+function fitZoom(grid: Box[][], colGap: number, rowGap: number): number {
+  const { width, height } = gridExtent(grid, colGap, rowGap)
+  return Math.min(1, FOLD_VIEW.w / width, FOLD_VIEW.h / height)
+}
+
+/** A column cut into columns of `rows` cells at most, as even as they can be, its order kept top to bottom then left to right. */
+function splitColumn<T>(column: T[], rows: number): T[][] {
+  const parts = Math.ceil(column.length / rows)
+  const per = Math.ceil(column.length / parts)
+  return Array.from({ length: parts }, (_, i) => column.slice(i * per, (i + 1) * per))
+}
+
+/**
+ * Folds the columns of a map too tall to be read: with many zones and few flows between them, most zones share one
+ * column (the columns are the layers of the declared flows), the map is one long strip and fitting it in the view
+ * shrinks it until no name can be read. Below FOLD_BELOW, every column is cut into columns of at most `rows` cells,
+ * for the `rows` that fits the view at the largest zoom (the tallest of them on a tie, the closest to the layers).
+ * The columns of one layer stay next to each other, in their order. A map that already reads well is returned as is.
+ */
+export function foldColumns<T extends Box>(grid: T[][], colGap: number, rowGap: number): T[][] {
+  const columns = grid.filter(column => column.length > 0)
+  if (columns.length === 0 || fitZoom(columns, colGap, rowGap) >= FOLD_BELOW) return grid
+  let best = columns
+  let bestZoom = fitZoom(columns, colGap, rowGap)
+  for (let rows = Math.max(...columns.map(c => c.length)) - 1; rows >= 1; rows--) {
+    const folded = columns.flatMap(column => splitColumn(column, rows))
+    const zoom = fitZoom(folded, colGap, rowGap)
+    if (zoom > bestZoom) {
+      best = folded
+      bestZoom = zoom
+    }
+  }
+  return best
+}

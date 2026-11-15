@@ -136,60 +136,63 @@ export default function LoggingTab({ selectedConnection, nodesList, securityGrou
     return undefined
   }
 
-  return (
-    <Box>
-      <Box sx={{ px: 2, pt: 2, pb: target ? 0.5 : 2 }}>
-        <Autocomplete
-          options={options}
-          value={target}
-          onChange={(_, v) => { if (v?.kind !== 'microseg' || microsegAvailable) setTarget(v) }}
-          getOptionDisabled={o => o.kind === 'microseg' && !microsegAvailable}
-          loading={loading}
-          groupBy={o => groupLabel(o.kind)}
-          getOptionLabel={o => o.label}
-          getOptionKey={o => o.key}
-          isOptionEqualToValue={(a, b) => a.key === b.key}
-          // A guest is also found by its node, a group by its comment.
-          filterOptions={(opts, { inputValue }) => {
-            const q = inputValue.trim().toLowerCase()
+  // The log picker: first on the row of the filters once a log is picked, alone above the hint before.
+  const picker = (
+    <Autocomplete
+      options={options}
+      value={target}
+      onChange={(_, v) => { if (v?.kind !== 'microseg' || microsegAvailable) setTarget(v) }}
+      getOptionDisabled={o => o.kind === 'microseg' && !microsegAvailable}
+      loading={loading}
+      groupBy={o => groupLabel(o.kind)}
+      getOptionLabel={o => o.label}
+      getOptionKey={o => o.key}
+      isOptionEqualToValue={(a, b) => a.key === b.key}
+      // A guest is also found by its node, a group by its comment.
+      filterOptions={(opts, { inputValue }) => {
+        const q = inputValue.trim().toLowerCase()
 
-            return opts.filter(o => !q || o.label.toLowerCase().includes(q) || (caption(o) || '').toLowerCase().includes(q))
-          }}
-          renderOption={({ key, ...props }, o) => {
-            const unavailable = o.kind === 'microseg' && !microsegAvailable
+        return opts.filter(o => !q || o.label.toLowerCase().includes(q) || (caption(o) || '').toLowerCase().includes(q))
+      }}
+      renderOption={({ key, ...props }, o) => {
+        const unavailable = o.kind === 'microseg' && !microsegAvailable
 
-            return (
-              <Box component="li" key={key} {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {/* A disabled option takes no pointer events: the tooltip needs its own. */}
-                <Tooltip title={unavailable ? unavailableReason : ''} placement="right">
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0, pointerEvents: 'auto' }}>
-                    <Box sx={{ width: 18, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>{glyph(o)}</Box>
-                    <Typography variant="body2" noWrap>{o.label}</Typography>
-                    {caption(o) && (
-                      <Typography variant="caption" noWrap sx={{ color: 'text.disabled', ml: 'auto', pl: 2 }}>{caption(o)}</Typography>
-                    )}
-                  </Box>
-                </Tooltip>
+        return (
+          <Box component="li" key={key} {...props} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* A disabled option takes no pointer events: the tooltip needs its own. */}
+            <Tooltip title={unavailable ? unavailableReason : ''} placement="right">
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0, pointerEvents: 'auto' }}>
+                <Box sx={{ width: 18, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>{glyph(o)}</Box>
+                <Typography variant="body2" noWrap>{o.label}</Typography>
+                {caption(o) && (
+                  <Typography variant="caption" noWrap sx={{ color: 'text.disabled', ml: 'auto', pl: 2 }}>{caption(o)}</Typography>
+                )}
               </Box>
-            )
+            </Tooltip>
+          </Box>
+        )
+      }}
+      renderInput={params => (
+        <TextField
+          {...params}
+          size="small"
+          label={t('firewallLog.target')}
+          placeholder={t('firewallLog.targetPlaceholder')}
+          InputProps={{
+            ...params.InputProps,
+            startAdornment: target ? (
+              <InputAdornment position="start" sx={{ ml: 0.5 }}>{glyph(target)}</InputAdornment>
+            ) : undefined,
           }}
-          renderInput={params => (
-            <TextField
-              {...params}
-              size="small"
-              label={t('firewallLog.target')}
-              placeholder={t('firewallLog.targetPlaceholder')}
-              InputProps={{
-                ...params.InputProps,
-                startAdornment: target ? (
-                  <InputAdornment position="start" sx={{ ml: 0.5 }}>{glyph(target)}</InputAdornment>
-                ) : undefined,
-              }}
-            />
-          )}
-          sx={{ maxWidth: 520 }}
         />
-      </Box>
+      )}
+      sx={{ width: target ? 340 : '100%', maxWidth: 520, flexShrink: 0 }}
+    />
+  )
+
+  return (
+    <Box sx={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {!target && <Box sx={{ px: 2, pt: 2, pb: 2 }}>{picker}</Box>}
 
       {target?.kind === 'microseg' ? (
         <MicrosegEventsView
@@ -197,6 +200,7 @@ export default function LoggingTab({ selectedConnection, nodesList, securityGrou
           connectionId={selectedConnection}
           zones={zones}
           guests={guestsByVmid}
+          filtersStart={picker}
         />
       ) : target ? (
         <FirewallLogView
@@ -205,6 +209,7 @@ export default function LoggingTab({ selectedConnection, nodesList, securityGrou
           scope={scopeOf(target)}
           guests={guestsByVmid}
           maxHeight="fill"
+          filtersStart={picker}
         />
       ) : (
         <Box sx={{ py: 8, textAlign: 'center' }}>

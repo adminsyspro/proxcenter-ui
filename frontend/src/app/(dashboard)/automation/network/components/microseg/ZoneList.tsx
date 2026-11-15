@@ -7,19 +7,23 @@ import { useTranslations } from 'next-intl'
 import type { PolicyDiff } from '@/lib/microseg/pendingChanges'
 import type { MicrosegFlow, MicrosegZone, PendingMember } from '@/lib/microseg/types'
 
-import { useMicrosegDrifts } from '@/lib/microseg/useMicrosegLists'
+import { zoneEgress } from '@/lib/microseg/types'
+import { useMicrosegDrifts, useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 
 import { useIgnoredDrifts } from './driftIgnore'
 import PolicyPager, { usePaged } from './PolicyPager'
 import { useBoxSize } from './useBoxSize'
+import { useNow } from './useNow'
+import { SUGGESTIONS_LIMIT } from './useZoneReadiness'
 import ZoneCard, { RemovedZoneCard, ZoneCardDetails, type ZoneCardProps } from './ZoneCard'
+import type { ZoneWorkContext } from './ZoneWorkspace'
 import type { ZoneRowProps } from './ZoneRow'
 import { zoneDriftSignals } from './zonePanelModel'
-import { zoneMembers, type PolicyGuest, type ZoneMember } from './zoneModel'
+import { isEgressReady, pendingOutboundOf, zoneMembers, type PolicyGuest, type ZoneMember } from './zoneModel'
 import { uncoveredSeriesOf, type UncoveredSeries } from './useZoneUncovered'
 import { MicrosegActionsSlot, SlotActions, WriteTip, useMicrosegWrite } from './microsegAccess'
 
-type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onAssign' | 'onRemoveMember' | 'removeBusy' | 'onAddFlow' | 'onEditFlow' | 'onDeleteFlow'>
+type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onSetEgress' | 'onAssign' | 'onRemoveMember' | 'removeBusy' | 'onAddFlow' | 'onEditFlow' | 'onDeleteFlow'>
   & Pick<ZoneCardProps, 'onOpenDrifts'> & {
   connectionId: string
   zones: MicrosegZone[]
@@ -33,16 +37,22 @@ type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onAssign
   onAdd: () => void
   /** The uncovered traffic of the last 24 hours per zone (one read for the tab): null while read, 'failed' when it cannot be. */
   uncovered?: UncoveredSeries | null | 'failed'
+  /** The observation window of the outbound readiness chip (the policy setting). */
+  readyAfterHours?: number
+  /** What the details of a card need to show the zone panel of the map (writes, version, peers); absent: the plain lists. */
+  work?: ZoneWorkContext
 }
 
-/** The zones opened under their chevron, remembered per connection in this browser. */
+/** The zone opened under its chevron (one at a time), remembered per connection in this browser. */
 // A new key for the cards: the open rows of the former list are not carried over, every card starts closed.
 export const openZonesKey = (connectionId: string) => `microseg.policy.openCards.${connectionId}`
 
 function readOpen(connectionId: string): Set<string> {
   try {
     const parsed: unknown = JSON.parse(window.localStorage.getItem(openZonesKey(connectionId)) ?? '[]')
-    return new Set(Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [])
+    // One zone at a time: of a list saved before, the last one opened.
+    const ids = Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : []
+    return new Set(ids.slice(-1))
   } catch {
     return new Set()
   }
@@ -51,8 +61,8 @@ function readOpen(connectionId: string): Set<string> {
 function useOpenZones(connectionId: string) {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => readOpen(connectionId))
   const toggle = useCallback((id: string) => setOpen(prev => {
-    const next = new Set(prev)
-    if (!next.delete(id)) next.add(id)
+    // Opening a zone closes the one open: the details of one zone at a time.
+    const next = new Set(prev.has(id) ? [] : [id])
     try {
       window.localStorage.setItem(openZonesKey(connectionId), JSON.stringify([...next]))
     } catch {
@@ -79,7 +89,7 @@ export function cardColumns(width: number | undefined): number {
  * (struck through until the next apply), ten per page, "+" right of the title for a new zone. An opened card shows
  * its members and flows full width below its row. The drifts are read once (the engine's last full run, no Proxmox call).
  */
-export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests, guestsStatus, pendingMembers, diff, onAdd, onOpenDrifts, uncovered = 'failed', ...handlers }: Props) {
+export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests, guestsStatus, pendingMembers, diff, onAdd, onOpenDrifts, uncovered = 'failed', readyAfterHours, work, ...handlers }: Props) {
   const t = useTranslations('microsegPilot.policy')
   const inSlot = useContext(MicrosegActionsSlot) !== null
   const { canWrite } = useMicrosegWrite()
@@ -87,6 +97,12 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
   const [gridRef, size] = useBoxSize<HTMLDivElement>()
   const { data: drifts } = useMicrosegDrifts(connectionId, { once: true })
   const { ignored } = useIgnoredDrifts(connectionId)
+  // The outbound readiness needs the pending outbound would-block flows: read once, and only when a zone observes its outbound.
+  const now = useNow()
+  const observingEgress = zones.some(z => zoneEgress(z) === 'observe')
+  const { data: outbound } = useMicrosegSuggestions(observingEgress ? connectionId : null, { kind: 'would_block', status: 'pending', direction: 'out', limit: SUGGESTIONS_LIMIT })
+  const egressReady = (zone: MicrosegZone) =>
+    zoneEgress(zone) === 'observe' && !!outbound && outbound.length < SUGGESTIONS_LIMIT && isEgressReady(zone, pendingOutboundOf(outbound, zone.id), readyAfterHours, now)
 
   const items: Item[] = useMemo(() => [
     ...zones.map(zone => ({ zone, removed: false, members: zoneMembers(zone, tagPrefix, guests, pendingMembers, zones) })),
@@ -118,8 +134,10 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
         onToggle={() => toggle(item.zone.id)}
         drifts={signals?.count ?? null}
         onOpenDrifts={onOpenDrifts}
+        egressReady={egressReady(item.zone)}
         uncovered={uncovered === 'failed' ? null : {
           series: uncovered ? uncoveredSeriesOf(uncovered, item.zone.name, diff?.renamedZones.get(item.zone.id)) : null,
+          outSeries: uncovered ? uncoveredSeriesOf(uncovered, item.zone.name, diff?.renamedZones.get(item.zone.id), 'out') : null,
           from: uncovered?.from ?? 0,
           stepMs: uncovered?.stepMs ?? 3_600_000,
         }}
@@ -138,6 +156,7 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
         flowDiff={diff?.flows ?? null}
         open
         onToggle={() => toggle(item.zone.id)}
+        work={work}
         {...handlers}
       />
     </Box>

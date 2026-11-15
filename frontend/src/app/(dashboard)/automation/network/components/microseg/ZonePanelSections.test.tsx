@@ -17,7 +17,6 @@ import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProvider
 import { GUESTS_ROUTE, REVISION_HEAD, calls, mock, policy, renderTab, reply } from './microsegTestKit'
 import MicrosegTab from './MicrosegTab'
 import { PANEL_SECTIONS_KEY } from './PanelSection'
-import { PANEL_DIRECTION_KEY } from './SelectionTraffic'
 import { body, db, installFreshMocks, vm, web } from './policyTestKit'
 import { SUGGESTIONS, node, setup, wouldBlock } from './zoneMapTestKit'
 
@@ -107,12 +106,12 @@ describe('zone panel: drifts', () => {
 
 describe('zone panel: Observed traffic and Top sources', () => {
   it('charts the events logged in the zone (asked with zone=), stacked by source zone, and ranks its sources with their share', async () => {
-    window.localStorage.setItem(PANEL_DIRECTION_KEY, 'in')
     mock.routes[EVENTS_OF_DB] = () => reply(200, {
       events: [event('web'), event('web'), event('web', { verdict: 'blocked' }), event('')], truncated: false, oldest: null,
     })
     setup()
     const panel = await openDb()
+    fireEvent.click(within(panel).getByTestId('direction-in'))
 
     const traffic = section(panel, 'Observed traffic')
     await waitFor(() => expect(within(traffic).getAllByTestId(/^area-/).map(a => a.getAttribute('data-testid'))).toEqual(['area-zone:zw', 'area-external']))
@@ -144,8 +143,59 @@ describe('zone panel: Pending suggestions', () => {
   })
 })
 
+describe('zone panel: expanded in a dialog', () => {
+  it('opens the traffic, the data and the logs of the zone in a centred dialog with tabs', async () => {
+    mock.routes[EVENTS_OF_DB] = () => reply(200, { events: [event('web')], truncated: false, oldest: null })
+    mock.routes['GET /events?limit=200'] = () => reply(200, {
+      events: [event('web'), event('db', { zone: 'web', dst_ip: '172.30.99.43', dport: 9999 }), event('web', { zone: 'other', src_zone: 'x' })], truncated: false, oldest: null,
+    })
+    setup({ suggestions: [wouldBlock('s1')] })
+    const panel = await openDb()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Expand' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Zone details · db' })
+    expect(within(dialog).getAllByRole('tab').map(t => t.textContent)).toEqual(['Traffic', 'Data', 'Logs'])
+    const title = within(dialog).getByRole('heading', { name: 'Zone details · db' })
+    expect(title.parentElement?.textContent).toContain('Zone details · db')
+    expect(within(title.parentElement as HTMLElement).getByRole('button', { name: 'Close' })).toBeTruthy()
+    expect(within(dialog).getByTestId('direction-both').getAttribute('aria-pressed')).toBe('true')
+    expect(await within(dialog).findByTestId('traffic-summary')).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Data' }))
+    const subs = within(dialog).getAllByRole('tab').map(t => t.textContent)
+    expect(subs.slice(3)).toEqual(['Pending suggestions (1)', 'Members (0)', 'Incoming flows (0)', 'Outgoing flows (0)'])
+    expect(within(dialog).getAllByRole('listitem')).toHaveLength(1)
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Members (0)' }))
+    expect(within(dialog).queryAllByRole('listitem')).toHaveLength(0)
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Incoming flows (0)' }))
+    expect(within(dialog).getByRole('button', { name: 'New flow' })).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Logs' }))
+    await waitFor(() => expect(within(dialog).getAllByRole('row')).toHaveLength(3))
+    expect(within(dialog).getAllByRole('columnheader').map(c => c.textContent)).toEqual(['Time', 'Direction', 'Verdict', 'Source', 'Destination', 'Service', 'Node'])
+    expect(within(dialog).getByText('172.30.99.43')).toBeTruthy()
+    expect(within(dialog).getAllByText('Would be blocked').length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByText('Inbound').length).toBeGreaterThan(0)
+  })
+})
+
+describe('zone panel: outbound suggestions', () => {
+  it('names the destination as the peer of an outbound row, and keeps the source for an inbound one', async () => {
+    setup({ suggestions: [
+      wouldBlock('o1', { direction: 'out', src_zone_id: 'zd', dst_zone_id: '', src_ip: '10.0.0.2', dst_ip: '172.30.99.43', dst_key: '172.30.99.43', proto: 'tcp', dport: '9999' }),
+      wouldBlock('o2', { direction: 'out', src_zone_id: 'zd', dst_zone_id: 'zw', dst_key: 'zw', dst_ip: '' }),
+      wouldBlock('o3', { direction: 'out', src_zone_id: 'zd', dst_zone_id: '', dst_ip: '', dst_key: '0.0.0.0/0' }),
+      wouldBlock('i1'),
+    ] })
+    const panel = await openDb()
+    const pending = section(panel, 'Pending suggestions')
+    expect(within(pending).getAllByRole('listitem').map(l => l.getAttribute('aria-label')).sort()).toEqual(['172.30.99.43', 'Many destinations', 'web', 'web'])
+    expect(within(pending).queryByRole('listitem', { name: 'db' })).toBeNull()
+  })
+})
+
 describe('zone panel: direction', () => {
-  it('charts outbound the flows the zone emitted, by destination zone, ranks its destinations, and remembers the choice', async () => {
+  it('charts outbound the flows the zone emitted, by destination zone, ranks its destinations, and does not remember the choice', async () => {
     // The ring has no source zone filter: outbound reads it whole and keeps the events from db.
     mock.routes['GET /events?limit=500'] = () => reply(200, {
       events: [event('db', { zone: 'web' }), event('db', { zone: 'web' }), event('web', { zone: 'db' })], truncated: false, oldest: null,
@@ -156,17 +206,19 @@ describe('zone panel: direction', () => {
 
     const traffic = section(panel, 'Observed traffic')
     await waitFor(() => expect(within(traffic).getByTestId('traffic-summary').textContent).toBe('2 hits · top destination web (100%) · 2 would be blocked, 0 blocked'))
+    fireEvent.mouseOver(within(traffic).getByTestId('traffic-summary'))
+    expect((await screen.findByRole('tooltip')).textContent).toContain("Blocked: connections blocked by the destination zone (its inbound) or by this zone's outbound.")
     expect(within(traffic).getAllByTestId(/^area-/).map(a => a.getAttribute('data-testid'))).toEqual(['area-zone:zw'])
     expect(within(panel).getByRole('region', { name: 'Top destinations' })).toBeTruthy()
-    expect(window.localStorage.getItem(PANEL_DIRECTION_KEY)).toBe('out')
 
     fireEvent.click(within(panel).getByRole('button', { name: 'Close' }))
     panel = await openDb()
-    expect(within(panel).getByTestId('direction-out').getAttribute('aria-pressed')).toBe('true')
+    expect(within(panel).getByTestId('direction-both').getAttribute('aria-pressed')).toBe('true')
+    expect(within(panel).getByTestId('direction-out').getAttribute('aria-pressed')).toBe('false')
+    expect(Object.keys(window.localStorage).some(k => /direction/i.test(k))).toBe(false)
   })
 
   it('reads the persisted history and not the ring while the history answers, one read for both directions', async () => {
-    window.localStorage.setItem(PANEL_DIRECTION_KEY, 'in')
     mock.routes['GET /traffic*'] = () => reply(200, {
       step: 300, from: new Date(Date.now() - 3_600_000).toISOString(), to: new Date(Date.now() + 300_000).toISOString(),
       buckets: [
@@ -177,6 +229,7 @@ describe('zone panel: direction', () => {
     setup()
     const panel = await openDb()
     const traffic = section(panel, 'Observed traffic')
+    fireEvent.click(within(panel).getByTestId('direction-in'))
 
     await waitFor(() => expect(within(traffic).getByTestId('traffic-summary').textContent).toBe('4 hits · top source web (100%) · 4 would be blocked, 0 blocked'))
     fireEvent.click(within(panel).getByTestId('direction-out'))
@@ -219,23 +272,21 @@ describe('zone panel: both directions (the default)', () => {
   })
 
   it('says one direction is empty while the other has traffic, with a way to it', async () => {
-    window.localStorage.setItem(PANEL_DIRECTION_KEY, 'in')
     mock.routes['GET /traffic*'] = HISTORY([{ zone: 'web', src_zone: 'db', verdict: 'blocked', hits: 7 }])
     setup()
     const panel = await openDb()
     const traffic = section(panel, 'Observed traffic')
+    fireEvent.click(within(panel).getByTestId('direction-in'))
 
     const empty = await within(traffic).findByTestId('timeline-empty')
     expect(empty.textContent).toBe('No inbound traffic in this range · 7 hits outbound · Show outbound')
     fireEvent.click(within(traffic).getByTestId('timeline-empty-action'))
     await waitFor(() => expect(within(panel).getByTestId('direction-out').getAttribute('aria-pressed')).toBe('true'))
-    expect(window.localStorage.getItem(PANEL_DIRECTION_KEY)).toBe('out')
   })
 })
 
 describe('guest panel: Observed traffic', () => {
   it('charts the events the guest logged (its VMID) from the ring, without range chips', async () => {
-    window.localStorage.setItem(PANEL_DIRECTION_KEY, 'in')
     mock.routes['GET /events?limit=500'] = () => reply(200, {
       events: [event('web', { vmid: 101 }), event('web', { vmid: 101 }), event('', { vmid: 999 })], truncated: false, oldest: null,
     })
@@ -247,6 +298,7 @@ describe('guest panel: Observed traffic', () => {
     fireEvent.change(search, { target: { value: 'db1' } })
     fireEvent.click(await screen.findByRole('option', { name: /^db1,/ }))
     const panel = await screen.findByRole('complementary', { name: 'Guest db1' })
+    fireEvent.click(within(panel).getByTestId('direction-in'))
 
     const traffic = section(panel, 'Observed traffic')
     await waitFor(() => expect(within(traffic).getAllByTestId(/^area-/).map(a => a.getAttribute('data-testid'))).toEqual(['area-zone:zw']))

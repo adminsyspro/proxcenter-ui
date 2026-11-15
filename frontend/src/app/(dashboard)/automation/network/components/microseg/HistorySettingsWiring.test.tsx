@@ -37,7 +37,7 @@ const FIREWALL = { clusterOptions: null, clusterRules: [], nodesList: ['pve1'], 
 
 const PREFLIGHT_FAIL = {
   checks: [
-    { id: 'cluster_firewall', status: 'pass' },
+    { id: 'cluster_firewall', status: 'fail', fix: 'enable_cluster_firewall' },
     { id: 'socle_rules', status: 'fail', fix: 'socle', detail: { web: false, ssh: false } },
   ],
 }
@@ -67,7 +67,7 @@ describe('preflight', () => {
     expect(calls('GET /preflight')).toHaveLength(1)
   })
 
-  it('opens the deployment wizard from a failed socle check, and checks again when the wizard is done', async () => {
+  it('opens the deployment wizard from the cluster firewall check, and checks again when the wizard is done', async () => {
     mock.routes['GET /preflight'] = () => reply(200, PREFLIGHT_FAIL)
     window.localStorage.setItem('microseg.subTab', 'policy')
     renderConfigured()
@@ -89,7 +89,7 @@ describe('preflight', () => {
     renderConfigured({ firewall: undefined })
     fireEvent.click(await screen.findByRole('button', { name: 'Pre-flight checks' }))
     const dialog = await screen.findByRole('dialog', { name: 'Pre-flight checks' })
-    await within(dialog).findByRole('listitem', { name: 'Management access: failed' })
+    await within(dialog).findByRole('listitem', { name: 'Cluster firewall: failed' })
     expect(within(dialog).queryByRole('button', { name: 'Open the deployment wizard' })).toBeNull()
   })
 })
@@ -101,11 +101,14 @@ describe('settings', () => {
     expect(await screen.findByRole('dialog', { name: 'Micro-segmentation settings' })).toBeTruthy()
   })
 
-  it('opens from the link of the Observation sub-tab', async () => {
+  it('opens from the gear of the Observation sub-tab: its legend, on the row of the pager, has no link of its own', async () => {
     window.localStorage.setItem('microseg.subTab', 'observation')
     mock.routes['GET /suggestions?limit=26&status=pending'] = () => reply(200, { suggestions: [], limit: 26, offset: 0 })
     renderConfigured()
-    fireEvent.click(await screen.findByRole('button', { name: 'Open settings' }))
+    const legend = await screen.findByTestId('observation-legend')
+    expect(screen.getByTestId('microseg-actions-slot').contains(legend)).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Open settings' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(await screen.findByRole('dialog', { name: 'Micro-segmentation settings' })).toBeTruthy()
   })
 

@@ -24,6 +24,17 @@ describe('countPendingChanges', () => {
     expect(countPendingChanges(draft, last)).toBe(3)
   })
 
+  it('counts an outbound mode or state change as a zone change, but not an absent value against off/local nor the observation instant', () => {
+    const base = revision([zone('a'), zone('b')], [])
+    const count = (z: Partial<MicrosegZone>) => countPendingChanges({ zones: [zone('a', z), zone('b')], flows: [], pending_members: [] }, base)
+    expect(count({ egress_mode: 'all' })).toBe(1)
+    expect(count({ egress_state: 'observe' })).toBe(1)
+    expect(count({ egress_state: 'off', egress_mode: 'local' })).toBe(0)
+    expect(count({ egress_observe_since: '2026-11-02T10:00:00Z' })).toBe(0)
+    const observing = revision([zone('a', { egress_state: 'observe', egress_observe_since: '2026-11-01T10:00:00Z' }), zone('b')], [])
+    expect(countPendingChanges({ zones: [zone('a', { egress_state: 'observe', egress_observe_since: '2026-11-02T10:00:00Z' }), zone('b')], flows: [], pending_members: [] }, observing)).toBe(0)
+  })
+
   it('counts nothing when the draft equals the last revision', () => {
     const draft = { zones: [zone('a'), zone('b')], flows: [flow('f1'), flow('f2')], pending_members: [] }
     expect(countPendingChanges(draft, last)).toBe(0)

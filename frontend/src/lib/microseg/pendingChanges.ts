@@ -14,6 +14,7 @@ function sameZone(a: MicrosegZone, b: MicrosegZone): boolean {
   const tb = b.observe_since ? Date.parse(b.observe_since) : null
   return a.name === b.name && a.label === b.label && a.color === b.color && a.enforcement === b.enforcement
     && a.vnet_id === b.vnet_id && a.state === b.state && a.isolate_members === b.isolate_members && ta === tb
+    && (a.egress_state ?? 'off') === (b.egress_state ?? 'off') && (a.egress_mode ?? 'local') === (b.egress_mode ?? 'local')
 }
 
 function sameFlow(a: MicrosegFlow, b: MicrosegFlow): boolean {

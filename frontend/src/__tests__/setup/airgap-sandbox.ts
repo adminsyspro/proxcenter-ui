@@ -97,11 +97,20 @@ if [ "\${FAKE_HOSTNAME_RC:-0}" != "0" ]; then exit "$FAKE_HOSTNAME_RC"; fi
 if [ "$1" = "-I" ]; then echo "10.42.0.55 172.17.0.1 "; else echo "airgap-test"; fi
 `
 
+// `ip -o addr show`: the docker0 bridge, whose address the installer leaves
+// out of PROXCENTER_HOST_IPS.
+const FAKE_IP = `#!/bin/bash
+echo "ip $*" >> "$FAKE_ARGV_LOG"
+echo "1: lo    inet 127.0.0.1/8 scope host lo"
+echo "2: ens18    inet 10.42.0.55/24 brd 10.42.0.255 scope global ens18"
+echo "3: docker0    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0"
+`
+
 export function makeAirgapSandbox(): AirgapSandbox {
   const dir = mkdtempSync(join(tmpdir(), 'proxcenter-airgap-test-'))
   const bin = join(dir, 'bin')
   mkdirSync(bin)
-  for (const [name, body] of [['docker', FAKE_DOCKER], ['curl', FAKE_CURL], ['hostname', FAKE_HOSTNAME]] as const) {
+  for (const [name, body] of [['docker', FAKE_DOCKER], ['curl', FAKE_CURL], ['hostname', FAKE_HOSTNAME], ['ip', FAKE_IP]] as const) {
     const p = join(bin, name)
     writeFileSync(p, body)
     chmodSync(p, 0o755)

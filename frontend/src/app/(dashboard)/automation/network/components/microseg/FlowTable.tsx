@@ -48,12 +48,13 @@ function End({ zoneId, cidr, zonesById }: { zoneId: string; cidr: string; zonesB
   )
 }
 
-const STATE_CHIP: Record<Exclude<FlowState, 'unknown'>, { color: 'default' | 'success' | 'warning' | 'error'; icon: string }> = {
+const STATE_CHIP: Record<Exclude<FlowState, 'unknown'>, { color: 'default' | 'success' | 'warning' | 'error' | 'info'; icon: string }> = {
   applied: { color: 'default', icon: 'ri-check-line' },
   pendingAdd: { color: 'success', icon: 'ri-add-line' },
   pendingChange: { color: 'warning', icon: 'ri-edit-line' },
   pendingRemoval: { color: 'error', icon: 'ri-subtract-line' },
   notApplied: { color: 'default', icon: 'ri-information-line' },
+  observed: { color: 'info', icon: 'ri-eye-line' },
 }
 
 /** The state of a flow; its colour is the diff's (added green, changed amber, removed red). */

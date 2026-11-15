@@ -18,9 +18,9 @@ export const HEAD_PX = 40
 export const MIN_ROWS = 10
 
 /** The rows that fit in a box of `height` px under the head row, at least MIN_ROWS. */
-export function rowsThatFit(height: number | null | undefined): number {
-  if (!height || height <= HEAD_PX) return MIN_ROWS
-  return Math.max(MIN_ROWS, Math.floor((height - HEAD_PX) / ROW_PX))
+export function rowsThatFit(height: number | null | undefined, rowPx = ROW_PX, headPx = HEAD_PX): number {
+  if (!height || height <= headPx) return MIN_ROWS
+  return Math.max(MIN_ROWS, Math.floor((height - headPx) / rowPx))
 }
 
 /**

@@ -9385,40 +9385,8 @@
     "loadErrorDetails": "Détails",
     "loadErrorHideDetails": "Masquer les détails",
     "dashboard": {
-      "stopHeldTitle": "Pare-feu de cluster coupé par l'arrêt d'urgence",
-      "coverageDefinition": "Protégé : pare-feu activé dans les options de l'invité et sur une de ses interfaces réseau, ce que Proxmox applique",
-      "coverageSampled": "Au-delà de {max, number} invités, seul un échantillon régulier est mesuré.",
-      "todoTitle": "À faire",
-      "todoNothing": "Rien à faire",
-      "todoUnavailable": "Indisponible tant que les données du pare-feu ne peuvent pas être lues",
-      "todoFirewallOff": "Pare-feu du cluster désactivé",
-      "todoManagementRules": "Aucune règle du cluster n'ouvre l'administration ({count, plural, one {port {ports}} other {ports {ports}}})",
-      "todoPolicyIn": "Politique entrante ACCEPT : tout ce qu'aucune règle ne bloque entre",
-      "todoUnprotected": "{count, plural, one {# invité sans pare-feu} other {# invités sans pare-feu}}",
-      "todoUnzoned": "{count, plural, one {# invité en marche dans aucune zone} other {# invités en marche dans aucune zone}}",
-      "todoPendingFlows": "{count, plural, one {# flux observé à examiner} other {# flux observés à examiner}}",
-      "todoPendingFlowsMore": "Au moins {count, number} flux observés à examiner",
-      "todoResume": "Reprendre",
-      "todoOpenWizard": "Ouvrir l'assistant",
-      "todoOpenOptions": "La modifier",
-      "todoShowThem": "Les afficher",
-      "todoOpenDrifts": "Ouvrir les écarts",
-      "todoOpenObservation": "Les examiner",
       "filterUnprotected": "{count, plural, one {# invité sans pare-feu} other {# invités sans pare-feu}}",
       "filterClear": "Afficher tous les invités",
-      "postureChipCluster": "Pare-feu de cluster {state} · entrant {policy}",
-      "postureChipHost": "Pare-feu de l'hôte {state} · entrant {policy}",
-      "postureOn": "activé",
-      "postureOff": "coupé",
-      "postureChipClusterUnknown": "Pare-feu de cluster indisponible",
-      "postureChipStopped": "Arrêt d'urgence actif",
-      "postureChipZones": "Zones en blocage {enforced, number} / {total, number}",
-      "postureChipZonesUnknown": "Zones en blocage -",
-      "postureChipGuests": "Invités protégés {protected, number} / {running, number} en marche",
-      "postureChipGuestsSampled": "Invités protégés {protected, number} / {running, number} mesurés · {total, number} en marche",
-      "postureChipGuestsUnknown": "Invités protégés -",
-      "postureChipLastCheck": "Dernière vérification {time}",
-      "postureChipNoCheck": "Aucune vérification encore",
       "postureTrafficByZone": "Trafic par zone",
       "postureTrafficByVlan": "Trafic par VLAN",
       "postureTrafficByNode": "Trafic par nœud",
@@ -9432,6 +9400,7 @@
       "postureHits": "{count, plural, one {# occurrence} other {# occurrences}}",
       "postureMembers": "{count, plural, one {# invité} other {# invités}}",
       "postureUnknownExternal": "Inconnu / Externe",
+      "postureOutside": "Extérieur",
       "postureUnzoned": "Hors zone",
       "postureOther": "Autres",
       "postureNoVlan": "Sans VLAN",
@@ -9446,23 +9415,29 @@
       "postureAllowed": "Autorisé",
       "postureWouldBlock": "Serait bloqué",
       "postureBlocked": "Bloqué",
-      "postureNotCovered": "Non couvert",
       "postureFlows": "{count, plural, one {# flux} other {# flux}}",
       "postureNoCounter": "sans compteur",
+      "postureNoCounterHint": "Les flux autorisés par la politique ne sont pas journalisés : leurs occurrences ne sont pas comptées.",
       "postureAwaitingDecision": "en attente d'une décision",
       "postureBlockedIn": "dans {zones}",
+      "postureBlockedOut": "en sortie de {zones}",
       "postureBlockedNone": "aucun rejeté",
       "postureServicesTitle": "Principaux services par occurrences",
+      "postureServicesShown": "{shown, number} services sur {total, number}",
+      "postureServicesAll": "Tous les flux observés",
       "postureColService": "Service réseau",
       "postureColFlows": "Flux",
       "postureColHits": "Occurrences",
       "postureColStatus": "Statut",
       "postureNoServices": "Aucun service observé ni autorisé",
+      "postureConversationsTitle": "Principales conversations",
+      "postureConversationsCaption": "source vers destination, par occurrences",
+      "postureColSource": "Source",
+      "postureColDestination": "Destination",
+      "postureColServices": "Services",
+      "postureNoConversations": "Aucun flux observé à examiner",
+      "postureConversationsShown": "{shown} conversations sur {total}",
       "postureUnknownIncludesUnzoned": "les sources inconnues incluent les invités hors zone tant que la liste des invités n'est pas lue (regrouper par VLAN ou par nœud)",
-      "postureRefresh": "Recalculer la couverture",
-      "postureRefreshAgo": "Calculée {time} · recalculer",
-      "postureRefreshSoon": "Calculée {time} · chiffres de moins de 30 secondes",
-      "postureRefreshComputing": "Calcul de la couverture en cours",
       "postureTimelineTitle": "Trafic observé dans le temps",
       "postureTimelineWindow": "fenêtre couverte : {minutes, plural, one {la dernière minute} other {les # dernières min}} (mémoire de l'orchestrateur)",
       "postureTimelineVerdict": "Verdict du pare-feu",
@@ -9514,54 +9489,31 @@
     }
   },
   "deployWizard": {
-    "bannerTitle": "Firewall du cluster non configuré",
-    "bannerDescription": "Votre cluster n'a aucune règle firewall et le firewall est désactivé. Déployez les règles essentielles avant d'activer le firewall pour éviter de perdre la connectivité.",
-    "bannerButton": "Déployer le Firewall",
-    "dialogTitle": "Déploiement du Firewall Cluster",
+    "dialogTitle": "Déploiement du pare-feu du cluster",
     "stepAnalysis": "Analyse",
-    "stepPreview": "Aperçu",
-    "stepApply": "Application",
     "stepActivate": "Activation",
     "stepDone": "Terminé",
     "analysisTitle": "État actuel du cluster",
     "analysisNodes": "{count} nœuds détectés",
-    "analysisFirewallOff": "Le firewall cluster est désactivé",
-    "analysisNoRules": "Aucune règle firewall cluster configurée",
-    "analysisPolicyAccept": "Policy par défaut : ACCEPT (tout le trafic autorisé)",
-    "analysisWarning": "Activer le firewall avec une policy DROP sans règles whitelist coupera la communication du cluster (Corosync, Ceph, migrations…). Cet assistant va d'abord créer les règles essentielles.",
-    "previewTitle": "Règles à créer",
-    "previewDescription": "Les {count} règles suivantes seront ajoutées au firewall cluster pour autoriser les services Proxmox essentiels.",
-    "previewService": "Service",
-    "previewProtocol": "Protocole",
-    "previewPorts": "Ports",
-    "previewDirection": "Direction",
-    "previewAction": "Action",
-    "applyTitle": "Application des règles",
-    "applyCreating": "Création de la règle : {service}",
-    "applySuccess": "Règle créée : {service}",
-    "applyError": "Échec de création : {service}",
-    "applyComplete": "Les {count} règles ont été créées avec succès !",
-    "applyPartial": "{success} règles créées sur {total}. {failed} en échec.",
-    "activateTitle": "Activer le firewall",
-    "activateEnableFirewall": "Activer le firewall cluster",
-    "activateSetDrop": "Mettre la policy entrante en DROP",
-    "activateWarning": "Activer la policy DROP signifie que tout le trafic entrant non explicitement autorisé par une règle sera bloqué. Les règles créées à l'étape précédente garantissent que les services cluster restent accessibles.",
+    "analysisFirewallOff": "Le pare-feu du cluster est désactivé",
+    "analysisNodesReading": "Lecture du pare-feu des nœuds…",
+    "analysisNodesOff": "Le pare-feu de chaque nœud est désactivé : activer le pare-feu du cluster ne filtre que les invités",
+    "analysisNodesFollow": "{count, plural, one {1 nœud active son propre pare-feu avec le cluster : {nodes}} other {# nœuds activent leur propre pare-feu avec le cluster : {nodes}}}",
+    "analysisInfo": "Cet assistant active le pare-feu du cluster, dont ont besoin le pare-feu des invités et la micro-segmentation. Il n'écrit rien sur les nœuds : ni règle, ni politique entrante.",
+    "analysisNodesWarning": "Sur {nodes}, le pare-feu du nœud n'est pas désactivé (enable: 0) : Proxmox l'active avec celui du cluster et filtre le nœud selon les règles posées par son administrateur. ProxCenter n'en ajoute aucune : vérifiez que l'interface web (8006) et SSH (22) restent joignables, ou désactivez le pare-feu du nœud.",
+    "analysisNodesUnknown": "Le pare-feu de {nodes} n'a pas pu être lu : vérifiez-le avant d'activer le pare-feu du cluster.",
+    "activateTitle": "Activer le pare-feu du cluster",
+    "activateDescription": "Le pare-feu du cluster est activé. Rien d'autre ne change : les règles, les politiques et le pare-feu des nœuds restent tels quels.",
+    "activateFailed": "Le pare-feu du cluster n'a pas pu être activé. Réessayez, ou activez-le dans Pare-feu > Options.",
     "activateButton": "Activer",
     "activateSkip": "Passer pour le moment",
     "activating": "Activation...",
     "doneTitle": "Déploiement terminé !",
-    "doneRulesCreated": "{count} règles cluster créées",
-    "doneFirewallEnabled": "Firewall cluster activé",
-    "doneFirewallNotEnabled": "Firewall cluster non activé (activation manuelle nécessaire)",
-    "donePolicyDrop": "Policy entrante définie sur DROP",
-    "donePolicyAccept": "Policy entrante reste en ACCEPT",
-    "doneViewRules": "Voir les règles",
+    "doneFirewallEnabled": "Pare-feu du cluster activé",
+    "doneFirewallNotEnabled": "Pare-feu du cluster non activé (activation manuelle nécessaire)",
     "doneClose": "Fermer",
     "next": "Suivant",
-    "cancel": "Annuler",
-    "customAdd": "Ajouter",
-    "customComment": "Description",
-    "customCommentPlaceholder": "ex. HTTPS, Monitoring…"
+    "cancel": "Annuler"
   },
   "firewall": {
     "type": "Type",
@@ -13305,7 +13257,9 @@
         "done": "Terminé",
         "failed": "Échec",
         "running": "En cours"
-      }
+      },
+      "logNode": "{node} · {rate} lignes/min · retard {lag}",
+      "logBehind": "Journal en retard"
     },
     "stop": {
       "button": "Arrêt d'urgence",
@@ -13321,29 +13275,45 @@
       "infoObjects": "Les objets de micro-segmentation restent en place ; Reprendre réactive le pare-feu de cluster et réapplique la politique",
       "infoUse": "À utiliser quand la segmentation bloque quelque chose qu'elle ne devrait pas",
       "resumeInfoReenable": "Réactive le pare-feu de cluster, puis réapplique la dernière révision",
-      "resumeInfoSocle": "Refusé si les règles d'administration (SSH 22, web 8006) sont absentes : corrigez-les d'abord dans l'assistant de déploiement du tableau de bord",
-      "openWizard": "Ouvrir l'assistant de déploiement",
+      "resumeInfoSocle": "Refusé si un nœud dont le pare-feu est actif ne laisse pas entrer l'interface web (8006) et SSH (22) : autorisez-les dans le pare-feu de ce nœud, ou désactivez-le, d'abord",
       "clusterFirewallOff": "Pare-feu de cluster désactivé",
-      "notDeployed": "Rien de déployé"
+      "notDeployed": "Rien de déployé",
+      "socleUncovered": "Adresses que les règles n'acceptent pas : {ips}",
+      "socleUncoveredNodes": "Adresses que les règles n'acceptent pas : {ips} (sur {nodes})"
     },
     "pending": {
-      "noCount": "Changements non appliqués",
-      "viewPlan": "Voir le plan",
+      "noCount": "Changements pas encore appliqués.",
+      "viewPlan": "Vérifier et appliquer",
       "prefixed": "{prefix} : {text}",
-      "whatWillChange": "Ce qui va changer : {list}",
+      "whatWillChange": "Pas encore appliqué : {list}.",
       "zones": {
         "added": "{count, plural, one {# zone ajoutée} other {# zones ajoutées}}",
         "changed": "{count, plural, one {# zone modifiée} other {# zones modifiées}}",
         "removed": "{count, plural, one {# zone supprimée} other {# zones supprimées}}"
+      },
+      "zonesNamed": {
+        "added": "{count, plural, one {zone {names} ajoutée} other {zones {names} ajoutées}}",
+        "changed": "{count, plural, one {zone {names} modifiée} other {zones {names} modifiées}}",
+        "removed": "{count, plural, one {zone {names} supprimée} other {zones {names} supprimées}}"
       },
       "flows": {
         "added": "{count, plural, one {# flux ajouté} other {# flux ajoutés}}",
         "changed": "{count, plural, one {# flux modifié} other {# flux modifiés}}",
         "removed": "{count, plural, one {# flux supprimé} other {# flux supprimés}}"
       },
+      "flowsNamed": {
+        "added": "flux {flow} ajouté",
+        "changed": "flux {flow} modifié",
+        "removed": "flux {flow} supprimé"
+      },
       "members": "{count, plural, one {# changement de membre} other {# changements de membres}}",
+      "membersTo": "{count, plural, one {# invité vers {zone}} other {# invités vers {zone}}}",
       "tagPrefix": "préfixe des tags modifié",
-      "whatWillChangeInline": "ce qui va changer : {list}"
+      "whatWillChangeInline": "pas encore appliqué : {list}.",
+      "untilApplied": "Rien ne change dans Proxmox tant que le plan n'est pas appliqué.",
+      "applying": "Application en cours : {list}",
+      "applyingInline": "application en cours : {list}",
+      "applyingNoCount": "Application des changements en cours"
     },
     "firstRun": {
       "title": "Mettre en place la micro-segmentation",
@@ -13378,7 +13348,7 @@
       "NETWORK": "ProxCenter est injoignable. Vérifiez votre connexion réseau.",
       "CHECK_PENDING": "Une vérification est déjà en file d'attente : le moteur la lance à son prochain passage.",
       "generic": "Une erreur est survenue. Réessayez.",
-      "SOCLE_MISSING": "Les règles d'administration (SSH 22, web 8006) sont absentes : le pare-feu de cluster n'a pas été réactivé. Ajoutez-les avec l'assistant de déploiement, puis reprenez.",
+      "SOCLE_MISSING": "Un nœud dont le pare-feu est actif ne laisse pas entrer l'interface web (8006) et SSH (22) : le pare-feu du cluster n'a pas été réactivé. Autorisez-les dans le pare-feu de ce nœud, ou désactivez-le, puis reprenez.",
       "NOT_DEPLOYED": "Rien n'est déployé : appliquez d'abord un plan, l'arrêt d'urgence agit sur une politique déployée."
     },
     "policy": {
@@ -13410,6 +13380,7 @@
         "outgoing": "Flux sortants",
         "noFlows": "Aucun",
         "changeState": "Changer l'état",
+        "stateChanging": "Changement d'état en cours",
         "edit": "Modifier la zone",
         "delete": "Supprimer la zone",
         "state": {
@@ -13450,15 +13421,37 @@
           "loading": "Lecture de l'historique...",
           "disabled": "Zone désactivée : son trafic n'est pas journalisé",
           "aria": "{count, plural, one {Trafic non couvert sur les dernières 24 heures : # occurrence} other {Trafic non couvert sur les dernières 24 heures : # occurrences}}",
-          "bar": "{from} à {to} : {count, plural, one {# occurrence} other {# occurrences}}"
-        }
+          "bar": "{from} à {to} : {count, plural, one {# occurrence} other {# occurrences}}",
+          "barBoth": "{from} à {to} : {count, plural, one {# occurrence} other {# occurrences}} entrantes, {out, plural, one {# occurrence} other {# occurrences}} sortantes",
+          "legendIn": "Entrant",
+          "legendOut": "Sortant",
+          "outBlocked": "{short} sortants bloqués",
+          "outWouldBlock": "{short} sortants seraient bloqués",
+          "outConnections": "{short} connexions sortantes"
+        },
+        "egress": {
+          "state": {
+            "off": "Sortie : non contrôlée",
+            "observe": "Sortie : observation",
+            "ready": "Sortie : prête",
+            "enforce": "Sortie : blocage"
+          },
+          "hint": {
+            "off": "Le trafic sortant n'est pas contrôlé",
+            "observe": "Le trafic sortant est journalisé, rien n'est bloqué",
+            "ready": "Rien n'aurait été bloqué en sortie sur toute la fenêtre d'observation",
+            "enforce": "Seuls les flux de la politique sortent de la zone"
+          }
+        },
+        "gatewayTip": "Passerelle {ip}"
       },
       "flow": {
-        "notApplied": "Non appliqué (sortie non gérée en v1)",
+        "notApplied": "Non appliqué (sortie non contrôlée)",
         "learned": "Appris",
         "edit": "Modifier le flux",
         "delete": "Supprimer le flux",
-        "createdBy": "Créé par {user}"
+        "createdBy": "Créé par {user}",
+        "observed": "Sortie en observation"
       },
       "zoneDialog": {
         "createTitle": "Nouvelle zone",
@@ -13468,8 +13461,74 @@
         "label": "Libellé",
         "color": "Couleur",
         "isolate": "Isoler les membres les uns des autres",
+        "members": "Membres",
+        "inboundSection": "Entrée",
+        "inboundStates": {
+          "disabled": "Désactivée",
+          "observe": "Observation",
+          "enforce": "Blocage"
+        },
+        "egressSection": "Sortie",
+        "outboundStates": {
+          "off": "Non contrôlée",
+          "observe": "Observation",
+          "enforce": "Blocage"
+        },
+        "egressFilter": "Filtrer la sortie vers :",
+        "egressFilterTo": "Filtrer vers",
+        "egressLocal": "Le réseau local",
+        "egressAll": "Le réseau local et Internet",
+        "egressAllWarning": "Filtrage par adresse IP seulement : un service derrière un nom de domaine peut changer d'adresse.",
+        "egressNeedsState": "La zone doit être en observation ou en blocage",
+        "tips": {
+          "isolate": "Les VM de cette zone ne se joignent entre elles que par un flux déclaré. Décochée, elles communiquent librement.",
+          "inbound": {
+            "disabled": "La zone n'est pas appliquée sur Proxmox.",
+            "observe": "Rien n'est bloqué : le trafic entrant hors politique est journalisé et proposé en suggestions.",
+            "enforce": "Seuls les flux de la politique entrent ; le reste est bloqué et visible dans Bloqués."
+          },
+          "outbound": {
+            "off": "Les VM de la zone sortent librement, rien n'est journalisé.",
+            "observe": "Rien n'est bloqué : les sorties hors politique sont journalisées et proposées en suggestions.",
+            "enforce": "Seules les sorties autorisées par un flux passent ; le reste est bloqué et visible dans Bloqués."
+          },
+          "local": "Filtre les sorties vers les sous-réseaux des VM en zone, VM sans zone comprises. Internet reste ouvert.",
+          "all": "Filtre toute sortie, Internet compris : seuls les flux de la politique passent."
+        },
+        "statesTitle": "Changer les états de la zone {name} ?",
+        "statesConfirm": "Appliquer les états",
+        "inboundRunFailed": "Le changement d'état en entrée a échoué : la sortie n'a pas été modifiée.",
+        "egressOnTitle": "Contrôler la sortie de la zone {name} ?",
+        "egressOffTitle": "Ne plus contrôler la sortie de la zone {name} ?",
+        "egressOnBody": "La sortie de la zone passe en observation.",
+        "egressOffBody": "Le filtrage de la sortie de la zone est retiré.",
+        "egressIsolateNote": "Le changement d'isolation est appliqué en même temps.",
+        "egressOnConfirm": "Contrôler",
+        "egressOffConfirm": "Ne plus contrôler",
         "create": "Créer",
-        "save": "Enregistrer"
+        "save": "Enregistrer",
+        "gateway": "Passerelle",
+        "gatewayHint": "Le routeur du réseau de la zone, facultatif",
+        "gatewayAllow": "Autoriser vers la passerelle",
+        "gatewayServices": {
+          "dns": "DNS",
+          "ntp": "NTP",
+          "ping": "Ping",
+          "http": "HTTP",
+          "https": "HTTPS",
+          "ssh": "SSH",
+          "snmp": "SNMP",
+          "syslog": "Syslog",
+          "proxy": "Proxy HTTP",
+          "all": "Tous les protocoles"
+        },
+        "gatewayAllowed": "Déjà autorisé par un flux du brouillon",
+        "gatewayFlowComment": "Passerelle de la zone",
+        "gatewayFirst": "Saisir d'abord la passerelle",
+        "gatewayServicesHint": "Choisir dans la liste, ou saisir un protocole et ses ports : tcp/8443, udp/5000:5010, icmp, any",
+        "gatewayTypedInvalid": "Service non reconnu : tcp ou udp avec ports (tcp/8443, udp/53,123, tcp/5000:5010), ou icmp, icmpv6, any",
+        "gatewayTypeHint": "Choisir ou saisir un service",
+        "gatewayAdd": "Ajouter {service}"
       },
       "flowDialog": {
         "createTitle": "Nouveau flux",
@@ -13501,7 +13560,8 @@
         "cidrBoth": "Un flux ne peut pas avoir un CIDR des deux côtés.",
         "protoInvalid": "Protocole invalide",
         "portInvalid": "Port invalide. Utilisez 80, 80,443 ou 8000:8100 (1 à 65535).",
-        "portNotAllowed": "Un port n'est pas autorisé avec ce protocole."
+        "portNotAllowed": "Un port n'est pas autorisé avec ce protocole.",
+        "gatewayInvalid": "Une adresse IPv4 ou IPv6, sans préfixe"
       },
       "delete": {
         "zoneTitle": "Supprimer la zone {name} ?",
@@ -13523,11 +13583,21 @@
         "running": {
           "disabled": "{label} : passage en désactivé en cours",
           "observe": "{label} : passage en observation en cours",
-          "enforce": "{label} : passage en application en cours"
+          "enforce": "{label} : passage en application en cours",
+          "egressObserve": "{label} : contrôle de la sortie en cours",
+          "egressOff": "{label} : retrait du contrôle de la sortie en cours",
+          "egressReopen": "{label} : réouverture de la sortie en cours",
+          "egressEnforce": "{label} : blocage de la sortie en cours"
         },
         "done": "{label} : {done} faites, {failed} en échec, {notRun} non exécutées",
         "failed": "{label} : l'exécution a échoué",
-        "unavailable": "{label} : la progression n'est pas disponible"
+        "unavailable": "{label} : la progression n'est pas disponible",
+        "progress": {
+          "waiting": "en attente de l'opération en cours",
+          "readingStart": "lecture de Proxmox",
+          "reading": "lecture de Proxmox, {done, number} / {total, number} invités",
+          "writing": "écriture dans Proxmox, {done, number} / {total, number}"
+        }
       },
       "assign": {
         "title": "Affecter des invités à {zone}",
@@ -13599,13 +13669,31 @@
           "pendingChangeHint": "Modifié à la prochaine application",
           "pendingRemoval": "Suppression en attente",
           "pendingRemovalHint": "Supprimé à la prochaine application",
-          "notApplied": "Non appliqué en v1",
-          "notAppliedHint": "Non appliqué (sortie non gérée en v1)",
-          "unknownHint": "Comparaison avec la révision appliquée..."
+          "notApplied": "Non appliqué",
+          "notAppliedHint": "Non appliqué (sortie non contrôlée)",
+          "unknownHint": "Comparaison avec la révision appliquée...",
+          "observed": "Sortie en observation",
+          "observedHint": "Sortie en observation : la zone journalise ces flux sans les bloquer encore"
         },
         "uncovered": "{count, plural, one {Non couvert 24 h : # occurrence} other {Non couvert 24 h : # occurrences}}",
         "uncoveredHint": "Trafic entrant dans cette zone qu’aucun flux ne couvre (journalisé par les membres de la zone ces dernières 24 h)",
         "noFlowInto": "Aucun flux vers cette zone"
+      },
+      "egressState": {
+        "title": {
+          "block": "Bloquer la sortie de la zone {name} ?",
+          "reopen": "Rouvrir la sortie de la zone {name} ?"
+        },
+        "reopenBody": "La sortie repasse en observation : plus rien n'est bloqué.",
+        "checking": "Vérification de l'observation de la sortie...",
+        "ready": "Rien n'aurait été bloqué en sortie ces {hours} dernières heures.",
+        "notReady": "Cette zone n'est pas prête : il faut {hours} heures d'observation de la sortie sans trafic en attente qui serait bloqué.",
+        "unchecked": "L'observation de la sortie n'a pas pu être vérifiée, la zone est considérée comme pas prête.",
+        "typeName": "Saisissez {name} pour confirmer",
+        "confirm": {
+          "block": "Bloquer la sortie",
+          "reopen": "Rouvrir la sortie"
+        }
       }
     },
     "plan": {
@@ -13625,6 +13713,13 @@
       "nothing": "Rien à modifier : Proxmox correspond déjà au brouillon.",
       "clusterGroup": "Objets du cluster",
       "stepCount": "{count, plural, one {# étape} other {# étapes}}",
+      "stepState": {
+        "waiting": "En attente",
+        "running": "En cours d'écriture",
+        "done": "Fait",
+        "failed": "Échec",
+        "notRun": "Non exécuté"
+      },
       "collisions": "Bloqué : ces objets Proxmox portent nos noms sans être les nôtres, renommez-les ou supprimez-les : {names}",
       "foreignRules": "Les règles ajoutées à la main dans nos groupes de sécurité sont conservées, sans y toucher : {names}",
       "unread": "{count, plural, one {# invité n'a pas pu être lu et sera traité} other {# invités n'ont pas pu être lus et seront traités}} au prochain passage : {names}",
@@ -13694,6 +13789,46 @@
           "title": "Nom déjà utilisé dans Proxmox",
           "detail": "{object} existe déjà dans Proxmox et n'a pas été créé par ProxCenter : il n'est pas touché.",
           "hint": "Un objet nommé pcz-* existe dans Proxmox sans le marqueur de la micro-segmentation : renommez-le ou supprimez-le dans Proxmox."
+        },
+        "egress_rule_missing": {
+          "title": "Règle de sortie absente",
+          "detail": "La règle finale de sortie de {name} est absente de Proxmox.",
+          "detailCollision": "{name} ne peut pas bloquer sa sortie : pcz-_local appartient à quelqu'un d'autre dans Proxmox.",
+          "hintCollision": "Un objet nommé pcz-_local existe dans Proxmox sans le marqueur de micro-segmentation : renommez-le ou supprimez-le dans Proxmox."
+        },
+        "egress_rule_misplaced": {
+          "title": "Règle de sortie mal placée",
+          "detail": "La règle finale de sortie de {name} n'est pas la dernière règle, ou apparaît deux fois.",
+          "detailKnown": "La règle des destinations connues de {name} n'est pas juste avant sa règle finale de sortie."
+        },
+        "egress_rule_verdict": {
+          "title": "Règle de sortie au mauvais verdict",
+          "detail": "La règle finale de sortie de {name} est {have} au lieu de {want}.",
+          "detailCollision": "{name} ne peut pas bloquer : pcz-_local appartient à quelqu'un d'autre dans Proxmox, sa règle de sortie reste {have}.",
+          "detailDest": "La règle de sortie de {name} vise {haveDest} au lieu de {wantDest}.",
+          "hintCollision": "Un objet nommé pcz-_local existe dans Proxmox sans le marqueur de micro-segmentation : renommez-le ou supprimez-le dans Proxmox."
+        },
+        "known_rule_missing": {
+          "title": "Règle des destinations connues absente",
+          "detail": "La règle du groupe pcz-_known est absente sur {name}."
+        },
+        "known_rule_extra": {
+          "title": "Règle des destinations connues en trop",
+          "detail": "{name} garde une règle du groupe pcz-_known dont son état de sortie n'a plus besoin."
+        },
+        "local_set_desync": {
+          "title": "Réseau local désynchronisé",
+          "detail": "{object} contient {actual} au lieu de {desired}."
+        },
+        "egress_no_subnet": {
+          "title": "Sortie sans sous-réseau connu",
+          "detail": "{name} de {zone} n'a aucun sous-réseau connu : son réseau local se réduit à ses IP.",
+          "hint": "Aucun sous-réseau connu : vérifiez la configuration réseau de l'invité dans Proxmox (une IP avec sa longueur de préfixe, ou l'agent invité QEMU)."
+        },
+        "destinationAll": "toutes les destinations",
+        "destinationLocal": "le réseau local",
+        "verdict": {
+          "disabled": "désactivée"
         }
       },
       "chip": {
@@ -13704,7 +13839,14 @@
         "member_without_ip": "Sans IP",
         "ambiguous_zone": "Plusieurs zones",
         "object_collision": "Nom pris",
-        "generic": "Dérive"
+        "generic": "Dérive",
+        "egress_rule_missing": "Sortie sans règle",
+        "egress_rule_misplaced": "Sortie mal placée",
+        "egress_rule_verdict": "Sortie, mauvais verdict",
+        "known_rule_missing": "Règle connue absente",
+        "known_rule_extra": "Règle connue en trop",
+        "local_set_desync": "Réseau local désynchronisé",
+        "egress_no_subnet": "Sans sous-réseau"
       },
       "zoneFilter": "Zone {name} seulement",
       "zoneFilterClear": "Afficher toutes les zones",
@@ -13716,6 +13858,13 @@
         "member_without_ip": "Membres sans IP connue ({count, number})",
         "ambiguous_zone": "Invités dans plusieurs zones ({count, number})",
         "object_collision": "Noms déjà utilisés dans Proxmox ({count, number})",
+        "egress_rule_missing": "Règles de sortie absentes ({count, number})",
+        "egress_rule_misplaced": "Règles de sortie mal placées ({count, number})",
+        "egress_rule_verdict": "Règles de sortie au mauvais verdict ({count, number})",
+        "known_rule_missing": "Règles d'adresses connues absentes ({count, number})",
+        "known_rule_extra": "Règles d'adresses connues en trop ({count, number})",
+        "local_set_desync": "Ensembles du réseau local désynchronisés ({count, number})",
+        "egress_no_subnet": "Sorties sans sous-réseau local ({count, number})",
         "generic": "{kind} (nombre : {count, number})"
       },
       "noneZone": "aucune",
@@ -13748,7 +13897,11 @@
         "status": "Statut",
         "statusAll": "Tous les statuts",
         "zone": "Zone",
-        "zoneAll": "Toutes les zones"
+        "zoneAll": "Toutes les zones",
+        "direction": "Direction",
+        "directionAll": "Toutes",
+        "directionIn": "Entrant",
+        "directionOut": "Sortant"
       },
       "kind": {
         "would_block": "Serait bloqué",
@@ -13805,6 +13958,7 @@
       "dismissTip": "Masque cette suggestion pour cette paire.",
       "bulkLabel": "Flux sélectionnés",
       "bulkAcceptTip": "Crée dans le brouillon le flux entre les zones de chaque suggestion sélectionnée.",
+      "bulkAcceptOutZoneTip": "Crée dans le brouillon le flux entre les zones de chaque suggestion sélectionnée. Un flux sortant vers une zone autorise aussi l'entrée de sa zone de destination depuis la zone source.",
       "bulkCidrTip": "Crée les mêmes flux avec chaque source comme plage d'adresses.",
       "bulkDismissTip": "Masque les suggestions sélectionnées.",
       "legend": {
@@ -13816,8 +13970,14 @@
         "about": "À propos des occurrences"
       },
       "acceptUnknownSource": "Source inconnue : utilisez En CIDR",
+      "aggregateHint": "Créez un flux à la main pour autoriser ce service vers toutes les adresses.",
+      "acceptOutZoneTip": "Ajoute le flux {from} → {to} : il autorise aussi l'entrée de {to} depuis {from}.",
       "zoneBanner": "Suggestions pour la zone {zone} · {count, plural, one {# occurrence non couverte} other {# occurrences non couvertes}} en 24 h",
       "zoneBannerNoCount": "Suggestions pour la zone {zone}",
+      "serviceBanner": "Filtré sur le service {service} ({ports})",
+      "serviceBannerClear": "Afficher tous les services",
+      "sourceBanner": "Filtré sur les flux dont la source n'est dans aucune zone",
+      "sourceBannerClear": "Afficher toutes les sources",
       "dialog": {
         "open": "Détails",
         "openFor": "Détails du flux de {source} vers {destination}",
@@ -13844,9 +14004,25 @@
         "colSource": "Origine",
         "colGuest": "Invité atteint",
         "colNode": "Nœud",
-        "guest": "{name} ({vmid}) · IP {ip}"
+        "guest": "{name} ({vmid}) · IP {ip}",
+        "direction": "Direction",
+        "colDestination": "Destination",
+        "trafficScopeOutside": "Tous les services de {source} vers les adresses hors zone avec ce verdict : l'historique garde les zones, pas les adresses."
       },
-      "actionTip": "{action} : {tip}"
+      "actionTip": "{action} : {tip}",
+      "direction": {
+        "in": "Entrant",
+        "out": "Sortant"
+      },
+      "manyDestinations": "Nombreuses destinations",
+      "prefix": {
+        "title": "Accepter comme réseau",
+        "length": "Longueur du préfixe",
+        "cancel": "Annuler",
+        "accept": "Accepter"
+      },
+      "cidrOutTip": "Crée le flux {from} → le réseau de {ip} {service} dans le brouillon, avec le préfixe choisi.",
+      "bulkCidrOutbound": "Les réseaux sortants s'acceptent un par un, pour choisir chaque préfixe."
     },
     "overview": {
       "empty": "Aucune zone à dessiner pour l'instant.",
@@ -13856,7 +14032,7 @@
       "mapLabel": "Carte des zones et de leurs flux",
       "suggestionsError": "Les flux en attente n'ont pas pu être lus. La carte ne montre que les flux autorisés.",
       "legend": {
-        "outside": "Vers l'extérieur : non appliqué en v1",
+        "outside": "Vers l'extérieur : sortie non bloquée",
         "allowed": "Autorisé",
         "unprotected": "Non protégé",
         "blocked": "Bloqué",
@@ -13867,8 +14043,8 @@
         "external": "Inconnu / Externe",
         "externalHint": "Sources qui ne correspondent à aucun invité : une adresse IP ou un réseau (CIDR)",
         "outside": "Extérieur",
-        "outsideHint": "Destinations hors des zones (un CIDR). Les flux vers elles ne sont pas appliqués en v1.",
-        "notApplied": "non appliqué en v1",
+        "outsideHint": "Destinations hors des zones (un CIDR). Les flux vers elles sont appliqués dès que la zone source bloque sa sortie.",
+        "notApplied": "sortie non contrôlée",
         "aria": "Zone {name} : {state}, {members}",
         "membersUnknown": "membres inconnus",
         "unzoned": "Invités sans zone ({count, number})",
@@ -13881,10 +14057,13 @@
         "moreHint": "{count, plural, one {# membre de plus} other {# membres de plus}} : le panneau de la zone les liste tous",
         "moreUnzonedHint": "{count, plural, one {# invité de plus} other {# invités de plus}} sans zone : Écarts les liste tous",
         "ipHint": "{ip} : une adresse hors zone et hors invité qui a parlé à cette zone",
-        "inside": "{count, plural, one {# flux observé} other {# flux observés}} dans la zone"
+        "inside": "{count, plural, one {# flux observé} other {# flux observés}} dans la zone",
+        "observed": "sortie en observation",
+        "gateway": "Passerelle",
+        "gatewayHint": "Passerelle de {zones} ({ip}) : son trafic est nommé sur la carte et dans le sous-onglet Observation"
       },
       "edge": {
-        "outside": "Non appliqué en v1 : {services}",
+        "outside": "Sortie non bloquée : {services}",
         "aria": "{from} vers {to} : {services}",
         "allowed": "Autorisé : {services}",
         "unprotected": "{count, plural, one {# flux observé} other {# flux observés}} qu'aucun flux n'autorise (non protégé)",
@@ -13897,7 +14076,9 @@
         "sourceHits": "{count, plural, one {# occurrence} other {# occurrences}} de {from} vers la zone {to} sur {service}",
         "sourceHitsSampled": "{count, plural, one {# occurrence} other {# occurrences}} de {from} vers la zone {to} sur {service} (paire d'exemple affichée)",
         "countUnprotected": "{count, plural, one {# flux non protégé} other {# flux non protégés}}",
-        "countBlocked": "{count, plural, one {# flux bloqué} other {# flux bloqués}}"
+        "countBlocked": "{count, plural, one {# flux bloqué} other {# flux bloqués}}",
+        "hitsTotal": "{count, plural, one {# occurrence} other {# occurrences}} dans le journal au total",
+        "noCounter": "Les flux autorisés n'ont pas de compteur : Proxmox ne journalise pas ce qu'il laisse passer"
       },
       "panel": {
         "label": "Zone {name}",
@@ -13910,6 +14091,21 @@
         "noFlows": "Aucun"
       },
       "zonePanel": {
+        "detailsTitle": "Détails de la zone · {name}",
+        "subSuggestions": "Suggestions en attente",
+        "subMembers": "Membres",
+        "addMembers": "Ajouter des membres",
+        "addFlow": "Nouveau flux",
+        "subIncoming": "Flux entrants",
+        "subOutgoing": "Flux sortants",
+        "colDirection": "Direction",
+        "colVerdict": "Verdict",
+        "expand": "Agrandir",
+        "tabTraffic": "Trafic",
+        "tabData": "Données",
+        "tabLogs": "Journaux",
+        "logsEmpty": "Aucun événement de cette zone dans la mémoire du moteur",
+        "logsOlder": "Charger plus ancien",
         "edit": "Modifier la zone",
         "changeState": "Changer l'état",
         "delete": "Supprimer la zone",
@@ -13919,15 +14115,21 @@
         "editFlow": "Modifier le flux",
         "deleteFlow": "Supprimer le flux",
         "newIncoming": "Nouveau flux entrant",
-        "newOutgoing": "Nouveau flux sortant"
+        "newOutgoing": "Nouveau flux sortant",
+        "egressBlock": "Bloquer la sortie",
+        "egressReopen": "Rouvrir la sortie"
+      },
+      "edgePanel": {
+        "detailsTitle": "Détails du flux",
+        "dialogLabel": "Détails du flux · {from} → {to}",
+        "declaredFlows": "Flux déclarés",
+        "newFlow": "Nouveau flux entre ces zones",
+        "suggestionsEmpty": "Aucune suggestion en attente pour cette paire",
+        "logsEmpty": "Aucun événement de cette paire dans la mémoire du moteur"
       },
       "partial": "Partiel : seuls les {count, number} premiers flux en attente sont dessinés.",
       "filters": {
         "title": "Flux :"
-      },
-      "toolbar": {
-        "refreshedAt": "Actualisé à {time}",
-        "refresh": "Actualiser la carte"
       },
       "flowPanel": {
         "label": "Flux {from} vers {to}",
@@ -13944,6 +14146,12 @@
       "zoomIn": "Zoom avant",
       "zoomOut": "Zoom arrière",
       "fitView": "Ajuster la carte à la vue",
+      "isolate": {
+        "only": "Flux de {name} uniquement",
+        "all": "Tous les flux",
+        "showAll": "Afficher tous les flux",
+        "showOnly": "Seulement ses flux"
+      },
       "a11y": {
         "nodeDescription": "Appuyez sur Entrée ou Espace pour ouvrir ses détails.",
         "nodeDescriptionKeyboard": "Appuyez sur Entrée ou Espace pour ouvrir ses détails.",
@@ -14019,6 +14227,7 @@
           "noZoneFlows": "Cet invité n'est dans aucune zone : aucun flux autorisé ne s'applique à lui.",
           "incoming": "Entrant, depuis {peer}",
           "outgoing": "Sortant, vers {peer}",
+          "fromZone": "depuis la zone {zone}",
           "acceptTip": "Accepter comme flux {from} → {to} {service} : le moteur garde une paire d'invités exemple par flux observé, le flux couvre donc toute la paire de zones.",
           "partial": "Seuls les {count} premiers flux observés en attente de la carte sont lus : cette liste peut en manquer."
         },
@@ -14037,6 +14246,7 @@
         "topSourcesEmpty": "Aucune source sur cette période",
         "suggestionsEmpty": "Aucune suggestion en attente pour cette zone",
         "summaryOut": "{hits, plural, one {# occurrence} other {# occurrences}} · première destination {source} ({share} %) · {wouldBlock, number} seraient bloqués, {blocked, number} bloqués",
+        "summaryOutBlockedHelp": "Bloqués : connexions bloquées par la zone de destination (son entrée) ou par la sortie de cette zone.",
         "topDestinations": "Principales destinations",
         "topDestinationsEmpty": "Aucune destination sur cette période",
         "memberRunning": "En marche",
@@ -14063,6 +14273,7 @@
       "checking": "Vérification du cluster...",
       "runAgain": "Relancer",
       "openWizard": "Ouvrir l'assistant de déploiement",
+      "raiseLogRate": "Relever pendant l'observation",
       "busy": "Une application est en cours, réessayez dans un instant.",
       "noClient": "Aucun client Proxmox n'est disponible pour cette connexion.",
       "readFailed": "Proxmox n'a pas pu être lu : {error}",
@@ -14075,20 +14286,27 @@
         "cluster_firewall": {
           "title": "Pare-feu du cluster",
           "pass": "Le pare-feu du cluster est activé.",
-          "off": "Le pare-feu du cluster est désactivé. L'assistant de déploiement ajoute les règles d'administration, puis l'active.",
+          "off": "Le pare-feu du cluster est désactivé. L'assistant de déploiement l'active, sans rien écrire sur les nœuds.",
           "heldByStop": "Pare-feu de cluster maintenu désactivé par l'arrêt d'urgence : levez l'arrêt pour le réactiver"
         },
         "socle_rules": {
           "title": "Accès d'administration",
           "pass": "Le web (8006) et SSH (22) restent accessibles.",
           "nodesOff": "Les pare-feu des nœuds sont désactivés, rien ne peut être coupé.",
-          "missing": "Aucune règle ne laisse le port {ports} ouvert depuis n'importe où : activer le pare-feu pourrait couper votre accès."
+          "missing": "Aucune règle ne laisse le port {ports} ouvert depuis n'importe où : activer le pare-feu pourrait couper votre accès.",
+          "missingFor": "Aucune règle ne garde le port {ports} ouvert depuis {ips} : activer le pare-feu pourrait couper ProxCenter.",
+          "dockerInternal": "Aucune règle ne garde le port {ports} ouvert pour ProxCenter : l'adresse détectée est interne à Docker, renseignez dans Réglages > Avancé l'adresse de l'hôte vue par Proxmox.",
+          "groupUnreadable": "Les règles du groupe de sécurité {group} n'ont pas pu être lues : impossible de vérifier que l'accès d'administration reste ouvert.",
+          "hostRulesUnreadable": "Les règles du pare-feu du nœud {node} n'ont pas pu être lues : impossible de vérifier que l'accès d'administration reste ouvert.",
+          "missingForNodes": "Aucune règle ne garde le port {ports} ouvert depuis {ips} sur {nodes} : activer le pare-feu pourrait couper ProxCenter.",
+          "missingOn": "Aucune règle ne garde le port {ports} ouvert sur {nodes} : activer le pare-feu pourrait couper votre accès."
         },
         "log_ratelimit": {
           "title": "Limite du débit de journal",
-          "default": "PVE journalise à son débit par défaut ({rate}), l'observation manque donc des flux. Relevez-le dans les réglages.",
+          "default": "PVE journalise à son débit par défaut ({rate}) : l'observation manque des flux.",
           "pass": "PVE journalise jusqu'à {rate}.",
-          "disabled": "PVE ne limite pas le journal du pare-feu."
+          "disabled": "PVE ne limite pas le journal du pare-feu.",
+          "planned": "Relevée à {rate} pendant qu'une zone est observée, puis remise à sa valeur (réglages)."
         },
         "self_in_zone": {
           "title": "Adresse de ProxCenter",
@@ -14096,7 +14314,14 @@
           "unknown": "L'adresse de ProxCenter n'a pas pu être détectée, cette vérification ne peut donc pas conclure. Renseignez-la dans les réglages.",
           "inZone": "ProxCenter ({self_ip}) est dans la zone {zone} : l'appliquer pourrait couper la connexion.",
           "uncheckedTimeout": "{count, plural, one {# membre n'a pas pu être vérifié} other {# membres n'ont pas pu être vérifiés}} (collecte interrompue) : ProxCenter peut se trouver dans l'un d'eux.",
-          "uncheckedCap": "{count, plural, one {# membre n'a pas pu être vérifié} other {# membres n'ont pas pu être vérifiés}} (au-delà du plafond de collecte) : ProxCenter peut se trouver dans l'un d'eux."
+          "uncheckedCap": "{count, plural, one {# membre n'a pas pu être vérifié} other {# membres n'ont pas pu être vérifiés}} (au-delà du plafond de collecte) : ProxCenter peut se trouver dans l'un d'eux.",
+          "inZoneEgress": "ProxCenter ({self_ip}) est dans la zone {zone}, qui contrôle sa sortie : autorisez un flux vers les nœuds Proxmox avant de bloquer, sinon ProxCenter pourrait les perdre.",
+          "dockerInternal": "L'adresse détectée est interne à Docker : renseignez dans Réglages > Avancé l'adresse de l'hôte vue par Proxmox."
+        },
+        "egress_subnets": {
+          "title": "Sous-réseaux de sortie",
+          "pass": "Chaque membre d'une zone à sortie contrôlée a un sous-réseau connu.",
+          "warn": "{count, plural, one {# membre n'a aucun sous-réseau connu} other {# membres n'ont aucun sous-réseau connu}} ({guests}) : leur réseau local se réduit à leurs IP."
         }
       },
       "rateUnits": {
@@ -14114,8 +14339,8 @@
         "load": "Charge sur Proxmox",
         "enforcement": "Application",
         "observation": "Observation",
-        "address": "Adresse de ProxCenter",
         "notifications": "Me notifier de",
+        "advanced": "Avancé",
         "removal": "Retrait"
       },
       "fields": {
@@ -14124,12 +14349,12 @@
         "ips_interval_sec": "Intervalle de lecture des IP des invités",
         "full_interval_sec": "Intervalle de la vérification complète",
         "log_interval_sec": "Intervalle de lecture du journal du pare-feu",
-        "ready_after_hours": "Observation avant application",
+        "ready_after_hours": "Observation avant blocage (entrée et sortie)",
         "write_cap": "Plafond d'écritures par passage",
         "rate": "Débit maximal du journal",
         "rateUnit": "Unité du débit du journal",
         "burst": "Rafale du journal",
-        "selfIps": "Adresses de ProxCenter",
+        "selfIps": "Adresses vues par Proxmox",
         "notify_drift": "Écarts",
         "notify_paused": "Moteur en pause",
         "notify_unprotected": "Invités non protégés",
@@ -14138,8 +14363,7 @@
       "hints": {
         "tagPrefix": "Les tags de zone des invités sont ce préfixe suivi du nom de la zone.",
         "write_cap": "Écritures vers Proxmox permises en un passage. Au-delà, le moteur se met en attente et demande votre confirmation.",
-        "rate": "Vide : la limite de débit du journal de Proxmox n'est pas touchée. Sinon elle est posée tant qu'une zone est observée.",
-        "selfIps": "Les adresses depuis lesquelles ProxCenter joint les invités, séparées par des virgules. Vide : détection automatique."
+        "rate": "Vide : la limite de débit du journal de Proxmox n'est pas touchée. Sinon elle est posée tant qu'une zone est observée."
       },
       "unitsLong": {
         "seconds": "secondes",
@@ -14152,8 +14376,14 @@
         "hour": "par heure",
         "day": "par jour"
       },
-      "leaveAsIs": "Ne pas toucher",
+      "leaveAsIs": "Inchangé",
       "detectedAutomatically": "Détectée automatiquement",
+      "selfIpsSource": {
+        "settings": "réglages",
+        "install": "script d'installation",
+        "detected": "détectée"
+      },
+      "dockerInternalHint": "Adresse interne à Docker : Proxmox voit l'adresse de l'hôte, renseignez-la ici.",
       "validation": {
         "tagPrefix": "Le préfixe de tag fait de 1 à 16 caractères : minuscules, chiffres, . _ + -",
         "range": "{label} doit être compris entre {min} et {max} {unit}.",
@@ -14182,6 +14412,13 @@
         "body": "Les invités gardent leurs anciens tags : ils quittent leur zone à la prochaine application tant qu'ils ne sont pas retaggés.",
         "typeName": "Saisissez {prefix} pour confirmer",
         "confirm": "Changer le préfixe"
+      },
+      "tips": {
+        "rate": "Plafond de lignes de journal par règle, relevé pendant l'observation pour ne rien perdre ; appliqué au cluster Proxmox.",
+        "logInterval": "Délai entre deux lectures du journal pare-feu de chaque nœud : une lecture par nœud et par intervalle.",
+        "readyAfter": "Durée sans nouveau flux qui serait bloqué avant qu'une zone soit indiquée prête ; ce n'est pas un verrou.",
+        "writeCap": "Au-delà, le moteur s'arrête et demande une confirmation.",
+        "selfIps": "Adresses depuis lesquelles ProxCenter joint les nœuds. Le pré-vol vérifie qu'elles ne sont pas coupées. Laisser vide pour utiliser la détection."
       }
     },
     "history": {
@@ -14309,6 +14546,8 @@
       "title": "Vérification complète",
       "runningText": "Vérification complète en cours",
       "queued": "En attente du moteur (jusqu'à 60 s)",
+      "queuedFor": "En file d'attente depuis {seconds, number} s : le moteur la démarre à sa prochaine passe, dans 60 s au plus",
+      "queuedLate": "Le moteur termine une autre opération sur ce cluster : la vérification suit",
       "inProgress": "En cours, {seconds, number} s écoulées",
       "progress": "{calls, plural, one {# appel API} other {# appels API}}, {writes, plural, one {# écriture} other {# écritures}}, {seconds, number} s",
       "doneSummary": "Vérifié en {seconds, number} s avec {calls, plural, one {# appel API} other {# appels API}}",
@@ -14382,7 +14621,12 @@
         "failed": "échec",
         "notRun": "non exécuté"
       },
-      "runAgain": "Relancer"
+      "runAgain": "Relancer",
+      "stages": {
+        "title": "Ce que fait la vérification",
+        "ips": "Adresses IP des membres",
+        "guests": "Invités relus et comparés à la politique, écarts réparés"
+      }
     },
     "trafficLens": {
       "connection": "Connexion",
@@ -14429,7 +14673,6 @@
     },
     "dfw": {
       "hits24h": "Occurrences 24 h",
-      "selectAll": "Sélectionner toutes les règles affichées",
       "any": "tout",
       "actionLabel": "Action de la règle",
       "action": {
@@ -14443,25 +14686,14 @@
       "rowEdited": "non publiée",
       "rowMoved": "déplacée",
       "rowDisabled": "désactivée",
-      "selectRule": "Sélectionner la règle {pos}",
+      "deleteRule": "Supprimer la règle {pos}",
       "enableLabel": "Règle {pos} active",
       "logLabel": "Règle {pos} journalisée",
-      "selectSection": "Sélectionner les règles de {name}",
       "collapse": "Replier {name}",
       "expand": "Déplier {name}",
-      "lastPublished": "Dernière publication réussie le {date} à {time}",
       "publish": "Publier ({count})",
       "discard": "Annuler les changements",
       "status": {
-        "rules": "{count, plural, one {Règles : # au total} other {Règles : # au total}}",
-        "rulesAtLeast": "{count, plural, one {Règles : au moins # au total} other {Règles : au moins # au total}}",
-        "rulesHint": "Compte les sections lues : les règles d’un hôte ou d’un invité sont lues à son ouverture",
-        "unpublished": "Non publiées",
-        "disabled": "Désactivées {count}",
-        "sections": "Sections : {count}",
-        "managed": "Gérées par la micro-segmentation {count}",
-        "covered": "VM couvertes : {covered} / {running} en marche",
-        "coveredUnknown": "VM couvertes : pas encore lu",
         "scope": "Portée"
       },
       "scope": {
@@ -14470,17 +14702,6 @@
         "vms": "VM",
         "all": "Tout"
       },
-      "bulk": {
-        "enable": "Activer",
-        "disable": "Désactiver",
-        "clone": "Cloner",
-        "up": "Monter",
-        "down": "Descendre",
-        "moveTo": "Déplacer vers une section"
-      },
-      "selection": "{count, plural, =0 {Aucune règle sélectionnée} one {# règle sélectionnée} other {# règles sélectionnées}}",
-      "dragHint": "glisser ⋮⋮ pour réordonner",
-      "clearSelection": "Effacer la sélection",
       "filter": "Filtrer : IP, port, groupe, VM",
       "moveDialog": {
         "title": "{count, plural, one {Déplacer # règle vers} other {Déplacer # règles vers}}",
@@ -14561,10 +14782,6 @@
       "publishedPart": "{applied} changements sur {total} publiés : publiez à nouveau pour le reste",
       "publishFailed": "Publication arrêtée après {applied} changements appliqués :",
       "conflict": "les règles d’une section ont changé dans Proxmox depuis leur lecture. Annulez les changements de cette section, puis publiez à nouveau : les autres sections gardent les leurs",
-      "mode": {
-        "cluster": "{count, plural, one {cluster · # nœud} other {cluster · # nœuds}}",
-        "standalone": "nœud unique"
-      },
       "defaultDeny": "Refus par défaut de la zone",
       "denyBlock": "Bloquer",
       "denyWouldBlock": "Bloquerait",
@@ -14572,8 +14789,6 @@
       "discardSection": "Annuler cette section",
       "conflictOptions": "les options du pare-feu d’une section ont changé dans Proxmox depuis leur lecture. Annulez les changements de cette section, puis publiez à nouveau : les autres sections gardent les leurs",
       "publishAgain": "Publiez à nouveau : les changements non appliqués sont toujours dans le brouillon.",
-      "summary": "Dernière publication : {applied} changements sur {total} appliqués",
-      "summaryStopped": "Dernière publication : {applied} changements sur {total} appliqués, arrêtée sur {kind} dans {scope}",
       "addRuleShort": "Ajouter une règle",
       "addRuleTo": "Ajouter une règle à {name}",
       "addARule": "Ajouter une règle",
@@ -14598,6 +14813,9 @@
       "titleNoCount": "Abandonner les changements non appliqués ?",
       "body": "Le brouillon revient à la dernière révision appliquée.",
       "confirm": "Abandonner"
+    },
+    "gateway": {
+      "name": "Passerelle de {zones}"
     }
   },
   "bulkPower": {

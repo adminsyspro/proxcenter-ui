@@ -4,7 +4,7 @@
 // Next relay at /api/v1/firewall/microseg/{connectionId}/<route>.
 
 import type {
-  CheckQueued, EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegEventList, MicrosegFlow, MicrosegPolicy,
+  CheckQueued, EgressState, FlowDirection, EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegEventList, MicrosegFlow, MicrosegPolicy,
   MicrosegRevision, MicrosegRun, MicrosegStatus, MicrosegSuggestion, MicrosegTraffic, MicrosegZone, PolicyUpdate,
   PreflightCheck, ResolveSuggestionsInput, SuggestionKind, SuggestionStatus, ZoneInput, ZoneState,
 } from './types'
@@ -13,13 +13,16 @@ export class MicrosegApiError extends Error {
   readonly status: number
   readonly code: string
   readonly serverMessage?: string
+  /** What the orchestrator adds to some refusals (SOCLE_MISSING: the failed socle check detail). */
+  readonly detail?: Record<string, unknown>
 
-  constructor(status: number, code: string, serverMessage?: string) {
+  constructor(status: number, code: string, serverMessage?: string, detail?: Record<string, unknown>) {
     super(serverMessage || code)
     this.name = 'MicrosegApiError'
     this.status = status
     this.code = code
     this.serverMessage = serverMessage
+    this.detail = detail
   }
 }
 
@@ -75,7 +78,8 @@ async function toError(res: Response): Promise<MicrosegApiError> {
   const code = typeof body?.code === 'string' && body.code ? body.code : fallbackCode(res.status)
   const message = typeof body?.error === 'string' ? body.error : undefined
   if (res.status === 409 && code === 'VERSION_CONFLICT') return new MicrosegConflictError(message)
-  return new MicrosegApiError(res.status, code, message)
+  const detail = body?.detail && typeof body.detail === 'object' && !Array.isArray(body.detail) ? (body.detail as Record<string, unknown>) : undefined
+  return new MicrosegApiError(res.status, code, message, detail)
 }
 
 export type RunStarted = { run_id: string }
@@ -94,16 +98,24 @@ export type ListEventsParams = {
   q?: string
 }
 /** `from` and `to` in RFC3339, `step` in seconds (a multiple of 300, 300 to 21600). */
-export type TrafficParams = { from: string; to: string; step: number }
+export type TrafficParams = { from: string; to: string; step: number; direction?: FlowDirection }
 export type ListSuggestionsParams = PageParams & {
   kind?: SuggestionKind
   status?: SuggestionStatus
   zone?: string
+  direction?: FlowDirection
+  /** Keeps the flows of these services, each "proto" or "proto/dport" (20 at most). */
+  service?: string[]
+  /** "unknown" keeps the flows whose source is in no zone. */
+  source?: 'unknown'
 }
 
-function query(params: Record<string, string | number | undefined> = {}): string {
+function query(params: Record<string, string | number | string[] | undefined> = {}): string {
   const qs = new URLSearchParams()
-  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') qs.set(k, String(v))
+  for (const [k, v] of Object.entries(params)) {
+    if (Array.isArray(v)) for (const one of v) qs.append(k, one)
+    else if (v !== undefined && v !== '') qs.set(k, String(v))
+  }
   const s = qs.toString()
   return s ? `?${s}` : ''
 }
@@ -184,6 +196,9 @@ export function microsegApi(connId: string) {
     deleteZone: (zoneId: string, version: number) => call<{ version: number }>('DELETE', `zones/${id(zoneId)}`, { version }),
     setZoneState: (zoneId: string, state: ZoneState, version: number) =>
       call<RunStarted>('POST', `zones/${id(zoneId)}/state`, { version, state }),
+    /** Outbound state of a zone (same answer as setZoneState); 400 on a disabled zone, 409 on a stale version. */
+    setZoneEgressState: (zoneId: string, state: EgressState, version: number) =>
+      call<RunStarted>('POST', `zones/${id(zoneId)}/egress-state`, { state, version }),
 
     saveFlow: ({ id: flowId, ...body }: FlowInput) =>
       call<{ version: number; flow: MicrosegFlow }>(flowId ? 'PUT' : 'POST', flowId ? `flows/${id(flowId)}` : 'flows', body),

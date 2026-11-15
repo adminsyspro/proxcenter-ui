@@ -16,6 +16,7 @@ import { defaultCentre } from './guestViewModel'
 import { MapNamesContext, edgeAria, type EdgeT, type MapNames } from './FlowEdge'
 import MapToolbar, { useFlowFilters, useMapView, type MapView } from './MapToolbar'
 import { mapViewGraph } from './mapViewGraph'
+import { pairEndOf } from './pairModel'
 import { buildMatrix, matrixEdge, type MatrixEnd } from './matrixModel'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
 import { useZoneEdits } from './useZoneEdits'
@@ -39,8 +40,16 @@ const PENDING_LIMIT = 200
 const PENDING_OBSERVED: ListSuggestionsParams = { status: 'pending', limit: PENDING_LIMIT }
 
 type Selection = { kind: 'zone' | 'guest' | 'edge'; id: string }
-/** The edge (or the cell of the matrix) whose flow panel is open. */
-type PanelEdge = { id: string; source: string; target: string; data: PanelEdgeData }
+/** The edge (or the cell of the matrix) whose flow panel is open, and the groups (zones, boundaries) of its two ends. */
+type PanelEdge = { id: string; source: string; target: string; data: PanelEdgeData; groups: [string, string] }
+
+/** The open flow panel's edge: the selected cell (its ends are groups already), else the selected edge of the canvas. */
+function panelEdgeOf(cell: Omit<PanelEdge, 'groups'> | null, edge: Pick<PanelEdge, 'id' | 'source' | 'target'> & { data?: unknown } | undefined): PanelEdge | null {
+  if (cell) return { ...cell, groups: [cell.source, cell.target] }
+  if (!edge) return null
+  const data = edge.data as MapEdgeData
+  return { id: edge.id, source: edge.source, target: edge.target, data, groups: [data.fromGroup, data.toGroup] }
+}
 
 /** The node the selection lights: the circle of the selected zone, or the selected guest. */
 function selectedNodeOf(selectedZone: { id: string } | null, selection: Selection | null): string | null {
@@ -76,17 +85,17 @@ const sameFlow = (a: MicrosegFlow, b: MicrosegFlow) => a.src_zone_id === b.src_z
 export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan, targetVm }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.overview')
   const tObs = useTranslations('microsegPilot.observation')
-  const { guests, status: guestsStatus, reload: reloadGuests } = useZoneGuests(connectionId)
+  const { guests, status: guestsStatus } = useZoneGuests(connectionId)
   const suggestions = useMicrosegSuggestions(connectionId, PENDING_OBSERVED)
   const { revision } = useLastRevisionSnapshot(connectionId, policy.pending_changes ? policy.last_revision?.id : null)
   const [selection, setSelection] = useState<Selection | null>(null)
   const [hover, setHover] = useState<string | null>(null)
   const [keyFocus, setKeyFocus] = useState<string | null>(null)
+  // The selected zone or guest whose other flows were asked back ("Show all flows"): forgotten with the selection.
+  const [allFlowsFor, setAllFlowsFor] = useState<string | null>(null)
   const [assigning, setAssigning] = useState(false)
   const [resolved, setResolved] = useState<SuggestionAction | null>(null)
   const [filters, setFilters] = useFlowFilters()
-  const [refreshing, setRefreshing] = useState(false)
-  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null)
   const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
   const [view, setView] = useMapView()
   const [centre, setCentre] = useState<string | null>(null)
@@ -149,26 +158,21 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     [target, matrix, sankey, filters],
   )
 
-  // "Refreshed at": the first answer, then the end of every refresh (a refresh that changes nothing still moves it).
-  const loaded = !!suggestions.data || membersKnown
-  useEffect(() => {
-    if (!loaded || refreshedAt) return
-    const timer = setTimeout(() => setRefreshedAt(new Date()), 0)
-    return () => clearTimeout(timer)
-  }, [loaded, refreshedAt])
-
   // A zone deleted from the draft (or an edge gone after a reload) simply closes its panel.
   const selectedZone = selection?.kind === 'zone' ? zones.find(z => z.id === selection.id) ?? null : null
   // The flow panel: the selected cell of the matrix, or the selected edge of the canvas.
   const graphEdge = graph.edges.find(e => selection?.kind === 'edge' && e.id === selection.id)
   const cellEdge = matrix && selection?.kind === 'edge' ? matrixEdge(matrix, selection.id, filters, unapplied) : null
-  const selectedEdge: PanelEdge | null = cellEdge ?? (graphEdge ? { id: graphEdge.id, source: graphEdge.source, target: graphEdge.target, data: graphEdge.data as unknown as MapEdgeData } : null)
+  const selectedEdge = panelEdgeOf(cellEdge, graphEdge)
   const selectedNode = selectedNodeOf(selectedZone, selection)
   const selectedFocus = selectedNode ?? (selection?.kind === 'edge' ? selection.id : null)
   const focusId = hover ?? keyFocus ?? selectedFocus
   // A target locks the focus on its guest: the pointer, the keyboard and the selection do not move it.
   const lock = useMemo(() => targetFocus(graph, target), [graph, target])
   const lit = useMemo(() => lock ?? focusSets(graph, focusId), [lock, graph, focusId])
+  // A selected zone or guest isolates its flows: the others are not drawn, so that a dense map reads zone by zone.
+  const isolating = !lock && !!selectedNode && allFlowsFor !== selectedNode
+  const isolated = useMemo(() => (isolating ? focusSets(graph, selectedNode) : null), [isolating, graph, selectedNode])
 
   const tNode = useTranslations('microsegPilot.overview.node')
   const tEdge = useTranslations('microsegPilot.overview.edge')
@@ -202,17 +206,17 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const nodes = useMemo(() => graph.nodes.map(n => {
     if (lock && n.id === lock.node) return { ...n, selected: n.id === selectedNode, className: 'microseg-target', data: { ...n.data, target: targetColor } }
     const selected = n.id === selectedNode
-    const dimmed = !!lit && !lit.nodes.has(n.id)
+    const dimmed = (!!lit && !lit.nodes.has(n.id)) || (!!isolated && !isolated.nodes.has(n.id))
     // A target keeps its zone and the zones of its pairs; the others are a faint outline.
     const faint = !!lock?.faintNodes.has(n.id)
     if (!selected && !dimmed) return n
     let className: string | undefined
     if (dimmed) className = faint ? 'microseg-faint' : 'microseg-dim'
     return { ...n, selected, className }
-  }), [graph.nodes, selectedNode, lit, lock, targetColor])
+  }), [graph.nodes, selectedNode, lit, isolated, lock, targetColor])
 
   // The edges take no focus, but a screen reader names them: "web to db: tcp/443".
-  const edges = useMemo(() => filterEdges(graph.edges, filters).map(e => {
+  const edges = useMemo(() => filterEdges(graph.edges, filters).filter(e => !isolated || isolated.edges.has(e.id)).map(e => {
     const d = e.data as unknown as MapEdgeData
     const dimmed = !!lit && !lit.edges.has(e.id)
     let className: string | undefined
@@ -224,7 +228,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
       ariaLabel: edgeAria(tEdge as EdgeT, names, e.source, e.target, d),
       data: dimmed ? { ...e.data, dimmed } : e.data,
     }
-  }), [graph.edges, filters, lit, lock, tEdge, names])
+  }), [graph.edges, filters, lit, isolated, lock, tEdge, names])
 
   // In the guest view another zone is not opened but put in the centre; the zone in the centre opens its panel.
   const selectZone = useCallback((zoneId: string) => {
@@ -261,12 +265,6 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   }, [pick])
   const showTarget = useCallback(() => { showPanel(); setSelection(null) }, [showPanel])
   const openTargetZone = useCallback((zoneId: string) => { setResolved(null); setSelection({ kind: 'zone', id: zoneId }) }, [])
-  const refresh = useCallback(async () => {
-    setRefreshing(true)
-    await Promise.all([reloadPolicy().catch(() => undefined), suggestions.reload().catch(() => undefined), reloadGuests().catch(() => undefined)])
-    setRefreshedAt(new Date())
-    setRefreshing(false)
-  }, [reloadPolicy, suggestions, reloadGuests])
 
   if (zones.length === 0) {
     return (
@@ -289,9 +287,6 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
             lead={<TargetPicker candidates={mapTarget.candidates} zonesById={zonesById} target={target} onTarget={changeTarget} onShowPanel={showTarget} observedCount={targetFlowCount} />}
             filters={filters}
             onFilters={setFilters}
-            refreshedAt={refreshedAt}
-            refreshing={refreshing}
-            onRefresh={refresh}
           />
         </Box>
         {policy.pending_changes && (
@@ -319,7 +314,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
           <Box
             role='region'
             aria-label={t('mapLabel')}
-            sx={{ flex: '1 1 0', minWidth: 0, width: '100%', minHeight: 560, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}
+            sx={{ position: 'relative', flex: '1 1 0', minWidth: 0, width: '100%', minHeight: 560, border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}
           >
             {sankey && (
               <ZoneSankey
@@ -346,6 +341,17 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
                 names={{ end: endName }}
                 target={target}
               />
+            )}
+            {!matrix && !lock && selectedNode && (
+              <Box
+                data-testid='map-isolation'
+                sx={{ position: 'absolute', top: 8, left: 8, zIndex: 6, display: 'flex', alignItems: 'center', gap: 0.5, pl: 1.5, pr: 0.5, py: 0.25, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 5, boxShadow: 1 }}
+              >
+                <Typography variant='caption' sx={{ fontWeight: 600 }}>{isolating ? t('isolate.only', { name: names.end(selectedNode) }) : t('isolate.all')}</Typography>
+                <Button size='small' onClick={() => setAllFlowsFor(isolating ? selectedNode : null)} sx={{ minHeight: 0, py: 0.25, textTransform: 'none' }}>
+                  {isolating ? t('isolate.showAll') : t('isolate.showOnly')}
+                </Button>
+              </Box>
             )}
             {!matrix && (
               <ZoneCanvas
@@ -381,6 +387,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
               onResolved={setResolved}
               onOpenDrifts={zoneId => goToSubTab('drifts', { zoneId })}
               partialLimit={(suggestions.data?.length ?? 0) >= PENDING_LIMIT ? PENDING_LIMIT : null}
+              peers={mapTarget.peers}
             />
           )}
           {targetPanel && target && (
@@ -404,14 +411,20 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
           {selectedEdge && (
             <EdgePanel
               key={selectedEdge.id}
-              edgeId={selectedEdge.id}
               source={selectedEdge.source}
               target={selectedEdge.target}
               data={selectedEdge.data}
               from={nameOf(selectedEdge.source)}
               to={nameOf(selectedEdge.target)}
+              src={pairEndOf(selectedEdge.groups[0], zonesById, nameOf(selectedEdge.groups[0]))}
+              dst={pairEndOf(selectedEdge.groups[1], zonesById, nameOf(selectedEdge.groups[1]))}
               zonesById={zonesById}
+              flows={flows}
+              suggestions={input.suggestions}
               unapplied={unapplied}
+              edits={edits}
+              partialLimit={(suggestions.data?.length ?? 0) >= PENDING_LIMIT ? PENDING_LIMIT : null}
+              peers={mapTarget.peers}
               connectionId={connectionId}
               version={policy.version}
               reloadPolicy={reloadPolicy}

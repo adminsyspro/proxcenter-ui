@@ -28,16 +28,23 @@ export function useMicrosegDrifts(connId: string | null | undefined, options: { 
 }
 
 /**
+ * The engine reads the firewall log every minute or so and records what it saw: the observed flows are read again at
+ * that pace while the page is shown (orchestrator database, no Proxmox call), or a page opened before the first flows
+ * never shows them.
+ */
+export const SUGGESTIONS_REFRESH_MS = 60_000
+
+/**
  * GET /suggestions for one page. The previous page stays on screen while the
  * next one loads (a filter or a page change must not blank the list).
  */
 export function useMicrosegSuggestions(connId: string | null | undefined, params: ListSuggestionsParams) {
   const api = useMemo(() => (connId ? microsegApi(connId) : null), [connId])
-  const key = connId ? [`${microsegBaseUrl(connId)}/suggestions`, params.kind, params.status, params.zone, params.limit, params.offset] : null
+  const key = connId ? [`${microsegBaseUrl(connId)}/suggestions`, params.kind, params.status, params.zone, params.direction, params.service?.join(' '), params.source, params.limit, params.offset] : null
   const { data, error, isLoading, isValidating, mutate } = useSWR<MicrosegSuggestion[], MicrosegApiError>(
     key,
     async () => (await api!.listSuggestions(params)).suggestions,
-    { keepPreviousData: true, shouldRetryOnError: shouldRetry },
+    { keepPreviousData: true, refreshInterval: SUGGESTIONS_REFRESH_MS, refreshWhenHidden: false, shouldRetryOnError: shouldRetry },
   )
   return { data, loading: isLoading, validating: isValidating, error, reload: () => mutate() }
 }

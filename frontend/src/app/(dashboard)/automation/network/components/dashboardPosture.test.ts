@@ -4,7 +4,7 @@ import type { FirewallCoverage } from '@/hooks/useZeroTrust'
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import {
-  MAX_CHORDS, MAX_SLICES, arcPath, chordPath, polar, postureDistribution, postureGuests, postureTraffic, protectedRunning, topServices, zonesEnforced,
+  MAX_CHORDS, MAX_SLICES, arcPath, chordPath, polar, postureDistribution, postureGuests, postureTraffic, observedTokens, topServices,
 } from './dashboardPosture'
 import type { PolicyGuest } from './microseg/zoneModel'
 
@@ -50,6 +50,16 @@ describe('postureGuests', () => {
     expect(joined.find(g => g.key === 'qemu/101')).toEqual({ key: 'qemu/101', node: 'pve1', tags: ['zone-web'], vlans: [10], ips: ['10.0.0.1/24'] })
     expect(postureGuests(ROWS, null).every(g => g.ips.length === 0)).toBe(true)
     expect(postureGuests(undefined, [guest(9, 'pve3', [], ['10.9.9.9'])])).toEqual([{ key: 'qemu/9', node: 'pve3', tags: [], vlans: [], ips: ['10.9.9.9'] }])
+  })
+})
+
+describe('postureTraffic: grouped by destination zone', () => {
+  it('names an outbound destination outside the zones Outside, kept apart from Unknown / External', () => {
+    const outbound = seen({ direction: 'out', src_zone_id: 'zweb', src_ip: '10.0.0.1', dst_zone_id: '', dst_ip: '198.51.100.7', hits: 40 })
+    const { slices } = postureTraffic(input({ groupBy: 'dstzone', suggestions: [...FLOWS_SEEN, outbound] }))
+    expect(slices.map(s => [s.key, s.kind, s.hits])).toContainEqual(['outside', 'outside', 40])
+    // The unknown sources of the inbound flows are still Unknown on the source side of the zone grouping.
+    expect(postureTraffic(input({ suggestions: [...FLOWS_SEEN, outbound] })).slices.map(s => s.key)).not.toContain('outside')
   })
 })
 
@@ -171,6 +181,15 @@ describe('postureDistribution', () => {
     expect(d.eastWest).toEqual({ hits: 400, percent: 80 })
   })
 
+  it('attributes a blocked outbound flow to the zone that emits it, not to its destination', () => {
+    const out = seen({ direction: 'out', kind: 'blocked', src_key: 'zweb', src_zone_id: 'zweb', dst_zone_id: 'zdb', dst_key: 'zdb', hits: 7 })
+    const outside = seen({ direction: 'out', kind: 'blocked', src_key: 'zweb', src_zone_id: 'zweb', dst_zone_id: '', dst_key: '203.0.113.9', dst_ip: '203.0.113.9', hits: 5 })
+    const d = postureDistribution({ zones: ZONES, tagPrefix: 'zone-', flows: [], suggestions: [out, outside, ...FLOWS_SEEN], guests: [], addresses: false })
+    expect(d.blockedZones).toEqual(['db'])
+    expect(d.blockedOutZones).toEqual(['web'])
+    expect(d.blocked).toBe(3)
+  })
+
   it('gives 0 % of nothing', () => {
     const d = postureDistribution({ zones: ZONES, tagPrefix: 'zone-', flows: [], suggestions: [], guests: [], addresses: false })
     expect(d.eastWest).toEqual({ hits: 0, percent: 0 })
@@ -179,27 +198,38 @@ describe('postureDistribution', () => {
 })
 
 describe('topServices', () => {
-  it('sums the observed flows per service and status, busiest first, then the services the policy allows', () => {
+  it('gives one row per service, a part per status, the busiest observed first, then the services only allowed', () => {
     const rows = topServices(FLOWS_SEEN, [flow({}), flow({ dport: '9100' }), flow({ dport: '9100', src_zone_id: 'zapp' }), flow({ proto: 'ICMP', dport: '' })])
     expect(rows).toEqual([
-      { key: 'not_covered|PostgreSQL', label: 'PostgreSQL', tokens: ['tcp/5432'], flows: 1, hits: 300, status: 'not_covered' },
-      { key: 'blocked|PostgreSQL', label: 'PostgreSQL', tokens: ['tcp/5432'], flows: 1, hits: 100, status: 'blocked' },
-      { key: 'not_covered|SSH', label: 'SSH', tokens: ['tcp/22'], flows: 2, hits: 100, status: 'not_covered' },
-      { key: 'allowed|node-exporter', label: 'node-exporter', tokens: ['tcp/9100'], flows: 2, hits: null, status: 'allowed' },
-      { key: 'allowed|PostgreSQL', label: 'PostgreSQL', tokens: ['tcp/5432'], flows: 1, hits: null, status: 'allowed' },
-      { key: 'allowed|icmp', label: 'icmp', tokens: ['icmp'], flows: 1, hits: null, status: 'allowed' },
+      {
+        key: 'PostgreSQL', label: 'PostgreSQL', tokens: ['tcp/5432'], flows: 3, hits: 400,
+        parts: [
+          { status: 'not_covered', flows: 1, hits: 300, tokens: ['tcp/5432'] },
+          { status: 'blocked', flows: 1, hits: 100, tokens: ['tcp/5432'] },
+          { status: 'allowed', flows: 1, hits: null, tokens: ['tcp/5432'] },
+        ],
+      },
+      { key: 'SSH', label: 'SSH', tokens: ['tcp/22'], flows: 2, hits: 100, parts: [{ status: 'not_covered', flows: 2, hits: 100, tokens: ['tcp/22'] }] },
+      { key: 'node-exporter', label: 'node-exporter', tokens: ['tcp/9100'], flows: 2, hits: null, parts: [{ status: 'allowed', flows: 2, hits: null, tokens: ['tcp/9100'] }] },
+      { key: 'icmp', label: 'icmp', tokens: ['icmp'], flows: 1, hits: null, parts: [{ status: 'allowed', flows: 1, hits: null, tokens: ['icmp'] }] },
     ])
   })
 
-  it('merges the ports of one service name and status, summing flows and hits, the raw tokens kept', () => {
+  it('merges the ports of one service name, summing flows and hits, the raw tokens kept', () => {
     const rows = topServices([
       seen({ dport: '8080', hits: 5 }), seen({ dport: '8081', hits: 7 }), seen({ proto: 'TCP', dport: '8080', hits: 1 }),
       seen({ dport: '22', hits: 2 }), seen({ proto: 'udp', dport: '22', hits: 3 }), seen({ dport: '22', hits: 4, src_ip: '10.9.9.9' }),
     ], [])
     expect(rows).toEqual([
-      { key: 'not_covered|HTTP-alt', label: 'HTTP-alt', tokens: ['tcp/8080', 'tcp/8081'], flows: 3, hits: 13, status: 'not_covered' },
-      { key: 'not_covered|SSH', label: 'SSH', tokens: ['tcp/22', 'udp/22'], flows: 3, hits: 9, status: 'not_covered' },
+      { key: 'HTTP-alt', label: 'HTTP-alt', tokens: ['tcp/8080', 'tcp/8081'], flows: 3, hits: 13, parts: [{ status: 'not_covered', flows: 3, hits: 13, tokens: ['tcp/8080', 'tcp/8081'] }] },
+      { key: 'SSH', label: 'SSH', tokens: ['tcp/22', 'udp/22'], flows: 3, hits: 9, parts: [{ status: 'not_covered', flows: 3, hits: 9, tokens: ['tcp/22', 'udp/22'] }] },
     ])
+  })
+
+  it('puts the busiest part of a service first: SSH blocked on tcp, still only observed on udp', () => {
+    const [ssh] = topServices([seen({ dport: '22', hits: 2 }), seen({ proto: 'udp', dport: '22', hits: 30, kind: 'blocked' })], [])
+    expect(ssh.parts.map(p => [p.status, p.hits, p.tokens])).toEqual([['blocked', 30, ['udp/22']], ['not_covered', 2, ['tcp/22']]])
+    expect(ssh.hits).toBe(32)
   })
 
   it('keeps the top 8', () => {
@@ -210,24 +240,10 @@ describe('topServices', () => {
   })
 })
 
-describe('header figures', () => {
-  it('counts the zones that enforce of all the zones', () => {
-    expect(zonesEnforced({ zones_by_state: { enforce: 1, observe: 4, disabled: 1 } })).toEqual({ enforced: 1, total: 6 })
-    expect(zonesEnforced(undefined)).toBeNull()
-  })
-
-  it('counts the running guests Proxmox filters, of the running guests, once measured', () => {
-    expect(protectedRunning({ computedAt: '2026-11-03T08:00:00Z', guests: ROWS })).toEqual({ protected: 3, running: 3, total: 3, asked: 4 })
-    expect(protectedRunning({ computedAt: '2026-11-03T08:00:00Z', guests: [row(1, 'pve1', [], [], 'running', null), row(2, 'pve1', [], [])] })).toEqual({ protected: 1, running: 2, total: 2, asked: 2 })
-    expect(protectedRunning({ computedAt: '', guests: ROWS })).toBeNull()
-    expect(protectedRunning(null)).toBeNull()
-  })
-
-  it('counts the protected guests over the guests asked only, above the guest cap of the coverage route', () => {
-    // 2 running guests asked (1 protected), 2 running guests the cap left out, 1 stopped guest left out.
-    const left = (vmid: number, status = 'running') => ({ ...row(vmid, 'pve1', [], [], status, null), sampledOut: true })
-    const guests = [row(1, 'pve1', [], []), row(2, 'pve1', [], [], 'running', false), left(3), left(4), left(5, 'stopped')]
-
-    expect(protectedRunning({ computedAt: '2026-11-03T08:00:00Z', guests })).toEqual({ protected: 1, running: 2, total: 4, asked: 2 })
+describe('observedTokens', () => {
+  it('keeps what the Observation list can be filtered on: the tokens of the observed parts, not those only allowed', () => {
+    const [row] = topServices([seen({ dport: '22', hits: 2 })], [flow({ proto: 'udp', dport: '22' })])
+    expect(row.tokens).toEqual(['tcp/22', 'udp/22'])
+    expect(observedTokens(row)).toEqual(['tcp/22'])
   })
 })

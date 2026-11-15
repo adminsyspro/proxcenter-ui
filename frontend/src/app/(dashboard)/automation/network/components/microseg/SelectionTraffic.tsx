@@ -14,25 +14,28 @@ import { useSliceName } from '../TrafficByZone'
 import { useTimelineRange } from '../useTimelineRange'
 import { useTrafficTimeline } from '../useTrafficTimeline'
 import { objectDotSx } from './objectColour'
-import { useStoredChoice } from './useStoredChoice'
 import { bareIp } from './zoneGraph'
 import TruncatedText from './TruncatedText'
 
 /** Sources (or destinations) listed in the panel; the header counts them all. */
 const TOP_SOURCES = 5
 
-/** What a map panel charts: a zone (the flows logged in it) or a guest (its events in the orchestrator's memory). */
-export type TrafficSelection = { kind: 'zone'; zone: MicrosegZone } | { kind: 'guest'; type: GuestType; vmid: number; ips: readonly string[] }
+/**
+ * What a map panel charts: a zone (the flows logged in it), a pair of zones (inbound what the receiver logged from the
+ * emitter, outbound what the emitter logged towards the receiver; '' for an end in no zone) or a guest (its events in
+ * the orchestrator's memory).
+ */
+export type TrafficSelection =
+  | { kind: 'zone'; zone: MicrosegZone }
+  | { kind: 'pair'; emitter: string; receiver: string }
+  | { kind: 'guest'; type: GuestType; vmid: number; ips: readonly string[] }
 
-/** The direction of a panel's chart, remembered per browser for every panel. */
-export const PANEL_DIRECTION_KEY = 'proxcenter.microseg.panelDirection'
-const DIRECTIONS: readonly TimelineDirection[] = ['both', 'in', 'out']
 
 /**
  * The traffic over time of a map panel's selection, the Dashboard's chart filtered on it: for a zone the persisted
  * history of the range (the ring asked with `zone=` when the history is not served), stacked by source zone; for a
  * guest the events of its VMID in the ring. Inbound (by source zone) or outbound (the flows it emitted, by destination
- * zone), remembered per browser. Also the same over every verdict, for the summary and the top sources. The range is
+ * zone). Also the same over every verdict, for the summary and the top sources. The range is
  * the Dashboard's, remembered per browser. `enabled` false reads nothing (its sections are folded). No Proxmox call.
  */
 /** One direction's figures over every verdict: its total, its ranked groups, would be blocked and blocked. */
@@ -47,7 +50,8 @@ export type TopEntry = SourceTotal & { dir: 'in' | 'out' }
 export function useSelectionTraffic(connectionId: string, zones: MicrosegZone[], selection: TrafficSelection, enabled = true) {
   const [verdict, setVerdict] = useState<TimelineVerdict>('all')
   const [range, setRange] = useTimelineRange()
-  const [direction, setDirection] = useStoredChoice<TimelineDirection>(PANEL_DIRECTION_KEY, DIRECTIONS, 'both')
+  // Both on every opening of a panel: the choice is not remembered.
+  const [direction, setDirection] = useState<TimelineDirection>('both')
   const slices = useMemo(() => zoneSeries(zones), [zones])
   const guestType = selection.kind === 'guest' ? selection.type : null
   const guestVmid = selection.kind === 'guest' ? selection.vmid : null
@@ -60,10 +64,13 @@ export function useSelectionTraffic(connectionId: string, zones: MicrosegZone[],
     return (e: MicrosegEvent) => mine.has(bareIp(e.src_ip))
   }, [guestVmid, guestIps])
   const zone = selection.kind === 'zone' ? selection.zone : null
+  const emitter = selection.kind === 'pair' ? selection.emitter : null
+  const receiver = selection.kind === 'pair' ? selection.receiver : null
+  const pair = useMemo(() => (emitter === null || receiver === null ? null : { emitter, receiver }), [emitter, receiver])
   const connection = enabled ? connectionId : null
   // Both directions are read: the same history answer, or the ring the panel holds (inbound of a zone asks `zone=`).
-  const inbound = useTrafficTimeline({ connection, zones, slices, groupBy: 'zone', verdict, range, zone, keep: keepIn })
-  const outbound = useTrafficTimeline({ connection, zones, slices, groupBy: 'dstzone', verdict, range, zone, keep: keepOut })
+  const inbound = useTrafficTimeline({ connection, zones, slices, groupBy: 'zone', verdict, range, zone, pair, keep: keepIn })
+  const outbound = useTrafficTimeline({ connection, zones, slices, groupBy: 'dstzone', verdict, range, zone, pair, keep: keepOut })
   const inSummary = useMemo(() => summaryOf(inbound.build), [inbound.build])
   const outSummary = useMemo(() => summaryOf(outbound.build), [outbound.build])
   const aligned = useMemo(() => alignTimelines(inbound.timeline, outbound.timeline), [inbound.timeline, outbound.timeline])
@@ -154,8 +161,10 @@ export function TrafficSummaryLine({ traffic }: { traffic: SelectionTrafficState
       ? t(key, { hits: total, source: nameOf(top[0]), share: Math.round(top[0].share), wouldBlock, blocked })
       : t('summaryNone')
   }
+  // Outbound, "blocked" also counts what the destination zone blocks at its inbound: the tooltip says so.
+  const help = traffic.direction === 'out' && traffic.summary.total > 0 ? t('summaryOutBlockedHelp') : null
   return (
-    <Tooltip title={text}>
+    <Tooltip title={help ? <>{text}<br />{help}</> : text}>
       <Typography variant='body2' color='text.secondary' noWrap data-testid='traffic-summary' sx={{ mt: 1 }}>{text}</Typography>
     </Tooltip>
   )

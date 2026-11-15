@@ -8,7 +8,8 @@ import { MicrosegApiError, microsegApi, microsegErrorKeyOf } from '@/lib/microse
 import type { PreflightCheck, PreflightStatus } from '@/lib/microseg/types'
 
 import { ONE_LINE_SX } from './dialogParts'
-import { heldByStop, opensWizard, parseRate, preflightMessage } from './preflightModel'
+import { heldByStop, opensWizard, parseRate, preflightMessage, raisesLogRate } from './preflightModel'
+import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import TruncatedText from './TruncatedText'
 
 const STATUS_ICON: Record<PreflightStatus, { icon: string; color: string }> = {
@@ -17,23 +18,30 @@ const STATUS_ICON: Record<PreflightStatus, { icon: string; color: string }> = {
   fail: { icon: 'ri-close-circle-fill', color: 'error.main' },
 }
 
-function CheckRow({ check, onOpenWizard, onResume }: { check: PreflightCheck; onOpenWizard?: () => void; onResume?: () => void }) {
+function CheckRow({ check, onOpenWizard, onResume, rateLimit }: { check: PreflightCheck; onOpenWizard?: () => void; onResume?: () => void; rateLimit?: RateLimitFix }) {
   const t = useTranslations('microsegPilot.preflight')
   const tStop = useTranslations('microsegPilot.stop')
-  const { title, detail } = preflightMessage(check)
+  const { title, detail, more = [] } = preflightMessage(check)
   const name = title ? t(`checks.${title}.title`) : check.id
   // The rate PVE writes ("20/second") is said with a translated unit; any other wording is shown as PVE wrote it.
   const rawRate = detail?.values?.rate
   const rate = parseRate(typeof rawRate === 'string' ? rawRate : undefined)
   const values = rate ? { ...detail?.values, rate: t(`rateUnits.${rate.unit}`, { count: rate.count }) } : detail?.values
-  const message = detail ? t(detail.key, values) : ''
-  const icon = STATUS_ICON[check.status] ?? STATUS_ICON.warn
+  // Every reason on the same line, in full in the tooltip of the cut text.
+  const message = detail ? [t(detail.key, values), ...more.map(line => t(line.key, line.values))].join(' ') : ''
+  // The engine raises the log rate while a zone observes once the settings hold the rate to use: the warning is then handled.
+  const planned = raisesLogRate(check, rateLimit?.observe)
+  const plannedRate = planned ? parseRate(planned) : null
+  const plannedText = planned ? t('checks.log_ratelimit.planned', { rate: plannedRate ? t(`rateUnits.${plannedRate.unit}`, { count: plannedRate.count }) : planned }) : ''
+  const icon = planned ? STATUS_ICON.pass : STATUS_ICON[check.status] ?? STATUS_ICON.warn
+  const raisable = check.id === 'log_ratelimit' && check.status === 'warn' && !planned && !!rateLimit?.onRaise
 
   return (
     <Box role='listitem' aria-label={`${name}: ${t(`status.${check.status}`)}`} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minHeight: 48, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>
       <Box component='i' className={icon.icon} sx={{ color: icon.color, fontSize: 20, flexShrink: 0 }} />
       <TruncatedText text={name} fontWeight={600} sx={{ flex: '0 0 auto', width: 170 }} />
-      <TruncatedText text={message} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
+      <TruncatedText text={planned ? plannedText : message} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
+      {raisable && <RaiseLogRate onRaise={rateLimit!.onRaise!} />}
       {onResume && heldByStop(check) && (
         <Button size='small' variant='outlined' color='error' onClick={onResume} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{tStop('resume')}</Button>
       )}
@@ -44,20 +52,59 @@ function CheckRow({ check, onOpenWizard, onResume }: { check: PreflightCheck; on
   )
 }
 
+/**
+ * The log rate the engine raises the cluster to while a zone is observed (`observe_log_rate_limit` of the settings, empty
+ * when unset), and the write that sets it to the recommended value (absent: no button).
+ */
+export type RateLimitFix = { observe: string; onRaise?: () => Promise<void> }
+
+/** "Raise while observing": sets the rate of the settings, the engine applies it with the next plan and restores it after. */
+function RaiseLogRate({ onRaise }: { onRaise: () => Promise<void> }) {
+  const t = useTranslations('microsegPilot.preflight')
+  const tAll = useTranslations()
+  const { canWrite } = useMicrosegWrite()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+  const raise = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await onRaise()
+    } catch (e) {
+      setError(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <>
+      {!!error && <Typography variant='caption' color='error' noWrap sx={{ flexShrink: 1, minWidth: 0 }}>{tAll(microsegErrorKeyOf(error))}</Typography>}
+      <WriteTip>
+        <Button size='small' variant='outlined' onClick={() => { void raise() }} disabled={!canWrite || busy} data-testid='preflight-raise-log-rate' sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+          startIcon={busy ? <CircularProgress size={14} /> : undefined}>
+          {t('raiseLogRate')}
+        </Button>
+      </WriteTip>
+    </>
+  )
+}
+
 type Props = {
   open: boolean
   connectionId: string
   onClose: () => void
   /** Changes when the cluster may have changed under the panel (the wizard ran): the checks are read again. */
   refreshKey?: number
-  /** Opens the deployment wizard (the fix of the socle and cluster firewall checks); absent: no fix button. */
+  /** Opens the deployment wizard (the fix of the cluster firewall check: it turns it on, and writes nothing on the nodes); absent: no fix button. */
   onOpenWizard?: () => void
   /** Opens the resume dialog (the fix of a cluster firewall the emergency stop holds off); absent: no button. */
   onResume?: () => void
+  /** The log rate of the settings and how to set it, for the log rate check. */
+  rateLimit?: RateLimitFix
 }
 
 /** The pre-flight checks of a connection, one line each. The cluster is read on every opening: nothing is cached. */
-export default function PreflightPanel({ open, connectionId, onClose, refreshKey = 0, onOpenWizard, onResume }: Props) {
+export default function PreflightPanel({ open, connectionId, onClose, refreshKey = 0, onOpenWizard, onResume, rateLimit }: Props) {
   const t = useTranslations('microsegPilot.preflight')
   const tAll = useTranslations()
   const [attempt, setAttempt] = useState(0)
@@ -106,7 +153,7 @@ export default function PreflightPanel({ open, connectionId, onClose, refreshKey
         )}
         {checks && (
           <Box role='list'>
-            {checks.map(check => <CheckRow key={check.id} check={check} onOpenWizard={onOpenWizard} onResume={onResume} />)}
+            {checks.map(check => <CheckRow key={check.id} check={check} onOpenWizard={onOpenWizard} onResume={onResume} rateLimit={rateLimit} />)}
           </Box>
         )}
       </DialogContent>

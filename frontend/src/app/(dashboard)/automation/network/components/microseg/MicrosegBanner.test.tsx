@@ -64,7 +64,7 @@ describe('banner: nothing to say, nothing drawn (UA27)', () => {
   it('draws the strip for the pending changes alone', async () => {
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('a')], last_revision: null, pending_changes: true }))
     renderTab()
-    expect(await screen.findByText('What will change: 1 zone added')).toBeTruthy()
+    expect(await screen.findByText('Not applied yet: zone a added.')).toBeTruthy()
   })
 
   it('draws the outcome of an action, then nothing once it is dismissed', async () => {
@@ -314,8 +314,8 @@ describe('banner: pending changes', () => {
     mock.routes['GET /revisions?limit=1'] = () => reply(200, { revisions: [revisionWithSnapshot([zone('a')], [])] })
     renderTab()
 
-    expect(await screen.findByText('What will change: 2 zones added, 1 flow added')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'View plan' }))
+    expect(await screen.findByText('Not applied yet: zones b, c added, flow a → b HTTPS added.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Review and apply' }))
     expect(await screen.findByRole('dialog', { name: 'Micro-segmentation plan' })).toBeTruthy()
   })
 
@@ -324,28 +324,60 @@ describe('banner: pending changes', () => {
     mock.routes['GET /revisions?limit=1'] = () => reply(500, { code: 'INTERNAL', error: 'boom' })
     renderTab()
 
-    expect(await screen.findByText('Unapplied changes')).toBeTruthy()
+    expect(await screen.findByText('Changes not applied yet.')).toBeTruthy()
     await waitFor(() => expect(calls('GET /revisions?limit=1').length).toBeGreaterThan(0))
-    expect(screen.queryByText(/What will change/)).toBeNull()
-    expect(screen.getByText('Unapplied changes')).toBeTruthy()
+    expect(screen.queryByText(/Not applied yet/)).toBeNull()
+    expect(screen.getByText('Changes not applied yet.')).toBeTruthy()
   })
 
   it('counts against nothing when no revision exists yet, without reading revisions', async () => {
     mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('a')], flows: [flow('f1')], last_revision: null, pending_changes: true }))
     renderTab()
-    expect(await screen.findByText('What will change: 1 zone added, 1 flow added')).toBeTruthy()
+    expect(await screen.findByText('Not applied yet: zone a added, 1 flow added.')).toBeTruthy()
     expect(calls('GET /revisions?limit=1')).toHaveLength(0)
   })
 
   it('shows no bar when nothing is pending', async () => {
     renderTab()
     await bannerReady()
-    expect(screen.queryByText(/What will change|unapplied change/i)).toBeNull()
+    expect(screen.queryByText(/^Not applied yet:|^Changes not applied yet/)).toBeNull()
   })
 
   it('does not read revisions when nothing is pending', async () => {
     renderTab()
     await bannerReady()
     expect(calls('GET /revisions?limit=1')).toHaveLength(0)
+  })
+})
+
+describe('banner: the log reader load', () => {
+  const node = (over: Record<string, unknown> = {}) => ({ node: 'pve1', lines_last: 400, lines_per_min_15m: 82, lag_seconds: 12, full_pages_24h: 0, ...over })
+
+  it('draws nothing while every reader keeps up', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ engine: { paused_until: null, held: false, last_runs: {}, last_log: null, log_nodes: [node()] } }))
+    renderTab()
+    await bannerReady()
+    expect(screen.queryByText('Log behind')).toBeNull()
+  })
+
+  it('shows an alert chip when a reader met a full page, and its load per node on hover', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ engine: { paused_until: null, held: false, last_runs: {}, last_log: null, log_nodes: [node(), node({ node: 'pve2', lines_per_min_15m: 5, lag_seconds: 0, full_pages_24h: 1 })] } }))
+    renderTab()
+    const chip = await screen.findByText('Log behind')
+    expect(chip.closest('.MuiChip-root')).toBeTruthy()
+    fireEvent.mouseOver(chip)
+    const tip = await screen.findByRole('tooltip')
+    expect(tip.textContent).toContain('pve1 · 82 lines/min · 12 sec behind')
+    expect(tip.textContent).toContain('pve2 · 5 lines/min · 0 sec behind')
+  })
+
+  it('says a long lag in minutes, then hours', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ engine: { paused_until: null, held: false, last_runs: {}, last_log: null, log_nodes: [node({ full_pages_24h: 1, lag_seconds: 120 }), node({ node: 'pve2', lag_seconds: 600 }), node({ node: 'pve3', lag_seconds: 36000 })] } }))
+    renderTab()
+    fireEvent.mouseOver(await screen.findByText('Log behind'))
+    const tip = (await screen.findByRole('tooltip')).textContent
+    expect(tip).toContain('pve1 · 82 lines/min · 120 sec behind')
+    expect(tip).toContain('pve2 · 82 lines/min · 10 min behind')
+    expect(tip).toContain('pve3 · 82 lines/min · 10 hr behind')
   })
 })

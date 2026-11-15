@@ -6,7 +6,7 @@ import { Alert, Box, CircularProgress, IconButton, Link, Tab, Tabs, Tooltip, Typ
 import { useTranslations } from 'next-intl'
 import { useSWRConfig } from 'swr'
 
-import { microsegBaseUrl } from '@/lib/microseg/api'
+import { microsegApi, microsegBaseUrl } from '@/lib/microseg/api'
 import { isRunAffectedKey } from '@/lib/microseg/runRefresh'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 
@@ -22,14 +22,17 @@ import ObservationPanel from './ObservationPanel'
 import PlanDialog from './PlanDialog'
 import PolicyPanel from './PolicyPanel'
 import PreflightPanel from './PreflightPanel'
+import { RECOMMENDED_OBSERVE_LOG_RATE } from './preflightModel'
 import RunStrip from './RunStrip'
 import SettingsDialog from './SettingsDialog'
+import { RunsInProgressProvider, useTrackedRuns } from './runsInProgress'
 import { useMicrosegControls } from './useMicrosegControls'
+import { useResumeRuns } from './useResumeRuns'
 import { CHECK_STATUS_POLL_MS } from './useMicrosegCheck'
 import { MicrosegActionsSlot, MicrosegWriteContext, useCanManageMicroseg } from './microsegAccess'
 import ZoneMap from './ZoneMap'
 import {
-  MICROSEG_SUBTABS, isMicrosegSubTab, type FirewallWizardData, type MicrosegSubTab, type MicrosegSubTabProps, type TrackedRun,
+  MICROSEG_SUBTABS, isMicrosegSubTab, type FirewallWizardData, type MicrosegSubTab, type MicrosegSubTabProps, type ObservationFocus,
 } from './microsegTabTypes'
 
 const STORAGE_KEY = 'microseg.subTab'
@@ -72,12 +75,14 @@ type Props = {
   firewall?: FirewallWizardData
   /** The sub-tab to open on, from a link or a line of the Dashboard's "To do" list; else the one last shown. */
   initialSubTab?: MicrosegSubTab
+  /** What the Observation sub-tab opens filtered on, from a figure of the Dashboard. */
+  initialObservation?: ObservationFocus | null
   /** The VMID of a `?vm=` link: the Overview targets that guest (the page also opens the Overview for it). */
   targetVm?: string | null
 }
 
 /** The Micro-segmentation tab of /automation/network: banner, first run guide and the five sub-tabs. */
-export default function MicrosegTab({ connectionId, connectionName, firewall, initialSubTab, targetVm }: Props) {
+export default function MicrosegTab({ connectionId, connectionName, firewall, initialSubTab, initialObservation = null, targetVm }: Props) {
   const t = useTranslations('microsegPilot')
   const { data: policy, loading, error, reload } = useMicrosegPolicy(connectionId || null)
   // While a manual check waits in the queue, the status (shared with the banner and the button) is read faster.
@@ -89,7 +94,8 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
   const [subTab, setSubTab] = useState<MicrosegSubTab>(() => initialSubTab ?? readStoredSubTab() ?? 'overview')
 
   // The runs live here, not in a sub-tab: switching sub-tab must not lose them.
-  const [runs, setRuns] = useState<TrackedRun[]>([])
+  const { runs, startRun, endRun, removeRun, inProgress } = useTrackedRuns()
+  useResumeRuns(connectionId, connectionName || connectionId, startRun)
   // The plan window is opened by the banner, the pending changes bar and the first run guide.
   const [planOpen, setPlanOpen] = useState(false)
   const onOpenPlan = useCallback(() => setPlanOpen(true), [])
@@ -101,22 +107,24 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
   // The zone a zone panel opened the Drifts sub-tab on (cleared by any other way to a sub-tab).
   const [driftsZone, setDriftsZone] = useState<string | null>(null)
   const [observationZone, setObservationZone] = useState<string | null>(null)
+  // What the Dashboard opened the Observation sub-tab on (cleared by any other way to a sub-tab).
+  const [observationFocus, setObservationFocus] = useState<ObservationFocus | null>(initialObservation)
   // The wizard changes the cluster: the pre-flight checks are read again once it is done.
   const [preflightRound, setPreflightRound] = useState(0)
   // The row of the sub-tabs hosts the actions of the active sub-tab (a state, so they render once it is mounted).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null)
   const { mutate } = useSWRConfig()
 
-  const startRun = useCallback((run: TrackedRun) => {
-    setRuns(prev => (prev.some(r => r.runId === run.runId) ? prev : [...prev, run]))
-  }, [])
-  const removeRun = useCallback((runId: string) => setRuns(prev => prev.filter(r => r.runId !== runId)), [])
   // A run changes Proxmox and records what it did: the draft, the status, the runs and revisions, the drifts
   // and the zone members (tags) are read again, so no list or count stays stale until a manual reload.
   const refreshAfterRun = useCallback(() => {
     void reload()
     void mutate(isRunAffectedKey(connectionId))
   }, [reload, mutate, connectionId])
+  const runFinished = useCallback((runId: string) => {
+    endRun(runId)
+    refreshAfterRun()
+  }, [endRun, refreshAfterRun])
   // A check also reads the logs: the suggestions it learnt are read again with the rest.
   const refreshAfterCheck = useCallback(() => {
     refreshAfterRun()
@@ -129,6 +137,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
     storeSubTab(tab)
     setDriftsZone(tab === 'drifts' ? options?.zoneId ?? null : null)
     setObservationZone(tab === 'observation' ? options?.zoneId ?? null : null)
+    setObservationFocus(null)
   }
 
   if (!connectionId) return <Alert severity='info' sx={{ m: 3 }}>{t('noConnection')}</Alert>
@@ -150,21 +159,21 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
 
   const firstRun = !policy.last_revision && policy.zones.length === 0
   const contentProps: MicrosegSubTabProps = {
-    connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan, startRun, onOpenSettings, onOpenPreflight, targetVm, driftsZone, observationZone,
+    connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan, startRun, onOpenSettings, onOpenPreflight, targetVm, driftsZone, observationZone, observationFocus,
   }
 
   return (
     <MicrosegWriteContext.Provider value={canWrite}>
     <MicrosegActionsSlot.Provider value={actionsSlot}>
+    <RunsInProgressProvider value={inProgress}>
     <Box sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <MicrosegBanner
         connectionId={connectionId}
         policy={policy}
         controls={controls}
         onOpenPlan={onOpenPlan}
-        onOpenWizard={firewall ? () => setWizardOpen(true) : undefined}
       />
-      <RunStrip connectionId={connectionId} runs={runs} onFinished={refreshAfterRun} onRemove={removeRun} />
+      <RunStrip connectionId={connectionId} runs={runs} onFinished={runFinished} onRemove={removeRun} />
       {firstRun && <FirstRunGuide goToSubTab={goToSubTab} onOpenPlan={onOpenPlan} onOpenPreflight={onOpenPreflight} />}
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
         <Tabs
@@ -243,6 +252,14 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
           onClose={() => setPreflightOpen(false)}
           onOpenWizard={firewall ? () => setWizardOpen(true) : undefined}
           onResume={() => { setPreflightOpen(false); controls.ask('resume') }}
+          rateLimit={{
+            observe: policy.policy.settings.observe_log_rate_limit ?? '',
+            // A draft setting: nothing is written to Proxmox here, the engine raises the rate with the next plan.
+            onRaise: async () => {
+              await microsegApi(connectionId).savePolicy({ version: policy.version, settings: { observe_log_rate_limit: RECOMMENDED_OBSERVE_LOG_RATE } })
+              await reload()
+            },
+          }}
         />
       )}
       {firewall && (
@@ -258,6 +275,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
         />
       )}
     </Box>
+    </RunsInProgressProvider>
     </MicrosegActionsSlot.Provider>
     </MicrosegWriteContext.Provider>
   )

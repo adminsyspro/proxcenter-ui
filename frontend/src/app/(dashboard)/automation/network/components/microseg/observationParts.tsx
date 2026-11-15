@@ -5,9 +5,10 @@ import { Box, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { microsegApi } from '@/lib/microseg/api'
-import type { MicrosegSuggestion, SuggestionAction, SuggestionKind } from '@/lib/microseg/types'
-import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
+import { isAggregateDst, type FlowDirection, type MicrosegSuggestion, type SuggestionAction, type SuggestionKind } from '@/lib/microseg/types'
+import { serviceLabel, serviceLabelIn, serviceTitle } from '@/lib/network/serviceNames'
 
+import AcceptNetworkDialog from './AcceptNetworkDialog'
 import { isVersionConflict, writeErrorMessage } from './dialogParts'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import TruncatedText from './TruncatedText'
@@ -41,21 +42,73 @@ export function ObservedKindGlyph({ kind }: { kind: SuggestionKind }) {
   )
 }
 
+/** The direction of an observed flow as an arrow (up and out for an outbound flow, down and in for an inbound one). */
+export function DirectionGlyph({ direction }: { direction: FlowDirection | undefined }) {
+  const t = useTranslations('microsegPilot.observation')
+  const out = direction === 'out'
+  const label = t(out ? 'direction.out' : 'direction.in')
+  return (
+    <Tooltip title={label}>
+      <Box component='span' role='img' aria-label={label} data-direction={out ? 'out' : 'in'} sx={{ display: 'inline-flex', flexShrink: 0, color: out ? 'warning.main' : 'text.secondary' }}>
+        <i className={out ? 'ri-arrow-right-up-line' : 'ri-arrow-right-down-line'} style={{ fontSize: 16 }} />
+      </Box>
+    </Tooltip>
+  )
+}
+
 /** The service of an observed flow (its name, protocol and port in the tooltip) and its hits, as two cells of a row. */
-export function ServiceHits({ suggestion: s }: { suggestion: Pick<MicrosegSuggestion, 'proto' | 'dport' | 'hits'> }) {
+export function ServiceHits({ suggestion: s, sharedServices }: { suggestion: Pick<MicrosegSuggestion, 'proto' | 'dport' | 'hits'>; sharedServices?: ReadonlySet<string> }) {
   const t = useTranslations('microsegPilot.observation')
   return (
     <>
-      <TruncatedText text={serviceLabel(s.proto, s.dport)} title={serviceTitle(s.proto, s.dport)} color='text.secondary' sx={{ flexShrink: 0 }} />
+      <TruncatedText text={sharedServices ? serviceLabelIn(s.proto, s.dport, sharedServices) : serviceLabel(s.proto, s.dport)} title={serviceTitle(s.proto, s.dport)} color='text.secondary' sx={{ flexShrink: 0 }} />
       <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{t('hits', { count: s.hits })}</Typography>
     </>
   )
 }
 
+/**
+ * Stands in the place of Accept on a row for many destinations: no one-click opening of the Internet, the flow is
+ * created by hand.
+ */
+export function AggregateHint() {
+  const t = useTranslations('microsegPilot.observation')
+  return (
+    <Tooltip title={t('aggregateHint')}>
+      <Box component='span' role='img' aria-label={t('aggregateHint')} sx={{ display: 'inline-flex', alignItems: 'center', px: 1, color: 'text.secondary' }}>
+        <i className='ri-information-line' />
+      </Box>
+    </Tooltip>
+  )
+}
+
+/** The tooltip of Accept for an outbound flow to a zone, which also opens that zone's inbound; undefined for any other flow. */
+export function outboundZoneAcceptTip(
+  t: (key: 'acceptOutZoneTip', values: { from: string; to: string }) => string,
+  s: Pick<MicrosegSuggestion, 'direction' | 'src_zone_id' | 'dst_zone_id'>,
+  from: string,
+  to: string,
+): string | undefined {
+  return s.direction === 'out' && s.src_zone_id && s.dst_zone_id ? t('acceptOutZoneTip', { from, to }) : undefined
+}
+
+/**
+ * The prefix choice of an outbound As CIDR: `choose` opens the dialog (rendered as `dialog`, null while closed), whose
+ * Accept closes it and resolves the flow with the chosen length.
+ */
+export function usePrefixChoice(ip: string, onResolve: (action: SuggestionAction, prefixLen?: number) => void) {
+  const [choosing, setChoosing] = useState(false)
+  const dialog = choosing
+    ? <AcceptNetworkDialog ip={ip} onClose={() => setChoosing(false)} onAccept={len => { setChoosing(false); onResolve('accept_cidr', len) }} />
+    : null
+  return { choose: () => setChoosing(true), dialog }
+}
+
 type ResolveActionsProps = {
   suggestion: MicrosegSuggestion
   busy: boolean
-  onResolve: (action: SuggestionAction) => void
+  /** `prefixLen` comes with As CIDR on an outbound flow, whose dialog chooses it. */
+  onResolve: (action: SuggestionAction, prefixLen?: number) => void
   /** Name of the accept button (its tooltip too when the flow has a source zone); "Accept" by default. */
   acceptLabel?: string
   /** Tooltip of the accept button when the flow has a source zone; the accept label by default. */
@@ -67,18 +120,30 @@ export function ResolveActions({ suggestion: s, busy, onResolve, acceptLabel, ac
   const t = useTranslations('microsegPilot.observation')
   const accept = acceptLabel ?? t('accept')
   const { canWrite } = useMicrosegWrite()
+  const outbound = s.direction === 'out'
+  const prefix = usePrefixChoice(s.dst_ip, onResolve)
+  // An outbound flow is accepted as the network of its destination (the prefix is chosen), never for many destinations.
+  const cidrOff = outbound ? !s.dst_ip : !s.src_ip
+  const aggregate = outbound && isAggregateDst(s)
+  const showCidr = !aggregate
+  const acceptTitle = s.src_zone_id ? acceptTip ?? accept : t('acceptNoZone')
 
   return (
     <>
-      <WriteTip title={s.src_zone_id ? acceptTip ?? accept : t('acceptNoZone')}>
-        <IconButton size='small' aria-label={accept} disabled={!canWrite || busy || !s.src_zone_id} onClick={() => onResolve('accept')}><i className='ri-check-line' /></IconButton>
-      </WriteTip>
-      <WriteTip title={s.src_ip ? t('acceptCidr') : t('acceptCidrNoIp')}>
-        <IconButton size='small' aria-label={t('acceptCidr')} disabled={!canWrite || busy || !s.src_ip} onClick={() => onResolve('accept_cidr')}><i className='ri-checkbox-multiple-line' /></IconButton>
-      </WriteTip>
+      {aggregate ? <AggregateHint /> : (
+        <WriteTip title={acceptTitle}>
+          <IconButton size='small' aria-label={accept} disabled={!canWrite || busy || !s.src_zone_id} onClick={() => onResolve('accept')}><i className='ri-check-line' /></IconButton>
+        </WriteTip>
+      )}
+      {showCidr && (
+        <WriteTip title={cidrOff ? t('acceptCidrNoIp') : t('acceptCidr')}>
+          <IconButton size='small' aria-label={t('acceptCidr')} disabled={!canWrite || busy || cidrOff} onClick={() => (outbound ? prefix.choose() : onResolve('accept_cidr'))}><i className='ri-checkbox-multiple-line' /></IconButton>
+        </WriteTip>
+      )}
       <WriteTip title={t('dismiss')}>
         <IconButton size='small' aria-label={t('dismiss')} disabled={!canWrite || busy} onClick={() => onResolve('dismiss')}><i className='ri-close-line' /></IconButton>
       </WriteTip>
+      {prefix.dialog}
     </>
   )
 }
@@ -105,14 +170,14 @@ export function useResolveSuggestions<R>(
 
   const clearFailure = useCallback(() => setFailure(null), [])
 
-  const resolve = useCallback(async (ids: string[], action: SuggestionAction): Promise<ResolveOutcome<R> | null> => {
+  const resolve = useCallback(async (ids: string[], action: SuggestionAction, prefixLen?: number): Promise<ResolveOutcome<R> | null> => {
     if (running.current || ids.length === 0) return null
     running.current = true
     setBusy(true)
     setFailure(null)
     let resolved = false
     try {
-      await microsegApi(connectionId).resolveSuggestions({ version, ids, action })
+      await microsegApi(connectionId).resolveSuggestions({ version, ids, action, ...(prefixLen === undefined ? {} : { prefix_len: prefixLen }) })
       resolved = true
     } catch (e) {
       setFailure(writeErrorMessage(tAll as (key: string) => string, e))

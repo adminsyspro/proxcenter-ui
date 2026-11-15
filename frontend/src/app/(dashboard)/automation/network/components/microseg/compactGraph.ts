@@ -4,9 +4,10 @@ import type { MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import { flowService } from './FlowSummary'
 import {
-  EXTERNAL_ID, NODE_H, NODE_W, OUTSIDE_ID, addAllowedPairs, addPair, cellCenters, comparePairs, placeBoundary, placePairs,
+  EXTERNAL_ID, NODE_H, NODE_W, OUTSIDE_ID, addAllowedPairs, addPair, cellCenters, comparePairs, outsideEgressOf, placeBoundary, placePairs,
   zoneColumns, zoneNodeId, type Cell, type MapEdgeKind, type MapInput, type Pair, type Placement, type ZoneGraph, type ZoneNodeData,
 } from './zoneGraph'
+import { foldColumns } from './zoneLayout'
 
 /** The box of a zone: its name on the first line, its state and member count on the second. */
 export const BOX_W = 190
@@ -68,16 +69,17 @@ export function buildCompactGraph({ zones, flows, suggestions, members = null, u
   addObservedZonePairs(pairs, suggestions, known)
   const ordered = [...pairs.values()].sort(comparePairs)
 
-  const grid = boxGrid(columns, ordered.some(p => p.source === EXTERNAL_ID), ordered.some(p => p.target === OUTSIDE_ID))
+  const grid = foldColumns(boxGrid(columns, ordered.some(p => p.source === EXTERNAL_ID), ordered.some(p => p.target === OUTSIDE_ID)), COMPACT_COL_GAP, COMPACT_ROW_GAP)
   const centers = cellCenters(grid, COMPACT_COL_GAP, COMPACT_ROW_GAP)
 
   const inside = insideCounts(suggestions, known)
+  const outsideEgress = outsideEgressOf(flows, known)
   const out: Placement = { nodes: [] as Node[], obstacles: [], endShapes: new Map() }
   for (const cell of grid.flat()) {
     const c = centers.get(cell.id)!
     const zone = known.get(cell.id.replace(/^zone:/, ''))
     if (zone && cell.id.startsWith('zone:')) placeBox(out, zone, members ? (members.get(zone.id)?.length ?? 0) : null, inside.get(zone.id) ?? 0, c)
-    else placeBoundary(out, cell.id, c)
+    else placeBoundary(out, cell.id, c, outsideEgress)
   }
 
   return { nodes: out.nodes, edges: placePairs(ordered, out.endShapes, out.obstacles, unapplied) }

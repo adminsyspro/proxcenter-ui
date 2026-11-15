@@ -7,16 +7,15 @@ import { useTranslations } from 'next-intl'
 import { microsegApi } from '@/lib/microseg/api'
 import type { MicrosegPolicy } from '@/lib/microseg/types'
 
-import { DialogErrorLine, ONE_LINE_SX, isVersionConflict, useDialogAction } from './dialogParts'
+import { DialogErrorLine, FormRow, ONE_LINE_SX, isVersionConflict, useDialogAction } from './dialogParts'
 import RemoveDialog from './RemoveDialog'
 import TypedConfirmDialog from './TypedConfirmDialog'
-import SettingsFields, { SectionTitle } from './SettingsFields'
+import SettingsFields, { SETTINGS_LABEL_WIDTH, SectionTitle } from './SettingsFields'
 import {
   SETTING_UNITS, changedUpdate, formFromSettings, validateSettingsForm, type SettingNumberKey, type SettingsForm,
 } from './settingsModel'
 import type { TrackedRun } from './microsegTabTypes'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
-import TruncatedText from './TruncatedText'
 
 type Props = {
   connectionId: string
@@ -97,31 +96,36 @@ export default function SettingsDialog({ connectionId, connectionName, policy, r
   return (
     <>
       <Dialog open onClose={busy ? undefined : onClose} maxWidth='sm' fullWidth scroll='paper' aria-labelledby='microseg-settings-title'>
-        <DialogTitle id='microseg-settings-title' sx={ONE_LINE_SX}>{t('title')}</DialogTitle>
+        <DialogTitle id='microseg-settings-title' sx={{ ...ONE_LINE_SX, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <i className='ri-settings-3-line' data-testid='settings-dialog-icon' style={{ fontSize: 18, flexShrink: 0 }} />
+          <Box component='span' sx={ONE_LINE_SX}>{t('title')}</Box>
+        </DialogTitle>
         <DialogContent dividers>
           <SettingsFields
             form={form}
             problems={problems}
             busy={busy}
             prefixWarning={prefixChanged}
+            effectiveSelfIps={policy.self_ips_effective}
+            selfIpsSource={policy.self_ips_source}
+            selfIpsDockerInternal={policy.self_ips_docker_internal}
             onChange={(key, value) => setForm(prev => ({ ...prev, [key]: value }))}
           />
           <SectionTitle>{t('sections.removal')}</SectionTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minHeight: 44, minWidth: 0 }}>
-            <TruncatedText text={t('remove.row')} title={t('remove.hint')} sx={{ flex: '1 1 0', minWidth: 0 }} />
+          <FormRow label={t('remove.row')} tip={t('remove.hint')} labelWidth={SETTINGS_LABEL_WIDTH}>
             <WriteTip>
-            <Button
-              size='small'
-              color='error'
-              variant='outlined'
-              disabled={!canWrite || busy}
-              onClick={() => { removal.reset(); setRemoving(true) }}
-              sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}
-            >
-              {t('remove.button')}
-            </Button>
+              <Button
+                size='small'
+                color='error'
+                variant='outlined'
+                disabled={!canWrite || busy}
+                onClick={() => { removal.reset(); setRemoving(true) }}
+                sx={{ whiteSpace: 'nowrap' }}
+              >
+                {t('remove.button')}
+              </Button>
             </WriteTip>
-          </Box>
+          </FormRow>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>

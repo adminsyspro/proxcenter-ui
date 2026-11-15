@@ -55,4 +55,65 @@ describe('ZoneSparkline', () => {
     expect(screen.getByText('Zone disabled: its traffic is not logged')).toBeTruthy()
     expect(bars()).toHaveLength(0)
   })
+
+  describe('by direction', () => {
+    const out = () => { const s = new Array<number>(24).fill(0); s[5] = 20; return s }
+    const hitsOf = (i: number) => [...bars()[i].querySelectorAll('rect')].slice(1).map(r => Number(r.getAttribute('height')))
+
+    it('draws one series and no legend when no outbound traffic exists', () => {
+      renderWithProviders(<ZoneSparkline state='observe' series={series()} outSeries={new Array<number>(24).fill(0)} from={FROM} stepMs={3_600_000} />)
+      expect(screen.queryByTestId('zone-sparkline-legend')).toBeNull()
+      expect(bars()[5].querySelectorAll('rect')).toHaveLength(2)
+    })
+
+    it('draws an inbound and an outbound series with a legend when outbound traffic exists', () => {
+      renderWithProviders(<ZoneSparkline state='observe' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      const legend = screen.getByTestId('zone-sparkline-legend')
+      expect(legend.textContent).toContain('Inbound')
+      expect(legend.textContent).toContain('Outbound')
+      expect(bars()[5].querySelectorAll('rect')).toHaveLength(3)
+      expect(hitsOf(5)).toEqual([24, 12])
+      expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('50 would be blocked · 20 outbound would be blocked')
+    })
+
+    it('truncates the total with an ellipsis instead of cutting it, and lets it shrink before the title', () => {
+      renderWithProviders(<ZoneSparkline state='observe' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      const total = getComputedStyle(screen.getByTestId('zone-sparkline-total'))
+      expect(total.textOverflow).toBe('ellipsis')
+      expect(total.whiteSpace).toBe('nowrap')
+      expect(total.overflow).toBe('hidden')
+      expect(total.flexShrink).not.toBe('0')
+      expect(total.minWidth).toBe('0px')
+    })
+
+    it('truncates each key of the legend', () => {
+      renderWithProviders(<ZoneSparkline state='observe' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      const key = screen.getByText('Outbound')
+      expect(getComputedStyle(key).textOverflow).toBe('ellipsis')
+    })
+
+    it('says both counts on hover', async () => {
+      renderWithProviders(<ZoneSparkline state='observe' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      fireEvent.mouseOver(bars()[5])
+      expect((await screen.findByRole('tooltip')).textContent).toMatch(/: 40 hits inbound, 20 hits outbound$/)
+    })
+
+    it('words each side with its own state: inbound enforced and outbound observed, and the reverse', () => {
+      const { unmount } = renderWithProviders(<ZoneSparkline state='enforce' outState='observe' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('50 blocked · 20 outbound would be blocked')
+      unmount()
+      renderWithProviders(<ZoneSparkline state='observe' outState='enforce' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('50 would be blocked · 20 outbound blocked')
+    })
+
+    it('words outbound hits left in the window after the outbound went off as plain connections', () => {
+      renderWithProviders(<ZoneSparkline state='enforce' outState='off' series={series()} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('50 blocked · 20 outbound connections')
+    })
+
+    it('says only the outbound part when nothing came in', () => {
+      renderWithProviders(<ZoneSparkline state='enforce' outState='enforce' series={new Array<number>(24).fill(0)} outSeries={out()} from={FROM} stepMs={3_600_000} />)
+      expect(screen.getByTestId('zone-sparkline-total').textContent).toBe('20 outbound blocked')
+    })
+  })
 })

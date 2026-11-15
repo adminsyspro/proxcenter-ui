@@ -416,6 +416,69 @@ README
     echo ""
 }
 
+# ---------- host addresses (micro-segmentation preflight) ----------
+
+# Behind Docker's bridge network the orchestrator only sees its container
+# address, while the Proxmox nodes see ProxCenter coming from this host's.
+# The installer writes the host's addresses to PROXCENTER_HOST_IPS so the
+# preflight checks the right ones.
+
+# docker_bridge_ips: the addresses of the container interfaces of this host,
+# which Proxmox never sees ProxCenter come from (Docker bridges and veth
+# pairs, CNI, flannel, calico), one per line. Without `ip`, the default
+# docker0 gateway. Any other address is kept: the preflight then asks the
+# rules to accept it too, which can only be stricter (Tailscale, a libvirt
+# NAT or an overlay may be how this host reaches Proxmox).
+docker_bridge_ips() {
+    if ! command -v ip > /dev/null 2>&1; then
+        echo "172.17.0.1"
+        return 0
+    fi
+    ip -o addr show 2>/dev/null \
+        | awk '$2 ~ /^(docker[0-9]*|docker_gwbridge|br-[0-9a-f]+|veth[^ ]*|cni[^ ]*|flannel[^ ]*|cali[^ ]*)(@.*)?:?$/ { split($4, a, "/"); print a[1] }'
+}
+
+# filter_host_ips CANDIDATES EXCLUDED: the CANDIDATES (space separated, as
+# `hostname -I` prints them) without loopback, link-local, the EXCLUDED ones
+# (space or newline separated) and duplicates, comma separated.
+filter_host_ips() {
+    local candidates="$1" excluded out="" ip
+    excluded=" $(echo "$2" | tr '\n' ' ') "
+    for ip in $candidates; do
+        case "$ip" in
+            127.*|::1|169.254.*|[fF][eE]80:*) continue ;;
+        esac
+        case "$excluded" in *" $ip "*) continue ;; esac
+        case ",$out," in *",$ip,"*) continue ;; esac
+        out="${out:+$out,}$ip"
+    done
+    echo "$out"
+}
+
+# host_ips: this host's addresses for PROXCENTER_HOST_IPS.
+host_ips() {
+    filter_host_ips "$(hostname -I 2>/dev/null)" "$(docker_bridge_ips)"
+}
+
+# set_host_ips FILE: write this host's current addresses to
+# PROXCENTER_HOST_IPS (install and upgrade). A node of an HA cluster is left
+# alone (the HA deploy sets its own address), and so is the value when no
+# address can be listed.
+set_host_ips() {
+    local ips previous
+    if grep -q '^# --- Managed by ProxCenter HA deploy' "$1"; then return 0; fi
+    ips=$(host_ips)
+    if [ -z "$ips" ]; then
+        log_warning "Could not list this host's addresses: PROXCENTER_HOST_IPS left as is"
+        return 0
+    fi
+    previous=$(env_get PROXCENTER_HOST_IPS "$1")
+    if [ -n "$previous" ] && [ "$previous" != "$ips" ]; then
+        log_warning "PROXCENTER_HOST_IPS was $previous: every upgrade rewrites it, force other addresses in Micro-segmentation > Settings > Advanced instead"
+    fi
+    env_set PROXCENTER_HOST_IPS "$ips" "$1"
+}
+
 # ---------- install ----------
 
 write_env_file() {
@@ -691,6 +754,7 @@ cmd_install() {
     cp "$SCRIPT_DIR/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
     CREATED_FILES+=("$INSTALL_DIR/.env")
     write_env_file "$edition" "$version" "$(server_ip)"
+    set_host_ips "$INSTALL_DIR/.env"
     if [ -n "$registry" ]; then
         env_set REGISTRY "$registry" "$INSTALL_DIR/.env"
         env_set POSTGRES_IMAGE "$registry/$(image_basename "$(manifest_images | grep '^postgres' | head -1)")" "$INSTALL_DIR/.env"
@@ -892,6 +956,7 @@ cmd_upgrade() {
     cp "$SCRIPT_DIR/docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"
     backfill_env "$edition"
     env_set VERSION "$version" "$INSTALL_DIR/.env"
+    set_host_ips "$INSTALL_DIR/.env"
     log_success "docker-compose.yml replaced (backup: docker-compose.yml.bak.$stamp), VERSION=$version"
     # Printed before the restart is attempted: if step 5 fails, this is still
     # in the transcript, and by then the compose/VERSION are already changed.

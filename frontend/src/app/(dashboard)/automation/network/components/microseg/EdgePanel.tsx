@@ -95,7 +95,7 @@ function ObservedRow({ s, example, zonesById, busy, onResolve }: {
 export default function EdgePanel({ edgeId, source, target, data, from, to, zonesById, unapplied, connectionId, version, reloadPolicy, reloadSuggestions, onResolved, onClose, onEdit }: Props) {
   const t = useTranslations('microsegPilot.overview')
   const observedKind = data.kind === 'unprotected' || data.kind === 'blocked'
-  const tokens = [...new Set([...data.flows, ...data.observed].map(f => flowService(f)))].sort()
+  const tokens = [...new Set([...data.flows, ...data.observed].map(f => flowService(f)))].sort((a, b) => a.localeCompare(b))
   const servicesTip = tokens.length ? serviceTokensTitle(tokens) : data.label
   const observed = observedKind || data.observed.length > 0
   const allowed = !observedKind || data.flows.length > 0

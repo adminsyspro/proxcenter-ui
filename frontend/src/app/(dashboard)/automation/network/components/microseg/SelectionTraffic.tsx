@@ -51,7 +51,7 @@ export function useSelectionTraffic(connectionId: string, zones: MicrosegZone[],
   const slices = useMemo(() => zoneSeries(zones), [zones])
   const guestType = selection.kind === 'guest' ? selection.type : null
   const guestVmid = selection.kind === 'guest' ? selection.vmid : null
-  const guestIps = selection.kind === 'guest' ? selection.ips.map(bareIp).sort().join(',') : ''
+  const guestIps = selection.kind === 'guest' ? selection.ips.map(bareIp).sort((a, b) => a.localeCompare(b)).join(',') : ''
   // A guest: inbound, the events it logged (its VMID); outbound, the events whose source is one of its addresses.
   const keepIn = useMemo(() => (guestVmid === null ? null : (e: MicrosegEvent) => e.vmid === guestVmid && e.type === guestType), [guestType, guestVmid])
   const keepOut = useMemo(() => {

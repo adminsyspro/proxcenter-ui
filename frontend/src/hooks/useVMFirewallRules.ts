@@ -173,7 +173,7 @@ export function useVMFirewallRules(connectionId: string | null): UseVMFirewallRu
     if (!connectionId) return []
     const key = `${connectionId}:${keyOf(vm)}`
     const running = rulesInFlight.current.get(key)
-    if (running) return running
+    if (running !== undefined) return running
 
     const read = firewallAPI.getVMRules(connectionId, vm.node, vm.type, vm.vmid)
       .then(rules => (Array.isArray(rules) ? rules : []))

@@ -16,16 +16,18 @@ const menuSectionStyles = (verticalNavOptions, theme) => {
         gap: collapsedNotHovered ? 0 : theme.spacing(2.5),
         ...(collapsedNotHovered && {
           paddingInlineStart: `${theme.spacing((collapsedWidth - 25) / 8)} !important`,
-          paddingInlineEnd: `${theme.spacing((collapsedWidth - 25) / 8 - 1.25)} !important`
+          paddingInlineEnd: `${theme.spacing((collapsedWidth - 25) / 8 - 1.25)} !important`,
+
+          // Collapsed: a plain rule stands for the section, so its icon no longer reads as a disabled link
+          [`& .${menuClasses.icon}`]: {
+            display: 'none'
+          }
         }),
         '&:before': {
           content: '""',
           blockSize: 1,
           inlineSize: collapsedNotHovered ? '1.3125rem' : '0.875rem',
-          backgroundColor: 'var(--mui-palette-divider)',
-          ...(collapsedNotHovered && {
-            display: 'none'
-          })
+          backgroundColor: 'var(--mui-palette-divider)'
         },
         ...(!collapsedNotHovered && {
           '&:after': {

@@ -1,6 +1,3 @@
-// MUI Imports
-import { lighten } from '@mui/material/styles'
-
 // Util Imports
 import { menuClasses } from '@menu/utils/menuClasses'
 
@@ -40,13 +37,16 @@ const menuItemStyles = (verticalNavOptions, theme) => {
               }
             }
           : {
-              color: 'var(--mui-palette-primary-contrastText)',
-              background:
-                theme.direction === 'ltr'
-                  ? `linear-gradient(270deg, var(--mui-palette-primary-main), ${lighten(theme.palette.primary.main, 0.5)} 100%)`
-                  : `linear-gradient(270deg, ${lighten(theme.palette.primary.main, 0.5)}, var(--mui-palette-primary-main) 100%)`,
+              // Tab look: the selected item takes the page block background it runs into,
+              // with a primary accent bar on the outer edge
+              color: 'var(--mui-palette-text-primary)',
+              backgroundColor: 'var(--mui-palette-background-paper)',
+              boxShadow: `inset ${theme.direction === 'rtl' ? -3 : 3}px 0 0 var(--mui-palette-primary-main)`,
               [`& .${menuClasses.icon}`]: {
-                color: 'inherit'
+                color: 'var(--mui-palette-primary-main)'
+              },
+              [`& .${menuClasses.label}`]: {
+                fontWeight: 600
               }
             })
       }
@@ -61,9 +61,7 @@ const menuItemStyles = (verticalNavOptions, theme) => {
       ...((!isPopoutWhenCollapsed || popoutExpanded || (popoutCollapsed && level === 0)) && {
         transition: `padding-inline-start ${transitionDuration}ms ease-in-out`,
         paddingInlineStart: theme.spacing(collapsedNotHovered ? (collapsedWidth - 25) / 8 : 5.5),
-        paddingInlineEnd: theme.spacing(collapsedNotHovered ? (collapsedWidth - 25) / 8 - 1.25 : 3.5),
-        borderStartEndRadius: 50,
-        borderEndEndRadius: 50
+        paddingInlineEnd: theme.spacing(collapsedNotHovered ? (collapsedWidth - 25) / 8 - 1.25 : 3.5)
       }),
       ...(!active && {
         '&:hover, &:focus-visible': {

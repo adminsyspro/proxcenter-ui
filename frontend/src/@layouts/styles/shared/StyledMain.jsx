@@ -5,7 +5,7 @@ import styled from '@emotion/styled'
 import themeConfig from '@configs/themeConfig'
 
 // Util Imports
-import { commonLayoutClasses } from '@layouts/utils/layoutClasses'
+import { commonLayoutClasses, verticalLayoutClasses } from '@layouts/utils/layoutClasses'
 
 const StyledMain = styled.main`
   padding: ${themeConfig.layoutPadding}px;
@@ -23,6 +23,14 @@ const StyledMain = styled.main`
     margin-inline: auto;
     max-inline-size: ${themeConfig.compactContentWidth}px;
   `}
+
+  /* Docked vertical nav (wider than its 1200px breakpoint): the content sits against it so the
+     selected menu item runs straight into the page block */
+  @media (min-width: 1201px) {
+    &.${verticalLayoutClasses.content}:not(.${verticalLayoutClasses.contentCompact}) {
+      padding-inline-start: 0;
+    }
+  }
 
   &:has(.${commonLayoutClasses.contentHeightFixed}) {
     overflow: hidden;

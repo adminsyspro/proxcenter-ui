@@ -38,6 +38,7 @@ export function flowService(flow: Pick<MicrosegFlow, 'proto' | 'dport'>): string
  */
 export default function FlowSummary({ flow, zonesById, sideMinWidth = 0 }: Props) {
   const t = useTranslations('microsegPilot.policy.flow')
+  const ts = useTranslations('microsegPilot.policy.table.state')
   const outbound = flow.dst_cidr ? outboundFlowStatus(flow, zonesById.get(flow.src_zone_id)) : 'applied'
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: '1 1 auto' }}>
@@ -49,8 +50,9 @@ export default function FlowSummary({ flow, zonesById, sideMinWidth = 0 }: Props
       </Tooltip>
       {flow.origin === 'learned' && <Chip size='small' color='info' variant='outlined' label={t('learned')} sx={{ flexShrink: 0 }} />}
       {outbound !== 'applied' && (
-        <Tooltip title={t(outbound)}>
-          <Chip size='small' color={outbound === 'observed' ? 'info' : 'warning'} variant='outlined' label={t(outbound)} sx={{ minWidth: 0, flexShrink: 1 }} />
+        // The short label of the Policy table, never cut (the two sides give way); the whole sentence is the tooltip.
+        <Tooltip title={ts(`${outbound}Hint`)}>
+          <Chip size='small' color={outbound === 'observed' ? 'info' : 'warning'} variant='outlined' label={ts(outbound)} sx={{ flexShrink: 0 }} />
         </Tooltip>
       )}
     </Box>

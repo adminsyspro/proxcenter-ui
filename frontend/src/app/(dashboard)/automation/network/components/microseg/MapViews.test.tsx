@@ -11,7 +11,7 @@ import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProvider
 
 import { SUGGESTIONS_REFRESH_MS } from '@/lib/microseg/useMicrosegLists'
 
-import { calls, mock, policy, reply, REVISION_HEAD } from './microsegTestKit'
+import { calls, mock, policy, reply, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
 import { body, db, installFreshMocks, vm, web } from './policyTestKit'
 import { flowOf, node, pathOf, setup, SUGGESTIONS, wouldBlock } from './zoneMapTestKit'
 
@@ -35,7 +35,7 @@ describe('the rendering selector', () => {
     demo()
     await node('zone:zw')
     const group = screen.getByRole('group', { name: 'Map rendering' })
-    expect(within(group).getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual(['Groups', 'Compact zones', 'Matrix', 'Guest view', 'Sankey diagram'])
+    expect(within(group).getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual(['Groups', 'Compact zones', 'Matrix', 'Guest view', 'Sankey diagram', 'Nodes'])
     expect(pressed('Groups')).toBe('true')
   })
 
@@ -353,5 +353,101 @@ describe('the Sankey diagram', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Unprotected' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Blocked' }))
     expect(await screen.findByText('No flow to draw with these filters.')).toBeTruthy()
+  })
+})
+
+describe('the node view', () => {
+  // web-1 and lost on pve1, web-2 and db-1 on pve2: s1 (web-1 to db-1) crosses the nodes, s2 (web-2 to db-1) stays inside pve2.
+  const onNodes = [
+    vm(100, 'web-1', ['zone-web'], { ips: ['10.0.0.1'], node: 'pve1' }),
+    vm(101, 'web-2', ['zone-web'], { ips: ['10.0.0.3'], node: 'pve2' }),
+    vm(200, 'db-1', ['zone-db'], { ips: ['10.0.0.2'], node: 'pve2' }),
+    vm(300, 'lost', [], { ips: ['10.0.0.9'], node: 'pve1' }),
+  ]
+
+  it('switches to a circle per Proxmox node holding its guests, the observed flows from node to node', async () => {
+    demo({ vms: onNodes })
+    await node('zone:zw')
+    pick('Nodes')
+    const circle = await node('pve:pve1')
+    expect(window.localStorage.getItem('microseg.map.view')).toBe('nodes')
+    expect(within(circle).getByText('pve1')).toBeTruthy()
+    expect(within(circle).getByText('2 guests')).toBeTruthy()
+    expect((await node('guest:pve:pve1:qemu/100')).getAttribute('data-parent')).toBe('pve:pve1')
+    expect((await node('guest:pve:pve2:qemu/200')).getAttribute('data-parent')).toBe('pve:pve2')
+    expect(screen.queryByTestId('node-zone:zw')).toBeNull()
+    expect((await pathOf('unprotected:pve:pve1>pve:pve2')).getAttribute('data-stroke')).toBe('#e53935')
+    expect(screen.getByTestId('edge-unprotected:pve:pve1>pve:pve2').getAttribute('aria-label')).toBe('pve1 to pve2: 1 unprotected flow')
+    // No edge inside a node (the circle counts the flow), no allowed flow between zones.
+    expect(screen.queryAllByTestId(/^edge-/)).toHaveLength(1)
+    expect(within(await node('pve:pve2')).getByText('1 internal flow')).toBeTruthy()
+  })
+
+  it('follows the flow checkboxes, and opens no flow panel from an edge', async () => {
+    window.localStorage.setItem('microseg.map.view', 'nodes')
+    demo({ vms: onNodes })
+    const id = 'unprotected:pve:pve1>pve:pve2'
+    await pathOf(id)
+    fireEvent.click(screen.getByTestId(`edge-${id}`))
+    expect(screen.queryByRole('complementary')).toBeNull()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Unprotected' }))
+    await waitFor(() => expect(screen.queryByTestId(`edge-${id}`)).toBeNull())
+  })
+
+  it('targets the guest clicked: its panel opens and the map locks on it', async () => {
+    window.localStorage.setItem('microseg.map.view', 'nodes')
+    demo({ vms: onNodes })
+    fireEvent.click(await node('guest:pve:pve1:qemu/100'))
+    expect(await screen.findByRole('complementary', { name: 'Guest web-1' })).toBeTruthy()
+    await waitFor(() => expect(screen.getByTestId('node-guest:pve:pve1:qemu/100').className).toContain('microseg-target'))
+    expect(screen.getByTestId('edge-unprotected:pve:pve1>pve:pve2').className).not.toContain('microseg-dim')
+  })
+
+  it('says that the guest list is unavailable when it could not be read', async () => {
+    window.localStorage.setItem('microseg.map.view', 'nodes')
+    demo({ vms: onNodes })
+    mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(500, { error: 'boom' })
+    expect(await screen.findByText('Guest list unavailable')).toBeTruthy()
+    expect(screen.queryAllByTestId(/^node-/)).toHaveLength(0)
+  })
+})
+
+describe('the nodes of the connection on the node view', () => {
+  const vms = [
+    vm(100, 'web-1', ['zone-web'], { ips: ['10.0.0.1'], node: 'pve1' }),
+    vm(101, 'web-2', ['zone-web'], { ips: ['10.0.0.3'], node: 'pve2' }),
+    vm(200, 'db-1', ['zone-db'], { ips: ['10.0.0.2'], node: 'pve2' }),
+    vm(400, 'old-1', [], { status: 'stopped', node: 'pve1' }),
+    vm(401, 'old-2', [], { status: 'stopped', node: 'pve3' }),
+  ]
+
+  it('draws an empty node and a node with only stopped guests in no zone, and counts every guest of a node', async () => {
+    window.localStorage.setItem('microseg.map.view', 'nodes')
+    demo({ vms, nodesList: ['pve1', 'pve2', 'pve3', 'pve4'], nodeStatus: { pve1: 'online', pve4: 'offline' } })
+    expect(within(await node('pve:pve4')).getByText('0 guests')).toBeTruthy()
+    expect(within(screen.getByTestId('node-pve:pve4')).getByTestId('pve-icon').getAttribute('data-status')).toBe('offline')
+    expect(within(screen.getByTestId('node-pve:pve1')).getByTestId('pve-icon').getAttribute('data-status')).toBe('online')
+    expect(within(screen.getByTestId('node-pve:pve2')).getByTestId('pve-icon').getAttribute('data-status')).toBe('unknown')
+    // old-1 is stopped and in no zone: counted like Proxmox does, not drawn.
+    expect(within(await node('pve:pve1')).getByText('2 guests')).toBeTruthy()
+    expect(screen.queryByTestId('node-guest:pve:pve1:qemu/400')).toBeNull()
+    expect(within(await node('pve:pve3')).getByText('1 guest')).toBeTruthy()
+    expect(screen.queryAllByTestId(/^node-pve:/)).toHaveLength(4)
+  })
+
+  it('draws the nodes of the guests when the page hands no node list', async () => {
+    window.localStorage.setItem('microseg.map.view', 'nodes')
+    demo({ vms })
+    expect(within(await node('pve:pve3')).getByText('1 guest')).toBeTruthy()
+    expect(screen.queryAllByTestId(/^node-pve:/)).toHaveLength(3)
+  })
+
+  it('counts the flows inside a node for the kinds the checkboxes show', async () => {
+    window.localStorage.setItem('microseg.map.view', 'nodes')
+    demo({ vms })
+    // s2 (blocked, web-2 to db-1) stays inside pve2.
+    expect(await within(await node('pve:pve2')).findByText('1 internal flow')).toBeTruthy()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Blocked' }))
+    await waitFor(() => expect(within(screen.getByTestId('node-pve:pve2')).queryByText(/internal flow/)).toBeNull())
   })
 })

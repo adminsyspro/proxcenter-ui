@@ -11,7 +11,7 @@ import { renderWithProviders } from '@/__tests__/setup/renderWithProviders'
 import { forgetSharedReads } from '@/lib/microseg/api'
 
 import { forgetHeldEvents } from '../usePostureEvents'
-import type { MicrosegFlow, MicrosegPolicy, MicrosegRevision, MicrosegStatus, MicrosegZone } from '@/lib/microseg/types'
+import type { MicrosegException, MicrosegFlow, MicrosegPolicy, MicrosegRevision, MicrosegStatus, MicrosegZone } from '@/lib/microseg/types'
 
 import MicrosegTab from './MicrosegTab'
 
@@ -32,13 +32,18 @@ export const flow = (id: string): MicrosegFlow => ({
   id, policy_id: 'p1', src_zone_id: 'a', src_cidr: '', dst_zone_id: 'b', dst_cidr: '', proto: 'tcp', dport: '443',
   comment: '', origin: 'manual', created_by: 'me',
 })
+/** An exception of zone "zw": app-01 (200) may reach web-1 (100) on PostgreSQL. */
+export const exception = (id: string, over: Partial<MicrosegException> = {}): MicrosegException => ({
+  id, policy_id: 'p1', zone_id: 'zw', sources: [{ type: 'qemu', vmid: 200, name: 'app-01' }], destinations: [{ type: 'qemu', vmid: 100, name: 'web-1' }],
+  services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'me', ...over,
+})
 
 export const policy = (over: Partial<MicrosegPolicy> = {}): MicrosegPolicy => ({
   policy: {
     id: 'p1', connection_id: 'c1', tag_prefix: 'zone-', version: 3, settings: {} as never, emergency_stop: false,
     created_at: '2026-11-01T10:00:00Z', updated_at: '2026-11-01T10:00:00Z', updated_by: 'me',
   },
-  zones: [], flows: [], pending_members: [], last_revision: null, version: 3, pending_changes: false, ...over,
+  zones: [], flows: [], exceptions: [], pending_members: [], last_revision: null, version: 3, pending_changes: false, ...over,
 })
 
 export const status = (over: Partial<MicrosegStatus> = {}): MicrosegStatus => ({

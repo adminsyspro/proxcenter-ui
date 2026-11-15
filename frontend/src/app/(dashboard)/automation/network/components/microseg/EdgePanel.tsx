@@ -4,13 +4,13 @@ import { useContext, useMemo, useState } from 'react'
 import { Alert, Box, Chip, Collapse, IconButton, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
-import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
+import type { MicrosegException, MicrosegFlow, MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
 import { serviceTitle, serviceTokensTitle } from '@/lib/network/serviceNames'
 
 import { OneLine } from './dialogParts'
 import EgressChip, { useZoneEgress } from './EgressChip'
 import ExpandDialog, { withCount, type DataTab } from './ExpandDialog'
-import { MapNamesContext, isSampled, observedHits, type EdgeT } from './FlowEdge'
+import { MapNamesContext, isSampled, joinParts, observedHits, type EdgeT } from './FlowEdge'
 import { flowService } from './FlowSummary'
 import { DirectionGlyph, ObservedKindGlyph, ResolveActions, outboundZoneAcceptTip, ServiceHits, useResolveSuggestions } from './observationParts'
 import { destinationName } from './ObservationRow'
@@ -23,7 +23,8 @@ import TruncatedText from './TruncatedText'
 import type { ZoneEdits } from './useZoneEdits'
 import { useGatewayName } from './useGatewayName'
 import { bareIp, type MapEdgeKind, type PanelEdgeData } from './zoneGraph'
-import { ExpandAddButton, FlowsList, NewFlowButton, useFlowEditor } from './ZonePanelActions'
+import type { ZoneMember } from './zoneModel'
+import { ExpandAddButton, FlowsList, NewFlowButton, useExceptionEditor, useFlowEditor } from './ZonePanelActions'
 
 const ROWS_PER_PAGE = 5
 
@@ -54,11 +55,32 @@ type Props = {
   partialLimit?: number | null
   /** The guest name of each address the inventory knows, to name the destination of an outbound row. */
   peers?: ReadonlyMap<string, string>
+  /** The members of the destination zone (the exceptions of the pair are of that zone), and whether the guests are read. */
+  members?: ZoneMember[]
+  membersKnown?: boolean
+}
+
+type PairExceptionsProps = { edits: ZoneEdits; zone: MicrosegZone; members: ZoneMember[]; membersKnown: boolean; exceptions: readonly MicrosegException[]; size: number }
+
+/**
+ * The exceptions a link of the map stands for, one line each as in the panel of their zone (the destination zone),
+ * with the same edit and delete: disabled for a reader.
+ */
+function PairExceptions({ edits, zone, members, membersKnown, exceptions, size }: PairExceptionsProps) {
+  const only = useMemo(() => new Set(exceptions.map(e => e.id)), [exceptions])
+  const editor = useExceptionEditor(edits, zone, members, membersKnown, only)
+  return (
+    <>
+      {editor.list(size)}
+      {editor.dialogs}
+    </>
+  )
 }
 
 /** The look of the pair's status chip: the edge legend's wording, coloured as the map draws it. */
 const STATUS_LOOK: Record<MapEdgeKind, { color: 'success' | 'error' | 'info' | 'default'; icon: string; legend: string }> = {
   allowed: { color: 'success', icon: 'ri-checkbox-circle-line', legend: 'allowed' },
+  exception: { color: 'success', icon: 'ri-checkbox-circle-line', legend: 'exception' },
   outside: { color: 'default', icon: 'ri-cloud-line', legend: 'allowed' },
   unprotected: { color: 'error', icon: 'ri-error-warning-line', legend: 'unprotected' },
   blocked: { color: 'info', icon: 'ri-forbid-line', legend: 'blocked' },
@@ -153,23 +175,40 @@ function ObservedRow({ s, example, zonesById, peers, busy, onResolve }: {
  * panel: the two ends with the pair's status (and the source zone's outbound state), then foldable sections: the
  * observed traffic between them (the zone chart restricted to the pair, inbound as the destination logged it, outbound
  * as the source logged it), the pending suggestions of the pair (one line each, details under the chevron, resolved as
- * in Observation; a 409 re-reads the draft and the list) and the flows declared between them, editable in place. The
+ * in Observation; a 409 re-reads the draft and the list), the flows declared between them, editable in place, and the
+ * exceptions the link stands for, editable as in the panel of their zone (first on a link that only stands for them). The
  * same content opens in a dialog (Expand) with the pair's events.
  */
 export default function EdgePanel({
   source, target, data, from, to, src, dst, zonesById, flows, suggestions, unapplied, edits,
-  connectionId, version, reloadPolicy, reloadSuggestions, onResolved, onClose, onEdit, partialLimit = null, peers,
+  connectionId, version, reloadPolicy, reloadSuggestions, onResolved, onClose, onEdit, partialLimit = null, peers, members = [], membersKnown = false,
 }: Props) {
   const t = useTranslations('microsegPilot.overview')
   const tz = useTranslations('microsegPilot.overview.zonePanel')
   const te = useTranslations('microsegPilot.overview.edgePanel')
   const tsec = useTranslations('microsegPilot.overview.sections')
+  const tx = useTranslations('microsegPilot.policy.exceptions')
   const tt = useTranslations('microsegPilot.overview.target.panel')
   const names = useContext(MapNamesContext)
   const zones = useMemo(() => [...zonesById.values()], [zonesById])
   const observedKind = data.kind === 'unprotected' || data.kind === 'blocked'
   const tokens = [...new Set([...data.flows, ...data.observed].map(f => flowService(f)))].sort((a, b) => a.localeCompare(b))
   const servicesTip = tokens.length ? serviceTokensTitle(tokens) : data.label
+  // An exception drawn from guest to guest names its two guests (the ends above are their zones); a link between two
+  // zones keeps the count the map shows on it.
+  const guestPair = data.kind === 'exception' && isSampled(source, target) ? `${names.short(source)} → ${names.short(target)}` : null
+  const counted = data.exceptionCount ? t('edge.exceptionCount', { count: data.exceptionCount }) : null
+  const summary = joinParts(guestPair, data.label, counted)
+  // The exceptions are of the destination zone.
+  const exceptionZone = data.exceptions.length ? dst.zone : null
+  const exceptionsBody = (size = ROWS_PER_PAGE) => exceptionZone && (
+    <PairExceptions edits={edits} zone={exceptionZone} members={members} membersKnown={membersKnown} exceptions={data.exceptions} size={size} />
+  )
+  const exceptionsSection = exceptionZone && (
+    <PanelSection id='edge.exceptions' title={tx('title')} count={data.exceptions.length}>{exceptionsBody()}</PanelSection>
+  )
+  // A link that only stands for exceptions shows them first: it has no declared flow.
+  const exceptionsFirst = data.kind === 'exception'
   const example = observedKind && isSampled(source, target) ? t('edge.example', { from: names.short(source), to: names.short(target) }) : null
   // The ends are rebuilt on every render of the map: the lists are cheap (the pending flows the map holds, the draft's flows).
   const pending = pairSuggestions(data.observed, suggestions, src, dst)
@@ -204,7 +243,7 @@ export default function EdgePanel({
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, mt: 1 }}>
         {chips}
-        <TruncatedText text={data.label} title={servicesTip} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
+        <TruncatedText text={summary} title={joinParts(guestPair, servicesTip, counted)} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
         <Tooltip title={t('panel.editInPolicy')}>
           <IconButton size='small' aria-label={t('panel.editInPolicy')} onClick={onEdit}><i className='ri-pencil-line' /></IconButton>
         </Tooltip>
@@ -237,16 +276,21 @@ export default function EdgePanel({
   const newFlow = initial ? <NewFlowButton label={te('newFlow')} onClick={() => editor.create(initial)} /> : undefined
   const flowsBody = (size = ROWS_PER_PAGE) => <FlowsList flows={declared} zonesById={zonesById} editor={editor} size={size} unapplied={unapplied} />
 
+  const exceptionsTab: DataTab[] = exceptionZone ? [{ id: 'exceptions', label: withCount(tx('title'), data.exceptions.length), content: exceptionsBody }] : []
   const dataTabs: DataTab[] = [
+    ...(exceptionsFirst ? exceptionsTab : []),
     { id: 'suggestions', label: withCount(tz('subSuggestions'), pending.length), content: suggestionsBody },
     { id: 'flows', label: withCount(te('declaredFlows'), declared.length), action: initial ? <ExpandAddButton label={tz('addFlow')} onClick={() => editor.create(initial)} /> : undefined, content: flowsBody },
+    ...(exceptionsFirst ? [] : exceptionsTab),
   ]
 
   return (
     <PanelFrame label={t('flowPanel.label', { from, to })} width={400} header={header}>
+      {exceptionsFirst && exceptionsSection}
       <PanelSection id='edge.traffic' title={tsec('traffic')} state={trafficSection}>{trafficBody}</PanelSection>
       <PanelSection id='edge.suggestions' title={tsec('suggestions')} count={pending.length}>{suggestionsBody()}</PanelSection>
       <PanelSection id='edge.flows' title={te('declaredFlows')} count={declared.length} action={newFlow}>{flowsBody()}</PanelSection>
+      {!exceptionsFirst && exceptionsSection}
       {editor.dialogs}
       {expanded && (
         <ExpandDialog

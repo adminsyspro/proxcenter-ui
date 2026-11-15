@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
-import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
+import type { MicrosegException, MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import { crossesBox, crossesCircle, rectAround, rectHitsCircle, rectsOverlap, type Rect } from './edgeGeometry'
 import {
@@ -481,5 +481,61 @@ describe('the occurrences of an edge', () => {
   it('sizes the label for the occurrences as the page writes them, compact', async () => {
     const { shortHits } = await import('./zoneGraph')
     expect([shortHits(3), shortHits(999), shortHits(1415), shortHits(25_300), shortHits(2_400_000)]).toEqual(['3', '999', '1.4K', '25K', '2.4M'])
+  })
+})
+
+describe('the exceptions between two zones', () => {
+  const guest = (vmid: number, name = '') => ({ type: 'qemu' as const, vmid, name })
+  const exception = (id: string, over: Partial<MicrosegException> = {}): MicrosegException => ({
+    id, policy_id: 'p1', zone_id: 'zd', sources: [guest(101, 'web-1')], destinations: [guest(102, 'db-1')],
+    services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'me', ...over,
+  })
+  const members = new Map([['zw', [member(101, 'web-1'), member(103, 'web-2')]], ['zd', [member(102, 'db-1'), member(104, 'db-2')]]])
+  const graph = (exceptions: MicrosegException[], flows: MicrosegFlow[] = [], zones = [web, db]) => buildZoneGraph({ zones, flows, suggestions: [], members, exceptions })
+
+  it('adds an exception from another zone to the allowed link between the two zones', () => {
+    const { edges } = graph([exception('x1')], [flow('f1')])
+    expect(edges.map(e => e.id)).toEqual(['allowed:zone:zw>zone:zd'])
+    expect(data(edges[0])).toMatchObject({ kind: 'allowed', label: 'HTTPS', exceptionCount: 1, count: 1, particle: true })
+    expect(edges[0].style?.strokeDasharray).toBeUndefined()
+  })
+
+  it('draws a dashed green link of their own between two zones no flow links', () => {
+    const { edges } = graph([exception('x1')])
+    expect(edges.map(e => e.id)).toEqual(['exception:zone:zw>zone:zd'])
+    expect(data(edges[0])).toMatchObject({ kind: 'exception', label: '', services: [], exceptionCount: 1, particle: false, small: false, color: EDGE_COLORS.allowed, hits: null })
+    expect(EDGE_COLORS.exception).toBe(EDGE_COLORS.allowed)
+    expect(edges[0].style?.strokeDasharray).toBe('6 4')
+    // The label is sized for "1 exception".
+    expect(data(edges[0]).label_w).toBeGreaterThan(60)
+  })
+
+  it('counts each exception once, whatever its guests, and not on the link the other way', () => {
+    const { edges } = graph(
+      [exception('x1', { sources: [guest(101), guest(103)], destinations: [guest(102), guest(104)] }), exception('x2')],
+      [flow('f1', { src_zone_id: 'zd', dst_zone_id: 'zw' })],
+    )
+    expect(edges.map(e => e.id).sort()).toEqual(['allowed:zone:zd>zone:zw', 'exception:zone:zw>zone:zd'])
+    expect(data(edges.find(e => e.id === 'exception:zone:zw>zone:zd')!).exceptionCount).toBe(2)
+    expect(data(edges.find(e => e.id === 'allowed:zone:zd>zone:zw')!).exceptionCount).toBe(0)
+    expect(data(edges.find(e => e.id === 'exception:zone:zw>zone:zd')!).exceptions.map(e => e.id)).toEqual(['x1', 'x2'])
+    expect(data(edges.find(e => e.id === 'allowed:zone:zd>zone:zw')!).exceptions).toEqual([])
+  })
+
+  it('draws no link for an exception inside its zone', () => {
+    expect(graph([exception('x1', { sources: [guest(104)] })]).edges).toEqual([])
+  })
+
+  it('draws nothing for a zone that is off, a destination that is no member, a source in no zone, or while the guests are unknown', () => {
+    expect(graph([exception('x1')], [], [web, zone('zd', 'db', { state: 'disabled' })]).edges).toEqual([])
+    expect(graph([exception('x1', { destinations: [guest(999)] })]).edges).toEqual([])
+    expect(graph([exception('x1', { sources: [guest(999)] })]).edges).toEqual([])
+    expect(buildZoneGraph({ zones: [web, db], flows: [], suggestions: [], members: null, exceptions: [exception('x1')] }).edges).toEqual([])
+  })
+
+  it('follows the Allowed checkbox', () => {
+    const { edges } = graph([exception('x1')])
+    expect(filterEdges(edges, { ...ALL_FLOWS, allowed: false })).toEqual([])
+    expect(filterEdges(edges, { ...ALL_FLOWS, unprotected: false, blocked: false })).toHaveLength(1)
   })
 })

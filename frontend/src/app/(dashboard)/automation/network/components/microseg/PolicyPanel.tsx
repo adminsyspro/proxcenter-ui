@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import type { MicrosegZone, ZoneState } from '@/lib/microseg/types'
 
 import AssignGuestsDialog from './AssignGuestsDialog'
+import { zoneDeleteBody } from './exceptionModel'
 import { useDialogAction } from './dialogParts'
 import FlowTable from './FlowTable'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
@@ -20,7 +21,7 @@ import ZoneList from './ZoneList'
 import { ZoneStateConfirm, useEgressChange, useFlowEditor } from './ZonePanelActions'
 import { useZoneUncovered } from './useZoneUncovered'
 import { usePendingChanges } from './usePendingChanges'
-import { useZoneEdits } from './useZoneEdits'
+import { useZoneEdits, type ExceptionCreated } from './useZoneEdits'
 import { useZoneGuests } from './useZoneGuests'
 import { targetPeers } from './targetModel'
 
@@ -54,8 +55,8 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
   const peers = useMemo(() => targetPeers(guests), [guests])
   const work = useMemo(() => ({ connectionId, edits, version: policy.version, reloadPolicy, peers }), [connectionId, edits, policy.version, reloadPolicy, peers])
 
-  const saveZone = (zone: MicrosegZone | null) => async (values: ZoneFormValues) => {
-    await edits.saveZone(zone, values)
+  const saveZone = (zone: MicrosegZone | null) => async (values: ZoneFormValues, onExceptionCreated: ExceptionCreated) => {
+    await edits.saveZone(zone, values, onExceptionCreated)
     setZoneDialog(null)
   }
 
@@ -118,7 +119,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         onDelete={flowEditor.remove}
       />
 
-      {zoneDialog && <ZoneDialog zone={zoneDialog.item} connectionId={connectionId} readyAfterHours={edits.readyAfterHours} onSave={saveZone(zoneDialog.item)} flows={edits.flows} onClose={() => setZoneDialog(null)} gate={zoneGateOf(edits, () => setZoneDialog(null))} />}
+      {zoneDialog && <ZoneDialog zone={zoneDialog.item} connectionId={connectionId} readyAfterHours={edits.readyAfterHours} onSave={saveZone(zoneDialog.item)} flows={edits.flows} policy={edits.policy} onClose={() => setZoneDialog(null)} gate={zoneGateOf(edits, () => setZoneDialog(null))} />}
       {flowEditor.dialogs}
       {assigning && (
         <AssignGuestsDialog
@@ -135,7 +136,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
       <MicrosegConfirmDialog
         open={deleting !== null}
         title={deleting ? t('delete.zoneTitle', { name: deleting.name }) : ''}
-        body={t('delete.zoneBody')}
+        body={deleting ? zoneDeleteBody(t, deleting.id, policy.exceptions) : ''}
         confirmLabel={t('delete.confirm')}
         color='error'
         busy={removal.busy}

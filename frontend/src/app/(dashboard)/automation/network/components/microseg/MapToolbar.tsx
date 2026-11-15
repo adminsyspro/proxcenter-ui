@@ -11,9 +11,9 @@ const STORAGE_KEY = 'microseg.map.flows'
 const VIEW_KEY = 'microseg.map.view'
 
 /** The renderings of the map; Groups (circles holding their guests) is the reference and the default. */
-export const MAP_VIEWS = ['groups', 'compact', 'matrix', 'guests', 'sankey'] as const
+export const MAP_VIEWS = ['groups', 'compact', 'matrix', 'guests', 'sankey', 'nodes'] as const
 export type MapView = (typeof MAP_VIEWS)[number]
-const VIEW_ICONS: Record<MapView, string> = { groups: 'ri-bubble-chart-line', compact: 'ri-flow-chart', matrix: 'ri-grid-line', guests: 'ri-focus-3-line', sankey: 'ri-git-branch-line' }
+const VIEW_ICONS: Record<MapView, string> = { groups: 'ri-bubble-chart-line', compact: 'ri-flow-chart', matrix: 'ri-grid-line', guests: 'ri-focus-3-line', sankey: 'ri-git-branch-line', nodes: 'ri-server-line' }
 
 /** The rendering of the map, kept in this browser (a blocked storage, or an unknown value, just means Groups). */
 export function useMapView(): [MapView, (next: MapView) => void] {
@@ -81,7 +81,7 @@ type Props = {
 
 /**
  * The toolbar of the map: the rendering selector, "Flows:" with its three checkboxes (each with the line it draws, so it is the legend too),
- * then the two lines it draws without a checkbox (allowed not applied yet, to the outside).
+ * then the three lines it draws without a checkbox (allowed not applied yet, exception between guests, to the outside).
  */
 export default function MapToolbar({ view, onView, lead, filters, onFilters }: Props) {
   const t = useTranslations('microsegPilot.overview')
@@ -109,6 +109,10 @@ export default function MapToolbar({ view, onView, lead, filters, onFilters }: P
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
           <Swatch color={EDGE_COLORS.allowed} dash='dotted' />
           <Typography variant='caption' color='text.secondary'>{t('legend.draft')}</Typography>
+        </Box>
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+          <Swatch color={EDGE_COLORS.exception} dash='dashed' />
+          <Typography variant='caption' color='text.secondary'>{t('legend.exception')}</Typography>
         </Box>
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
           <Swatch color={EDGE_COLORS.outside} dash='dashed' />

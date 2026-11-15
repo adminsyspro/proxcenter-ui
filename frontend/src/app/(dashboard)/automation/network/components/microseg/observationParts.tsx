@@ -56,13 +56,24 @@ export function DirectionGlyph({ direction }: { direction: FlowDirection | undef
   )
 }
 
-/** The service of an observed flow (its name, protocol and port in the tooltip) and its hits, as two cells of a row. */
-export function ServiceHits({ suggestion: s, sharedServices }: { suggestion: Pick<MicrosegSuggestion, 'proto' | 'dport' | 'hits'>; sharedServices?: ReadonlySet<string> }) {
+/** The two cells of `ServiceHits` in a row that has a status chip: they are cut before the chip is, their full text as tooltip. */
+const YIELDING_SX = { flex: '0 1 auto', minWidth: 0 } as const
+const FIXED_SX = { flexShrink: 0 } as const
+
+/**
+ * The service of an observed flow (its name, protocol and port in the tooltip) and its hits, as two cells of a row.
+ * With `yields`, both give way when the row is too narrow (cut, the full text in their tooltip): for a row whose
+ * status chip must stay whole.
+ */
+export function ServiceHits({ suggestion: s, sharedServices, yields = false }: { suggestion: Pick<MicrosegSuggestion, 'proto' | 'dport' | 'hits'>; sharedServices?: ReadonlySet<string>; yields?: boolean }) {
   const t = useTranslations('microsegPilot.observation')
+  const sx = yields ? YIELDING_SX : FIXED_SX
   return (
     <>
-      <TruncatedText text={sharedServices ? serviceLabelIn(s.proto, s.dport, sharedServices) : serviceLabel(s.proto, s.dport)} title={serviceTitle(s.proto, s.dport)} color='text.secondary' sx={{ flexShrink: 0 }} />
-      <Typography noWrap color='text.secondary' sx={{ flexShrink: 0 }}>{t('hits', { count: s.hits })}</Typography>
+      <TruncatedText text={sharedServices ? serviceLabelIn(s.proto, s.dport, sharedServices) : serviceLabel(s.proto, s.dport)} title={serviceTitle(s.proto, s.dport)} color='text.secondary' sx={sx} />
+      {yields
+        ? <TruncatedText text={t('hits', { count: s.hits })} color='text.secondary' sx={sx} />
+        : <Typography noWrap color='text.secondary' sx={sx}>{t('hits', { count: s.hits })}</Typography>}
     </>
   )
 }

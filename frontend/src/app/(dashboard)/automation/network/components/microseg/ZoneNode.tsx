@@ -9,7 +9,7 @@ import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/component
 import type { ZoneState } from '@/lib/microseg/types'
 
 import { STATE_DOT } from './ZoneRow'
-import { NODE_H, NODE_W, UNZONED_ID, type BoundaryNodeData, type GuestNodeData, type MoreNodeData, type UnzonedNodeData, type ZoneNodeData } from './zoneGraph'
+import { NODE_H, NODE_W, UNZONED_ID, isPveGroup, type BoundaryNodeData, type GuestNodeData, type MoreNodeData, type UnzonedNodeData, type ZoneNodeData } from './zoneGraph'
 import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W } from './zoneLayout'
 
 /** What the nodes do with the keys and the focus (ZoneCanvas provides it): the pointer goes through the canvas. */
@@ -155,7 +155,11 @@ function guestBorder(pending: boolean, selected: boolean): string {
   return selected ? 'primary.main' : 'divider'
 }
 
-/** A guest inside its circle: its glyph (type and status), its name under it, the details in a tooltip; a ring when targeted. */
+/**
+ * A guest inside its circle: its glyph (type and status), its name under it, the details in a tooltip; a ring when
+ * targeted. On the node view its glyph is circled in the colour of its zone, which the tooltip names, and a guest
+ * that cannot be targeted (`inert`: it is not running) is no button.
+ */
 function GuestNodeComponent({ id, data, selected }: NodeProps) {
   const d = data as unknown as GuestNodeData
   const t = useTranslations('microsegPilot.overview.node')
@@ -167,28 +171,30 @@ function GuestNodeComponent({ id, data, selected }: NodeProps) {
       <Typography variant='caption' fontWeight={600} sx={{ display: 'block' }}>{m.name}</Typography>
       <Typography variant='caption' sx={{ display: 'block' }}>{t('guestWhere', { vmid: m.vmid, node: m.node })}</Typography>
       <Typography variant='caption' sx={{ display: 'block' }}>{m.ips.length ? t('guestIps', { ips: m.ips.join(', ') }) : t('guestNoIp')}</Typography>
+      {d.zone !== undefined && <Typography variant='caption' sx={{ display: 'block' }}>{d.zone === null ? t('guestNoZone') : t('guestZone', { zone: d.zone })}</Typography>}
       {m.pending && <Typography variant='caption' sx={{ display: 'block' }}>{t('guestPending')}</Typography>}
     </Box>
   )
   return (
     <Tooltip title={details} open={!!selected || hovered} onOpen={() => setHovered(true)} onClose={() => setHovered(false)} describeChild placement='bottom'>
       <Box
-        role='button'
-        tabIndex={0}
+        role={d.inert ? 'img' : 'button'}
+        tabIndex={d.inert ? undefined : 0}
         aria-label={t('guestAria', { name: m.name, vmid: m.vmid })}
-        aria-pressed={!!selected}
-        onKeyDown={onKeys(() => selectGuest(id))}
-        onFocus={() => setFocus(id)}
-        onBlur={() => setFocus(null)}
-        sx={{ position: 'relative', width: GUEST_W, height: GUEST_H, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', borderRadius: 1, '&:focus-visible': FOCUS_RING }}
+        aria-pressed={d.inert ? undefined : !!selected}
+        onKeyDown={d.inert ? undefined : onKeys(() => selectGuest(id))}
+        onFocus={d.inert ? undefined : () => setFocus(id)}
+        onBlur={d.inert ? undefined : () => setFocus(null)}
+        sx={{ position: 'relative', width: GUEST_W, height: GUEST_H, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: d.inert ? 'default' : 'pointer', borderRadius: 1, '&:focus-visible': FOCUS_RING }}
       >
         <Handles top={GLYPH_Y} />
         <Box
           data-target={d.target === undefined ? undefined : 'true'}
+          data-color={d.color}
           sx={theme => ({
             mt: `${GLYPH_Y - GUEST_R}px`, width: 2 * GUEST_R, height: 2 * GUEST_R, boxSizing: 'border-box', borderRadius: '50%', flexShrink: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.paper',
-            border: '1.5px solid', borderStyle: m.pending ? 'dashed' : 'solid', borderColor: guestBorder(m.pending, !!selected),
+            border: d.color ? '2px solid' : '1.5px solid', borderStyle: m.pending ? 'dashed' : 'solid', borderColor: d.color ?? guestBorder(m.pending, !!selected),
             boxShadow: d.target === undefined ? 'none' : `0 0 0 3px ${d.target || theme.palette.primary.main}`,
           })}
         >
@@ -203,19 +209,23 @@ function GuestNodeComponent({ id, data, selected }: NodeProps) {
 
 export const GuestNode = memo(GuestNodeComponent)
 
-/** The guests a circle does not draw: "+N". On a zone it opens the panel, which lists every member. */
+/** The guests a circle does not draw: "+N". On a zone it opens the panel, which lists every member; on a Proxmox node (or without a zone) it opens nothing. */
 function MoreNodeComponent({ data }: NodeProps) {
   const d = data as unknown as MoreNodeData
   const t = useTranslations('microsegPilot.overview.node')
   const { openZone } = useContext(MapActionsContext)
-  const unzoned = d.groupId === UNZONED_ID
+  const pve = isPveGroup(d.groupId)
+  const unzoned = d.groupId === UNZONED_ID || pve
   const text = `+${d.count}`
+  let hint: 'moreHint' | 'moreUnzonedHint' | 'morePveHint' = 'moreHint'
+  if (pve) hint = 'morePveHint'
+  else if (unzoned) hint = 'moreUnzonedHint'
   return (
-    <Tooltip title={t(unzoned ? 'moreUnzonedHint' : 'moreHint', { count: d.count })} describeChild placement='bottom'>
+    <Tooltip title={t(hint, { count: d.count })} describeChild placement='bottom'>
       <Box
         role={unzoned ? undefined : 'button'}
         tabIndex={unzoned ? undefined : 0}
-        aria-label={t(unzoned ? 'moreUnzonedHint' : 'moreHint', { count: d.count })}
+        aria-label={t(hint, { count: d.count })}
         onKeyDown={unzoned ? undefined : onKeys(() => openZone(d.groupId))}
         sx={{ position: 'relative', width: GUEST_W, height: GUEST_H, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: unzoned ? 'default' : 'pointer', borderRadius: 1, '&:focus-visible': FOCUS_RING }}
       >

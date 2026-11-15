@@ -9,7 +9,7 @@ import { within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
-import { calls, fetchMock, mock, policy, reply, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
+import { calls, exception, fetchMock, mock, policy, reply, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
 import { db, installFreshMocks, vm, web } from './policyTestKit'
 import { flowOf, node, pathOf, reduceMotion, setup, SUGGESTIONS, wouldBlock } from './zoneMapTestKit'
 
@@ -246,3 +246,23 @@ describe('side panel', () => {
   })
 })
 
+
+describe('exceptions', () => {
+  const vms = [vm(100, 'web-1', ['zone-web']), vm(200, 'db-1', ['zone-db'])]
+  const toDb = exception('x1', { zone_id: 'zd', sources: [{ type: 'qemu', vmid: 100, name: 'web-1' }], destinations: [{ type: 'qemu', vmid: 200, name: 'db-1' }] })
+
+  it('draws the exceptions from a zone to another as a dashed green link that counts them, and names the line in the legend', async () => {
+    setup({ vms, exceptions: [toDb] })
+    const path = await pathOf('exception:zone:zw>zone:zd')
+    expect(path.getAttribute('data-dash')).toBe('6 4')
+    expect(path.getAttribute('data-stroke')).toBe('#2e7d32')
+    expect(await screen.findByText('1 exception')).toBeTruthy()
+    expect(screen.getByText('Exception between VMs')).toBeTruthy()
+  })
+
+  it('counts them on the allowed link of the two zones when there is one', async () => {
+    setup({ vms, flows: [flowOf('f1')], exceptions: [toDb] })
+    expect(await screen.findByText('HTTPS · 1 exception')).toBeTruthy()
+    expect(screen.getAllByTestId(/^edge-/)).toHaveLength(1)
+  })
+})

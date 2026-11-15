@@ -46,6 +46,10 @@ export const MICROSEG_ROUTES: MicrosegRoute[] = [
   { method: 'POST', pattern: /^flows$/, write: true, audit: 'relay', auditAction: 'microseg.flow.create' },
   { method: 'PUT', pattern: /^flows\/[^/]+$/, write: true, audit: 'relay', auditAction: 'microseg.flow.update' },
   { method: 'DELETE', pattern: /^flows\/[^/]+$/, write: true, audit: 'relay', auditAction: 'microseg.flow.delete' },
+  // The exceptions of a zone are draft writes like the flows; they are read with GET /policy.
+  { method: 'POST', pattern: /^exceptions$/, write: true, audit: 'relay', auditAction: 'microseg.exception.create' },
+  { method: 'PUT', pattern: /^exceptions\/[^/]+$/, write: true, audit: 'relay', auditAction: 'microseg.exception.update' },
+  { method: 'DELETE', pattern: /^exceptions\/[^/]+$/, write: true, audit: 'relay', auditAction: 'microseg.exception.delete' },
   { method: 'POST', pattern: /^members$/, write: true, audit: 'relay', auditAction: 'microseg.members.set' },
   // A dry run: it computes the plan and changes nothing.
   { method: 'POST', pattern: /^plan$/, write: true, audit: 'none' },

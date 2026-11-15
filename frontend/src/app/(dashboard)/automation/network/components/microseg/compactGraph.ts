@@ -4,7 +4,8 @@ import type { MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import { flowService } from './FlowSummary'
 import {
-  EXTERNAL_ID, NODE_H, NODE_W, OUTSIDE_ID, addAllowedPairs, addPair, cellCenters, comparePairs, outsideEgressOf, placeBoundary, placePairs,
+  EXTERNAL_ID, NODE_H, NODE_W, OUTSIDE_ID, addAllowedPairs, addExceptionZonePairs, addPair, cellCenters, comparePairs, exceptionLinks, outsideEgressOf, placeBoundary,
+  placePairs,
   zoneColumns, zoneNodeId, type Cell, type MapEdgeKind, type MapInput, type Pair, type Placement, type ZoneGraph, type ZoneNodeData,
 } from './zoneGraph'
 import { foldColumns } from './zoneLayout'
@@ -59,13 +60,14 @@ function placeBox(out: Placement, zone: MicrosegZone, members: number | null, in
 /**
  * The compact rendering, for 10 to 40 zones: a box per zone (name, state, member count) instead of a circle of
  * guests, on the same grid as the groups view (longest-path layer as the column, barycenter order as the row). One
- * green edge per ordered pair of zones with its ports grouped, the observed flows (unprotected, blocked) as their own
+ * green edge per ordered pair of zones with its ports grouped and the count of the exceptions between them, the observed flows (unprotected, blocked) as their own
  * edges zone to zone, External and Outside boxes when an edge needs them. Pure and deterministic.
  */
-export function buildCompactGraph({ zones, flows, suggestions, members = null, unapplied = null }: MapInput): ZoneGraph {
+export function buildCompactGraph({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null }: MapInput): ZoneGraph {
   const { known, columns } = zoneColumns(zones, flows)
   const pairs = new Map<string, Pair>()
   addAllowedPairs(pairs, flows, known)
+  addExceptionZonePairs(pairs, exceptionLinks(exceptions, known, members, unzoned))
   addObservedZonePairs(pairs, suggestions, known)
   const ordered = [...pairs.values()].sort(comparePairs)
 

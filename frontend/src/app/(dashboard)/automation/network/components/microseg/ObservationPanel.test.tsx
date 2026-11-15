@@ -8,11 +8,13 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { cleanup, within } from '@testing-library/react'
 
 import { screen, fireEvent, renderWithProviders, waitFor } from '@/__tests__/setup/renderWithProviders'
+import RBACContext, { type RBACContextValue } from '@/contexts/RBACContext'
 import type { MicrosegSuggestion } from '@/lib/microseg/types'
 
 import { calls, mock, policy, renderTab, reply, zone, BASE, fetchMock, GUESTS_ROUTE, REVISION_HEAD } from './microsegTestKit'
+import MicrosegTab from './MicrosegTab'
 import ObservationPanel from './ObservationPanel'
-import { body, installFreshMocks } from './policyTestKit'
+import { body, installFreshMocks, vm } from './policyTestKit'
 
 installFreshMocks()
 
@@ -743,5 +745,158 @@ describe('outbound flows', () => {
     expect(bulk.disabled).toBe(true)
     fireEvent.mouseOver(bulk.parentElement as HTMLElement)
     expect(await screen.findByText(/Outbound networks are accepted one by one/)).toBeTruthy()
+  })
+})
+
+describe('allow this flow only: an exception from an observed flow', () => {
+  const ONLY = 'Allow this flow only'
+  const SAVED = 'Exception added to the draft: the next apply writes it.'
+  const flow = sug('s1', { src_ip: '10.0.0.5', dport: '5432' })
+  const vms = [vm(201, 'app-01', ['zone-web'], { ips: ['10.0.0.5'] }), vm(101, 'db-01', ['zone-db'], { ips: ['10.0.0.9'] })]
+
+  function open(guests: unknown[] = vms) {
+    mock.routes['GET /traffic*'] = () => reply(200, { step: 3600, from: '2026-11-01T13:00:00Z', to: '2026-11-02T13:00:00Z', buckets: [] })
+    mock.routes['GET /events*'] = () => reply(200, { events: [], truncated: false, oldest: null })
+    mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: guests } })
+    mock.routes['POST /exceptions'] = () => reply(200, { version: 4, exception: { id: 'e9' } })
+  }
+  const flowDialog = async (line: RegExp | string, name: RegExp | string) => {
+    fireEvent.click(within(await row(line)).getByRole('button', { name: /^Details of the flow/ }))
+    return screen.findByRole('dialog', { name })
+  }
+
+  it('opens the exception dialog with the two VMs and the observed service, and writes it into the destination zone', async () => {
+    open()
+    setup([flow])
+    const dialog = await flowDialog('web to db', /web → db/)
+    fireEvent.click(await within(dialog).findByRole('button', { name: ONLY }))
+
+    const exceptionDialog = await screen.findByRole('dialog', { name: 'New exception' })
+    expect(screen.queryByRole('dialog', { name: /web → db/ })).toBeNull()
+    expect(within(exceptionDialog).getByTestId('exception-sources-value').textContent).toContain('app-01')
+    expect(within(exceptionDialog).getByTestId('exception-destinations-value').textContent).toContain('db-01')
+    expect(within(exceptionDialog).getByText('PostgreSQL')).toBeTruthy()
+
+    const before = listCalls().length
+    fireEvent.click(within(exceptionDialog).getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(calls('POST /exceptions')).toHaveLength(1))
+    expect(body(calls('POST /exceptions')[0][1])).toEqual({
+      version: 3, zone_id: 'zd',
+      sources: [{ type: 'qemu', vmid: 201, name: 'app-01' }],
+      destinations: [{ type: 'qemu', vmid: 101, name: 'db-01' }],
+      services: [{ proto: 'tcp', dport: '5432' }],
+      comment: '',
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(await screen.findByText('Exception added to the draft: the next apply writes it.')).toBeTruthy()
+    // The suggestion is left as it is, and the list is read again.
+    expect(calls('POST /suggestions/resolve')).toHaveLength(0)
+    await waitFor(() => expect(listCalls().length).toBeGreaterThan(before))
+  })
+
+  it('keeps the exception dialog open with the reason when the write is refused', async () => {
+    open()
+    setup([flow])
+    mock.routes['POST /exceptions'] = () => reply(400, { code: 'INVALID', error: 'too many rules' })
+    fireEvent.click(await within(await flowDialog('web to db', /web → db/)).findByRole('button', { name: ONLY }))
+    const exceptionDialog = await screen.findByRole('dialog', { name: 'New exception' })
+    fireEvent.click(within(exceptionDialog).getByRole('button', { name: 'Add' }))
+    expect(await within(exceptionDialog).findByText(/too many rules/)).toBeTruthy()
+  })
+
+  const rowOf = async (id: string) => {
+    await waitFor(() => expect(flowRows().some(r => r.getAttribute('data-suggestion') === id)).toBe(true))
+    return flowRows().find(r => r.getAttribute('data-suggestion') === id) as HTMLElement
+  }
+  /** The guests are read and on the rows: the eligible flow of the page shows its icon. */
+  const guestsShown = async (id: string) => waitFor(async () => expect(within(await rowOf(id)).getByRole('button', { name: ONLY })).toBeTruthy())
+  const detailsOf = async (id: string) => {
+    fireEvent.click(within(await rowOf(id)).getByRole('button', { name: /^Details of the flow/ }))
+    return screen.findByRole('dialog', { name: /web → db/ })
+  }
+
+  it('offers the action as an icon on the row of an eligible flow, which opens the prefilled dialog', async () => {
+    open()
+    setup([flow])
+    await guestsShown('s1')
+    const line = await rowOf('s1')
+    // The four actions stay on the one line of the row.
+    expect(within(line).getAllByRole('button').map(b => b.getAttribute('aria-label')).slice(-4)).toEqual(['Accept', 'As CIDR', 'Dismiss', ONLY])
+    fireEvent.mouseOver(within(line).getByRole('button', { name: ONLY }))
+    expect(await screen.findByText(/^Allow this flow only: .*only app-01 reaches db-01 on /)).toBeTruthy()
+    fireEvent.click(within(line).getByRole('button', { name: ONLY }))
+    const exceptionDialog = await screen.findByRole('dialog', { name: 'New exception' })
+    expect(within(exceptionDialog).getByTestId('exception-sources-value').textContent).toContain('app-01')
+    expect(within(exceptionDialog).getByTestId('exception-destinations-value').textContent).toContain('db-01')
+    expect(within(exceptionDialog).getByText('PostgreSQL')).toBeTruthy()
+    fireEvent.click(within(exceptionDialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(calls('POST /exceptions')).toHaveLength(0)
+  })
+
+  it('is absent, on the row and in the dialog, when an address is of no known guest', async () => {
+    open()
+    setup([flow, sug('s2', { src_ip: '192.168.1.50', dport: '5432' })])
+    await guestsShown('s1')
+    expect(within(await rowOf('s2')).getByRole('button', { name: 'Accept' })).toBeTruthy()
+    expect(within(await rowOf('s2')).queryByRole('button', { name: ONLY })).toBeNull()
+    const dialog = await detailsOf('s2')
+    expect(within(dialog).getByRole('button', { name: 'Accept' })).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: ONLY })).toBeNull()
+  })
+
+  it('is absent when the destination guest is not a member of the destination zone', async () => {
+    open([...vms, vm(102, 'db-02', [], { ips: ['10.0.0.8'] })])
+    setup([flow, sug('s2', { src_ip: '10.0.0.5', dst_ip: '10.0.0.8', dport: '5432' })])
+    await guestsShown('s1')
+    expect(within(await rowOf('s2')).queryByRole('button', { name: ONLY })).toBeNull()
+    expect(within(await detailsOf('s2')).queryByRole('button', { name: ONLY })).toBeNull()
+  })
+
+  it('is no longer offered once an exception of the zone allows the flow, the others keeping it', async () => {
+    open([...vms, vm(102, 'db-02', ['zone-db'], { ips: ['10.0.0.8'] })])
+    window.localStorage.setItem('microseg.subTab', 'observation')
+    const held = {
+      id: 'e1', policy_id: 'p1', zone_id: 'zd', created_by: 'me', comment: '',
+      sources: [{ type: 'qemu', vmid: 201, name: 'app-01' }], destinations: [{ type: 'qemu', vmid: 101, name: 'db-01' }], services: [{ proto: 'tcp', dport: '5432' }],
+    }
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web, db], exceptions: [held as never], last_revision: REVISION_HEAD }))
+    mock.routes[ROUTE] = () => reply(200, { suggestions: [flow, sug('s2', { src_ip: '10.0.0.5', dst_ip: '10.0.0.8', dport: '5432' })], limit: 26, offset: 0 })
+    renderTab()
+    await guestsShown('s2')
+    expect(within(await rowOf('s1')).queryByRole('button', { name: ONLY })).toBeNull()
+    expect(within(await detailsOf('s1')).queryByRole('button', { name: ONLY })).toBeNull()
+  })
+
+  it('shows one outcome at a time: the saved exception replaces the accepted flow, and the other way round', async () => {
+    open()
+    setup([flow, sug('s2', { dst_ip: '10.0.0.7' })])
+    await guestsShown('s1')
+    fireEvent.click(within(await rowOf('s2')).getByRole('button', { name: 'Dismiss' }))
+    expect(await screen.findByText('1 flow dismissed')).toBeTruthy()
+    fireEvent.click(within(await rowOf('s1')).getByRole('button', { name: ONLY }))
+    const exceptionDialog = await screen.findByRole('dialog', { name: 'New exception' })
+    fireEvent.click(within(exceptionDialog).getByRole('button', { name: 'Add' }))
+    expect(await screen.findByText(SAVED)).toBeTruthy()
+    expect(screen.queryByText('1 flow dismissed')).toBeNull()
+    fireEvent.click(within(await rowOf('s2')).getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(screen.queryByText(SAVED)).toBeNull())
+    expect(await screen.findByText('1 flow dismissed')).toBeTruthy()
+  })
+
+  it('is disabled for a user who cannot write, like the other actions', async () => {
+    open()
+    window.localStorage.setItem('microseg.subTab', 'observation')
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web, db], last_revision: REVISION_HEAD }))
+    mock.routes[ROUTE] = () => reply(200, { suggestions: [flow], limit: 26, offset: 0 })
+    const denied: RBACContextValue = {
+      permissions: [], roles: [], isAdmin: false, scopeTypes: [], hiddenWidgets: [], loading: false,
+      hasPermission: () => false, hasAnyPermission: () => false, hasAllPermissions: () => false, hasPermissionOn: () => false, refresh: () => undefined,
+    }
+    renderTab(<RBACContext.Provider value={denied}><MicrosegTab connectionId='c1' /></RBACContext.Provider>)
+    const dialog = await flowDialog('web to db', /web → db/)
+    const button = await within(dialog).findByRole('button', { name: ONLY }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect((within(dialog).getByRole('button', { name: 'Accept' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })

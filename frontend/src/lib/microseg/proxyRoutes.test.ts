@@ -13,7 +13,7 @@ describe('matchMicrosegRoute', () => {
   it('knows the exact route table of the orchestrator', () => {
     const table = MICROSEG_ROUTES.map(r => `${r.method} ${r.pattern.source}`).sort()
 
-    expect(MICROSEG_ROUTES).toHaveLength(29)
+    expect(MICROSEG_ROUTES).toHaveLength(32)
     expect(table).toHaveLength(new Set(table).size)
 
     const cases: Array<[string, string[], boolean]> = [
@@ -25,6 +25,9 @@ describe('matchMicrosegRoute', () => {
       ['POST', ['flows'], true],
       ['PUT', ['flows', 'f1'], true],
       ['DELETE', ['flows', 'f1'], true],
+      ['POST', ['exceptions'], true],
+      ['PUT', ['exceptions', 'e1'], true],
+      ['DELETE', ['exceptions', 'e1'], true],
       ['POST', ['members'], true],
       ['POST', ['plan'], true],
       ['POST', ['apply'], true],
@@ -80,6 +83,9 @@ describe('matchMicrosegRoute', () => {
     expect(owner('POST', ['flows'])).toBe('relay microseg.flow.create')
     expect(owner('PUT', ['flows', 'f1'])).toBe('relay microseg.flow.update')
     expect(owner('DELETE', ['flows', 'f1'])).toBe('relay microseg.flow.delete')
+    expect(owner('POST', ['exceptions'])).toBe('relay microseg.exception.create')
+    expect(owner('PUT', ['exceptions', 'e1'])).toBe('relay microseg.exception.update')
+    expect(owner('DELETE', ['exceptions', 'e1'])).toBe('relay microseg.exception.delete')
     expect(owner('POST', ['members'])).toBe('relay microseg.members.set')
     expect(owner('POST', ['suggestions', 'resolve'])).toBe('relay microseg.suggestions.resolve')
     expect(owner('POST', ['confirm-writes'])).toBe('relay microseg.confirm_writes')
@@ -93,6 +99,14 @@ describe('matchMicrosegRoute', () => {
 
   it('refuses a verb the orchestrator does not serve on a known path', () => {
     expect(matchMicrosegRoute('POST', ['flows', 'f1'])).toBeNull()
+    // The exceptions are written, never read on their own: they come with GET /policy.
+    expect(matchMicrosegRoute('POST', ['exceptions', 'e1'])).toBeNull()
+    expect(matchMicrosegRoute('PUT', ['exceptions'])).toBeNull()
+    expect(matchMicrosegRoute('DELETE', ['exceptions'])).toBeNull()
+    expect(matchMicrosegRoute('GET', ['exceptions'])).toBeNull()
+    expect(matchMicrosegRoute('GET', ['exceptions', 'e1'])).toBeNull()
+    expect(matchMicrosegRoute('PUT', ['exceptions', 'e1', 'extra'])).toBeNull()
+    expect(matchMicrosegRoute('POST', ['exception'])).toBeNull()
     expect(matchMicrosegRoute('PUT', ['zones'])).toBeNull()
     expect(matchMicrosegRoute('GET', ['apply'])).toBeNull()
     expect(matchMicrosegRoute('DELETE', ['runs', 'r1'])).toBeNull()

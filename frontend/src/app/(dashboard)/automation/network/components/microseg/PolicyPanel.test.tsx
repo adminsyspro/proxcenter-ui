@@ -239,7 +239,14 @@ describe('flow list', () => {
     expect(within(flows).getByText('10.0.0.0/8')).toBeTruthy()
 
     fireEvent.click(within(screen.getByRole('listitem', { name: 'web' })).getByRole('button', { name: 'Show details of web' }))
-    expect(within(await screen.findByRole('region', { name: 'Details of web' })).getAllByText(pill)).toHaveLength(1)
+    // Under the zone the chip says it short and never shrinks; the whole sentence is its tooltip.
+    const details = await screen.findByRole('region', { name: 'Details of web' })
+    expect(within(details).queryByText(pill)).toBeNull()
+    const chip = within(details).getByText('Not applied')
+    expect(chip.closest('.MuiChip-root')).toHaveStyle({ flexShrink: '0' })
+    expect(chip.closest('.MuiChip-root')).not.toHaveStyle({ minWidth: '0' })
+    fireEvent.mouseOver(chip)
+    expect(await screen.findByRole('tooltip', { name: pill })).toBeTruthy()
   })
 
   it('says "Outbound observed" for a flow to a CIDR while the source zone observes its outbound traffic, and nothing once it enforces it', async () => {
@@ -250,7 +257,10 @@ describe('flow list', () => {
     expect(within(flows).queryByText(/Not applied/)).toBeNull()
 
     fireEvent.click(within(screen.getByRole('listitem', { name: 'web' })).getByRole('button', { name: 'Show details of web' }))
-    expect(within(await screen.findByRole('region', { name: 'Details of web' })).getAllByText('Outbound observed')).toHaveLength(1)
+    const observed = within(await screen.findByRole('region', { name: 'Details of web' })).getByText('Outbound observed')
+    expect(observed.closest('.MuiChip-root')).toHaveStyle({ flexShrink: '0' })
+    fireEvent.mouseOver(observed)
+    expect(await screen.findByRole('tooltip', { name: 'Outbound observed: the zone logs these flows without blocking them yet' })).toBeTruthy()
   })
 
   it('does not show the pill for a CIDR source', async () => {

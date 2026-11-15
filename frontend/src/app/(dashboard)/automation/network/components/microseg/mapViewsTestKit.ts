@@ -3,7 +3,7 @@
  * demo-like draft (6 zones of 8/8/6/4/4/2 members, guests in no zone, 12 flows, observed pairs of each kind).
  */
 
-import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
+import type { MicrosegException, MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import type { MapInput, MapMember } from './zoneGraph'
 
@@ -62,3 +62,9 @@ export function demoInput(): Required<Pick<MapInput, 'zones' | 'flows' | 'sugges
   const unzoned = [member(900, 'lost-1', ['10.9.0.1']), member(901, 'lost-2'), member(902, 'lost-3')]
   return { zones, flows, suggestions, members, unzoned }
 }
+
+/** An exception of zone db ("zd"): web-6 (qemu/105) may reach db-3 (qemu/402) on PostgreSQL. */
+export const exception = (id: string, over: Partial<MicrosegException> = {}): MicrosegException => ({
+  id, policy_id: 'p1', zone_id: 'zd', sources: [{ type: 'qemu', vmid: 105, name: 'web-6' }], destinations: [{ type: 'qemu', vmid: 402, name: 'db-3' }],
+  services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'me', ...over,
+})

@@ -2,13 +2,14 @@ import type { CSSProperties } from 'react'
 
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
 
-import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, ZoneState } from '@/lib/microseg/types'
+import type { GuestRefLite, MicrosegException, MicrosegFlow, MicrosegSuggestion, MicrosegZone, ZoneState } from '@/lib/microseg/types'
 import { serviceLabelIn, serviceName, sharedServiceNames } from '@/lib/network/serviceNames'
 
 import { flowService } from './FlowSummary'
 import { outboundFlowStatus, type OutboundFlowStatus } from './outboundStatus'
 import { placeEdges, type EdgeEnds, type Obstacle, type PlacedEdge } from './zoneGraphEdges'
 import type { Point } from './edgeGeometry'
+import { guestKey } from './zoneModel'
 import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, byText, circleRadius, foldColumns, layerZones, memberSlots, orderLayers, slotPositions } from './zoneLayout'
 
 /** Size of the External and Outside boxes. */
@@ -24,9 +25,16 @@ export const UNZONED_ID = 'unzoned'
 export const zoneNodeId = (zoneId: string) => `zone:${zoneId}`
 export const guestNodeId = (groupId: string, key: string) => `guest:${groupId}:${key}`
 export const moreNodeId = (groupId: string) => `more:${groupId}`
+/** The circle of a Proxmox node on the node view; its guests carry it as their group. */
+export const pveNodeId = (node: string) => `pve:${node}`
+export const isPveGroup = (id: string) => id.startsWith('pve:')
+export const pveNodeName = (id: string) => id.slice(4)
 
-/** One green for every allowed flow (the zone colour stays on its circle), blue for blocked, dashed red for unprotected. */
-export const EDGE_COLORS = { allowed: '#2e7d32', blocked: '#1565c0', unprotected: '#e53935', outside: '#9e9e9e' } as const
+/**
+ * One green for every allowed flow (the zone colour stays on its circle) and, dashed, for the exceptions between guests;
+ * blue for blocked, dashed red for unprotected.
+ */
+export const EDGE_COLORS = { allowed: '#2e7d32', exception: '#2e7d32', blocked: '#1565c0', unprotected: '#e53935', outside: '#9e9e9e' } as const
 
 /** A guest drawn on the map. */
 export type MapMember = {
@@ -58,15 +66,36 @@ export type GuestNodeData = {
   groupId: string
   /** The guest is the target of the map: the colour of the ring around its glyph (its zone's). */
   target?: string
+  /** On the node view, the colour of its zone around its glyph (grey in no zone) and the name of that zone (null in none). */
+  color?: string
+  zone?: string | null
+  /** On the node view, a guest that is not running: it cannot be targeted, so it is no button. */
+  inert?: boolean
 }
 export type MoreNodeData = { kind: 'more'; count: number; groupId: string }
 /** `egress`, on the Outside box: the worst state of the outbound traffic of the zones that send a flow to it. */
 export type BoundaryNodeData = { kind: 'external' | 'outside'; egress?: OutboundFlowStatus }
 /** An address that talks to a zone and is no guest (the guest view draws the busiest ones on their own). */
 export type IpNodeData = { kind: 'ip'; ip: string; /** The zones whose gateway the address is, by name. */ gatewayOf?: string[] }
-export type MapNodeData = ZoneNodeData | UnzonedNodeData | GuestNodeData | MoreNodeData | BoundaryNodeData | IpNodeData
+/** The guests a zone has on a Proxmox node. */
+export type PveZoneShare = { id: string; name: string; color: string; count: number }
+/**
+ * A Proxmox node of the node view: every guest it holds for Proxmox (`count`, the stopped ones in no zone included,
+ * which are not drawn), the zones its drawn guests belong to by name, those in no zone, and the pending observed flows
+ * between two of its guests, per kind (no edge stands for them); `inside` is their count for the kinds shown.
+ */
+export type PveNodeData = {
+  kind: 'pveNode'; node: string; count: number; zones: PveZoneShare[]; unzoned: number
+  inside: number; insideByKind: { unprotected: number; blocked: number }; radius: number
+  /** The status of the node ("online"...) when the page knows it: its icon then carries the status dot. */
+  status?: string
+}
+/** A Proxmox node of the connection and the guests it holds, running or not, in a zone or not. */
+export type PveNodeInfo = { node: string; guests: number; status?: string }
+export type MapNodeData = ZoneNodeData | UnzonedNodeData | GuestNodeData | MoreNodeData | BoundaryNodeData | IpNodeData | PveNodeData
 
-export type MapEdgeKind = 'allowed' | 'unprotected' | 'blocked' | 'outside'
+/** `exception`: what the exceptions of a zone allow from guest to guest, beside the flows of the zones. */
+export type MapEdgeKind = 'allowed' | 'exception' | 'unprotected' | 'blocked' | 'outside'
 
 export type MapEdgeData = {
   kind: MapEdgeKind
@@ -84,6 +113,13 @@ export type MapEdgeData = {
   flows: MicrosegFlow[]
   /** The observed flows of the edge (unprotected and blocked edges). */
   observed: MicrosegSuggestion[]
+  /** The exceptions the edge stands for, by id: between its two zones, or between its two guests on the guest view. */
+  exceptions: MicrosegException[]
+  /**
+   * How many of them the label counts ("2 exceptions"): those of a link between two zones; 0 on an edge of the guest
+   * view, which draws each exception guest to guest, labelled with its services.
+   */
+  exceptionCount: number
   /** Every flow of the edge is in the draft only (not applied yet). */
   draft: boolean
   /** The ends, and the circles (or boxes) they belong to: the focus mode keeps them lit. */
@@ -100,10 +136,15 @@ export type MapEdgeData = {
   small: boolean
   particle: boolean
   color: string
+  /** On the node view, the guests the edge stands for, pair by pair with their services (its tooltip lists them). */
+  guestPairs?: GuestPair[]
 }
 
-/** What the flow panel shows of an edge (or of a cell of the matrix): its kind, its flows and its observed flows. */
-export type PanelEdgeData = Pick<MapEdgeData, 'kind' | 'color' | 'label' | 'flows' | 'observed'>
+/** `key`: the two guests ("qemu/100>qemu/200"), since two guests may carry one name. */
+export type GuestPair = { key: string; from: string; to: string; services: string[] }
+
+/** What the flow panel shows of an edge (or of a cell of the matrix): its kind, its flows, its observed flows and its exceptions. */
+export type PanelEdgeData = Pick<MapEdgeData, 'kind' | 'color' | 'label' | 'flows' | 'observed' | 'exceptions' | 'exceptionCount'>
 
 export type MapInput = {
   zones: MicrosegZone[]
@@ -115,11 +156,18 @@ export type MapInput = {
   unzoned?: MapMember[] | null
   /** Ids of the flows of the draft that are not applied yet. */
   unapplied?: ReadonlySet<string> | null
+  /** The exceptions of the draft; drawn only once the members are known. */
+  exceptions?: readonly MicrosegException[] | null
+  /**
+   * The Proxmox nodes of the connection with their guest counts, for the node view; without it that view draws the
+   * nodes of the guests it knows and counts those.
+   */
+  pveNodes?: readonly PveNodeInfo[] | null
 }
 
 export type ZoneGraph = { nodes: Node[]; edges: Edge[] }
 
-const KIND_RANK: Record<MapEdgeKind, number> = { allowed: 0, outside: 1, unprotected: 2, blocked: 3 }
+const KIND_RANK: Record<MapEdgeKind, number> = { allowed: 0, exception: 1, outside: 2, unprotected: 3, blocked: 4 }
 
 /** The 8 groups of an IPv6 address, or null when it is not one. An IPv4 tail ("::ffff:10.0.0.5") counts for two. */
 function ipv6Groups(text: string): number[] | null {
@@ -204,8 +252,9 @@ export function groupServices(services: string[]): string {
 }
 
 /** `all` is every member in name order, `shown` the ones drawn. */
-export type Group = { id: string; radius: number; all: MapMember[]; shown: MapMember[]; more: number; data: ZoneNodeData | UnzonedNodeData }
-export type Pair = { kind: MapEdgeKind; source: string; target: string; services: Set<string>; flows: MicrosegFlow[]; observed: MicrosegSuggestion[] }
+export type Group = { id: string; radius: number; all: MapMember[]; shown: MapMember[]; more: number; data: ZoneNodeData | UnzonedNodeData | PveNodeData }
+/** `exceptions`: the exceptions the pair stands for, between its two zones or its two guests (see MapEdgeData.exceptions). */
+export type Pair = { kind: MapEdgeKind; source: string; target: string; services: Set<string>; flows: MicrosegFlow[]; observed: MicrosegSuggestion[]; exceptions: MicrosegException[] }
 export type Cell = { id: string; w: number; h: number }
 export type AddressBooks = Map<string, Map<string, string>>
 export type Placement = { nodes: Node[]; obstacles: Obstacle[]; endShapes: Map<string, EdgeEnds> }
@@ -220,7 +269,7 @@ export function groupOf(id: string, members: MapMember[] | null, data: Group['da
   return { id, radius, all: list, shown: list.slice(0, shown), more, data }
 }
 
-/** The id a group's guest nodes carry: the zone id, or "unzoned". */
+/** The id a group's guest nodes carry: the zone id, "unzoned", or the id of a Proxmox node's circle. */
 const groupKey = (group: Group) => (group.id === UNZONED_ID ? UNZONED_ID : group.id.replace(/^zone:/, ''))
 
 /**
@@ -260,13 +309,17 @@ function buildGroups(sorted: MicrosegZone[], members: MapInput['members'], unzon
 const pairKey = (p: Pick<Pair, 'kind' | 'source' | 'target'>) => `${p.kind}:${p.source}>${p.target}`
 const isObserved = (kind: MapEdgeKind) => kind === 'unprotected' || kind === 'blocked'
 
-export function addPair(pairs: Map<string, Pair>, kind: MapEdgeKind, source: string, target: string, service: string, flow?: MicrosegFlow, seen?: MicrosegSuggestion) {
+export function addPair(
+  pairs: Map<string, Pair>, kind: MapEdgeKind, source: string, target: string, service: string, flow?: MicrosegFlow, seen?: MicrosegSuggestion,
+  exception?: MicrosegException,
+) {
   if (source === target) return
   const key = pairKey({ kind, source, target })
-  const pair = pairs.get(key) ?? { kind, source, target, services: new Set<string>(), flows: [], observed: [] }
+  const pair = pairs.get(key) ?? { kind, source, target, services: new Set<string>(), flows: [], observed: [], exceptions: [] }
   pair.services.add(service)
   if (flow) pair.flows.push(flow)
   if (seen) pair.observed.push(seen)
+  if (exception && !pair.exceptions.includes(exception)) pair.exceptions.push(exception)
   pairs.set(key, pair)
 }
 
@@ -322,6 +375,66 @@ function addObservedPairs(pairs: Map<string, Pair>, suggestions: MicrosegSuggest
     const source = observedSource(s, known, books)
     const target = books.get(s.dst_zone_id)!.get(bareIp(s.dst_ip || '')) ?? zoneNodeId(s.dst_zone_id)
     addPair(pairs, kind, source, target, flowService(s), undefined, s)
+  }
+}
+
+/** Where each member of a group is drawn, by guest ("qemu/101"): its node, or the "+N" node when it is not drawn. */
+export function memberBook(group: Group): Map<string, string> {
+  const book = new Map<string, string>()
+  const shownKeys = new Set(group.shown.map(m => m.key))
+  const groupId = groupKey(group)
+  for (const m of group.all) book.set(guestKey(m), shownKeys.has(m.key) ? guestNodeId(groupId, m.key) : moreNodeId(groupId))
+  return book
+}
+
+/**
+ * One source and one destination of an exception that compiles to rules. `srcZone` is the zone of the source, or
+ * UNZONED_ID for a running guest in no zone.
+ */
+export type ExceptionLink = { exception: MicrosegException; source: GuestRefLite; destination: GuestRefLite; srcZone: string }
+
+/**
+ * What the exceptions allow, guest to guest, as the engine compiles them: nothing for a zone that is gone or neither
+ * observed nor enforced, nothing to a destination that is no member of the zone. A source the map does not know (a
+ * guest that is gone, a stopped guest in no zone) gives nothing either, and nothing is known while the members are not.
+ */
+export function exceptionLinks(
+  exceptions: MapInput['exceptions'], known: ReadonlyMap<string, MicrosegZone>, members: MapInput['members'], unzoned: MapInput['unzoned'],
+): ExceptionLink[] {
+  if (!exceptions?.length || !members) return []
+  const zoneOf = new Map<string, string>()
+  for (const m of unzoned ?? []) zoneOf.set(guestKey(m), UNZONED_ID)
+  // A guest two zones hold (a change of zone that is queued) is of the first by name, on every rendering.
+  for (const id of [...known.keys()].reverse()) for (const m of members.get(id) ?? []) zoneOf.set(guestKey(m), id)
+  const links: ExceptionLink[] = []
+  for (const exception of [...exceptions].sort((a, b) => byText(a.id, b.id))) {
+    const state = known.get(exception.zone_id)?.state
+    if (state !== 'observe' && state !== 'enforce') continue
+    const inZone = new Set((members.get(exception.zone_id) ?? []).map(guestKey))
+    for (const destination of exception.destinations) {
+      if (!inZone.has(guestKey(destination))) continue
+      for (const source of exception.sources) {
+        const srcZone = zoneOf.get(guestKey(source))
+        if (srcZone) links.push({ exception, source, destination, srcZone })
+      }
+    }
+  }
+  return links
+}
+
+/**
+ * The exceptions from a zone to another, on the zone renderings: each one is counted on the allowed link between the
+ * two zones, or on a dashed link of their own when no flow links them. An exception inside its zone, or from a guest
+ * in no zone, draws no link.
+ */
+export function addExceptionZonePairs(pairs: Map<string, Pair>, links: readonly ExceptionLink[]) {
+  for (const { exception, srcZone } of links) {
+    if (srcZone === UNZONED_ID || srcZone === exception.zone_id) continue
+    const ends = { source: zoneNodeId(srcZone), target: zoneNodeId(exception.zone_id) }
+    const key = pairs.has(pairKey({ kind: 'allowed', ...ends })) ? pairKey({ kind: 'allowed', ...ends }) : pairKey({ kind: 'exception', ...ends })
+    const pair = pairs.get(key) ?? { kind: 'exception' as const, ...ends, services: new Set<string>(), flows: [], observed: [], exceptions: [] }
+    if (!pair.exceptions.includes(exception)) pair.exceptions.push(exception)
+    pairs.set(key, pair)
   }
 }
 
@@ -399,9 +512,9 @@ function buildNodes(grid: Cell[][], centers: Map<string, Point>, groups: Map<str
   return out
 }
 
-/** Unprotected and Outside edges are dashed, a draft-only edge dotted, the others solid. */
+/** Unprotected, Outside and exception edges are dashed, a draft-only edge dotted, the others solid. */
 function edgeDash(kind: MapEdgeKind, draft: boolean): string | undefined {
-  if (kind === 'unprotected' || kind === 'outside') return '6 4'
+  if (kind === 'unprotected' || kind === 'outside' || kind === 'exception') return '6 4'
   return draft ? '1 5' : undefined
 }
 
@@ -425,11 +538,27 @@ export function shortHits(hits: number): string {
   return `${(hits / 1_000_000).toFixed(1)}M`
 }
 
-/** The text an edge label is sized for: its services, and the occurrences of an observed edge. */
+/** An exception of the guest view, drawn from guest to guest with its services (a link between two zones that only stands for exceptions has none). */
+const isGuestException = (p: Pair) => p.kind === 'exception' && p.services.size > 0
+
+/** An edge between two guests has the smaller label: an observed one, or an exception of the guest view. */
+const isGuestEdge = (p: Pair) => isObserved(p.kind) || isGuestException(p)
+
+/** The exceptions the label of an edge counts: those of a link between two zones. */
+const exceptionCount = (p: Pair) => (isGuestException(p) ? 0 : p.exceptions.length)
+
+/**
+ * The text an edge label is sized for: its services, the occurrences of an observed edge, and the count of the
+ * exceptions between two zones ("2 exceptions": the word has this length, or about, in the languages served).
+ */
 function labelText(p: Pair): string {
-  const services = groupServices([...p.services])
   const hits = edgeHits(p)
-  return hits === null ? services : `${services} · ${shortHits(hits)}`
+  const count = exceptionCount(p)
+  return [
+    p.services.size ? groupServices([...p.services]) : null,
+    hits === null ? null : shortHits(hits),
+    count ? `${count} exception${count > 1 ? 's' : ''}` : null,
+  ].filter(part => part !== null).join(' · ')
 }
 
 function toEdge(p: Pair, place: PlacedEdge, endShapes: Map<string, EdgeEnds>, unapplied: ReadonlySet<string> | null): Edge {
@@ -454,6 +583,8 @@ function toEdge(p: Pair, place: PlacedEdge, endShapes: Map<string, EdgeEnds>, un
       hits: edgeHits(p),
       flows: [...p.flows].sort((a, b) => byText(a.id, b.id)),
       observed: [...p.observed].sort((a, b) => byText(a.id, b.id)),
+      exceptions: [...p.exceptions].sort((a, b) => byText(a.id, b.id)),
+      exceptionCount: exceptionCount(p),
       draft,
       fromGroup: endShapes.get(p.source)!.group,
       toGroup: endShapes.get(p.target)!.group,
@@ -463,7 +594,7 @@ function toEdge(p: Pair, place: PlacedEdge, endShapes: Map<string, EdgeEnds>, un
       label_y: place.label.y,
       label_w: place.label.w,
       label_h: place.label.h,
-      small: observed,
+      small: isGuestEdge(p),
       particle: p.kind === 'allowed' && !draft,
       color,
     } satisfies MapEdgeData,
@@ -473,17 +604,19 @@ function toEdge(p: Pair, place: PlacedEdge, endShapes: Map<string, EdgeEnds>, un
 /**
  * The map: a circle per zone holding its guests (11 and a "+N" past 12), a dashed circle of the running guests in
  * no zone, an "Unknown / External" box for the sources in no zone and an Outside box for the CIDR destinations.
- * Allowed flows go circle to circle, one green edge per ordered pair; observed flows (unprotected, blocked) go guest
+ * Allowed flows go circle to circle, one green edge per ordered pair, which also counts the exceptions between the two
+ * zones (a dashed link of their own without a flow); observed flows (unprotected, blocked) go guest
  * to guest, resolved from their addresses (the circle when the address is no drawn guest's). Circles on a grid:
  * longest-path layer as the column, barycenter order as the row. Pure and deterministic.
  */
-export function buildZoneGraph({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null }: MapInput): ZoneGraph {
+export function buildZoneGraph({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null }: MapInput): ZoneGraph {
   const { sorted, known, columns } = zoneColumns(zones, flows)
   const { groups, books } = buildGroups(sorted, members, unzoned)
 
   // Edges, by their ends.
   const pairs = new Map<string, Pair>()
   addAllowedPairs(pairs, flows, known)
+  addExceptionZonePairs(pairs, exceptionLinks(exceptions, known, members, unzoned))
   addObservedPairs(pairs, suggestions, known, books)
   const ordered = [...pairs.values()].sort(comparePairs)
 
@@ -511,7 +644,7 @@ export function zoneColumns(zones: MicrosegZone[], flows: MicrosegFlow[]): { sor
 /** The edges of the pairs, in their order, each placed (lanes, bows, label) between the outlines of its ends. */
 export function placePairs(ordered: Pair[], endShapes: Map<string, EdgeEnds>, obstacles: Obstacle[], unapplied: ReadonlySet<string> | null): Edge[] {
   const placed = placeEdges(
-    ordered.map(p => ({ id: pairKey(p), source: p.source, target: p.target, label: labelText(p), small: isObserved(p.kind) })),
+    ordered.map(p => ({ id: pairKey(p), source: p.source, target: p.target, label: labelText(p), small: isGuestEdge(p) })),
     endShapes,
     obstacles,
   )
@@ -524,9 +657,9 @@ export function placePairs(ordered: Pair[], endShapes: Map<string, EdgeEnds>, ob
 export type FlowFilters = { allowed: boolean; unprotected: boolean; blocked: boolean }
 export const ALL_FLOWS: FlowFilters = { allowed: true, unprotected: true, blocked: true }
 /** The checkbox of the toolbar each kind of edge follows. */
-const FILTER_OF_KIND: Record<MapEdgeKind, keyof FlowFilters> = { allowed: 'allowed', outside: 'allowed', unprotected: 'unprotected', blocked: 'blocked' }
+const FILTER_OF_KIND: Record<MapEdgeKind, keyof FlowFilters> = { allowed: 'allowed', exception: 'allowed', outside: 'allowed', unprotected: 'unprotected', blocked: 'blocked' }
 
-/** The edges the three checkboxes of the toolbar let through (the flows to Outside are allowed flows). */
+/** The edges the three checkboxes of the toolbar let through (the flows to Outside and the exceptions are allowed flows). */
 export function filterEdges(edges: Edge[], filters: FlowFilters): Edge[] {
   return edges.filter(e => filters[FILTER_OF_KIND[(e.data as unknown as MapEdgeData).kind] ?? 'allowed'])
 }

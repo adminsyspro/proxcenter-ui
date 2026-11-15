@@ -9,7 +9,7 @@ import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import type { MicrosegSubTabProps, ObservedService } from './microsegTabTypes'
-import { BulkBar, ObservationLegend } from './ObservationActions'
+import { BulkBar, FlowExceptionDialog, ObservationLegend, useFlowExceptions, type FlowException } from './ObservationActions'
 import ObservationFilters, { type ObservationFilterValues } from './ObservationFilters'
 import { decodeCollapsed, destinationKey, encodeCollapsed } from './observationModel'
 import ObservationTable from './ObservationTable'
@@ -84,7 +84,7 @@ function FocusBanner({ testId, text, clearText, onClear }: { testId: string; tex
   )
 }
 
-export default function ObservationPanel({ connectionId, policy, reloadPolicy, onOpenSettings, observationZone = null, observationFocus = null }: MicrosegSubTabProps) {
+export default function ObservationPanel({ connectionId, policy, reloadPolicy, startRun, onOpenSettings, observationZone = null, observationFocus = null }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.observation')
   // Opened from a Policy zone group: filtered on that zone; from a figure of the Dashboard: on its type of flow. Both
   // stay filters the user can clear.
@@ -98,6 +98,10 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
   const [resolved, setResolved] = useState<Resolved | null>(null)
   // The flow opened in its dialog.
   const [detail, setDetail] = useState<MicrosegSuggestion | null>(null)
+  // "Allow this flow only": the exception the flow of the dialog would be, then the one being written in its own dialog.
+  const flowExceptionOf = useFlowExceptions(connectionId, policy)
+  const [exception, setException] = useState<FlowException | null>(null)
+  const [exceptionSaved, setExceptionSaved] = useState(false)
 
   const { data, loading, error, reload } = useMicrosegSuggestions(connectionId, {
     kind: filters.kind || undefined,
@@ -171,6 +175,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
   async function resolve(ids: string[], action: SuggestionAction, prefixLen?: number) {
     if (busy || ids.length === 0) return
     setResolved(null)
+    setExceptionSaved(false)
     // A 409 (the draft moved) re-reads the list and the draft; the selection stays for the next try.
     const outcome = await resolveIds(ids, action, prefixLen)
     if (!outcome) return
@@ -187,6 +192,25 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
   const fromDialog = (s: MicrosegSuggestion, action: SuggestionAction, prefixLen?: number) => {
     setDetail(null)
     void resolve([s.id], action, prefixLen)
+  }
+  // What the action of a flow needs (the names of its two guests, what opens its dialog); undefined: no action.
+  const exceptionActionOf = (s: MicrosegSuggestion) => {
+    const target = flowExceptionOf(s)
+    if (!target) return undefined
+    const open = () => {
+      setDetail(null)
+      setResolved(null)
+      setExceptionSaved(false)
+      setException(target)
+    }
+    return { source: target.draft.sources[0].name, destination: target.draft.destinations[0].name, open }
+  }
+  // The draft was read again by the write; the list is read again too, like after an accepted flow.
+  const exceptionWritten = () => {
+    setException(null)
+    setResolved(null)
+    setExceptionSaved(true)
+    void reload()
   }
   const endName = (zoneId: string, ip: string) => endpoint(zoneId, ip, zonesById, t, gatewayName)
   const bulk = (action: SuggestionAction) => resolve(chosen.map(r => r.id), action)
@@ -205,6 +229,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
           {t(resolved.action === 'dismiss' ? 'resolvedDismiss' : 'resolvedAccept', { count: resolved.count })}
         </Alert>
       )}
+      {exceptionSaved && <Alert severity='success' onClose={() => setExceptionSaved(false)} sx={{ mb: 1.5 }}>{t('exceptionSaved')}</Alert>}
 
       {/* One row: the legend, the bulk actions of a selection, the pager. */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minHeight: 40 }}>
@@ -241,6 +266,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
               onToggle={toggle}
               onResolve={one}
               onOpenDetails={setDetail}
+              exceptionOf={exceptionActionOf}
               nextFlow={hasNext ? data[OBSERVATION_PAGE_SIZE] : undefined}
               collapsed={collapsed}
               onToggleGroup={toggleGroup}
@@ -258,7 +284,19 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
           busy={busy}
           onResolve={(action, prefixLen) => fromDialog(detail, action, prefixLen)}
           guestName={guestName}
+          exception={exceptionActionOf(detail)}
           onClose={() => setDetail(null)}
+        />
+      )}
+      {exception && (
+        <FlowExceptionDialog
+          connectionId={connectionId}
+          policy={policy}
+          reloadPolicy={reloadPolicy}
+          startRun={startRun}
+          exception={exception}
+          onSaved={exceptionWritten}
+          onClose={() => setException(null)}
         />
       )}
     </Box>

@@ -1,14 +1,20 @@
 'use client'
 
-import { useContext, type ReactNode } from 'react'
+import { useContext, useMemo, type ReactNode } from 'react'
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { serviceTitle } from '@/lib/network/serviceNames'
-import { isAggregateDst, type MicrosegSuggestion, type SuggestionAction, type SuggestionKind } from '@/lib/microseg/types'
+import { isAggregateDst, type MicrosegPolicy, type MicrosegSuggestion, type SuggestionAction, type SuggestionKind } from '@/lib/microseg/types'
 
+import ExceptionDialog from './ExceptionDialog'
+import { exceptionCovered, exceptionFromSuggestion, type ExceptionDraft } from './exceptionModel'
 import { AggregateHint, ObservedKindGlyph, outboundZoneAcceptTip, usePrefixChoice } from './observationParts'
 import { MicrosegActionsSlot, WriteTip, useMicrosegWrite } from './microsegAccess'
+import type { TrackedRun } from './microsegTabTypes'
+import { useZoneEdits } from './useZoneEdits'
+import { useZoneGuests } from './useZoneGuests'
+import { zoneMembers, type ZoneMember } from './zoneModel'
 
 const ACTION_SX = { minWidth: 0, px: 1, py: 0, lineHeight: 1.6, whiteSpace: 'nowrap' } as const
 
@@ -22,6 +28,8 @@ type FlowActionsProps = {
   onResolve: (action: SuggestionAction, prefixLen?: number) => void
   /** Coloured icons for the rows of the table (the default), labelled buttons where there is room (the flow dialog). */
   variant?: 'icons' | 'buttons'
+  /** "Allow this flow only": given when the flow is between two known guests (`useFlowException`), absent otherwise. */
+  exception?: { source: string; destination: string; open: () => void }
 }
 
 /** The three ways out, their icon and colour (Accept green, As CIDR blue, Dismiss red). */
@@ -39,12 +47,15 @@ function acceptTipOf(t: Translate, s: MicrosegSuggestion, flow: { from: string; 
   return outboundZoneAcceptTip(t, s, flow.from, flow.to) ?? t('acceptTip', flow)
 }
 
+/** The tooltip of "allow this flow only": an icon is named by its action first, like the three others. */
+const exceptionTip = (t: Translate, variant: 'icons' | 'buttons', tip: string) => (variant === 'icons' ? t('actionTip', { action: t('exceptionOnly'), tip }) : tip)
+
 /**
  * The three ways out of an observed flow, whose tooltip says what each does: Accept (a flow between the zones in the
  * draft), As CIDR (the same with the source as an address range) and Dismiss. In the rows they are coloured icons
  * named by the action; in the dialog, labelled buttons.
  */
-export function FlowActions({ suggestion: s, source, destination, busy, onResolve, variant = 'icons' }: FlowActionsProps) {
+export function FlowActions({ suggestion: s, source, destination, busy, onResolve, variant = 'icons', exception }: FlowActionsProps) {
   const t = useTranslations('microsegPilot.observation')
   const { canWrite } = useMicrosegWrite()
   const service = serviceTitle(s.proto, s.dport)
@@ -82,9 +93,85 @@ export function FlowActions({ suggestion: s, source, destination, busy, onResolv
           </WriteTip>
         )
       })}
+      {exception && (
+        <WriteTip title={exceptionTip(t, variant, t('exceptionOnlyTip', { from: exception.source, to: exception.destination, service }))}>
+          {variant === 'icons' ? (
+            <IconButton size='small' color='primary' aria-label={t('exceptionOnly')} disabled={!canWrite || busy} onClick={exception.open}>
+              <i className='ri-door-open-line' />
+            </IconButton>
+          ) : (
+            <Button size='small' variant='outlined' disabled={!canWrite || busy} onClick={exception.open} sx={ACTION_SX}>{t('exceptionOnly')}</Button>
+          )}
+        </WriteTip>
+      )}
       {prefix.dialog}
     </Box>
   )
+}
+
+/** An exception an observed flow would be, with the zone it is written into and what its dialog lists. */
+export type FlowException = { zoneId: string; draft: ExceptionDraft; members: ZoneMember[] }
+
+/**
+ * What "allow this flow only" would write for an observed flow: the exception between its two guests, in its
+ * destination zone. Null when the flow is not between two known guests (`exceptionFromSuggestion`), or when an
+ * exception of the zone allows it already (`exceptionCovered`): the action is then not offered. Read from the
+ * inventory the tab already holds, no request of its own; the members of a destination zone are worked out once for
+ * all the flows that reach it.
+ */
+export function useFlowExceptions(connectionId: string, policy: MicrosegPolicy): (suggestion: MicrosegSuggestion) => FlowException | null {
+  const { guests } = useZoneGuests(connectionId)
+
+  return useMemo(() => {
+    const zones = new Map(policy.zones.map(z => [z.id, z]))
+    const membersByZone = new Map<string, ZoneMember[]>()
+    const membersOf = (zoneId: string) => {
+      const zone = zones.get(zoneId)
+      if (!zone) return null
+      let members = membersByZone.get(zoneId)
+      if (!members) {
+        members = zoneMembers(zone, policy.policy.tag_prefix, guests, policy.pending_members, policy.zones)
+        membersByZone.set(zoneId, members)
+      }
+      return members
+    }
+
+    return (suggestion: MicrosegSuggestion) => {
+      if (suggestion.status !== 'pending') return null
+      const members = membersOf(suggestion.dst_zone_id)
+      const draft = members && exceptionFromSuggestion(suggestion, guests, members)
+      if (!members || !draft || exceptionCovered(draft, suggestion.dst_zone_id, policy.exceptions)) return null
+
+      return { zoneId: suggestion.dst_zone_id, draft, members }
+    }
+  }, [policy, guests])
+}
+
+type FlowExceptionDialogProps = {
+  connectionId: string
+  policy: MicrosegPolicy
+  reloadPolicy: () => Promise<unknown>
+  startRun: (run: TrackedRun) => void
+  exception: FlowException
+  /** After the exception is written (the draft is read again by then). */
+  onSaved: () => void
+  onClose: () => void
+}
+
+/**
+ * The exception dialog opened on an observed flow: its two guests and its service are picked already, and the save
+ * writes the exception into the destination zone like the zone panel does (`saveException`). The suggestion is left
+ * as it is: once the exception is applied the engine stops reporting the flow.
+ */
+export function FlowExceptionDialog({ connectionId, policy, reloadPolicy, startRun, exception, onSaved, onClose }: Readonly<FlowExceptionDialogProps>) {
+  const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun })
+  const { guests } = useZoneGuests(connectionId)
+  const save = async (draft: ExceptionDraft) => {
+    await edits.saveException(exception.zoneId, draft)
+    onSaved()
+  }
+
+  return <ExceptionDialog open exception={exception.draft} guests={guests} members={exception.members} onSave={save} onClose={onClose} />
 }
 
 type BulkBarProps = {

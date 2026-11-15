@@ -9,7 +9,7 @@ import type { Edge } from '@xyflow/react'
 
 import { BOX_H, BOX_W, buildCompactGraph } from './compactGraph'
 import { crossesBox, rectAround, rectsOverlap, type Rect } from './edgeGeometry'
-import { demoInput, flow, seen, zone } from './mapViewsTestKit'
+import { demoInput, exception, flow, seen, zone } from './mapViewsTestKit'
 import { NODE_H, NODE_W, type MapEdgeData, type ZoneNodeData } from './zoneGraph'
 
 const data = (e: Edge) => e.data as unknown as MapEdgeData
@@ -124,5 +124,17 @@ describe('the demo-like compact map is readable', () => {
       for (const b of boxes) if (rectsOverlap(r, rectAround(b, b.w, b.h))) problems.push(`${id} on ${b.id}`)
     }
     expect(problems).toEqual([])
+  })
+})
+
+describe('the exceptions between two zones', () => {
+  it('adds them to the link between the two zones, or draws a dashed link of their own', () => {
+    const { members } = demoInput()
+    const own = buildCompactGraph({ zones: [web, db], flows: [], suggestions: [], members, exceptions: [exception('x1')] })
+    expect(own.edges.map(e => e.id)).toEqual(['exception:zone:zw>zone:zd'])
+    expect(data(own.edges[0])).toMatchObject({ kind: 'exception', exceptionCount: 1, label: '' })
+    const added = buildCompactGraph({ zones: [web, db], flows: [flow('f1')], suggestions: [], members, exceptions: [exception('x1'), exception('x2')] })
+    expect(added.edges.map(e => e.id)).toEqual(['allowed:zone:zw>zone:zd'])
+    expect(data(added.edges[0])).toMatchObject({ kind: 'allowed', exceptionCount: 2, label: 'HTTPS' })
   })
 })

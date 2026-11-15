@@ -2,7 +2,7 @@ import type { MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import { cellView, type MatrixModel } from './matrixModel'
 import {
-  UNZONED_ID, bareIp, guestNodeId, moreNodeId, zoneNodeId, type FlowFilters, type MapEdgeData, type ZoneGraph,
+  UNZONED_ID, bareIp, guestNodeId, moreNodeId, pveNodeId, zoneNodeId, type FlowFilters, type MapEdgeData, type ZoneGraph,
 } from './zoneGraph'
 import { byText } from './zoneLayout'
 import { byGuestName, guestKey, type PolicyGuest, type ZoneMember } from './zoneModel'
@@ -111,11 +111,15 @@ export function targetPeers(guests: PolicyGuest[]): Map<string, string> {
   return peers
 }
 
-/** The node of the guest on a canvas: its glyph, else the "+N" of its circle, else the circle (or box) of its zone. */
+/**
+ * The node of the guest on a canvas: its glyph, else the "+N" of its circle, else the circle (or box) of its zone; on
+ * the node view, its glyph in the circle of its Proxmox node, else the "+N" of that circle, else the circle.
+ */
 export function targetNodeId(graph: ZoneGraph, t: TargetGuest): string | null {
   const ids = new Set(graph.nodes.map(n => n.id))
   const group = t.zoneId ?? UNZONED_ID
-  const tries = [guestNodeId(group, t.key), moreNodeId(group), t.zoneId ? zoneNodeId(t.zoneId) : null]
+  const pve = pveNodeId(t.node)
+  const tries = [guestNodeId(group, t.key), moreNodeId(group), t.zoneId ? zoneNodeId(t.zoneId) : null, guestNodeId(pve, t.key), moreNodeId(pve), pve]
   return tries.find(id => !!id && ids.has(id)) ?? null
 }
 

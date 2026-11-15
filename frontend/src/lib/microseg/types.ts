@@ -93,6 +93,26 @@ export type MicrosegFlow = {
   created_by: string
 }
 
+/** A guest named by an exception: its name is the one it had when the exception was saved. */
+export type GuestRefLite = { type: GuestType; vmid: number; name: string }
+
+export type ExceptionService = { proto: string; dport: string }
+
+/**
+ * An exception of a zone (Go `Exception`): these source guests may reach these member guests of the zone, on these
+ * services, whatever the flows of the zone say.
+ */
+export type MicrosegException = {
+  id: string
+  policy_id: string
+  zone_id: string
+  sources: GuestRefLite[]
+  destinations: GuestRefLite[]
+  services: ExceptionService[]
+  comment: string
+  created_by: string
+}
+
 export type PendingMember = {
   id: string
   policy_id: string
@@ -132,11 +152,13 @@ export function isAggregateDst(s: { dst_key?: string }): boolean {
   return s.dst_key === '0.0.0.0/0' || s.dst_key === '::/0'
 }
 
-/** What a revision froze: the tag prefix, the zones and the flows. */
+/** What a revision froze: the tag prefix, the zones, the flows and the exceptions. */
 export type MicrosegSnapshot = {
   tag_prefix: string
   zones: MicrosegZone[]
   flows: MicrosegFlow[]
+  /** Absent on a revision taken before the exceptions existed: read as none. */
+  exceptions?: MicrosegException[]
 }
 
 /**
@@ -156,6 +178,8 @@ export type MicrosegPolicy = {
   policy: MicrosegPolicyRecord
   zones: MicrosegZone[]
   flows: MicrosegFlow[]
+  /** Always a list on the browser side: the client reads an older orchestrator, which does not send it, as none. */
+  exceptions: MicrosegException[]
   pending_members: PendingMember[]
   last_revision: MicrosegRevision | null
   version: number
@@ -350,6 +374,17 @@ export type FlowInput = {
   dport?: string
   comment?: string
   origin?: string
+}
+
+export type ExceptionInput = {
+  /** Present: PUT /exceptions/{id}; absent: POST /exceptions. */
+  id?: string
+  version: number
+  zone_id: string
+  sources: GuestRefLite[]
+  destinations: GuestRefLite[]
+  services: ExceptionService[]
+  comment?: string
 }
 
 export type PolicyUpdate = {

@@ -55,6 +55,10 @@ export type MicrosegSubTabProps = {
   onOpenPreflight?: () => void
   /** The VMID of a `?vm=` link, handed by the page: the Overview targets that guest. */
   targetVm?: string | null
+  /** The Proxmox nodes of the connection, when the page knows them: the node view of the map draws the empty ones too. */
+  pveNodes?: string[]
+  /** The status of those nodes ("online"...), when the page knows it. */
+  pveNodeStatus?: Record<string, string>
 }
 
 /** What the deployment wizard (opened from a failed pre-flight check) needs from the firewall page. */
@@ -62,6 +66,8 @@ export type FirewallWizardData = {
   clusterOptions: ClusterOptions | null
   clusterRules: FirewallRule[]
   nodesList: string[]
+  /** The status of the nodes ("online"...); the wizard does not read it, the node view of the map does. */
+  nodeStatus?: Record<string, string>
   firewallMode: FirewallMode
   /** The page reloads its firewall data once the wizard has written. */
   onComplete: () => void

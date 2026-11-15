@@ -10,8 +10,8 @@ import { within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 
-import { calls, mock, reply } from './microsegTestKit'
-import { db, installFreshMocks, web } from './policyTestKit'
+import { calls, exception, mock, reply } from './microsegTestKit'
+import { db, installFreshMocks, vm, web } from './policyTestKit'
 import { flowOf, setup, wouldBlock } from './zoneMapTestKit'
 
 installFreshMocks()
@@ -205,5 +205,80 @@ describe('pair panel: the Sankey diagram', () => {
     expect([...panel.querySelectorAll('section[data-section]')].map(s => s.getAttribute('aria-label'))).toEqual(['Observed traffic', 'Pending suggestions', 'Declared flows'])
     fireEvent.click(within(panel).getByRole('button', { name: 'Expand' }))
     expect(await screen.findByRole('dialog', { name: 'Flow details · web → db' })).toBeTruthy()
+  })
+})
+
+describe('pair panel: exceptions', () => {
+  const vms = [vm(100, 'web-1', ['zone-web'], { ips: ['10.0.0.1'] }), vm(200, 'db-1', ['zone-db'], { ips: ['10.0.0.2'] })]
+  const toDb = (id: string, over: Parameters<typeof exception>[1] = {}) => exception(id, {
+    zone_id: 'zd', sources: [{ type: 'qemu', vmid: 100, name: 'web-1' }], destinations: [{ type: 'qemu', vmid: 200, name: 'db-1' }], ...over,
+  })
+  const sections = (panel: HTMLElement) => [...panel.querySelectorAll('section[data-section]')].map(s => s.getAttribute('aria-label'))
+
+  async function openEdge(view: string, name: string, panelName: string) {
+    window.localStorage.setItem('microseg.map.view', view)
+    fireEvent.click(await screen.findByRole('button', { name }))
+    return screen.findByRole('complementary', { name: panelName })
+  }
+
+  it('lists the exceptions of a link that only stands for them first, with their count in the header, and edits and deletes them', async () => {
+    window.localStorage.setItem('microseg.map.view', 'compact')
+    setup({ vms, exceptions: [toDb('e1'), toDb('e2', { services: [{ proto: 'tcp', dport: '22' }] }), exception('other')] })
+    const panel = await openEdge('compact', 'web to db: 2 exceptions', 'Flow web to db')
+    expect(within(panel).getByText('Exception between VMs')).toBeTruthy()
+    expect(within(panel).getByText('2 exceptions')).toBeTruthy()
+    expect(sections(panel)).toEqual(['VM exceptions', 'Observed traffic', 'Pending suggestions', 'Declared flows'])
+    expect(within(panel).getByTestId('section-edge.exceptions-count').textContent).toBe('2')
+    const region = section(panel, 'VM exceptions')
+    const rows = await within(region).findAllByRole('listitem')
+    expect(rows.map(r => r.getAttribute('aria-label'))).toEqual(['web-1 → db-1 · PostgreSQL', 'web-1 → db-1 · SSH'])
+
+    fireEvent.click(within(rows[0]).getByRole('button', { name: 'Edit exception' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Source VMs')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    mock.routes['DELETE /exceptions/e2'] = () => reply(200, { version: 4 })
+    fireEvent.click(within(rows[1]).getByRole('button', { name: 'Delete exception' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Delete this exception?' })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(calls('DELETE /exceptions/e2')).toHaveLength(1))
+  })
+
+  it('keeps the count beside the services of an allowed link, and lists its exceptions after its declared flows', async () => {
+    window.localStorage.setItem('microseg.map.view', 'compact')
+    setup({ vms, flows: [flowOf('f1')], exceptions: [toDb('e1')] })
+    const panel = await openEdge('compact', 'web to db: HTTPS (tcp/443) · 1 exception', 'Flow web to db')
+    expect(within(panel).getByText('Allowed')).toBeTruthy()
+    expect(within(panel).getByText('HTTPS · 1 exception')).toBeTruthy()
+    expect(sections(panel)).toEqual(['Observed traffic', 'Pending suggestions', 'Declared flows', 'VM exceptions'])
+    expect(await within(section(panel, 'VM exceptions')).findByRole('listitem', { name: 'web-1 → db-1 · PostgreSQL' })).toBeTruthy()
+    expect(within(panel).getByTestId('section-edge.flows-count').textContent).toBe('1')
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Expand' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Data' }))
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'VM exceptions (1)' }))
+    expect(await within(dialog).findByRole('listitem', { name: 'web-1 → db-1 · PostgreSQL' })).toBeTruthy()
+  })
+
+  it('names the two guests of an exception drawn in the guest view, and lists that exception', async () => {
+    window.localStorage.setItem('microseg.map.view', 'guests')
+    setup({ vms, exceptions: [toDb('e1'), toDb('e2', { sources: [{ type: 'qemu', vmid: 999, name: 'gone' }] })] })
+    const panel = await openEdge('guests', 'web-1 (web) to db-1 (db): PostgreSQL (tcp/5432)', 'Flow web-1 (web) to db-1 (db)')
+    expect(within(panel).getByTestId('pair-ends').textContent).toBe('webdb')
+    // In the header (the ends above it are the zones), and on the line of the exception.
+    const named = within(panel).getAllByText('web-1 → db-1 · PostgreSQL')
+    expect(named.some(el => !section(panel, 'VM exceptions').contains(el))).toBe(true)
+    expect(sections(panel)[0]).toBe('VM exceptions')
+    expect(within(panel).getByTestId('section-edge.exceptions-count').textContent).toBe('1')
+    const rows = await within(section(panel, 'VM exceptions')).findAllByRole('listitem')
+    expect(rows.map(r => r.getAttribute('aria-label'))).toEqual(['web-1 → db-1 · PostgreSQL'])
+  })
+
+  it('shows no exceptions section on a pair without one', async () => {
+    setup({ vms, flows: [flowOf('f1')] })
+    const panel = await openCell('web', 'db')
+    expect(sections(panel)).toEqual(['Observed traffic', 'Pending suggestions', 'Declared flows'])
   })
 })

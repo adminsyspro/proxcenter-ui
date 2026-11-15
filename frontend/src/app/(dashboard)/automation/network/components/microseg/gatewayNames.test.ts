@@ -48,7 +48,7 @@ describe('gateway flows', () => {
   })
 
   it('takes an empty gateway or a plain address, refuses a prefix or a name', () => {
-    const form = (gateway: string) => validateZoneForm({ name: 'web', label: '', color: ZONE_COLORS[0], isolate_members: false, state: 'disabled', egress_state: 'off', egress_mode: 'local', gateway, gateway_services: [] })
+    const form = (gateway: string) => validateZoneForm({ name: 'web', label: '', color: ZONE_COLORS[0], isolate_members: false, state: 'disabled', egress_state: 'off', egress_mode: 'local', gateway, gateway_services: [], exceptions: [], removed_exceptions: [] })
     expect(form('').gateway).toBeUndefined()
     expect(form('10.30.0.1').gateway).toBeUndefined()
     expect(form('2001:db8::1').gateway).toBeUndefined()

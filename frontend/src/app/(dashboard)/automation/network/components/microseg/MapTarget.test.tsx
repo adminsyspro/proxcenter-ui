@@ -202,11 +202,26 @@ describe('the guest panel', () => {
     await target('db-1')
     const aside = await panel('Guest db-1')
     const row = within(within(aside).getByRole('region', { name: 'Flows' })).getAllByRole('listitem')[0]
-    // The peer name holds 96 px; the kind chip gives way first.
-    expect(within(row).getByText('web-2').parentElement!).toHaveStyle({ minWidth: '96px' })
-    expect(within(row).getByText('Blocked').closest('.MuiChip-root')).toHaveStyle({ minWidth: '0' })
+    // The peer name holds 96 px, or its own width when it is shorter; the kind chip never shrinks, its label stays whole.
+    // jsdom drops a `min()` length from the computed style: the rule is read from the style sheet.
+    const nameClasses = [...within(row).getByText('web-2').parentElement!.classList]
+    const css = [...document.querySelectorAll('style')].map(el => el.textContent).join('')
+    expect(nameClasses.some(c => new RegExp(String.raw`\.${c}\{[^}]*min-width:min\(96px,\s?8ch\)`).test(css))).toBe(true)
+    const chip = within(row).getByText('Blocked').closest('.MuiChip-root')!
+    expect(chip).toHaveStyle({ flexShrink: '0' })
+    expect(chip).not.toHaveStyle({ minWidth: '0' })
+    expect(chip).not.toHaveStyle({ maxWidth: '120px' })
+    // The service and its hits give way instead, each cut with its full text as tooltip.
+    expect(within(row).getByText('SSH').parentElement!).toHaveStyle({ flexShrink: '1', minWidth: '0' })
+    expect(within(row).getByText('7 hits').parentElement!).toHaveStyle({ flexShrink: '1', minWidth: '0' })
     fireEvent.mouseOver(within(row).getByText('web-2'))
     expect(await screen.findByRole('tooltip', { name: 'Incoming, from web-2' })).toBeTruthy()
+    fireEvent.mouseLeave(within(row).getByText('web-2'))
+    fireEvent.mouseOver(within(row).getByText('SSH'))
+    expect(await screen.findByRole('tooltip', { name: 'SSH (tcp/22)' })).toBeTruthy()
+    fireEvent.mouseLeave(within(row).getByText('SSH'))
+    fireEvent.mouseOver(within(row).getByText('7 hits'))
+    expect(await screen.findByRole('tooltip', { name: '7 hits' })).toBeTruthy()
     // Each side of an allowed flow holds 48 px before its ellipsis.
     fireEvent.click(within(aside).getByTestId('section-guest.zoneRules'))
     const allowed = within(within(aside).getByRole('region', { name: 'Rules of its zone' })).getAllByRole('listitem')[0]
@@ -394,6 +409,24 @@ describe('the target search of a user who cannot read the inventory (D9)', () =>
       expect(rows.map(r => r.getAttribute('data-suggestion'))).toEqual(['o2', 'o1'])
       expect(within(rows[0]).queryByText('from zone web')).toBeNull()
       expect(within(rows[1]).getByText('from zone web')).toBeTruthy()
+    })
+
+    it('keeps the emitting zone reachable when the row squeezes it: a floor under its text, and the tooltip of the direction icon says it', async () => {
+      setup({ vms: guests, flows: [flowOf('f1')], suggestions: [out('o1', { hits: 9 }), out('o2', { src_ip: '10.0.0.3', dport: '443', hits: 1 })] })
+      await node('guest:zw:qemu/101')
+      await target('web-2')
+      const rows = within(await panel('Guest web-2')).getAllByRole('listitem')
+      // jsdom may drop a `ch` length from the computed style: the rule is read from the style sheet.
+      const classes = [...within(rows[1]).getByText('from zone web').parentElement!.classList]
+      const css = [...document.querySelectorAll('style')].map(el => el.textContent).join('')
+      expect(classes.some(c => new RegExp(String.raw`\.${c}\{[^}]*min-width:2ch`).test(css))).toBe(true)
+      const where = rows[1].getAttribute('aria-label')!
+      fireEvent.mouseOver(rows[1].querySelector('i[class*="ri-arrow-"]')!)
+      expect(await screen.findByRole('tooltip', { name: `${where}, from zone web` })).toBeTruthy()
+      fireEvent.mouseLeave(rows[1].querySelector('i[class*="ri-arrow-"]')!)
+      // A row of the guest itself has no zone to add.
+      fireEvent.mouseOver(rows[0].querySelector('i[class*="ri-arrow-"]')!)
+      expect(await screen.findByRole('tooltip', { name: rows[0].getAttribute('aria-label')! })).toBeTruthy()
     })
 
     it('adds the protocol to a service name two rows share for different protocols', async () => {

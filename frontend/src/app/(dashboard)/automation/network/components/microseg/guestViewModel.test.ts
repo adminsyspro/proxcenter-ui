@@ -9,8 +9,8 @@ import type { Edge, Node } from '@xyflow/react'
 
 import { crossesBox, crossesCircle, rectAround, rectHitsCircle, rectsOverlap } from './edgeGeometry'
 import { EMPTY_PEER_R, MAX_IPS, MAX_PER_COLUMN, buildGuestView, defaultCentre, ipNodeId, zoneTraffic } from './guestViewModel'
-import { demoInput, seen, zone } from './mapViewsTestKit'
-import { NODE_H, NODE_W, type MapEdgeData, type ZoneNodeData } from './zoneGraph'
+import { demoInput, exception, seen, zone } from './mapViewsTestKit'
+import { EDGE_COLORS, NODE_H, NODE_W, type MapEdgeData, type ZoneNodeData } from './zoneGraph'
 
 const data = (e: Edge) => e.data as unknown as MapEdgeData
 const demo = demoInput()
@@ -169,4 +169,81 @@ describe('every demo zone in the centre is readable', () => {
       expect(problems).toEqual([])
     })
   }
+})
+
+describe('the exceptions of the view', () => {
+  const withExceptions = (centre: string, ...exceptions: ReturnType<typeof exception>[]) => buildGuestView({ ...demo, exceptions, centre })
+  const exceptionIds = (g: { edges: Edge[] }) => g.edges.filter(e => data(e).kind === 'exception').map(e => e.id).sort()
+  const guest = (vmid: number, name = '') => ({ type: 'qemu' as const, vmid, name })
+
+  it('draws an exception as a dashed green edge from its source guest to its destination guest, labelled with its services', () => {
+    const g = withExceptions('zd', exception('x1', { services: [{ proto: 'tcp', dport: '5432' }, { proto: 'tcp', dport: '22' }] }))
+    expect(exceptionIds(g)).toEqual(['exception:guest:zw:qemu/105>guest:zd:qemu/402'])
+    const edge = g.edges.find(e => data(e).kind === 'exception')!
+    expect(data(edge)).toMatchObject({ label: 'SSH, PostgreSQL', services: ['tcp/22', 'tcp/5432'], color: EDGE_COLORS.allowed, particle: false, small: true, exceptionCount: 0, fromGroup: 'zone:zw', toGroup: 'zone:zd' })
+    expect(edge.style?.strokeDasharray).toBe('6 4')
+    // The panel of the edge lists the exceptions it stands for.
+    expect(data(edge).exceptions.map(e => e.id)).toEqual(['x1'])
+    // The source did not talk to the centre: the exception alone draws it in its zone.
+    expect(g.nodes.filter(n => n.parentId === 'zone:zw').map(n => n.id).sort()).toEqual(['guest:zw:qemu/100', 'guest:zw:qemu/101', 'guest:zw:qemu/105'])
+  })
+
+  it('draws one edge per source and destination, and merges the services of two exceptions of a pair', () => {
+    const g = withExceptions(
+      'zd',
+      exception('x1', { sources: [guest(105), guest(106)], destinations: [guest(402), guest(403)] }),
+      exception('x2', { services: [{ proto: 'tcp', dport: '22' }] }),
+    )
+    expect(exceptionIds(g)).toEqual([
+      'exception:guest:zw:qemu/105>guest:zd:qemu/402', 'exception:guest:zw:qemu/105>guest:zd:qemu/403',
+      'exception:guest:zw:qemu/106>guest:zd:qemu/402', 'exception:guest:zw:qemu/106>guest:zd:qemu/403',
+    ])
+    expect(data(g.edges.find(e => e.id === 'exception:guest:zw:qemu/105>guest:zd:qemu/402')!).label).toBe('SSH, PostgreSQL')
+    expect(data(g.edges.find(e => e.id === 'exception:guest:zw:qemu/106>guest:zd:qemu/403')!).label).toBe('PostgreSQL')
+    expect(data(g.edges.find(e => e.id === 'exception:guest:zw:qemu/105>guest:zd:qemu/402')!).exceptions.map(e => e.id)).toEqual(['x1', 'x2'])
+    expect(data(g.edges.find(e => e.id === 'exception:guest:zw:qemu/106>guest:zd:qemu/403')!).exceptions.map(e => e.id)).toEqual(['x1'])
+  })
+
+  it('draws the zone of a source on the left of the centre even when nothing else links them', () => {
+    const g = withExceptions('zd', exception('x1', { sources: [guest(203)] }))
+    expect(exceptionIds(g)).toEqual(['exception:guest:zad:qemu/203>guest:zd:qemu/402'])
+    expect(g.nodes.filter(n => n.parentId === 'zone:zad').map(n => n.id)).toEqual(['guest:zad:qemu/203'])
+    expect(cx(g.nodes, 'zone:zad')).toBeLessThan(cx(g.nodes, 'zone:zd'))
+  })
+
+  it('draws an exception between two members of the centre inside its circle', () => {
+    expect(exceptionIds(withExceptions('zd', exception('x1', { sources: [guest(400)] })))).toEqual(['exception:guest:zd:qemu/400>guest:zd:qemu/402'])
+  })
+
+  it('draws a source in no zone in the circle of the guests in no zone', () => {
+    const g = withExceptions('zd', exception('x1', { sources: [guest(901)] }))
+    expect(exceptionIds(g)).toEqual(['exception:guest:unzoned:qemu/901>guest:zd:qemu/402'])
+    expect(g.nodes.filter(n => n.parentId === 'unzoned').map(n => n.id)).toEqual(['guest:unzoned:qemu/901'])
+  })
+
+  it('draws the exception of a peer zone a member of the centre is a source of', () => {
+    const g = withExceptions('zw', exception('x1'))
+    expect(exceptionIds(g)).toEqual(['exception:guest:zw:qemu/105>guest:zd:qemu/402'])
+    expect(g.nodes.some(n => n.id === 'guest:zd:qemu/402')).toBe(true)
+    // Nothing between two peers: the same exception is not drawn around a third zone.
+    expect(exceptionIds(withExceptions('za', exception('x1')))).toEqual([])
+  })
+
+  it('ends on the "+N" node for a member of the centre that is not drawn', () => {
+    const many = new Map(demo.members)
+    many.set('zd', Array.from({ length: 14 }, (_, i) => ({ ...demo.members.get('zd')![0], key: `qemu/${400 + i}`, vmid: 400 + i, name: `db-${String(i + 1).padStart(2, '0')}`, ips: [] })))
+    const g = buildGuestView({ ...demo, members: many, exceptions: [exception('x1', { destinations: [guest(413)] })], centre: 'zd' })
+    expect(exceptionIds(g)).toEqual(['exception:guest:zw:qemu/105>more:zd'])
+  })
+
+  it('draws nothing for a zone that is off, a destination that is no member, a guest the map does not know, or while the guests are unknown', () => {
+    const off = buildGuestView({ ...demo, zones: demo.zones.map(z => (z.id === 'zd' ? { ...z, state: 'disabled' as const } : z)), exceptions: [exception('x1')], centre: 'zd' })
+    expect(exceptionIds(off)).toEqual([])
+    expect(exceptionIds(withExceptions('zd', exception('x1', { destinations: [guest(300)] })))).toEqual([])
+    expect(exceptionIds(withExceptions('zd', exception('x1', { sources: [guest(9999)] })))).toEqual([])
+    expect(exceptionIds(withExceptions('zd', exception('x1', { zone_id: 'gone' })))).toEqual([])
+    expect(exceptionIds(buildGuestView({ ...demo, members: null, exceptions: [exception('x1')], centre: 'zd' }))).toEqual([])
+    // Without exceptions the view is what it was.
+    expect(buildGuestView({ ...demo, exceptions: [], centre: 'zd' })).toEqual(view('zd'))
+  })
 })

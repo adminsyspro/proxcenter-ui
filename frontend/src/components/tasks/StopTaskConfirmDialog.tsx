@@ -3,6 +3,9 @@
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
+import CancelMigrationDialog from '@/app/(dashboard)/infrastructure/inventory/components/CancelMigrationDialog'
+import type { StopOptions } from '@/lib/tasks/jobActions'
+
 /**
  * The one confirmation asked before stopping anything from a task row (#974).
  *
@@ -10,6 +13,10 @@ import { useTranslations } from 'next-intl'
  * surface that offers it (the two tabs of the taskbar, the Task Center table,
  * the migration detail dialog) asks the same question with the same buttons
  * instead of growing its own modal.
+ *
+ * A migration gets the confirmation of its migrate dialog instead, so stopping
+ * it from a task row offers the same choice: remove the copy a warm run made
+ * on the target (ticked) or keep it.
  */
 export default function StopTaskConfirmDialog({
   open,
@@ -20,6 +27,7 @@ export default function StopTaskConfirmDialog({
   confirmLabel,
   keepLabel,
   busyLabel,
+  migration,
   onKeep,
   onConfirm,
 }: Readonly<{
@@ -31,10 +39,23 @@ export default function StopTaskConfirmDialog({
   confirmLabel?: string
   keepLabel?: string
   busyLabel?: string
+  migration?: { migrationType: string | null; targetVmid: number | null }
   onKeep: () => void
-  onConfirm: () => void
+  onConfirm: (opts?: StopOptions) => void
 }>) {
   const t = useTranslations()
+
+  if (migration) {
+    return (
+      <CancelMigrationDialog
+        open={open}
+        busy={busy}
+        job={{ targetVmid: migration.targetVmid, config: { migrationType: migration.migrationType } }}
+        onClose={() => { if (!busy) onKeep() }}
+        onConfirm={removeTarget => onConfirm({ removeTarget })}
+      />
+    )
+  }
 
   return (
     <Dialog open={open} onClose={() => { if (!busy) onKeep() }} maxWidth="xs" fullWidth>
@@ -52,7 +73,7 @@ export default function StopTaskConfirmDialog({
         <Button onClick={onKeep} disabled={busy}>
           {keepLabel ?? t('tasks.stop.keep')}
         </Button>
-        <Button variant="contained" color="error" onClick={onConfirm} disabled={busy}>
+        <Button variant="contained" color="error" onClick={() => onConfirm()} disabled={busy}>
           {busy ? busyLabel ?? t('tasks.stop.stopping') : confirmLabel ?? t('tasks.stop.confirm')}
         </Button>
       </DialogActions>

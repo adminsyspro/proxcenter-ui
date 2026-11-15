@@ -38,6 +38,7 @@ import JobDetailDialog from '@/components/tasks/JobDetailDialog'
 import { useRouter } from 'next/navigation'
 import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
 import { migrationFromTaskCenterJob, openMigration } from '@/lib/migration/migrationJobOpen'
+import { migrationJobDetail } from '@/lib/tasks/activeMigrations'
 import StopTaskButton from '@/components/tasks/StopTaskButton'
 import TaskLogButton from '@/components/tasks/TaskLogButton'
 import FailureReasonText from '@/components/tasks/FailureReasonText'
@@ -188,9 +189,13 @@ export default function JobsPage() {
 
     return {
       id: job.id,
-      run: () => runJobAction(job, 'cancel'),
+      run: opts => runJobAction(job, 'cancel', opts),
       body: job.type === 'migration' ? t('tasks.shared.cancelConfirmStop') : t('tasks.stop.confirmBodyJob'),
       warning: job.type === 'migration' ? t('tasks.shared.cancelConfirmLeftovers') : undefined,
+      // The confirmation of the migrate dialog: a warm run offers to remove its copy.
+      ...(job.type === 'migration'
+        ? { migration: { migrationType: job.metadata?.migrationType ?? null, targetVmid: job.metadata?.targetVmid ?? null } }
+        : {}),
     }
   }, [isEnterprise, hasPermission, t])
 
@@ -309,7 +314,7 @@ export default function JobsPage() {
               variant='body2'
               sx={{ opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0, maxWidth: '50%' }}
             >
-              {params.row.type === 'rolling_update' ? rollingUpdateDetail(params.row, t) : params.row.detail}
+              {params.row.type === 'rolling_update' ? rollingUpdateDetail(params.row, t) : migrationJobDetail(k => t(k), params.row)}
             </Typography>
             {/* #926: why it failed, on the row itself */}
             {params.row.status === 'failed' && <FailureReasonText reason={params.row.metadata?.error} />}
@@ -609,6 +614,7 @@ export default function JobsPage() {
         busy={stop.busy}
         body={stop.target?.body}
         warning={stop.target?.warning}
+        migration={stop.target?.migration}
         onKeep={stop.dismiss}
         onConfirm={stop.confirm}
       />

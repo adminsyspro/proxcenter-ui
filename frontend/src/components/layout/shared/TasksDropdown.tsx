@@ -32,8 +32,7 @@ import { useActiveDeployments } from '@/hooks/useNavbarNotifications'
 import { useSharedTasks } from '@/hooks/useSharedTasks'
 import { openMigration } from '@/lib/migration/migrationJobOpen'
 import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
-import { activeMigrations, isWaitingForCutover } from '@/lib/tasks/activeMigrations'
-import { stepLabelKey } from '@/lib/tasks/taskProgressDisplay'
+import { activeMigrations, isWaitingForCutover, migrationStepText } from '@/lib/tasks/activeMigrations'
 import { useRouter } from 'next/navigation'
 
 type RunningTask = {
@@ -631,8 +630,7 @@ return () => window.removeEventListener('focus', handleFocus)
             </Box>
             {shownMigrations.map((m, idx) => {
               const waiting = isWaitingForCutover(m)
-              const stepKey = stepLabelKey(m.currentStep)
-              const step = waiting ? t('tasks.shared.waitingForCutover') : (stepKey ? t(`tasks.steps.${stepKey}` as any) : (m.currentStep || m.status))
+              const step = migrationStepText(k => t(k as any), m) ?? m.status
               return (
                 <Box key={m.id}>
                   <Box

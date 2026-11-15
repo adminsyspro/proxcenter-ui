@@ -2,6 +2,8 @@
 
 import { useCallback, useState } from 'react'
 
+import type { StopOptions } from '@/lib/tasks/jobActions'
+
 /**
  * One in-flight stop request, described by the row that offers it: its id (so
  * the button can stay disabled once PVE or the orchestrator has acknowledged),
@@ -9,11 +11,16 @@ import { useCallback, useState } from 'react'
  */
 export type StopTaskTarget = {
   id: string
-  run: () => Promise<{ ok: boolean; error?: string }>
+  run: (opts?: StopOptions) => Promise<{ ok: boolean; error?: string }>
   title?: string
   body?: string
   warning?: string
   confirmLabel?: string
+  /**
+   * A migration row: the confirmation is the one of its migrate dialog, which
+   * offers to remove the copy of a warm run on the target.
+   */
+  migration?: { migrationType: string | null; targetVmid: number | null }
 }
 
 /**
@@ -43,11 +50,11 @@ export function useStopTask(onStopped?: () => void | Promise<void>) {
 
   const clearError = useCallback(() => setError(null), [])
 
-  const confirm = useCallback(async () => {
+  const confirm = useCallback(async (opts?: StopOptions) => {
     if (!target) return
 
     setBusy(true)
-    const { ok, error: failure } = await target.run()
+    const { ok, error: failure } = await target.run(opts)
     setBusy(false)
     setTarget(null)
 

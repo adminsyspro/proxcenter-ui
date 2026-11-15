@@ -365,6 +365,13 @@ export async function GET(req: Request) {
             targetNode: mj.targetNode,
             targetVmid: mj.targetVmid,
             currentStep: mj.currentStep,
+            // The page shows "route • step" with the step translated
+            // (migrationStepText); a warm run's cancel offers to remove its copy.
+            route,
+            migrationStatus: mj.status,
+            migrationType: (mj.config as any)?.migrationType ?? null,
+            cutoverMode: (mj.config as any)?.cutoverMode ?? null,
+            projectedDowntimeSec: mj.projectedDowntimeSec ?? null,
             totalDisks: mj.totalDisks,
             currentDisk: mj.currentDisk,
             transferSpeed: mj.transferSpeed,

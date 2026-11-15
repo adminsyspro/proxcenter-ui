@@ -2778,6 +2778,7 @@
       "testRequested": "Test angefordert: Er startet nach der laufenden Synchronisierung",
       "testRunning": "Test läuft · VM {vmid} · Overlay {size}",
       "testStopping": "Test wird beendet: Test-VM wird entfernt",
+      "testFailed": "Letzter Test fehlgeschlagen: {reason}",
       "testConsole": "Konsole",
       "testStop": "Test beenden",
       "testBlocksCutover": "Beenden Sie den laufenden Test vor dem Cutover",

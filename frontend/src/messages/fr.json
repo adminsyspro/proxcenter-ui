@@ -2789,6 +2789,7 @@
       "testRequested": "Test demandé : il démarre après la synchronisation en cours",
       "testRunning": "Test en cours · VM {vmid} · surcouche {size}",
       "testStopping": "Arrêt du test : suppression de la VM de test",
+      "testFailed": "Le dernier test a échoué : {reason}",
       "testConsole": "Console",
       "testStop": "Arrêter le test",
       "testBlocksCutover": "Arrêtez le test en cours avant le cutover",

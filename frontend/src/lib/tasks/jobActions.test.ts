@@ -365,6 +365,19 @@ describe("runJobAction and runPveTaskStop", () => {
     expect(fetchMock).toHaveBeenLastCalledWith(DRS_TASK_URL, { method: "DELETE" })
   })
 
+  it("asks a migration cancel to remove the copy on the target when the operator ticked it", async () => {
+    const fetchMock = stubFetch({ ok: true, json: async () => ({}) })
+
+    expect(await runJobAction(migration(), "cancel", { removeTarget: true })).toEqual({ ok: true })
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/v1/migrations/mig-1/cancel", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ removeTarget: true }),
+    })
+
+    // unticked: the copy stays, the same request as before
+    await runJobAction(migration(), "cancel", { removeTarget: false })
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/v1/migrations/mig-1/cancel", { method: "POST" })
+  })
+
   it("reports the server's refusal instead of failing silently", async () => {
     stubFetch({ ok: false, json: async () => ({ error: "Forbidden" }) })
 

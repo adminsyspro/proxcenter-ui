@@ -316,6 +316,22 @@ describe("cleanupOrphanedWarmSource", () => {
       expect(await logsOf(job.id)).toContain("Could not remove test VM 9001 on pve1 (PVE 500: VM is locked): delete it in Proxmox, with its disks")
     })
 
+    it("removes its test VM even when a newer run of the same source exists, and keeps away from that run's copy", async () => {
+      // The test VMID belongs to this job alone; the newer run owns the
+      // source snapshot and the reader on the node, not this VM.
+      vi.mocked(removeTestVm).mockClear()
+      readers.mockClear()
+      const job = await seed({ testState: { phase: "running", testVmid: 9001, overlays } })
+      await seed({ status: "full_copy", error: null, logs: [] })
+
+      await cleanupOrphanedWarmSource(job.id)
+
+      expect(removeTestVm).toHaveBeenCalledWith(expect.objectContaining({ vmid: 9001, jobId: job.id, nodeIp: "10.42.0.101", overlays }))
+      expect(await logsOf(job.id)).toContain("Test VM 9001 removed after the server restarted")
+      expect(readers).not.toHaveBeenCalled()
+      expect(login).not.toHaveBeenCalled()
+    })
+
     it("leaves alone a test that had already ended", async () => {
       vi.mocked(removeTestVm).mockClear()
       const job = await seed({ testState: { phase: "ended", testVmid: 9001, overlays } })

@@ -363,8 +363,43 @@ describe("runMigrationTest", () => {
   })
 
   it("refuses a request it cannot read", async () => {
-    h.request.mockResolvedValue(null)
+    h.request.mockResolvedValue({ bridge: "vmbr9" })
     await runMigrationTest(target())
     expect(states().at(-1)).toMatchObject({ phase: "failed", reason: "storage is required" })
+  })
+
+  it("does nothing, and overwrites no earlier result, when the request is already gone from the row", async () => {
+    // A stale mirror read can put the test signal back for a moment after a
+    // test ended and cleared its row: that is not a new request.
+    h.request.mockResolvedValue(null)
+    await expect(runMigrationTest(target())).resolves.toBeUndefined()
+    expect(states()).toEqual([])
+    expect(h.log).not.toHaveBeenCalled()
+    expect(h.clear).toHaveBeenCalledWith("j1")
+  })
+
+  it("retries clearing the request at the end, so the same test does not run again", async () => {
+    stopOnceRunning()
+    let failures = 2
+    const plain = h.fields.getMockImplementation()!
+    h.fields.mockImplementation(async (id: unknown, data: any) => {
+      if (data && "testRequest" in data && failures-- > 0) throw new Error("connection reset")
+      return plain(id, data)
+    })
+    await runMigrationTest(target())
+    const clears = h.fields.mock.calls.filter(c => c[1] && "testRequest" in (c[1] as object))
+    expect(clears).toHaveLength(3)
+    expect(h.clear).toHaveBeenCalledWith("j1")
+  })
+
+  it("says in the log at error level when the request could not be cleared", async () => {
+    stopOnceRunning()
+    const plain = h.fields.getMockImplementation()!
+    h.fields.mockImplementation(async (id: unknown, data: any) => {
+      if (data && "testRequest" in data) throw new Error("connection reset")
+      return plain(id, data)
+    })
+    await runMigrationTest(target())
+    expect(h.log.mock.calls.some(c => c[2] === "error" && String(c[1]).includes("could not clear the test request"))).toBe(true)
   })
 })

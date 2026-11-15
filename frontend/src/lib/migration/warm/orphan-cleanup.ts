@@ -210,35 +210,23 @@ export async function cleanupOrphanedWarmSource(jobId: string, deps: WarmOrphanC
       lines.push({ msg: `Target VM ${job.targetVmid} on ${job.targetNode} was left as the interrupted run made it. Delete it in Proxmox if you do not keep it; a retry creates a new VM.`, level: "warn" })
     }
 
-    // A newer run of the same VM owns whatever proxcenter-warm-* is there now.
-    const newer = await prisma.migrationJob.findFirst({
-      where: { id: { not: job.id }, sourceConnectionId: job.sourceConnectionId, sourceVmId: job.sourceVmId, status: { notIn: [...TERMINAL_STATUSES, "queued"] } },
-      select: { id: true },
-    })
-    if (newer) return
-
-    // The run's nbdkit reader outlives the server on the target node and keeps
-    // the source disk open (NFC session on vSphere, NBD export on XCP-ng): the
-    // snapshot then cannot go cleanly. Stop it first (a reader is only killed
-    // when its job is terminal, which this one now is).
+    let pveConn: Awaited<ReturnType<typeof getConnectionById>> | null = null
     let nodeIp: Awaited<ReturnType<typeof getNodeSshEndpointForMigration>> | null = null
+    let unreachable = ""
     try {
-      const pveConn = await getConnectionById(job.targetConnectionId, job.tenantId)
+      pveConn = await getConnectionById(job.targetConnectionId, job.tenantId)
       nodeIp = await getNodeSshEndpointForMigration(prisma, job.targetConnectionId, job.targetNode, pveConn.baseUrl)
-      await sweepOrphanReaders({
-        connectionId: job.targetConnectionId, nodeIp, nodeName: job.targetNode, currentJobId: "",
-        log: async (msg, level) => { lines.push({ msg, level: level ?? "info" }) },
-        prisma,
-      })
     } catch (e: any) {
-      lines.push({ msg: `Could not stop the copy reader of this run on ${job.targetNode} (${e?.message || e}); the next warm job on that node will.`, level: "warn" })
+      unreachable = e?.message || String(e)
     }
-    // A test VM boots on overlays backed by the copy (migration-test.ts): it
-    // goes first, as it holds the copy's devices open.
+
+    // A test VM boots on overlays backed by the copy (migration-test.ts). Its
+    // VMID belongs to this job alone, so it goes even when a newer run of the
+    // same source exists, and before anything of the copy is released.
     const test = readTestState(job.testState)
     if (test?.testVmid && test.phase !== "ended" && test.phase !== "failed") {
       try {
-        const pveConn = await getConnectionById(job.targetConnectionId, job.tenantId)
+        if (!pveConn) throw new Error(unreachable || `${job.targetNode} could not be reached`)
         const removal = await removeTestVm({ pveConn, node: job.targetNode, vmid: test.testVmid, jobId: job.id, connectionId: job.targetConnectionId, nodeIp, overlays: test.overlays ?? [] })
         if (!removal.removed) throw new Error(removal.reason)
         await prisma.migrationJob.update({
@@ -249,6 +237,29 @@ export async function cleanupOrphanedWarmSource(jobId: string, deps: WarmOrphanC
       } catch (e: any) {
         lines.push({ msg: `Could not remove test VM ${test.testVmid} on ${job.targetNode} (${e?.message || e}): delete it in Proxmox, with its disks`, level: "warn" })
       }
+    }
+
+    // A newer run of the same VM owns whatever proxcenter-warm-* is there now,
+    // and the reader on the node.
+    const newer = await prisma.migrationJob.findFirst({
+      where: { id: { not: job.id }, sourceConnectionId: job.sourceConnectionId, sourceVmId: job.sourceVmId, status: { notIn: [...TERMINAL_STATUSES, "queued"] } },
+      select: { id: true },
+    })
+    if (newer) return
+
+    // The run's nbdkit reader outlives the server on the target node and keeps
+    // the source disk open (NFC session on vSphere, NBD export on XCP-ng): the
+    // snapshot then cannot go cleanly. Stop it first (a reader is only killed
+    // when its job is terminal, which this one now is).
+    try {
+      if (!nodeIp) throw new Error(unreachable || `${job.targetNode} could not be reached`)
+      await sweepOrphanReaders({
+        connectionId: job.targetConnectionId, nodeIp, nodeName: job.targetNode, currentJobId: "",
+        log: async (msg, level) => { lines.push({ msg, level: level ?? "info" }) },
+        prisma,
+      })
+    } catch (e: any) {
+      lines.push({ msg: `Could not stop the copy reader of this run on ${job.targetNode} (${e?.message || e}); the next warm job on that node will.`, level: "warn" })
     }
     if (nodeIp && job.targetVmid) {
       await unmapTargetRbd({ connectionId: job.targetConnectionId, nodeIp, node: job.targetNode, vmid: job.targetVmid, logs: job.logs }, lines)

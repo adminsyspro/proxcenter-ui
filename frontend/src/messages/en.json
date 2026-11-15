@@ -2789,6 +2789,7 @@
       "testRequested": "Test requested: it starts after the sync in progress",
       "testRunning": "Test running · VM {vmid} · overlay {size}",
       "testStopping": "Stopping the test: removing the test VM",
+      "testFailed": "Last test failed: {reason}",
       "testConsole": "Console",
       "testStop": "Stop test",
       "testBlocksCutover": "Stop the running test before the cutover",

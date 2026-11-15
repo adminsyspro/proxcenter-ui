@@ -212,7 +212,7 @@ describe('guest conversion at cutover (#1000)', () => {
     fireEvent.click(screen.getByRole('button', { name: CUTOVER_LABEL }))
     const box = await screen.findByTestId('cutover-convert-guest') as HTMLInputElement
     expect(box.checked).toBe(true)
-    expect(screen.getByText(/Adds about 60 s to the downtime/)).toBeInTheDocument()
+    expect(screen.getByText(/Adds about 100 s to the downtime/)).toBeInTheDocument()
 
     fireEvent.click(box)
     expect(screen.getByText(/No conversion: the VM boots on the hardware it supports/)).toBeInTheDocument()

@@ -3,14 +3,10 @@ import { NextResponse } from "next/server"
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { migrateScope, scopedJobWhere } from "@/lib/migration/authorize"
-import { requestWarmCutover } from "@/lib/migration/warm/warm-pipeline"
+import { CUTOVER_ELIGIBLE, requestJobCutover } from "@/lib/migration/warm/request-cutover"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
-
-// Warm-only statuses; cold/live/v2v pipelines never reach these, so a status
-// check alone gates this to interactive warm migrations.
-const CUTOVER_ELIGIBLE = new Set(["delta_sync", "awaiting_cutover"])
 
 /**
  * POST /api/v1/migrations/[id]/cutover
@@ -49,15 +45,7 @@ async function handlePost(
       nextConfig = { ...config, convertGuest: body.convertGuest }
     }
 
-    // The row is the signal: the pipeline mirrors it back into its own
-    // registry (lib/migration/operator-signals). Writing it before the
-    // in-process call is what makes the click survive a route handler that
-    // does not share the pipeline's module instance, which is the normal case
-    // in dev and with more than one frontend replica in production. The
-    // conversion choice rides in the same write: the pipeline reads it back
-    // from the row at cutover, and a retry replays it.
-    await prisma.migrationJob.update({ where: { id }, data: { cutoverRequestedAt: new Date(), ...(nextConfig && { config: nextConfig }) } })
-    requestWarmCutover(id)
+    await requestJobCutover(prisma, id, nextConfig)
     return NextResponse.json({ data: { status: "cutover_requested" } })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })

@@ -54,7 +54,6 @@ vi.mock('@mui/x-data-grid', () => ({
   },
 }))
 vi.mock('./TaskDetailDialog', () => ({ default: () => null }))
-vi.mock('@/components/SharedTaskDetailDialog', () => ({ default: () => null }))
 vi.mock('@/components/tasks/JobDetailDialog', () => ({ default: () => null }))
 
 afterEach(() => {

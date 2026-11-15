@@ -515,8 +515,10 @@ describe("convertGuestAtCutover", () => {
     expect(commands().some(c => c.includes("online-disks.exit"))).toBe(false)
   })
 
-  it("announces about a minute of downtime", () => {
-    expect(GUEST_CONVERSION_ESTIMATE_SEC).toBe(60)
+  it("announces the downtime the lab measured at cutover, not the bare conversion", () => {
+    // 95 s on Debian 13 (XCP-ng) and 99 s on Windows Server 2022 (vCenter) on
+    // 14/11/2026: at 60 s a 2 min budget was accepted, then missed by 10-15 s.
+    expect(GUEST_CONVERSION_ESTIMATE_SEC).toBe(100)
   })
 })
 

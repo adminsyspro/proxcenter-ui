@@ -62,6 +62,12 @@ export interface WarmMigrationConfig {
    */
   cutoverMode?: "auto" | "manual"
   /**
+   * Seconds between two delta passes while a manual cutover is awaited. Absent
+   * means the setting of the source connection, one minute when it has none
+   * (lib/migration/warm/sync-interval-source).
+   */
+  syncIntervalSec?: number
+  /**
    * Cap on the write rate of the thick-target zeroing, MB/s (roadmap#45). 0 is
    * unlimited; absent means the cap of the target PVE connection.
    */

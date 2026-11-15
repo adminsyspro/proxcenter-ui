@@ -40,14 +40,10 @@ const navigationCustomStyles = (verticalNavOptions, theme) => {
       }
     },
     [`& .${menuClasses.root}`]: {
-      paddingBlockEnd: theme.spacing(10),
-      ...(collapsedNotHovered
-        ? {
-            paddingInlineEnd: theme.spacing(1.25)
-          }
-        : {
-            paddingInlineEnd: theme.spacing(4)
-          })
+      // Items run to the nav edge, and the first one lines up with the top of the page block
+      // (header 64px + layout padding 12px, minus the 59px nav header)
+      paddingBlockStart: 17,
+      paddingBlockEnd: theme.spacing(10)
     },
     [`& .${verticalNavClasses.backdrop}`]: {
       backgroundColor: 'var(--backdrop-color)'

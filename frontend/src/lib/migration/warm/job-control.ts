@@ -72,12 +72,22 @@ export function isCutoverRequested(jobId: string): boolean { return cutoverReque
 /** @internal test hook */
 export function __isCutoverRequestedForTest(jobId: string): boolean { return isCutoverRequested(jobId) }
 
+/**
+ * Move a job to a status. The write that ends a run (completed, failed,
+ * cancelled) always lands. A step of a run still working does not land on a
+ * row the operator cancelled meanwhile: the cancel route writes the row, the
+ * pipeline only reads it on the next poll of its signals, and a progress write
+ * in between used to put the migration back to "delta_sync", so it kept
+ * syncing behind a task shown as stopped until a second cancel got through.
+ */
 export async function updateJob(id: string, status: WarmStatus, extra: Record<string, any> = {}) {
   const prisma = jobPrisma.get(id)
-  await prisma.migrationJob.update({
-    where: { id },
-    data: { status, currentStep: status, ...(status === "completed" ? { completedAt: new Date() } : {}), ...extra },
-  })
+  const data = { status, currentStep: status, ...(status === "completed" ? { completedAt: new Date() } : {}), ...extra }
+  if ((TERMINAL_STATUSES as readonly string[]).includes(status)) {
+    await prisma.migrationJob.update({ where: { id }, data })
+    return
+  }
+  await prisma.migrationJob.updateMany({ where: { id, status: { not: "cancelled" } }, data })
 }
 
 /**
@@ -92,6 +102,17 @@ export async function updateJobLive(id: string, status: WarmStatus, extra: Recor
     where: { id, status: { notIn: [...TERMINAL_STATUSES] } },
     data: { status, currentStep: status, ...extra },
   })
+}
+
+/**
+ * Write fields of a job that is still running without touching its status or
+ * its step: a figure the engine derives on the side (the suggested sync
+ * interval) must not move what the follow-up shows. Scoped to a non-terminal
+ * status like updateJobLive, so it never writes on a job that has ended.
+ */
+export async function updateJobFields(id: string, data: Record<string, any>) {
+  const prisma = jobPrisma.get(id)
+  await prisma.migrationJob.updateMany({ where: { id, status: { notIn: [...TERMINAL_STATUSES] } }, data })
 }
 
 /**
@@ -126,17 +147,12 @@ export async function appendStep(id: string, step: WarmLogStep, title: string) {
 const OPERATOR_GATE_TIMEOUT_MS = 2 * 60 * 60 * 1000 // 2h safety cap
 
 /**
- * Pacing between two delta passes of a manual hold. A converged source yields
- * empty passes in seconds; without this the hold would snapshot and consolidate
- * on vCenter in a tight loop for its whole duration, which is exactly the churn
- * that broke a 3 TB run (#678). Deliberately not configurable: it only changes
- * how fresh the projection is, and a minute is fresh enough to decide on.
- */
-export const HOLD_PASS_INTERVAL_MS = 60 * 1000
-
-/**
  * Wait between two hold passes, in slices, so the operator's cutover request is
- * picked up within a second instead of after the full interval. Returns false
+ * picked up within a second instead of after the full interval. A converged
+ * source yields empty passes in seconds; without this pause the hold would
+ * snapshot and consolidate on vCenter in a tight loop for its whole duration,
+ * which is exactly the churn that broke a 3 TB run (#678). How long the pause
+ * lasts is an operator setting (./sync-interval), applied by ./hold-wait. Returns false
  * when a cutover was requested (the caller stops replicating and switches over),
  * true when the wait ran to the end. Throws on cancellation, like every other
  * wait in this pipeline.

@@ -22,9 +22,12 @@ const h = vi.hoisted(() => ({
   // answer with its own key.
   t: (key: string) => (key === 'jobs.running' ? 'Running' : key),
   emptyList: { data: { data: [] as unknown[] } },
-  router: { push: () => {} },
+  router: { push: (url: string) => { h.pushed.push(url) } },
+  pushed: [] as string[],
   rollingUpdates: { activeUpdates: [] as unknown[], openMonitor: () => {} },
   tenant: { currentTenant: { id: 'default' }, loading: false },
+  shared: { data: { data: [] as unknown[] } },
+  restoreTask: (() => false) as (id: string) => boolean,
 }))
 
 // ⚠️ Every mocked hook has to return a STABLE value across renders, the way
@@ -40,6 +43,8 @@ vi.mock('@/hooks/useNavbarNotifications', () => ({ useActiveDeployments: () => h
 vi.mock('@/contexts/RollingUpdateContext', () => ({ useRollingUpdates: () => h.rollingUpdates }))
 vi.mock('@/contexts/TenantContext', () => ({ useTenant: () => h.tenant }))
 vi.mock('@/contexts/BrandingContext', () => ({ useBranding: () => ({ branding: h.branding }) }))
+vi.mock('@/hooks/useSharedTasks', () => ({ useSharedTasks: () => h.shared }))
+vi.mock('@/contexts/ProxCenterTasksContext', () => ({ useProxCenterTasks: () => ({ restoreTask: (id: string) => h.restoreTask(id) }) }))
 
 import TasksDropdown from './TasksDropdown'
 
@@ -59,6 +64,9 @@ const shell = (id: string, node: string): Task => ({
 
 beforeEach(() => {
   h.tasks = []
+  h.shared = { data: { data: [] } }
+  h.pushed = []
+  h.restoreTask = () => false
   h.branding = { browserTitle: '' }
   document.title = 'PROXCENTER'
 })
@@ -165,5 +173,86 @@ describe('TasksDropdown tab title', () => {
     render(<TasksDropdown />)
 
     await waitFor(() => expect(document.title).toBe('⏳ 2 running · PROXCENTER'))
+  })
+})
+
+const migration = (id: string, over: Record<string, unknown> = {}) => ({
+  id, kind: 'migration', label: `${id} (vCenter -> Proxmox)`, sourceVmName: id, sourceConnectionId: 'vc1', sourceVmId: `vm-${id}`, batchId: null, targetNode: 'pve1', targetVmid: null,
+  status: 'full_copy', currentStep: 'full_copy', progress: 40, totalDisks: 1, currentDisk: 0, bytesTransferred: null, totalBytes: null,
+  transferSpeed: null, error: null, projectedDowntimeSec: null, cutoverMode: 'auto', convertGuest: true, isMine: true,
+  createdByName: 'test', createdAt: new Date().toISOString(), startedAt: null, completedAt: null, ...over,
+})
+
+describe('TasksDropdown migrations', () => {
+  const open = (container: HTMLElement) => fireEvent.click(container.querySelector('button') as HTMLElement)
+
+  it('lists the migrations under way in their own section and counts them on the button', async () => {
+    h.shared = { data: { data: [migration('db-01'), migration('old', { status: 'completed', progress: 100 })] } }
+
+    const { container, getByTestId, queryByText, findAllByTestId } = render(<TasksDropdown />)
+    open(container)
+
+    const rows = await findAllByTestId('tasks-dropdown-migration')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toHaveTextContent('db-01')
+    expect(rows[0]).toHaveTextContent('tasks.steps.full_copy')
+    expect(rows[0]).toHaveTextContent('40%')
+    expect(getByTestId('tasks-dropdown-migrations')).toHaveTextContent('notifications.migrations')
+    // the empty state is for a menu with nothing at all under way
+    expect(queryByText('common.noData')).toBeNull()
+    expect(container.querySelector('.MuiBadge-badge')).toHaveTextContent('1')
+  })
+
+  it('says a manual warm migration waits for its cutover rather than syncing', async () => {
+    h.shared = { data: { data: [migration('web', { status: 'delta_sync', currentStep: 'delta_7', progress: 90, cutoverMode: 'manual', projectedDowntimeSec: 112 })] } }
+
+    const { container, findByTestId } = render(<TasksDropdown />)
+    open(container)
+
+    expect(await findByTestId('tasks-dropdown-migration')).toHaveTextContent('tasks.shared.waitingForCutover')
+  })
+
+  it('opens the migrate dialog of the run on its source host, like the task bar', async () => {
+    h.shared = { data: { data: [migration('db-01')] } }
+
+    const { container, findByTestId } = render(<TasksDropdown />)
+    open(container)
+    fireEvent.click(await findByTestId('tasks-dropdown-migration'))
+
+    expect(h.pushed).toEqual(['/infrastructure/inventory?selectType=ext&selectId=vc1&openMigration=db-01'])
+  })
+
+  it('opens the follow-up of its batch for a run of a bulk migration', async () => {
+    h.shared = { data: { data: [migration('db-02', { batchId: 'b-1' })] } }
+
+    const { container, findByTestId } = render(<TasksDropdown />)
+    open(container)
+    fireEvent.click(await findByTestId('tasks-dropdown-migration'))
+
+    expect(h.pushed).toEqual(['/infrastructure/inventory?selectType=ext&selectId=vc1&openBatch=b-1'])
+  })
+
+  it('reopens the migrate dialog that started the run when this tab still holds it, like the task bar', async () => {
+    const restored: string[] = []
+    h.restoreTask = id => { restored.push(id); return true }
+    h.shared = { data: { data: [migration('db-01')] } }
+
+    const { container, findByTestId } = render(<TasksDropdown />)
+    open(container)
+    fireEvent.click(await findByTestId('tasks-dropdown-migration'))
+
+    expect(restored).toEqual(['migration-db-01'])
+    expect(h.pushed).toEqual([])
+  })
+
+  it('shows five migrations of a big wave, then the rest on demand', async () => {
+    h.shared = { data: { data: Array.from({ length: 8 }, (_, i) => migration(`vm-${i}`)) } }
+
+    const { container, findAllByTestId, getByTestId } = render(<TasksDropdown />)
+    open(container)
+
+    expect(await findAllByTestId('tasks-dropdown-migration')).toHaveLength(5)
+    fireEvent.click(getByTestId('tasks-dropdown-migrations-more'))
+    expect(await findAllByTestId('tasks-dropdown-migration')).toHaveLength(8)
   })
 })

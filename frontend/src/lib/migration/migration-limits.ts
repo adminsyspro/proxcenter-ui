@@ -123,15 +123,40 @@ export function pickJobsToStart({ queued, running, batchRunning, limits }: PickI
   return picked
 }
 
+/**
+ * Whether one more migration may run now for `job`, given the ones running
+ * into its target cluster or reading from its source: the test a warm job
+ * waiting for a manual cutover passes before each delta pass
+ * (lib/migration/warm/hold-slot). Same counting as pickJobsToStart, without
+ * the batch concurrency: a pass lasts seconds and must not queue behind the
+ * wave of its own batch.
+ */
+export function hasFreeSlot(job: { targetNode: string; sourceHostKey: string | null }, running: RunningSlotJob[], limits: MigrationLimits): boolean {
+  const sameTarget = running.filter(r => r.sameTarget)
+  if (sameTarget.length >= limits.cluster) return false
+  if (sameTarget.filter(r => r.targetNode === job.targetNode).length >= limits.perNode) return false
+  if (job.sourceHostKey && running.filter(r => r.sourceHostKey === job.sourceHostKey).length >= limits.perSourceHost) return false
+  return true
+}
+
 const TARGET_LIMIT_FIELDS = ["migrationMaxParallel", "migrationMaxPerNode"] as const
 const SOURCE_LIMIT_FIELDS = ["migrationMaxPerSourceHost"] as const
-export type MigrationLimitField = typeof TARGET_LIMIT_FIELDS[number] | typeof SOURCE_LIMIT_FIELDS[number]
-const LIMIT_FIELDS_BY_TYPE: Record<string, readonly MigrationLimitField[]> = { pve: TARGET_LIMIT_FIELDS, vmware: SOURCE_LIMIT_FIELDS }
+// Interval between two delta passes of a warm migration waiting for a manual
+// cutover (lib/migration/warm/sync-interval): a setting of the sources whose
+// warm pipeline holds, VMware and XCP-ng.
+const SYNC_INTERVAL_FIELDS = ["migrationSyncIntervalSec"] as const
+export type MigrationLimitField = typeof TARGET_LIMIT_FIELDS[number] | typeof SOURCE_LIMIT_FIELDS[number] | typeof SYNC_INTERVAL_FIELDS[number]
+const LIMIT_FIELDS_BY_TYPE: Record<string, readonly MigrationLimitField[]> = {
+  pve: TARGET_LIMIT_FIELDS,
+  vmware: [...SOURCE_LIMIT_FIELDS, ...SYNC_INTERVAL_FIELDS],
+  xcpng: SYNC_INTERVAL_FIELDS,
+}
 
 /**
  * The limit settings of `body` that belong to a connection of `type`: the
  * cluster and per-node limits on a PVE target, the per-host limit on a VMware
- * source. Null (back to the default) is kept; a field not sent is left out.
+ * source, the sync interval on a VMware or XCP-ng source. Null (back to the
+ * default) is kept; a field not sent is left out.
  */
 export function migrationLimitFields(type: string | null | undefined, body: Record<string, unknown>): Partial<Record<MigrationLimitField, number | null>> {
   const fields: readonly MigrationLimitField[] = LIMIT_FIELDS_BY_TYPE[type ?? ""] ?? []

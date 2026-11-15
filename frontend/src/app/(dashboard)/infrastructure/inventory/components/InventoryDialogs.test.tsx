@@ -1311,6 +1311,8 @@ describe('migration dialog options', () => {
 
     fireEvent.click(screen.getByText('harness-open-single'))
     const panel = await screen.findByTestId('mig-warm-prereqs')
+    // The readiness of the target node sits with the target, right under the VMID field.
+    expect(screen.getByTestId('migration-column-target')).toContainElement(panel)
     expect(screen.getAllByRole('alert').filter(a => a.textContent?.includes('vddk-lib') || a.textContent?.includes('virt-v2v-in-place'))).toHaveLength(1)
     const runtime = within(panel).getByTestId('mig-warm-prereq-runtime')
     const conversion = within(panel).getByTestId('mig-convert-guest-missing')
@@ -1494,9 +1496,9 @@ describe('migration dialog options', () => {
     expect(warmCheck.requiredDiskBytes).toBe(0)
   })
 
-  // #663: the budget only governs the automatic decision, so it follows the
-  // switch instead of sitting there inert next to a hold.
-  it('shows the downtime budget only while the cutover stays automatic', async () => {
+  // #663: the budget only governs the automatic decision. Held for the
+  // operator, the same field becomes the downtime the cutover aims at.
+  it('turns the downtime budget into a target once the cutover is manual', async () => {
     renderWithProviders(
       <OptionsHarness dialogOverrides={{ migType: 'warm' }} />,
     )
@@ -1505,7 +1507,8 @@ describe('migration dialog options', () => {
     expect(screen.getByRole('slider', { name: BUDGET_LABEL })).toBeInTheDocument()
 
     fireEvent.click(getSwitch(AUTO_CUTOVER_LABEL))
-    await waitFor(() => expect(screen.queryByRole('slider', { name: BUDGET_LABEL })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('slider', { name: 'Target downtime' })).toBeInTheDocument())
+    expect(screen.queryByRole('slider', { name: BUDGET_LABEL })).not.toBeInTheDocument()
   })
 
   it('hides the downtime budget outside a warm migration', () => {

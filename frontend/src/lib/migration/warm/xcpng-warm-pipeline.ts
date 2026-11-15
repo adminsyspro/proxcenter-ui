@@ -27,13 +27,15 @@ import type { Extent } from "./extents"
 import type { WarmMigrationConfig } from "./types"
 import {
   registerJob, unregisterJob, acquireVmLock, releaseVmLock, updateJob, updateJobLive, appendLog, appendStep, readJobConfig,
-  isCancelled, isCutoverRequested, sleepUnlessCutover, awaitOperatorCutover, runDeltaPassWithRetry, HOLD_PASS_INTERVAL_MS,
+  isCancelled, isCutoverRequested, awaitOperatorCutover, runDeltaPassWithRetry,
 } from "./job-control"
 import {
   applyExtentsWithProgress, checksumDiskWindows, scaleWarmProgress, warmFinalTransfer, APPLY_INACTIVITY_MS, PROGRESS_LOG_INTERVAL_MS,
   type PassWindow, type PassProgress,
 } from "./apply"
 import { createTargetVmShell, provisionBlockTargets, markVolumesCopied } from "./target-provision"
+import { awaitNextHoldPass, describeHoldInterval } from "./hold-wait"
+import { catchUpBeforeCutover } from "./catch-up"
 import { resolveWarmZeroRateLimit } from "./zero-rate-target"
 import { sweepOrphanReaders } from "./orphan-readers"
 import { cleanShutdownAndConfirm, isXapiGuestAgentMissing, type PowerOffOps } from "./power-off"
@@ -333,6 +335,10 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       markVolumesCopied(allocatedVolumes)
       const fullSec = Math.max(1, (Date.now() - t0) / 1000)
       let throughput = full.bytes / fullSec
+      // The rate of the full copy stays the reference for what a sync can copy:
+      // the rate of a delta pass divides a few megabytes by a time that is
+      // mostly snapshot handling, and says nothing about the copy itself.
+      const copyRateBytesPerSec = throughput
       await updateJob(jobId, "full_copy", { progress: 80, bytesTransferred: BigInt(full.bytes), transferSpeed: `${(throughput / 1048576).toFixed(0)} MB/s` })
       await appendLog(jobId, `Full copy done: ${(full.bytes / 1073741824).toFixed(2)} GB at ${(throughput / 1048576).toFixed(0)} MB/s`, "success")
 
@@ -341,12 +347,16 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       // the projection counts it as part of the downtime.
       const verifySec = config.convertGuest === false ? 0 : GUEST_CONVERSION_ESTIMATE_SEC
       const cfg: ConvergenceConfig = { downtimeBudgetSec: budget, maxPasses, shutdownSec: 20, bootSec: 30, verifySec, cutoverMode }
-      if (cutoverMode === "manual") await appendLog(jobId, `Manual cutover: replication will keep running and the migration will wait for you. Click "Cutover now" when your window opens.`, "info")
+      if (cutoverMode === "manual") await appendLog(jobId, `Manual cutover: replication will keep running, with a sync every ${await describeHoldInterval(config)}, and the migration will wait for you. Click "Cutover now" when your window opens.`, "info")
       await appendStep(jobId, "delta", "Delta sync")
       let pass = 0
+      // The operator asked for the cutover (hold or gate): the copy may be an
+      // interval behind, so it is brought up to date before the source stops.
+      let operatorCutover = false
+      let lastPassEndMs: number | undefined
       while (true) {
         if (isCancelled(jobId)) throw new Error("Migration cancelled")
-        if (isCutoverRequested(jobId)) { await appendLog(jobId, "Operator requested cutover: proceeding to final delta", "info"); break }
+        if (isCutoverRequested(jobId)) { await appendLog(jobId, "Operator requested cutover: proceeding to final delta", "info"); operatorCutover = true; break }
         const tk = Date.now()
         await updateJob(jobId, "delta_sync", { currentStep: `delta_${pass + 1}` })
         const deltaWindow: PassWindow = cutoverMode === "manual"
@@ -355,18 +365,28 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
         // A failed pass leaves the baseline untouched, so it is retried rather
         // than thrown away with hours of replication (#1028).
         const r = await runDeltaPassWithRetry(jobId, `Delta pass ${pass + 1}`, () => runPass(`delta-${pass + 1}`, baseline, deltaWindow))
-        if (r === null) { await appendLog(jobId, "Operator requested cutover: proceeding to final delta", "info"); break }
+        if (r === null) { await appendLog(jobId, "Operator requested cutover: proceeding to final delta", "info"); operatorCutover = true; break }
         baseline = r.snap
         copiedBytes += r.bytes
+        lastPassEndMs = Date.now()
         const dsec = Math.max(1, (Date.now() - tk) / 1000)
         throughput = r.bytes > 0 ? r.bytes / dsec : throughput
         await appendLog(jobId, `Delta pass ${pass + 1}: ${(r.bytes / 1048576).toFixed(1)} MB`)
         const decision = decideNextPass(pass, { deltaBytes: r.bytes, throughputBytesPerSec: throughput }, cfg)
         await updateJob(jobId, "delta_sync", { currentStep: `delta_${pass + 1}`, projectedDowntimeSec: decision.projectedDowntimeSec, progress: Math.round(deltaWindow.rangeEnd) })
         if (decision.action === "cutover") break
-        if (decision.action === "operator-gate") { await awaitOperatorCutover(jobId, decision.projectedDowntimeSec, budget, maxPasses, { floorSec: cfg.shutdownSec + cfg.bootSec }); break }
-        if (cutoverMode === "manual" && !(await sleepUnlessCutover(jobId, HOLD_PASS_INTERVAL_MS))) { await appendLog(jobId, "Operator requested cutover: proceeding to final delta", "info"); break }
+        if (decision.action === "operator-gate") { await awaitOperatorCutover(jobId, decision.projectedDowntimeSec, budget, maxPasses, { floorSec: cfg.shutdownSec + cfg.bootSec }); operatorCutover = true; break }
+        if (cutoverMode === "manual" && !(await awaitNextHoldPass(jobId, config, { durationSec: dsec, deltaBytes: r.bytes, throughputBytesPerSec: copyRateBytesPerSec, budgetSec: budget, fixedDowntimeSec: cfg.shutdownSec + cfg.bootSec + verifySec }))) { await appendLog(jobId, "Operator requested cutover: proceeding to final delta", "info"); operatorCutover = true; break }
         pass++
+      }
+
+      if (operatorCutover) {
+        await updateJob(jobId, "cutover", { currentStep: "catch_up" })
+        copiedBytes += await catchUpBeforeCutover(jobId, lastPassEndMs, async () => {
+          const r = await runPass("catchup", baseline, { status: "cutover", currentStep: "catch_up", rangeStart: 94, rangeEnd: 95 })
+          baseline = r.snap
+          return r.bytes
+        })
       }
 
       // ── cutover (95 -> 98): confirmed power off, then the final delta ──

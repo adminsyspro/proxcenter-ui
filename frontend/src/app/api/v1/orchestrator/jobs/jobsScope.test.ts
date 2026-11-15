@@ -287,6 +287,8 @@ describe("GET /api/v1/orchestrator/jobs — tenant scoping", () => {
     expect(mig.target).toBe("pve1.example.com")
     expect(mig.detail).toBe("vCenter → pve-node-01 (VMID 210) • disk 1/2")
     expect(mig.metadata.cancellable).toBe(true)
+    // what reopens the dialog the run was started from (lib/migration/migrationJobOpen)
+    expect(mig.metadata).toMatchObject({ sourceConnectionId: "vmw-1", batchId: null })
     expect(body.data.map((j: any) => j.id)).toContain("mig-c2")
     expect(migrationFindManyMock.mock.calls[0][0].where).toEqual({})
     expect(migrationFindManyMock.mock.calls[0][0].omit).toEqual({ logs: true })

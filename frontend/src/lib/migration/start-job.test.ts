@@ -49,7 +49,7 @@ beforeEach(() => {
 
 describe("startMigrationJob", () => {
   it("routes a VMware warm job to the VMware warm engine with every warm option", async () => {
-    const config = { ...base, migrationType: "warm", sourceType: "vcenter", downtimeBudgetSec: 600, cutoverMode: "manual", zeroRateLimitMBps: 200, copyVmk: "vmk2", copyAddress: "10.0.0.2", vddkLibdir: "/opt/vddk", targetVmid: 900, hardware: { cores: 2 }, nics: [{ index: 0, bridge: "vmbr1" }], disks: [{ index: 1, targetStorage: "ZFS-Pool" }] }
+    const config = { ...base, migrationType: "warm", sourceType: "vcenter", downtimeBudgetSec: 600, cutoverMode: "manual", syncIntervalSec: 900, zeroRateLimitMBps: 200, copyVmk: "vmk2", copyAddress: "10.0.0.2", vddkLibdir: "/opt/vddk", targetVmid: 900, hardware: { cores: 2 }, nics: [{ index: 0, bridge: "vmbr1" }], disks: [{ index: 1, targetStorage: "ZFS-Pool" }] }
 
     await startMigrationJob(job(config), "t1")
 
@@ -57,7 +57,7 @@ describe("startMigrationJob", () => {
       sourceConnectionId: "src", sourceVmId: "vm-1", targetConnectionId: "tgt", targetNode: "pve1", targetStorage: "local-lvm",
       networkBridge: "vmbr0", vlanTag: undefined, startAfterMigration: false, convertDisksToQcow2: false, cpuType: "host",
       hardware: { cores: 2 }, nics: [{ index: 0, bridge: "vmbr1" }], disks: [{ index: 1, targetStorage: "ZFS-Pool" }], targetVmid: 900, vddkLibdir: "/opt/vddk",
-      downtimeBudgetSec: 600, cutoverMode: "manual", zeroRateLimitMBps: 200, copyVmk: "vmk2",
+      downtimeBudgetSec: 600, cutoverMode: "manual", syncIntervalSec: 900, zeroRateLimitMBps: 200, copyVmk: "vmk2",
     }, "t1")
     expect(cold).not.toHaveBeenCalled()
     expect(h.connection.findUnique).not.toHaveBeenCalled()
@@ -143,7 +143,7 @@ describe("startMigrationJob", () => {
 describe("config builders", () => {
   it("omit absent options", () => {
     const w = warmConfigFromJobConfig({ ...base }, "warm-vmware")
-    for (const k of ["targetVmid", "vddkLibdir", "downtimeBudgetSec", "cutoverMode", "zeroRateLimitMBps", "copyVmk", "hardware", "nics", "disks"]) {
+    for (const k of ["targetVmid", "vddkLibdir", "downtimeBudgetSec", "cutoverMode", "syncIntervalSec", "zeroRateLimitMBps", "copyVmk", "hardware", "nics", "disks"]) {
       expect(w).not.toHaveProperty(k)
     }
     const c = coldConfigFromJobConfig({ ...base, migrationType: "cold" })

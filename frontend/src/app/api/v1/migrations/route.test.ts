@@ -102,6 +102,49 @@ describe("POST /api/v1/migrations — warm routing", () => {
     expect(h.prisma.migrationJob.create.mock.calls[0][0].data.config).toMatchObject({ cutoverMode: "manual" })
   })
 
+  it("forwards a sync interval typed in the dialog to the warm pipeline and keeps it for a retry", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    const res = await callRoute(POST, { body: { ...body, cutoverMode: "manual", syncIntervalSec: 1800 } })
+    expect(res.status).toBe(200)
+
+    await runAfters()
+    expect(warm.mock.calls[0][1]).toMatchObject({ cutoverMode: "manual", syncIntervalSec: 1800 })
+    expect(createdJobData().config).toMatchObject({ syncIntervalSec: 1800 })
+  })
+
+  it("leaves the sync interval out when the caller omits it, so the source connection's setting applies", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    await callRoute(POST, { body: { ...body, cutoverMode: "manual" } })
+    await runAfters()
+    expect(warm.mock.calls[0][1]).not.toHaveProperty("syncIntervalSec")
+    expect(createdJobData().config).not.toHaveProperty("syncIntervalSec")
+  })
+
+  it("rejects a sync interval under a minute or over a day", async () => {
+    for (const syncIntervalSec of [59, 86401, 90.5, "soon"]) {
+      h.prisma.connection.findUnique.mockReset()
+      const res = await callRoute(POST, { body: { ...body, cutoverMode: "manual", syncIntervalSec } })
+      expect(res.status, String(syncIntervalSec)).toBe(400)
+      expect((await readJson<any>(res))?.error).toBe("syncIntervalSec must be an integer between 60 and 86400 seconds")
+    }
+    expect(h.prisma.migrationJob.create).not.toHaveBeenCalled()
+  })
+
+  it("accepts a sync interval sent with an automatic cutover, where it has no effect", async () => {
+    h.prisma.connection.findUnique
+      .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })
+      .mockResolvedValueOnce({ id: "tgt", type: "pve", name: "pve" })
+
+    const res = await callRoute(POST, { body: { ...body, syncIntervalSec: 600 } })
+    expect(res.status).toBe(200)
+  })
+
   it("leaves cutoverMode out of the payload when the caller omits it", async () => {
     h.prisma.connection.findUnique
       .mockResolvedValueOnce({ id: "src", type: "vmware", subType: null, name: "esxi", baseUrl: "https://esxi" })

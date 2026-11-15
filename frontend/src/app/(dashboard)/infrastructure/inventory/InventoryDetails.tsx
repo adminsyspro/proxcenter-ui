@@ -99,6 +99,7 @@ import BackupJobsPanel from './BackupJobsPanel'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useToast } from '@/contexts/ToastContext'
+import { useOpenMigrationJob } from './hooks/useOpenMigrationJob'
 import { requireOk } from '@/lib/api/fetchJsonSafe'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
 import type { Status, InventorySelection, Kpi, KV, UtilMetric, DetailsPayload, RrdTimeframe, SeriesPoint, ActiveDialog } from './types'
@@ -130,6 +131,7 @@ import EntityTagManager from './components/EntityTagManager'
 import VmActions from './components/VmActions'
 import NodeActions from './components/NodeActions'
 import WarmCutoverButton, { canRequestCutover, isAwaitingOperator } from './components/WarmCutoverButton'
+import SyncIntervalButton from './components/SyncIntervalButton'
 import MigrationLogLines from './components/MigrationLogLines'
 import LiveLogBox from '@/components/ui/LiveLogBox'
 import { migrationLogText } from './migrationLogText'
@@ -485,6 +487,7 @@ export default function InventoryDetails({
     migTransferMode, setMigTransferMode,
     migConvertToQcow2, setMigConvertToQcow2,
     migManualCutover, setMigManualCutover,
+    migSyncIntervalSec, setMigSyncIntervalSec,
     migConvertGuest, setMigConvertGuest, migEfiPreEnrolledKeys, setMigEfiPreEnrolledKeys,
     migDowntimeBudget, setMigDowntimeBudget,
     migZeroRateLimit, setMigZeroRateLimit,
@@ -1262,6 +1265,21 @@ export default function InventoryDetails({
     // instead of waiting for the next tick.
   }, [selection, migJobId])
 
+  // A single migration asked for from the task bar or the running-tasks menu,
+  // or named in the address: reopen its migrate dialog from the run's record
+  // (lib/migration/migrationJobOpen), whichever tab started it. A run named in
+  // the address waits for the page to have selected what the address selects.
+  const [addressSelection] = useState(() => {
+    if (typeof window === 'undefined') return null
+    const q = new URLSearchParams(window.location.search)
+    return q.get('selectType') ? { type: q.get('selectType'), id: q.get('selectId') } : null
+  })
+  const { askedInAddress: migrationAskedInAddress } = useOpenMigrationJob({
+    onOpen: vm => setEsxiMigrateVm(vm),
+    onError: message => toast.error(t('inventoryPage.esxiMigration.reopenFailed', { error: message })),
+    ready: !addressSelection || (selection?.type === addressSelection.type && selection?.id === addressSelection.id),
+  })
+
   // A bulk migration runs on the server (roadmap#53): opening its source host
   // page reopens the follow-up of a batch still in flight there, even after the
   // tab that launched it was closed. Skipped while a batch is already loaded.
@@ -1272,6 +1290,9 @@ export default function InventoryDetails({
     if (selection?.type !== 'ext' || bulkMigBatchRef.current) return
     let stale = false
     const wanted = new URLSearchParams(window.location.search).get('openBatch')
+    // A single run named in the address: its dialog opens, not the batch in
+    // flight on that host.
+    if (!wanted && migrationAskedInAddress()) return
     const load = wanted
       ? fetchBulkBatch(wanted).then(snap => {
         if (!snap || stale || bulkMigBatchRef.current) return false
@@ -4556,6 +4577,7 @@ return vm?.isCluster ?? false
                                 </Typography>
                               )}
                             </Box>
+                            <SyncIntervalButton job={vmMigJob} />
                             <WarmCutoverButton job={vmMigJob} />
                             <ForcePowerOffButton job={vmMigJob} />
                             <RootChoiceButton job={vmMigJob} />
@@ -5042,6 +5064,8 @@ return vm?.isCluster ?? false
         migEfiPreEnrolledKeys={migEfiPreEnrolledKeys}
         setMigEfiPreEnrolledKeys={setMigEfiPreEnrolledKeys}
         setMigManualCutover={setMigManualCutover}
+        migSyncIntervalSec={migSyncIntervalSec}
+        setMigSyncIntervalSec={setMigSyncIntervalSec}
         migDowntimeBudget={migDowntimeBudget}
         setMigDowntimeBudget={setMigDowntimeBudget}
         migZeroRateLimit={migZeroRateLimit}

@@ -25,11 +25,11 @@ type TestJob = {
  * booted on the replicated copy while the migration waits for its manual
  * cutover (lib/migration/warm/migration-test.ts).
  */
-export default function MigrationTestButton({ job, size = 'small', onChanged }: {
+export default function MigrationTestButton({ job, size = 'small', onChanged }: Readonly<{
   job: TestJob
   size?: 'small' | 'medium'
   onChanged?: () => void
-}) {
+}>) {
   const t = useTranslations()
   const [open, setOpen] = useState(false)
 

@@ -137,7 +137,7 @@ describe("buildConversionScript", () => {
   })
 
   it("schedules the data disks online after a successful run, on the overlays once the NBD chains are down (lab 22/10)", () => {
-    const lines = buildConversionScript("job-1", ["/dev/rbd3", "/dev/rbd4"], "<nbd/>", undefined, [], "<file/>", true).split("\n")
+    const lines = buildConversionScript("job-1", ["/dev/rbd3", "/dev/rbd4"], "<nbd/>", undefined, [], "<file/>", { onlineDisks: true }).split("\n")
     const at = (re: RegExp) => lines.findIndex(l => re.test(l))
     const customize = at(/virt-customize --no-network --format qcow2 -a "\$D\/disk0\.qcow2"/)
     expect(at(/^if \[ "\$RC" = 0 \]; then$/)).toBeGreaterThan(at(/^nbd_chain_down$/))
@@ -563,7 +563,7 @@ describe("conversion on the overlays of a migration test", () => {
   const xml = buildConversionXml({ name: "w22", firmware: "bios", overlays: paths })
 
   it("creates each overlay at its test path, on top of its replicated volume", () => {
-    const script = buildConversionScript("j1", ["/dev/a", "/dev/b"], xml, undefined, [], undefined, false, { overlayPaths: paths })
+    const script = buildConversionScript("j1", ["/dev/a", "/dev/b"], xml, undefined, [], undefined, { overlayPaths: paths })
     expect(script).toContain("qemu-img create -q -f qcow2 -b '/dev/a' -F raw '/mnt/x/images/9001/vm-9001-test-0.qcow2'")
     expect(script).toContain("qemu-img create -q -f qcow2 -b '/dev/b' -F raw '/mnt/x/images/9001/vm-9001-test-1.qcow2'")
     expect(script).toContain("mkdir -p '/mnt/x/images/9001'")
@@ -571,7 +571,7 @@ describe("conversion on the overlays of a migration test", () => {
   })
 
   it("repairs the NTFS of a live Windows copy on the overlays before converting", () => {
-    const script = buildConversionScript("j1", ["/dev/a"], xml, undefined, [], undefined, false, { overlayPaths: paths.slice(0, 1), repairNtfs: true })
+    const script = buildConversionScript("j1", ["/dev/a"], xml, undefined, [], undefined, { overlayPaths: paths.slice(0, 1), repairNtfs: true })
     const lines = script.split("\n")
     const repair = lines.findIndex(l => l.includes("ntfsfix"))
     expect(repair).toBeGreaterThan(lines.findIndex(l => l.startsWith("qemu-img create")))
@@ -584,7 +584,7 @@ describe("conversion on the overlays of a migration test", () => {
   })
 
   it("links each working-dir overlay name to its test overlay, so the NBD chains, the pinning and the data-disk script reach it", () => {
-    const script = buildConversionScript("j1", ["/dev/a", "/dev/b"], xml, undefined, [], undefined, true, { overlayPaths: paths })
+    const script = buildConversionScript("j1", ["/dev/a", "/dev/b"], xml, undefined, [], undefined, { onlineDisks: true, overlayPaths: paths })
     const lines = script.split("\n")
     const link0 = lines.indexOf(`ln -sfn '${paths[0]}' "$D/disk0.qcow2"`)
     expect(link0).toBeGreaterThan(lines.findIndex(l => l.startsWith("qemu-img create")))

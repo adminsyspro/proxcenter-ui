@@ -184,6 +184,8 @@ export interface ConversionScriptOptions {
    * refuses to write to it (lab 14/11); only ever on throwaway overlays.
    */
   repairNtfs?: boolean
+  /** A Windows with data disks: bring them online at first boot (see above). */
+  onlineDisks?: boolean
 }
 
 const parentDirs = (paths: string[]) => [...new Set(paths.map(p => p.slice(0, p.lastIndexOf("/")) || "/"))]
@@ -202,7 +204,7 @@ export function buildOverlayScript(devices: string[], overlayPaths: string[]): s
   ].join("\n")
 }
 
-export function buildConversionScript(jobId: string, devices: string[], xml: string, netpin?: string, extraArgs: string[] = [], fileXml?: string, onlineDisks = false, opts: ConversionScriptOptions = {}): string {
+export function buildConversionScript(jobId: string, devices: string[], xml: string, netpin?: string, extraArgs: string[] = [], fileXml?: string, opts: ConversionScriptOptions = {}): string {
   const dir = conversionDir(jobId)
   const q = shellEscape
   const b64 = (text: string) => q(Buffer.from(text).toString("base64"))
@@ -239,7 +241,7 @@ export function buildConversionScript(jobId: string, devices: string[], xml: str
     `LIBGUESTFS_BACKEND=direct stdbuf -oL virt-v2v-in-place -i libvirtxml "$D/guest.xml" --block-driver virtio-scsi${extraArgs.map(x => ` ${q(x)}`).join("")} --machine-readable < /dev/null > "$D/v2v.log" 2>&1`,
     "RC=$?",
     ...(fileXml ? ["nbd_chain_down"] : []),
-    ...(onlineDisks ? [
+    ...(opts.onlineDisks ? [
       'if [ "$RC" = 0 ]; then',
       windowsOnlineDisksCommand({ disk: '"$D/disk0.qcow2"', disks: devices.length, localPath: '"$D/online-disks.ps1"', logPath: '"$D/online-disks.log"', format: "qcow2" }),
       '  echo $? > "$D/online-disks.exit"',
@@ -578,8 +580,8 @@ async function runGuestConversion(a: GuestConversionInput, mode: ConversionMode)
     const winIps = a.isWindows ? a.staticIps ?? [] : []
     // Windows Server keeps the data disks offline on their new controller (#1173 lab).
     const onlineDisks = a.isWindows && a.devices.length > 1
-    const script = buildConversionScript(mode.workId, a.devices, xml, netpin, windowsStaticIpArgs(winIps, targetMacs), viaNbd ? buildConversionXml(domain) : undefined, onlineDisks,
-      { overlayPaths: mode.overlayPaths, repairNtfs: mode.repairNtfs })
+    const script = buildConversionScript(mode.workId, a.devices, xml, netpin, windowsStaticIpArgs(winIps, targetMacs), viaNbd ? buildConversionXml(domain) : undefined,
+      { overlayPaths: mode.overlayPaths, repairNtfs: mode.repairNtfs, onlineDisks })
     const launchError = await launch(script)
     if (launchError) return { converted: false, reason: `virt-v2v-in-place could not be started: ${launchError}` }
     await a.log(mode.commit

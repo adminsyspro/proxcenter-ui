@@ -681,11 +681,13 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     const migrationTest: HoldTest = {
       run: async () => {
         const convert = await wantsConversion()
+        // Boot parameters of a test whose guest conversion did not apply.
+        const notConverted = convert ? "failed" : "not-requested"
         await runMigrationTest({
           jobId, pveConn, targetConnectionId: config.targetConnectionId, node: config.targetNode, nodeIp,
           devices: vmConfig.disks.map(d => targetDev.get(d.deviceKey) ?? ""),
           conversion: convert ? conversionInputFor(await readWindowsStaticIps().catch(() => [])) : null,
-          paramsFor: converted => bootParamsFor(converted ? "converted" : convert ? "failed" : "not-requested"),
+          paramsFor: converted => bootParamsFor(converted ? "converted" : notConverted),
           driveOpts: (i, slot, p) => driveOptsFor(p)(i, slot),
         })
       },
@@ -984,7 +986,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
     // Best-effort cleanup: stop readers, remove OUR snapshots (specific MOR), free orphan volumes.
     // An operator who cancelled may have asked to remove the copy on the target too.
     const removeCopies = cancelRemovesTarget(jobId)
-    await cleanupOnFailure(jobId, config, soapSession, ourSnapshots, allocatedVolumes, activeReaders, nodeIp, removeCopies).catch(() => {})
+    await cleanupOnFailure(jobId, config, soapSession, ourSnapshots, allocatedVolumes, activeReaders, nodeIp).catch(() => {})
     // After the volumes: the VM goes only when it holds no completed copy (#612),
     // and CBT only once our snapshots are gone, which vSphere requires.
     if (createdVmid != null && pveConn) {
@@ -1102,7 +1104,6 @@ async function cleanupOnFailure(
   allocatedVolumes: AllocatedVolume[],
   activeReaders: VddkReaderHandle[],
   nodeIp: SshTarget,
-  removeCopies: boolean,
 ): Promise<void> {
   // nodeIp is the value resolved during planning (empty if we failed before that,
   // in which case nothing was allocated on the node and there is nothing to free).
@@ -1125,7 +1126,7 @@ async function cleanupOnFailure(
     await consolidateSourceAfterFailure(session, config.sourceVmId, (msg, level) => appendLog(jobId, msg, level))
   }
   // Unmap, free the orphans, keep (or remove, on the operator's word) the completed copies (#612).
-  await releaseTargetVolumes({ jobId, connectionId: config.targetConnectionId, nodeIp, allocatedVolumes, removeCopies })
+  await releaseTargetVolumes({ jobId, connectionId: config.targetConnectionId, nodeIp, allocatedVolumes, removeCopies: cancelRemovesTarget(jobId) })
 }
 
 // Re-exports: the API routes and the unit tests keep importing these from this module.

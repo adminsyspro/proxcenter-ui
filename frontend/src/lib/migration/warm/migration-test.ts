@@ -178,6 +178,19 @@ class TestStopped extends Error {}
 
 const gib = (bytes: number) => `${(bytes / GiB).toFixed(1)} GiB`
 
+/** "network on vmbr1 VLAN 30", or "no network". */
+function networkLabel(bridge: string | null, vlanTag: number | null): string {
+  if (!bridge) return "no network"
+  return vlanTag ? `network on ${bridge} VLAN ${vlanTag}` : `network on ${bridge}`
+}
+
+/** A message without its final dots, without a backtracking regex. */
+function withoutTrailingDots(s: string): string {
+  let end = s.length
+  while (end > 0 && s[end - 1] === ".") end--
+  return s.slice(0, end)
+}
+
 /**
  * Run the test the operator asked for on this job, from the request on its
  * row to the removal of the test VM. Returns once nothing of the test is left;
@@ -250,8 +263,12 @@ export async function runMigrationTest(t: MigrationTestTarget): Promise<void> {
         log: (msg, level) => log(msg.replace(/^Guest conversion: /, "guest conversion: "), level), isCancelled: stopAsked,
       })
       converted = r.converted
-      if (r.converted) await log(`guest converted in ${r.seconds ?? 0}s${r.os ? ` (${r.os})` : ""}, as the cutover would`, "success")
-      else await log(`guest conversion not applied: ${(r.reason || "").replace(/\.+$/, "")}. The test boots the hardware the cutover would fall back to`, "warn")
+      if (r.converted) {
+        const os = r.os ? ` (${r.os})` : ""
+        await log(`guest converted in ${r.seconds ?? 0}s${os}, as the cutover would`, "success")
+      } else {
+        await log(`guest conversion not applied: ${withoutTrailingDots(r.reason || "")}. The test boots the hardware the cutover would fall back to`, "warn")
+      }
     }
     if (!converted) {
       if (!t.conversion) await report({ step: "overlay" })
@@ -273,7 +290,7 @@ export async function runMigrationTest(t: MigrationTestTarget): Promise<void> {
     const startedAt = Date.now()
     const endsAt = startedAt + request.maxSec * 1000
     await report({ phase: "running", startedAt: new Date(startedAt).toISOString(), endsAt: new Date(endsAt).toISOString() })
-    await log(`VM ${vmid} (${params.name}-test) started on ${node}, ${request.bridge ? `network on ${request.bridge}${request.vlanTag ? ` VLAN ${request.vlanTag}` : ""}` : "no network"}; it stops by itself after ${request.maxSec / 3600} h`, "success")
+    await log(`VM ${vmid} (${params.name}-test) started on ${node}, ${networkLabel(request.bridge, request.vlanTag)}; it stops by itself after ${request.maxSec / 3600} h`, "success")
 
     const dir = overlays[0].slice(0, overlays[0].lastIndexOf("/")) || "/"
     let nextProbe = 0
@@ -322,7 +339,7 @@ export async function runMigrationTest(t: MigrationTestTarget): Promise<void> {
       ? `ended (${reason}); test VM ${vmid} and its overlays removed${resume}`
       : `ended (${reason}) before the test VM was created${resume}`
     if (ending?.leftover) line = reason
-    else if (ending?.failed) line = `${vmid === null ? "not started" : "stopped"}: ${reason}${vmid === null ? "" : `. Test VM ${vmid} and its overlays removed`}`
+    else if (ending?.failed) line = vmid === null ? `not started: ${reason}` : `stopped: ${reason}. Test VM ${vmid} and its overlays removed`
     await log(line, ending?.level ?? "info")
     await updateJobTestFields(jobId, { testRequest: null, testStopRequestedAt: null }).catch(() => {})
     clearWarmTest(jobId)

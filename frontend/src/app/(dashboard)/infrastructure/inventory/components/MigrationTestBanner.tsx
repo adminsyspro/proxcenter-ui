@@ -45,13 +45,14 @@ export function formatTestClock(sec: number): string {
 }
 
 /** Re-render every second while `on`, so the times the banner shows move. */
-function useSecondTick(on: boolean) {
-  const [, setTick] = useState(0)
+function useSecondTick(on: boolean): number {
+  const [tick, setTick] = useState(0)
   useEffect(() => {
     if (!on) return
     const id = setInterval(() => setTick(n => n + 1), 1000)
     return () => clearInterval(id)
   }, [on])
+  return tick
 }
 
 /**
@@ -59,7 +60,7 @@ function useSecondTick(on: boolean) {
  * where it stands with a bar, the screen of the test VM, its console and its
  * stop. The cutover waits for its end.
  */
-export default function MigrationTestBanner({ job }: { job: BannerJob }) {
+export default function MigrationTestBanner({ job }: Readonly<{ job: BannerJob }>) {
   const t = useTranslations()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -72,6 +73,8 @@ export default function MigrationTestBanner({ job }: { job: BannerJob }) {
 
   const phase = state?.phase ?? 'requested'
   const runningVmid = phase === 'running' ? state?.testVmid : undefined
+  const running = runningVmid !== undefined && runningVmid > 0
+  const hasScreen = running && !!job.targetConnectionId && !!job.targetNode
   let text: string
   let time: string | null = null
   // null = a moving bar: the step has no measurable progress.
@@ -117,9 +120,9 @@ export default function MigrationTestBanner({ job }: { job: BannerJob }) {
   return (
     <Alert severity="info" icon={<i className="ri-flask-line" />} data-testid="migration-test-banner" sx={{ '& .MuiAlert-message': { width: '100%', minWidth: 0 } }}>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'flex-start' }}>
-        {runningVmid && job.targetConnectionId && job.targetNode && (
+        {hasScreen && (
           <Box data-testid="migration-test-screen" sx={{ width: 168, flexShrink: 0 }}>
-            <ConsolePreview height={105} connId={job.targetConnectionId} node={job.targetNode} type="qemu" vmid={String(runningVmid)} vmStatus="running" />
+            <ConsolePreview height={105} connId={job.targetConnectionId ?? undefined} node={job.targetNode ?? undefined} type="qemu" vmid={String(runningVmid)} vmStatus="running" />
           </Box>
         )}
         <Box sx={{ flex: '1 1 220px', minWidth: 0 }}>
@@ -131,9 +134,9 @@ export default function MigrationTestBanner({ job }: { job: BannerJob }) {
             {...(percent === null ? {} : { value: percent })}
             sx={{ mt: 0.75, height: 6, borderRadius: 3 }}
           />
-          {(runningVmid || phase !== 'stopping' || time) && (
+          {(running || phase !== 'stopping' || time !== null) && (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 1, mt: 0.75, ml: -0.75 }}>
-              {runningVmid && (
+              {running && (
                 <Button size="small" color="inherit" startIcon={<i className="ri-terminal-box-line" />} onClick={openConsole} sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}>
                   {k('testConsole')}
                 </Button>

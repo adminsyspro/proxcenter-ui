@@ -20,7 +20,7 @@ interface TestOptions {
 }
 
 /** One setting per line: its label on the left, its control on the right, aligned with the other lines. */
-function Line({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+function Line({ id, label, children }: Readonly<{ id: string; label: string; children: ReactNode }>) {
   return (
     <Box data-testid={`test-line-${id}`} sx={{ display: 'grid', gridTemplateColumns: '170px 1fr', alignItems: 'center', gap: 2 }}>
       <Typography variant="body2" color="text.secondary">{label}</Typography>
@@ -35,14 +35,14 @@ function Line({ id, label, children }: { id: string; label: string; children: Re
  * The node's options are read when the dialog opens; nothing starts before
  * "Start test".
  */
-export default function MigrationTestDialog({ open, jobId, name, node, onClose, onStarted }: {
+export default function MigrationTestDialog({ open, jobId, name, node, onClose, onStarted }: Readonly<{
   open: boolean
   jobId: string
   name: string
   node: string
   onClose: () => void
   onStarted?: () => void
-}) {
+}>) {
   const t = useTranslations()
   const [options, setOptions] = useState<TestOptions | null>(null)
   const [storage, setStorage] = useState('')

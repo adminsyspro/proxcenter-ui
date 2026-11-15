@@ -54,7 +54,7 @@ export const MIGRATION_TEST_MAX_SEC_CHOICES = [3600, 7200, 14400, 28800, 86400] 
 export const MIGRATION_TEST_MAX_SEC_DEFAULT = 14400
 
 const PHASES: readonly MigrationTestPhase[] = ["requested", "preparing", "running", "stopping", "ended", "failed"]
-const ACTIVE_PHASES: readonly MigrationTestPhase[] = ["requested", "preparing", "running", "stopping"]
+const ACTIVE_PHASES: ReadonlySet<MigrationTestPhase> = new Set(["requested", "preparing", "running", "stopping"])
 
 /** A PVE storage id ([a-zA-Z][a-zA-Z0-9\-_.]*). They reach shell commands on the node. */
 const STORAGE_ID_RE = /^[A-Za-z][\w.-]{0,63}$/
@@ -94,7 +94,7 @@ export function readTestState(v: unknown): MigrationTestState | null {
 export function isTestActive(job: { testRequest?: unknown; testState?: unknown }): boolean {
   if (job.testRequest) return true
   const state = readTestState(job.testState)
-  return !!state && ACTIVE_PHASES.includes(state.phase)
+  return !!state && ACTIVE_PHASES.has(state.phase)
 }
 
 interface TestableJob {

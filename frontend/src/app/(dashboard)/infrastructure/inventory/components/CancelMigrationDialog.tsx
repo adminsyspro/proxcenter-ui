@@ -18,13 +18,13 @@ type CancelJob = {
  * the operator chooses, and removing it is ticked by default: a copy waiting
  * for a cutover that will not come is of no use.
  */
-export default function CancelMigrationDialog({ open, job, busy = false, onClose, onConfirm }: {
+export default function CancelMigrationDialog({ open, job, busy = false, onClose, onConfirm }: Readonly<{
   open: boolean
   job: CancelJob
   busy?: boolean
   onClose: () => void
   onConfirm: (removeTarget: boolean) => void
-}) {
+}>) {
   const t = useTranslations()
   const warm = job?.config?.migrationType === 'warm'
   const [removeTarget, setRemoveTarget] = useState(true)

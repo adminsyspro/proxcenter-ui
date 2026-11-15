@@ -168,7 +168,7 @@ export default function EdgePanel({
   const names = useContext(MapNamesContext)
   const zones = useMemo(() => [...zonesById.values()], [zonesById])
   const observedKind = data.kind === 'unprotected' || data.kind === 'blocked'
-  const tokens = [...new Set([...data.flows, ...data.observed].map(f => flowService(f)))].sort()
+  const tokens = [...new Set([...data.flows, ...data.observed].map(f => flowService(f)))].sort((a, b) => a.localeCompare(b))
   const servicesTip = tokens.length ? serviceTokensTitle(tokens) : data.label
   const example = observedKind && isSampled(source, target) ? t('edge.example', { from: names.short(source), to: names.short(target) }) : null
   // The ends are rebuilt on every render of the map: the lists are cheap (the pending flows the map holds, the draft's flows).

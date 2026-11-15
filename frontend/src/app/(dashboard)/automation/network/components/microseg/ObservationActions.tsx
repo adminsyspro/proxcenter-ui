@@ -1,6 +1,6 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useContext, type ReactNode } from 'react'
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -8,7 +8,7 @@ import { serviceTitle } from '@/lib/network/serviceNames'
 import { isAggregateDst, type MicrosegSuggestion, type SuggestionAction, type SuggestionKind } from '@/lib/microseg/types'
 
 import { AggregateHint, ObservedKindGlyph, outboundZoneAcceptTip, usePrefixChoice } from './observationParts'
-import { WriteTip, useMicrosegWrite } from './microsegAccess'
+import { MicrosegActionsSlot, WriteTip, useMicrosegWrite } from './microsegAccess'
 
 const ACTION_SX = { minWidth: 0, px: 1, py: 0, lineHeight: 1.6, whiteSpace: 'nowrap' } as const
 
@@ -167,19 +167,22 @@ const KINDS: SuggestionKind[] = ['would_block', 'blocked']
  */
 export function ObservationLegend({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const t = useTranslations('microsegPilot.observation')
+  // Under a tab row, its gear opens the settings: no link of its own.
+  const tabRow = useContext(MicrosegActionsSlot) !== null
 
+  // On the row of the pager, left of it.
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 2, rowGap: 0.5, mb: 1.5, minWidth: 0 }}>
-      <Box component='ul' aria-label={t('legend.title')} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 2, rowGap: 0.5, m: 0, p: 0, listStyle: 'none', minWidth: 0 }}>
+    <Box data-testid='observation-legend' sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 1, rowGap: 0.5, minWidth: 0 }}>
+      <Box component='ul' aria-label={t('legend.title')} sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 1.5, rowGap: 0.5, m: 0, p: 0, listStyle: 'none', minWidth: 0 }}>
         {KINDS.map(kind => <LegendItem key={kind} mark={<ObservedKindGlyph kind={kind} />} text={t(`legend.${kind}`)} />)}
         <LegendItem mark={<Dot color='primary.main' />} text={t('legend.zoneDot')} />
         <LegendItem mark={<Dot color='error.main' />} text={t('legend.unknownDot')} />
       </Box>
-      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, ml: 'auto' }}>
+      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}>
         <Tooltip title={t('sampling')}>
           <IconButton size='small' aria-label={t('legend.about')}><i className='ri-information-line' /></IconButton>
         </Tooltip>
-        <Button size='small' disabled={!onOpenSettings} onClick={onOpenSettings} sx={{ whiteSpace: 'nowrap' }}>{t('openSettings')}</Button>
+        {!tabRow && <Button size='small' disabled={!onOpenSettings} onClick={onOpenSettings} sx={{ whiteSpace: 'nowrap' }}>{t('openSettings')}</Button>}
       </Box>
     </Box>
   )

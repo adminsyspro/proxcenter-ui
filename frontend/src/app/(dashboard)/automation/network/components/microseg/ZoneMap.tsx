@@ -85,7 +85,7 @@ const sameFlow = (a: MicrosegFlow, b: MicrosegFlow) => a.src_zone_id === b.src_z
 export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan, targetVm }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.overview')
   const tObs = useTranslations('microsegPilot.observation')
-  const { guests, status: guestsStatus, reload: reloadGuests } = useZoneGuests(connectionId)
+  const { guests, status: guestsStatus } = useZoneGuests(connectionId)
   const suggestions = useMicrosegSuggestions(connectionId, PENDING_OBSERVED)
   const { revision } = useLastRevisionSnapshot(connectionId, policy.pending_changes ? policy.last_revision?.id : null)
   const [selection, setSelection] = useState<Selection | null>(null)
@@ -96,8 +96,6 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const [assigning, setAssigning] = useState(false)
   const [resolved, setResolved] = useState<SuggestionAction | null>(null)
   const [filters, setFilters] = useFlowFilters()
-  const [refreshing, setRefreshing] = useState(false)
-  const [refreshedAt, setRefreshedAt] = useState<Date | null>(null)
   const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
   const [view, setView] = useMapView()
   const [centre, setCentre] = useState<string | null>(null)
@@ -159,14 +157,6 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     () => (target && matrix && sankey ? targetSankey(matrix, filters, target) : null),
     [target, matrix, sankey, filters],
   )
-
-  // "Refreshed at": the first answer, then the end of every refresh (a refresh that changes nothing still moves it).
-  const loaded = !!suggestions.data || membersKnown
-  useEffect(() => {
-    if (!loaded || refreshedAt) return
-    const timer = setTimeout(() => setRefreshedAt(new Date()), 0)
-    return () => clearTimeout(timer)
-  }, [loaded, refreshedAt])
 
   // A zone deleted from the draft (or an edge gone after a reload) simply closes its panel.
   const selectedZone = selection?.kind === 'zone' ? zones.find(z => z.id === selection.id) ?? null : null
@@ -275,12 +265,6 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   }, [pick])
   const showTarget = useCallback(() => { showPanel(); setSelection(null) }, [showPanel])
   const openTargetZone = useCallback((zoneId: string) => { setResolved(null); setSelection({ kind: 'zone', id: zoneId }) }, [])
-  const refresh = useCallback(async () => {
-    setRefreshing(true)
-    await Promise.all([reloadPolicy().catch(() => undefined), suggestions.reload().catch(() => undefined), reloadGuests().catch(() => undefined)])
-    setRefreshedAt(new Date())
-    setRefreshing(false)
-  }, [reloadPolicy, suggestions, reloadGuests])
 
   if (zones.length === 0) {
     return (
@@ -303,9 +287,6 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
             lead={<TargetPicker candidates={mapTarget.candidates} zonesById={zonesById} target={target} onTarget={changeTarget} onShowPanel={showTarget} observedCount={targetFlowCount} />}
             filters={filters}
             onFilters={setFilters}
-            refreshedAt={refreshedAt}
-            refreshing={refreshing}
-            onRefresh={refresh}
           />
         </Box>
         {policy.pending_changes && (

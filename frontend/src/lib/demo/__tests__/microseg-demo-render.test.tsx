@@ -59,7 +59,7 @@ describe('Micro-segmentation tab on the demo data', () => {
 })
 
 describe('Dashboard of the network page on the demo data', () => {
-  it('fills its chips, its traffic figures, its services and its time chart from the demo answers', async () => {
+  it('fills its traffic figures, its services, its time chart and its conversations from the demo answers', async () => {
     renderWithProviders(
       <SWRConfig value={{ revalidateOnMount: true, dedupingInterval: 0, errorRetryCount: 0, refreshInterval: 0, provider: () => new Map() }}>
         <DashboardTab
@@ -81,10 +81,6 @@ describe('Dashboard of the network page on the demo data', () => {
       </SWRConfig>,
     )
 
-    // Three zones enforce inbound; the db zone blocks its outbound.
-    await waitFor(() => expect(screen.getByTestId('chip-zones').textContent).toBe('Zones enforced 3 / 5 · outbound 1 / 5'))
-    // The guest coverage is read: a count of running guests, not the "-" of a figure not measured.
-    await waitFor(() => expect(screen.getByTestId('chip-guests').textContent).toMatch(/^Guests protected \d+ \/ \d+ running$/))
     // The observed flows: would be blocked in the observed zones, blocked in the enforced ones, inbound and outbound.
     await waitFor(() => expect(screen.getByTestId('tile-would-block-value').textContent).toBe('10 flows'))
     expect(screen.getByTestId('tile-blocked-value').textContent).toBe('3 flows')
@@ -95,8 +91,8 @@ describe('Dashboard of the network page on the demo data', () => {
     expect(services[0].textContent).toContain('HTTPS')
     // The time chart has the history of the zones to draw.
     await waitFor(() => expect(within(screen.getByTestId('timeline')).getAllByTestId(/^area-/).length).toBeGreaterThan(1))
-    // The "To do" list counts the guests the coverage reports without firewall.
-    expect(await screen.findByText(/guests without firewall/)).toBeTruthy()
+    // Who talks to whom: the busiest pairs of the demo's observed flows.
+    expect((await screen.findAllByTestId('conversation-row')).length).toBeGreaterThan(0)
   })
 })
 

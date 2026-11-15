@@ -122,7 +122,7 @@ export function useEgressChange(edits: ZoneEdits) {
 type ZoneDialogOpen = { kind: 'edit' } | { kind: 'delete' } | { kind: 'state'; state: ZoneState } | null
 
 /** Edit, state, delete and assign of the zone of the panel, one row of icons, with their dialogs. */
-export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted }: { zone: MicrosegZone; edits: ZoneEdits; onAssign: () => void; onDeleted: () => void }) {
+export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted, spread = false }: { zone: MicrosegZone; edits: ZoneEdits; onAssign: () => void; onDeleted: () => void; spread?: boolean }) {
   const t = useTranslations('microsegPilot.overview.zonePanel')
   const tp = useTranslations('microsegPilot.policy')
   const [open, setOpen] = useState<ZoneDialogOpen>(null)
@@ -144,7 +144,8 @@ export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted }: { zone: 
   const egress = zoneEgress(zone)
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+    // `spread`: the icons are laid out by the row they sit in (spread over its width), not grouped.
+    <Box sx={spread ? { display: 'contents' } : { display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
       <WriteIcon label={t('edit')} icon='ri-pencil-line' onClick={() => setOpen({ kind: 'edit' })} />
       {egress === 'observe' && <WriteIcon label={t('egressBlock')} icon='ri-lock-line' onClick={() => egressChange.ask(zone, 'block')} />}
       {egress === 'enforce' && <WriteIcon label={t('egressReopen')} icon='ri-lock-unlock-line' onClick={() => egressChange.ask(zone, 'reopen')} />}

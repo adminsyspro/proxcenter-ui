@@ -6,7 +6,7 @@
 // sources which are read from the nodes.
 
 import { paletteAlpha } from './paletteAlpha'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 
 import {
@@ -31,6 +31,8 @@ interface Props {
   zones: MicrosegZone[]
   /** The inventory, for the state dot of a guest. */
   guests?: Record<number, LogGuestInfo>
+  /** Rendered first on the row of the filters (the log picker of the Logging tab), the row then held on one line. */
+  filtersStart?: ReactNode
 }
 
 /** Debounce of the search text before it is sent as `q`. */
@@ -76,7 +78,7 @@ function ZoneChip({ name, color }: { name: string; color?: string }) {
   )
 }
 
-export default function MicrosegEventsView({ connectionId, zones, guests }: Props) {
+export default function MicrosegEventsView({ connectionId, zones, guests, filtersStart }: Props) {
   const theme = useTheme()
   const t = useTranslations('firewallLog.microseg')
   const tLog = useTranslations('firewallLog')
@@ -133,8 +135,10 @@ export default function MicrosegEventsView({ connectionId, zones, guests }: Prop
   const filtering = !!(zone || verdict || sentSearch)
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, flexWrap: 'wrap' }}>
+    // The height of the tab: the table takes what the filters and the footer leave, and scrolls in it.
+    <Box sx={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, flexWrap: filtersStart ? { xs: 'wrap', lg: 'nowrap' } : 'wrap' }}>
+        {filtersStart}
         <TextField
           size='small'
           placeholder={t('searchPlaceholder')}
@@ -178,7 +182,7 @@ export default function MicrosegEventsView({ connectionId, zones, guests }: Prop
 
       {loading && <LinearProgress />}
 
-      <TableContainer sx={{ maxHeight: 'calc(100vh - 380px)', minHeight: 160 }}>
+      <TableContainer data-testid='microseg-events-table' sx={{ flex: '1 1 0', minHeight: 160 }}>
         <Table size='small' stickyHeader>
           <TableHead>
             <TableRow>

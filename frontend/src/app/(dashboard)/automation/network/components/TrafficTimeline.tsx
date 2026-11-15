@@ -33,6 +33,8 @@ type Props = {
   rangeLock?: 'grouping' | 'unavailable' | null
   /** The map panel's variant: lower, no title (the section header is it), the groups as a row of chips under it. */
   compact?: boolean
+  /** Grows with the card it is in: the chart takes the free height, never under its usual height. */
+  fill?: boolean
   /** False for a chart of the orchestrator's memory only (a guest): no range chips. */
   showRange?: boolean
   /** A map panel's direction (inbound / outbound), on the line of the verdict; none on the Dashboard. */
@@ -250,14 +252,15 @@ function LegendChips({ timeline, below = null }: { timeline: PostureTimeline; be
  * second tab, "Volume (sFlow)", shows the sFlow bytes of the same groups over the same range, only when sFlow has data
  * for the connection.
  */
-export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null, compact = false, showRange = true, direction, onDirection, emptyText, hideVerdict = false, emptyAction, mirror = null }: Props) {
+export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null, compact = false, fill = false, showRange = true, direction, onDirection, emptyText, hideVerdict = false, emptyAction, mirror = null }: Props) {
   const t = useTranslations('networkPage.dashboard')
   const [ref, size] = useBoxSize<HTMLDivElement>()
   const [chosen, setChosen] = useState<Unit>('events')
   // The Volume tab only exists while sFlow has data for the connection.
   const unit: Unit = volume ? chosen : 'events'
   const measured = size?.width ?? null
-  const height = compact ? COMPACT_TIMELINE_HEIGHT : TIMELINE_HEIGHT
+  const base = compact ? COMPACT_TIMELINE_HEIGHT : TIMELINE_HEIGHT
+  const height = fill ? Math.max(base, size?.height ?? 0) : base
 
   let body: React.ReactNode
   if (unit === 'bytes' && volume) body = volume.total > 0 ? <Areas timeline={volume} measured={measured} unit='bytes' height={height} /> : <Typography variant='body2' color='text.secondary' data-testid='volume-empty'>{t('postureVolumeEmpty')}</Typography>
@@ -373,7 +376,7 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
     </>
   )
   const captionLine = caption && <Typography variant='caption' color='text.secondary' noWrap={compact} data-testid='timeline-caption'>{caption}</Typography>
-  const chart = <Box ref={ref} sx={{ position: 'relative', width: '100%', minWidth: 0 }}>{body}</Box>
+  const chart = <Box ref={ref} data-testid='timeline-chart' sx={{ position: 'relative', width: '100%', minWidth: 0, ...(fill && { flex: '1 1 0', minHeight: base, overflow: 'hidden' }) }}>{body}</Box>
 
   if (compact) {
     // Two rows at most: the caption, then the toggles on one row (scrolled sideways rather than wrapped).
@@ -397,7 +400,7 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
   )
 
   return (
-    <Box data-testid='timeline' sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+    <Box data-testid='timeline' sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, ...(fill && { flex: '1 1 auto' }) }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
         {title}
         {captionLine}

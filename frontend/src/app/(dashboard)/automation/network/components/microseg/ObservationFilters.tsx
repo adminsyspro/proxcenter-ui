@@ -28,7 +28,8 @@ const COMPACT_SELECT_SX = {
   height: 30,
   // The type of a small button (pxToRem(13)), so it follows the root size the way the buttons do.
   fontSize: '0.8125rem',
-  minWidth: 150,
+  // As wide as its name and value: the row of the tabs holds the four filters and the buttons.
+  minWidth: 0,
   '& .MuiSelect-select': { py: 0, pl: 1.25, display: 'flex', alignItems: 'center', minHeight: 0 },
 } as const
 

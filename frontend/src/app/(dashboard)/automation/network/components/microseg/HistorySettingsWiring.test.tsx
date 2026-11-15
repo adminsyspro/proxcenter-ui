@@ -101,11 +101,14 @@ describe('settings', () => {
     expect(await screen.findByRole('dialog', { name: 'Micro-segmentation settings' })).toBeTruthy()
   })
 
-  it('opens from the link of the Observation sub-tab', async () => {
+  it('opens from the gear of the Observation sub-tab: its legend, on the row of the pager, has no link of its own', async () => {
     window.localStorage.setItem('microseg.subTab', 'observation')
     mock.routes['GET /suggestions?limit=26&status=pending'] = () => reply(200, { suggestions: [], limit: 26, offset: 0 })
     renderConfigured()
-    fireEvent.click(await screen.findByRole('button', { name: 'Open settings' }))
+    const legend = await screen.findByTestId('observation-legend')
+    expect(screen.getByTestId('microseg-actions-slot').contains(legend)).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Open settings' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(await screen.findByRole('dialog', { name: 'Micro-segmentation settings' })).toBeTruthy()
   })
 

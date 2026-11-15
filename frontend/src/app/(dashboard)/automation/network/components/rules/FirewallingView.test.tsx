@@ -173,15 +173,15 @@ describe('Firewalling: sections and badges', () => {
     expect(zabbix).toHaveStyle({ opacity: '0.6' })
   })
 
-  it('states the totals in the status bar', () => {
+  it('has no title, status bar nor action bar: the scope (no visible word) and the filter on the line of Publish', () => {
     renderView()
-    const status = screen.getByTestId('dfw-status')
-    expect(status).toHaveTextContent('Rules: at least 4 in total')
-    expect(status).toHaveTextContent('Unpublished 0')
-    expect(status).toHaveTextContent('Disabled 1')
-    expect(status).toHaveTextContent('Sections: 6')
-    expect(status).toHaveTextContent('Managed by the micro-segmentation 1')
-    expect(status).toHaveTextContent('VMs covered: 1 / 2 running')
+    expect(screen.queryByTestId('dfw-status')).toBeNull()
+    expect(screen.queryByTestId('dfw-actions')).toBeNull()
+    expect(screen.queryByText('Firewalling')).toBeNull()
+    expect(screen.queryByText('Scope')).toBeNull()
+    expect(screen.getByRole('combobox', { name: 'Scope' })).toHaveTextContent('All')
+    expect(screen.getByRole('textbox', { name: 'Filter: IP, port, group, VM' })).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).toBeNull()
   })
 })
 
@@ -206,18 +206,9 @@ describe('Firewalling: edits go to the draft', () => {
     expect(publishButton()).toBeDisabled()
   })
 
-  it('the bulk bar acts on the checked rules', () => {
+  it('a rule of the user is deleted from its own row: it leaves the list, one unpublished change', () => {
     renderView()
-    const bar = screen.getByTestId('dfw-actions')
-    expect(within(bar).getByRole('button', { name: 'Delete' })).toBeDisabled()
-    fireEvent.click(within(ruleRow('Old Zabbix')).getByRole('checkbox', { name: 'Select rule 2' }))
-    expect(within(bar).getByText(/1 rule selected/)).toBeInTheDocument()
-    for (const name of ['Enable', 'Disable', 'Clone', 'Move up', 'Move down', 'Move to section', 'Delete']) {
-      expect(within(bar).getByRole('button', { name })).toBeEnabled()
-    }
-    fireEvent.click(within(bar).getByRole('button', { name: 'Enable' }))
-    expect(publishButton()).toHaveTextContent('Publish (1)')
-    fireEvent.click(within(bar).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(ruleRow('Old Zabbix')).getByRole('button', { name: 'Delete rule 2' }))
     expect(screen.queryAllByTestId('dfw-rule-row').some(r => within(r).queryByText('Old Zabbix'))).toBe(false)
     expect(publishButton()).toHaveTextContent('Publish (1)')
   })
@@ -405,7 +396,7 @@ describe('Firewalling: the engine block of a guest and the way out of a conflict
   })
 })
 
-describe('Firewalling: checkboxes (bench report: "the boxes cannot be checked")', () => {
+describe('Firewalling: Delete on the rule, no checkbox', () => {
   const ZONED = guest(104, {
     name: 'zoned', rulesLoaded: true, vlans: [],
     rules: [
@@ -415,58 +406,28 @@ describe('Firewalling: checkboxes (bench report: "the boxes cannot be checked")'
       { pos: 3, type: 'in', action: 'ACCEPT', enable: 1, log: 'info', comment: '[pc-microseg] observe', digest: 'G' },
     ],
   })
-  const bar = () => screen.getByTestId('dfw-actions')
 
-  it('shows no checkbox on an engine row nor on a zone group header', () => {
+  it('offers no Delete on an engine row nor on a zone group rule', () => {
     renderView()
     const zone = screen.getByTestId('dfw-section-zone:pcz-db')
-    expect(within(zone).queryByRole('checkbox')).toBeNull()
     fireEvent.click(within(zone).getByRole('button', { name: /Expand/ }))
-    for (const name of ['[pc-microseg] app -> db', '[pc-microseg] db -> db']) expect(within(ruleRow(name)).queryByRole('checkbox')).toBeNull()
+    for (const name of ['[pc-microseg] app -> db', '[pc-microseg] db -> db']) expect(within(ruleRow(name)).queryByRole('button', { name: /^Delete rule/ })).toBeNull()
   })
 
-  it('shows no section or table checkbox while no rule can be checked, and a quiet "No rules" caption', () => {
+  it('a quiet "No rules" caption under the Name column', () => {
     renderView(props({ clusterRules: [] }))
-    expect(within(screen.getByTestId('dfw-section-cluster')).queryByRole('checkbox')).toBeNull()
-    // A host whose rules were never read: nothing to check either.
-    expect(within(screen.getByTestId('dfw-section-host:pve1')).queryByRole('checkbox')).toBeNull()
-    expect(screen.queryByRole('checkbox', { name: 'Select every rule shown' })).toBeNull()
     const empty = screen.getByTestId('dfw-empty')
     expect(empty).toHaveTextContent('No rules')
-    // Under the Name column: four leading cells, then the caption.
-    expect(empty.querySelectorAll('td')[0]).toHaveAttribute('colspan', '4')
+    // Under the Name column: three leading cells (handle, #, active), then the caption.
+    expect(empty.querySelectorAll('td')[0]).toHaveAttribute('colspan', '3')
   })
 
-  it('a read-only user sees the section checkbox of a section with rules, disabled', () => {
-    renderView(props(), false)
-    expect(within(screen.getByTestId('dfw-section-cluster')).getByRole('checkbox')).toBeDisabled()
-  })
-
-  it('a section header checks only the selectable rules of a guest, collapsed or not; the head checkbox likewise', () => {
+  it('a guest of a zone: Delete on its own rules only, never on the engine ones', () => {
     renderView(props({ guests: [ZONED], clusterRules: [] }), true, true)
     fireEvent.click(within(screen.getByTestId('dfw-group-__untagged__')).getByRole('button', { name: /Expand/ }))
-    const header = within(screen.getByTestId('dfw-section-guest:qemu/104')).getByRole('checkbox')
-    expect(header).toBeEnabled()
-    fireEvent.click(header)
-    expect(bar()).toHaveTextContent('2 rules selected')
     fireEvent.click(within(screen.getByTestId('dfw-section-guest:qemu/104')).getByRole('button', { name: /Expand/ }))
-    expect(within(ruleRow('u1')).getByRole('checkbox')).toBeChecked()
-    expect(within(ruleRow('[pc-microseg]')).queryByRole('checkbox')).toBeNull()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select every rule shown' }))
-    expect(bar()).toHaveTextContent('No rule selected')
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select every rule shown' }))
-    expect(bar()).toHaveTextContent('2 rules selected')
-  })
-
-  it("a user rule's checkbox toggles and lights the bulk actions", () => {
-    renderView()
-    const box = within(ruleRow('Admin SSH')).getByRole('checkbox', { name: 'Select rule 1' })
-    fireEvent.click(box)
-    expect(box).toBeChecked()
-    for (const name of ['Enable', 'Disable', 'Clone', 'Move to section', 'Delete']) expect(within(bar()).getByRole('button', { name })).toBeEnabled()
-    fireEvent.click(box)
-    expect(box).not.toBeChecked()
-    expect(within(bar()).getByRole('button', { name: 'Enable' })).toBeDisabled()
+    expect(within(ruleRow('u1')).getByRole('button', { name: /^Delete rule/ })).toBeEnabled()
+    expect(within(ruleRow('[pc-microseg]')).queryByRole('button', { name: /^Delete rule/ })).toBeNull()
   })
 })
 
@@ -491,26 +452,24 @@ describe('Firewalling: final recette details', () => {
     expect(publishButton()).toHaveTextContent('Publish (0)')
   })
 
-  it('keeps the summary of the last publish next to the unpublished count until the draft changes', async () => {
+  it('tells a publish by its toast, with no history icon next to Publish', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ applied: 1, total: 1, scopes: {} }), { status: 200 }))
     renderView()
     fireEvent.click(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' }))
     fireEvent.click(publishButton())
-    expect(await screen.findByTestId('dfw-publish-summary')).toHaveTextContent('Last publish: 1 of 1 changes applied')
-    expect(h.toast).toHaveBeenCalledWith('1 change published', 'success')
-    fireEvent.click(within(ruleRow('Old Zabbix')).getByRole('switch', { name: 'Rule 2 enabled' }))
+    await waitFor(() => expect(h.toast).toHaveBeenCalledWith('1 change published', 'success'))
     expect(screen.queryByTestId('dfw-publish-summary')).toBeNull()
     fetchSpy.mockRestore()
   })
 
-  it('says where the last publish stopped', async () => {
+  it('says where a publish stopped in its alert', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       applied: 0, total: 1, scopes: {}, failed: { index: 0, kind: 'rule.edit', scope: 'cluster', code: 'PVE_ERROR', message: 'timeout' },
     }), { status: 502 }))
     renderView()
     fireEvent.click(within(ruleRow('Admin SSH')).getByRole('switch', { name: 'Rule 1 enabled' }))
     fireEvent.click(publishButton())
-    expect(await screen.findByTestId('dfw-publish-summary')).toHaveTextContent('Last publish: 0 of 1 changes applied, stopped on rule.edit in cluster')
+    expect(await screen.findByTestId('dfw-publish-error')).toBeInTheDocument()
     fetchSpy.mockRestore()
   })
 })
@@ -611,22 +570,6 @@ describe('Firewalling: creating a rule', () => {
     expect(publishButton()).toHaveTextContent('Publish (1)')
   })
 
-  it('the toolbar Add rule asks where: the cluster preselected, a host or a guest shown can be picked', async () => {
-    h.getNodeRules.mockResolvedValue([])
-    h.getNodeOptions.mockResolvedValue({ enable: 1 })
-    renderView(props(), true, true)
-    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }))
-    const dialog = await screen.findByRole('dialog')
-    const scope = within(dialog).getByRole('combobox', { name: /Applies to/ })
-    expect(scope).toHaveTextContent('Cluster rules')
-    fireEvent.mouseDown(scope)
-    const list = await screen.findByRole('listbox')
-    expect(within(list).getByText('Hosts')).toBeInTheDocument()
-    expect(within(list).getByRole('option', { name: 'vm-101 (101) · pve1' })).toBeInTheDocument()
-    fireEvent.click(within(list).getByRole('option', { name: 'Host pve2' }))
-    // The host's rules are read; the rule can be kept once they are.
-    await waitFor(() => expect(h.getNodeRules).toHaveBeenCalledWith('c1', 'pve2'))
-  })
 })
 
 describe('Firewalling: the zones edited in place (micro-segmentation draft)', () => {
@@ -781,10 +724,10 @@ describe('Firewalling: the zones edited in place (micro-segmentation draft)', ()
 })
 
 describe('Firewalling for a read-only user', () => {
-  it('disables Publish, Add rule (toolbar and sections), the switches and the action, with the reason', async () => {
+  it('disables Publish, Add rule, Delete, the switches and the action, with the reason', async () => {
     renderView(props(), false)
     expect(publishButton()).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Add rule' })).toBeDisabled()
+    expect(within(ruleRow('Admin SSH')).getByRole('button', { name: 'Delete rule 1' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Add a rule to Cluster rules' })).toBeDisabled()
     const ssh = ruleRow('Admin SSH')
     for (const s of within(ssh).getAllByRole('switch')) expect(s).toBeDisabled()
@@ -811,7 +754,7 @@ describe('Firewalling for a read-only user', () => {
 
   it('leaves them enabled with the right', () => {
     renderView()
-    expect(screen.getByRole('button', { name: 'Add rule' })).toBeEnabled()
+    expect(within(ruleRow('Admin SSH')).getByRole('button', { name: 'Delete rule 1' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: 'Add section' })).toBeNull()
     expect(ruleRow('Admin SSH')).toHaveAttribute('draggable', 'true')
     expect(within(ruleRow('Admin SSH')).getByRole('button', { name: 'Admin SSH' })).toBeEnabled()

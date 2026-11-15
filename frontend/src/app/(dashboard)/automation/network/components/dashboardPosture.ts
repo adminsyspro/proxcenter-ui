@@ -1,6 +1,6 @@
 import type { FirewallCoverage } from '@/hooks/useZeroTrust'
 import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, OUTSIDE_KEY, UNZONED_KEY, zoneKey } from '@/lib/microseg/trafficLens'
-import { zoneEgress, type MicrosegFlow, type MicrosegStatus, type MicrosegSuggestion, type MicrosegZone } from '@/lib/microseg/types'
+import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 import { serviceTokenLabel } from '@/lib/network/serviceNames'
 
 import { flowService } from './microseg/FlowSummary'
@@ -371,38 +371,6 @@ export function topServices(suggestions: readonly MicrosegSuggestion[], flows: r
 /** The tokens of the observed parts of a service: what the Observation list can be filtered on. */
 export function observedTokens(row: Pick<ServiceRow, 'parts'>): string[] {
   return [...new Set(row.parts.filter(p => p.status !== 'allowed').flatMap(p => p.tokens))].sort(byText)
-}
-
-/** Zones that enforce, of all the zones; null while the status is not read. */
-export function zonesEnforced(status: Pick<MicrosegStatus, 'zones_by_state'> | undefined): { enforced: number; total: number } | null {
-  const z = status?.zones_by_state
-  if (!z) return null
-  return { enforced: z.enforce ?? 0, total: (z.enforce ?? 0) + (z.observe ?? 0) + (z.disabled ?? 0) }
-}
-
-/** Zones that block their outbound traffic and zones that only observe it; null while the policy is not read. */
-export type ZonesOutbound = { blocked: number; observed: number }
-
-export function zonesOutbound(zones: readonly Pick<MicrosegZone, 'state' | 'egress_state'>[] | undefined): ZonesOutbound | null {
-  if (!zones) return null
-  const states = zones.map(zoneEgress)
-  return { blocked: states.filter(s => s === 'enforce').length, observed: states.filter(s => s === 'observe').length }
-}
-
-/**
- * Running guests filtered by Proxmox, of the running guests the coverage route asked; null until it measured them.
- * Above its guest cap the route asks an even sample: `running` then counts the running guests asked, `total` every
- * running guest and `asked` the size of the sample (the cap), and a guest the cap left out is not taken for an
- * unprotected one.
- */
-export type ProtectedRunning = { protected: number; running: number; total: number; asked: number }
-
-export function protectedRunning(coverage: Pick<FirewallCoverage, 'computedAt' | 'guests'> | null | undefined): ProtectedRunning | null {
-  if (!coverage?.computedAt || !coverage.guests) return null
-  const asked = coverage.guests.filter(r => !r.sampledOut)
-  const running = asked.filter(r => r.status === 'running')
-  const total = coverage.guests.filter(r => r.status === 'running').length
-  return { protected: running.filter(r => r.enabled === true).length, running: running.length, total, asked: asked.length }
 }
 
 /**

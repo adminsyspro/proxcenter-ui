@@ -165,8 +165,8 @@ export default function NetworkAutomationPage() {
             <Tab icon={<i className="ri-database-2-line" />} iconPosition="start" label={t('networkPage.tabIpSets')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
             <Tab icon={<i className="ri-price-tag-3-line" />} iconPosition="start" label={t('networkPage.tabAliases')} sx={{ textTransform: 'none', fontWeight: 600, fontSize: 14 }} />
           </Tabs>
-            {/* Connection selector: right end of the tabs row, below the tabs on a narrow width */}
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexShrink: 0, ml: 'auto', px: 2, py: 1 }}>
+            {/* Connection selector: right end of the tabs row, below the tabs on a narrow width; room above for its floating label */}
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexShrink: 0, ml: 'auto', px: 2, pt: 1.5, pb: 1 }}>
               <FormControl size="small" sx={{ minWidth: 200 }}>
                 <InputLabel>{t('firewall.connection')}</InputLabel>
                 <Select value={selectedConnection} label={t('firewall.connection')} onChange={(e) => {

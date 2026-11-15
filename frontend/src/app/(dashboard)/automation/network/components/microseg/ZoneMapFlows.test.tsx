@@ -343,24 +343,10 @@ describe('canvas tools', () => {
     expect(screen.getByTestId('flow-minimap')).toBeTruthy()
   })
 
-  it('says when it was refreshed and reads the policy, the observed flows and the guests again on Refresh', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-11-02T10:00:00Z'))
+  it('has no refresh time nor Refresh button: the map follows the engine on its own', async () => {
     setup({ flows: [flowOf('f1')] })
     await pathOf('allowed:zone:zw>zone:zd')
-    const first = (await screen.findByText(/^Refreshed at /)).textContent
-    vi.setSystemTime(new Date('2026-11-02T10:07:30Z'))
-    const count = (route: string) => fetchMock.mock.calls.filter(([url]) => String(url).endsWith(route)).length
-    const before = [calls('GET /policy').length, calls(SUGGESTIONS).length, count(GUESTS_ROUTE)]
-    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web(), db()], flows: [flowOf('f1')], last_revision: REVISION_HEAD }))
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh the map' }))
-    await waitFor(() => {
-      expect(calls('GET /policy').length).toBeGreaterThan(before[0])
-      expect(calls(SUGGESTIONS).length).toBeGreaterThan(before[1])
-      expect(count(GUESTS_ROUTE)).toBeGreaterThan(before[2])
-    })
-    // Nothing changed in the answers, the time still moves.
-    await waitFor(() => expect(screen.getByText(/^Refreshed at /).textContent).not.toBe(first))
-    vi.useRealTimers()
+    expect(screen.queryByText(/^Refreshed at /)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Refresh the map' })).toBeNull()
   })
 })

@@ -4,7 +4,7 @@ import type { FirewallCoverage } from '@/hooks/useZeroTrust'
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import {
-  MAX_CHORDS, MAX_SLICES, arcPath, chordPath, polar, postureDistribution, postureGuests, postureTraffic, observedTokens, protectedRunning, topServices, zonesEnforced, zonesOutbound,
+  MAX_CHORDS, MAX_SLICES, arcPath, chordPath, polar, postureDistribution, postureGuests, postureTraffic, observedTokens, topServices,
 } from './dashboardPosture'
 import type { PolicyGuest } from './microseg/zoneModel'
 
@@ -245,38 +245,5 @@ describe('observedTokens', () => {
     const [row] = topServices([seen({ dport: '22', hits: 2 })], [flow({ proto: 'udp', dport: '22' })])
     expect(row.tokens).toEqual(['tcp/22', 'udp/22'])
     expect(observedTokens(row)).toEqual(['tcp/22'])
-  })
-})
-
-describe('zonesOutbound', () => {
-  it('counts the zones that block and that observe their outbound; a zone that is disabled or has no outbound state counts for neither', () => {
-    expect(zonesOutbound(undefined)).toBeNull()
-    expect(zonesOutbound([])).toEqual({ blocked: 0, observed: 0 })
-    expect(zonesOutbound([
-      { state: 'enforce', egress_state: 'enforce' }, { state: 'observe', egress_state: 'enforce' }, { state: 'observe', egress_state: 'observe' },
-      { state: 'observe', egress_state: 'off' }, { state: 'observe' }, { state: 'disabled', egress_state: 'enforce' },
-    ])).toEqual({ blocked: 2, observed: 1 })
-  })
-})
-
-describe('header figures', () => {
-  it('counts the zones that enforce of all the zones', () => {
-    expect(zonesEnforced({ zones_by_state: { enforce: 1, observe: 4, disabled: 1 } })).toEqual({ enforced: 1, total: 6 })
-    expect(zonesEnforced(undefined)).toBeNull()
-  })
-
-  it('counts the running guests Proxmox filters, of the running guests, once measured', () => {
-    expect(protectedRunning({ computedAt: '2026-11-03T08:00:00Z', guests: ROWS })).toEqual({ protected: 3, running: 3, total: 3, asked: 4 })
-    expect(protectedRunning({ computedAt: '2026-11-03T08:00:00Z', guests: [row(1, 'pve1', [], [], 'running', null), row(2, 'pve1', [], [])] })).toEqual({ protected: 1, running: 2, total: 2, asked: 2 })
-    expect(protectedRunning({ computedAt: '', guests: ROWS })).toBeNull()
-    expect(protectedRunning(null)).toBeNull()
-  })
-
-  it('counts the protected guests over the guests asked only, above the guest cap of the coverage route', () => {
-    // 2 running guests asked (1 protected), 2 running guests the cap left out, 1 stopped guest left out.
-    const left = (vmid: number, status = 'running') => ({ ...row(vmid, 'pve1', [], [], status, null), sampledOut: true })
-    const guests = [row(1, 'pve1', [], []), row(2, 'pve1', [], [], 'running', false), left(3), left(4), left(5, 'stopped')]
-
-    expect(protectedRunning({ computedAt: '2026-11-03T08:00:00Z', guests })).toEqual({ protected: 1, running: 2, total: 4, asked: 2 })
   })
 })

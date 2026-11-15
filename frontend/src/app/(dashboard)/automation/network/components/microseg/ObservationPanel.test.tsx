@@ -193,13 +193,12 @@ describe('observation list', () => {
     expect(await screen.findByText('No observed flow matches these filters.')).toBeTruthy()
   })
 
-  it('shows the sampling notice with a link that opens the settings of the tab', async () => {
+  it('shows the sampling notice on the row of the sub-tabs, whose gear opens the settings of the tab', async () => {
     setup([])
     fireEvent.mouseOver(await screen.findByRole('button', { name: 'About the hit counts' }))
     expect(await screen.findByText(/at most one line per second per chain by default/)).toBeTruthy()
-    const link = screen.getByRole('button', { name: 'Open settings' }) as HTMLButtonElement
-    expect(link.disabled).toBe(false)
-    fireEvent.click(link)
+    expect(screen.queryByRole('button', { name: 'Open settings' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(await screen.findByRole('dialog', { name: 'Micro-segmentation settings' })).toBeTruthy()
   })
 })

@@ -1,5 +1,6 @@
 /**
- * The shape of every edge of the zone map and the place of its label: lanes keep the edges of a pair side by side,
+ * The shape of every edge of the zone map and the place of its label: lanes keep the edges between the same two
+ * circles (or boxes) side by side, whichever guest or circle they end on,
  * a bow keeps an edge clear of the circles it does not belong to, and each label goes to the first place along its
  * edge where it covers no circle, no box and no other label.
  */
@@ -60,19 +61,29 @@ function groupBy(specs: EdgeSpec[], key: (s: EdgeSpec) => string): Map<string, E
   return groups
 }
 
-const directionKey = (s: EdgeSpec) => `${s.source}>${s.target}`
+/**
+ * The way of an edge between the circles (or boxes) of its ends: an edge into a circle and one into a guest of that
+ * circle run along the same line, so they share their lanes and are drawn side by side, not on top of each other.
+ * Inside one circle, the way between the two guests themselves (each direction on its own side).
+ */
+function directionKey(s: EdgeSpec, ends: Map<string, EdgeEnds>): string {
+  const from = ends.get(s.source)?.group ?? s.source
+  const to = ends.get(s.target)?.group ?? s.target
+  return from === to ? `${s.source}>${s.target}` : `${from}>${to}`
+}
 /** The two ends of an edge in a fixed order, so that both directions of a pair share the key. */
 const endsKey = (s: EdgeSpec) => (s.source < s.target ? `${s.source}|${s.target}` : `${s.target}|${s.source}`)
 
 /**
- * Lanes: each direction of a pair on its own side (the offset follows the normal of the edge, which flips with the
- * direction), the edges of one direction spread around the middle line when the other direction is empty.
+ * Lanes: each direction between two circles (or boxes) on its own side (the offset follows the normal of the edge,
+ * which flips with the direction), the edges of one direction spread around the middle line when the other is empty.
  */
-function laneMap(specs: EdgeSpec[]): Map<EdgeSpec, Lane> {
-  const byDirection = groupBy(specs, directionKey)
+function laneMap(specs: EdgeSpec[], ends: Map<string, EdgeEnds>): Map<EdgeSpec, Lane> {
+  const byDirection = groupBy(specs, s => directionKey(s, ends))
   const lanes = new Map<EdgeSpec, Lane>()
-  for (const same of byDirection.values()) {
-    const reverse = byDirection.has(`${same[0].target}>${same[0].source}`)
+  for (const [key, same] of byDirection) {
+    const [from, to] = key.split('>')
+    const reverse = byDirection.has(`${to}>${from}`)
     same.forEach((s, k) => {
       lanes.set(s, {
         offset: (reverse ? k + 0.5 : k - (same.length - 1) / 2) * LANE_GAP,
@@ -131,7 +142,7 @@ function placeLabel(shape: EdgeShape, w: number, h: number, start: number, label
 }
 
 export function placeEdges(specs: EdgeSpec[], ends: Map<string, EdgeEnds>, obstacles: Obstacle[]): Map<string, PlacedEdge> {
-  const lanes = laneMap(specs)
+  const lanes = laneMap(specs, ends)
   const shapes = new Map<string, EdgeShape>()
   for (const [key, group] of groupBy(specs, endsKey)) {
     for (const [id, shape] of pairShapes(key, group, ends, obstacles, lanes)) shapes.set(id, shape)

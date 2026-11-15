@@ -108,6 +108,17 @@ describe('MicrosegEventsView', () => {
     expect(blocked.getAllByText(/^(db|web)$/)).toHaveLength(1)
   })
 
+  it('lets the table take the height the tab leaves, scrolling in it', async () => {
+    renderView()
+
+    await screen.findByText('web-01')
+    const table = screen.getByTestId('microseg-events-table')
+
+    expect(getComputedStyle(table).flexGrow).toBe('1')
+    expect(getComputedStyle(table).minHeight).toBe('160px')
+    expect(getComputedStyle(table.parentElement as HTMLElement).flexGrow).toBe('1')
+  })
+
   it('tells the engine has seen nothing yet, in the table width', async () => {
     answer = () => ({ events: [], truncated: false, oldest: null })
     renderView()

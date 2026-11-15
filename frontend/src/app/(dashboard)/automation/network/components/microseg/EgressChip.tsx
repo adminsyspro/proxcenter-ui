@@ -20,22 +20,24 @@ const LOOK: Record<Look, { color: 'default' | 'info' | 'success' | 'error' }> = 
 /**
  * The outbound state of a zone as a chip: off, observing (ready once the observation window is clean), blocking.
  * With `iconOnlyBelow` (px), the label is hidden when the nearest size container (the card title) is narrower than
- * that: the icon and the tooltip stay, so the zone name keeps its room.
+ * that: the icon and the tooltip stay, so the zone name keeps its room. `iconOnly` always leaves it to the tooltip.
  */
-export default function EgressChip({ state, ready = false, size = 'small', iconOnlyBelow }: { state: EgressState; ready?: boolean; size?: 'small' | 'medium'; iconOnlyBelow?: number }) {
+export default function EgressChip({ state, ready = false, size = 'small', iconOnlyBelow, iconOnly = false }: { state: EgressState; ready?: boolean; size?: 'small' | 'medium'; iconOnlyBelow?: number; iconOnly?: boolean }) {
   const t = useTranslations('microsegPilot.policy.zone.egress')
   const look: Look = state === 'observe' && ready ? 'ready' : state
   return (
-    <Tooltip title={t(`hint.${look}`)} describeChild>
+    <Tooltip title={iconOnly ? `${t(`state.${look}`)} : ${t(`hint.${look}`)}` : t(`hint.${look}`)} describeChild>
       <Chip
         size={size}
         variant='outlined'
         color={LOOK[look].color}
         icon={<i className='ri-logout-box-r-line' style={{ fontSize: size === 'small' ? 14 : 16 }} />}
-        aria-label={iconOnlyBelow ? t(`state.${look}`) : undefined}
+        aria-label={iconOnlyBelow || iconOnly ? t(`state.${look}`) : undefined}
+        data-testid='egress-chip'
         label={<span data-egress-label>{t(`state.${look}`)}</span>}
         sx={{
           flexShrink: 0, maxWidth: '100%',
+          ...(iconOnly && { '& .MuiChip-label': { display: 'none' }, '& .MuiChip-icon': { mx: '5px' } }),
           ...(iconOnlyBelow ? { [`@container (max-width: ${iconOnlyBelow}px)`]: { '& .MuiChip-label': { display: 'none' }, '& .MuiChip-icon': { mr: '5px' } } } : {}),
         }}
       />

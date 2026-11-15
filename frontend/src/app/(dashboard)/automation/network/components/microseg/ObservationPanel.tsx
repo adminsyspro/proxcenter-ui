@@ -193,7 +193,6 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
 
   return (
     <Box sx={{ px: 3, pb: 3 }}>
-      <ObservationLegend onOpenSettings={onOpenSettings} />
       <ObservationFilters values={filters} zones={policy.zones} onChange={changeFilters} />
       {filters.zone && <ZoneFilterBanner connectionId={connectionId} policy={policy} zoneId={filters.zone} />}
       {service && <FocusBanner testId='observation-service-filter' text={t('serviceBanner', { service: service.label, ports: service.tokens.join(', ') })} clearText={t('serviceBannerClear')} onClear={clearService} />}
@@ -207,6 +206,14 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
         </Alert>
       )}
 
+      {/* One row: the legend, the bulk actions of a selection, the pager. */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minHeight: 40 }}>
+        <ObservationLegend onOpenSettings={onOpenSettings} />
+        {data && chosen.length > 0 && <BulkBar count={chosen.length} busy={busy} noZone={noZoneAmongChosen} noIp={noIpAmongChosen} outbound={outboundAmongChosen} aggregate={aggregateAmongChosen} outboundZone={outboundZoneAmongChosen} onResolve={bulk} />}
+        <Box sx={{ flex: 1 }} />
+        {data && <PrevNextPager page={page} hasNext={hasNext} onPage={goToPage} />}
+      </Box>
+
       {!data && !error && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <CircularProgress size={20} />
@@ -216,11 +223,6 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, o
 
       {data && (
         <>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 40 }}>
-            {chosen.length > 0 && <BulkBar count={chosen.length} busy={busy} noZone={noZoneAmongChosen} noIp={noIpAmongChosen} outbound={outboundAmongChosen} aggregate={aggregateAmongChosen} outboundZone={outboundZoneAmongChosen} onResolve={bulk} />}
-            <Box sx={{ flex: 1 }} />
-            <PrevNextPager page={page} hasNext={hasNext} onPage={goToPage} />
-          </Box>
           {rows.length === 0 ? (
             <Typography color='text.secondary' sx={{ py: 2 }}>{t('empty')}</Typography>
           ) : (

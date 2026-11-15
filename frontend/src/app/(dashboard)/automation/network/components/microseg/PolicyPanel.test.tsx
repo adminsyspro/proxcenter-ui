@@ -106,6 +106,21 @@ describe('zone list', () => {
     expect(screen.queryByRole('region', { name: 'Details of db' })).toBeNull()
   })
 
+  it('shows the details of one zone at a time: opening one closes the other, and a saved list keeps its last zone', async () => {
+    window.localStorage.setItem('microseg.policy.openCards.c1', JSON.stringify(['zw', 'zd']))
+    setup({ zones: [web(), db()] })
+    expect(await screen.findByRole('region', { name: 'Details of db' })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Details of web' })).toBeNull()
+
+    fireEvent.click(within(screen.getByRole('listitem', { name: 'web' })).getByRole('button', { name: 'Show details of web' }))
+    expect(await screen.findByRole('region', { name: 'Details of web' })).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Details of db' })).toBeNull())
+    expect(JSON.parse(window.localStorage.getItem('microseg.policy.openCards.c1') ?? '[]')).toEqual(['zw'])
+
+    fireEvent.click(within(screen.getByRole('listitem', { name: 'web' })).getByRole('button', { name: 'Hide details of web' }))
+    await waitFor(() => expect(screen.queryByRole('region', { name: /Details of/ })).toBeNull())
+  })
+
   it('opens no card on first display, whatever the former list remembered', async () => {
     window.localStorage.setItem('microseg.policy.openZones.c1', JSON.stringify(['zw', 'zd']))
     setup({ zones: [web(), db()] })

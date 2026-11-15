@@ -1,8 +1,8 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { Box, Checkbox, FormControlLabel, IconButton, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material'
-import { useFormatter, useTranslations } from 'next-intl'
+import { Box, Checkbox, FormControlLabel, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material'
+import { useTranslations } from 'next-intl'
 
 import { useStored, useStoredChoice } from './useStoredChoice'
 import { ALL_FLOWS, EDGE_COLORS, type FlowFilters } from './zoneGraph'
@@ -77,18 +77,14 @@ type Props = {
   lead?: ReactNode
   filters: FlowFilters
   onFilters: (next: FlowFilters) => void
-  refreshedAt: Date | null
-  refreshing: boolean
-  onRefresh: () => void
 }
 
 /**
  * The toolbar of the map: the rendering selector, "Flows:" with its three checkboxes (each with the line it draws, so it is the legend too),
- * then the time of the last read with a refresh button. A time range selector would go between the two.
+ * then the two lines it draws without a checkbox (allowed not applied yet, to the outside).
  */
-export default function MapToolbar({ view, onView, lead, filters, onFilters, refreshedAt, refreshing, onRefresh }: Props) {
+export default function MapToolbar({ view, onView, lead, filters, onFilters }: Props) {
   const t = useTranslations('microsegPilot.overview')
-  const format = useFormatter()
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', minHeight: 36 }}>
       {view && onView && <ViewSwitch view={view} onView={onView} />}
@@ -118,22 +114,6 @@ export default function MapToolbar({ view, onView, lead, filters, onFilters, ref
           <Swatch color={EDGE_COLORS.outside} dash='dashed' />
           <Typography variant='caption' color='text.secondary'>{t('legend.outside')}</Typography>
         </Box>
-      </Box>
-      {/* A time range selector would sit here; v1 shows the cumulative observed flows. */}
-      <Box sx={{ flex: 1 }} />
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        {refreshedAt && (
-          <Typography noWrap variant='caption' color='text.secondary'>
-            {t('toolbar.refreshedAt', { time: format.dateTime(refreshedAt, { timeStyle: 'medium' }) })}
-          </Typography>
-        )}
-        <Tooltip title={t('toolbar.refresh')}>
-          <span>
-            <IconButton size='small' aria-label={t('toolbar.refresh')} disabled={refreshing} onClick={onRefresh}>
-              <i className='ri-refresh-line' />
-            </IconButton>
-          </span>
-        </Tooltip>
       </Box>
     </Box>
   )

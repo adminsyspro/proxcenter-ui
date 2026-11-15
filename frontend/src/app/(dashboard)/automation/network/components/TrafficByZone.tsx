@@ -222,9 +222,9 @@ export default function TrafficByZone({ phase, traffic, groupBy, onGroupBy, trun
   }
 
   return (
-    <PostureCard testId='traffic-card' title={t(TITLE[groupBy])} caption={caption} hint={hint} action={select}>
+    <PostureCard testId='traffic-card' title={t(TITLE[groupBy])} caption={caption} hint={hint} action={select} grow>
       {body}
-      {footer && <Box sx={{ mt: 1, pt: 2, borderTop: 1, borderColor: 'divider' }}>{footer}</Box>}
+      {footer && <Box sx={{ mt: 1, pt: 2, borderTop: 1, borderColor: 'divider', flex: '1 1 auto', display: 'flex', flexDirection: 'column' }}>{footer}</Box>}
     </PostureCard>
   )
 }

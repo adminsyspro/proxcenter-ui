@@ -43,14 +43,16 @@ type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onSetEgr
   work?: ZoneWorkContext
 }
 
-/** The zones opened under their chevron, remembered per connection in this browser. */
+/** The zone opened under its chevron (one at a time), remembered per connection in this browser. */
 // A new key for the cards: the open rows of the former list are not carried over, every card starts closed.
 export const openZonesKey = (connectionId: string) => `microseg.policy.openCards.${connectionId}`
 
 function readOpen(connectionId: string): Set<string> {
   try {
     const parsed: unknown = JSON.parse(window.localStorage.getItem(openZonesKey(connectionId)) ?? '[]')
-    return new Set(Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [])
+    // One zone at a time: of a list saved before, the last one opened.
+    const ids = Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : []
+    return new Set(ids.slice(-1))
   } catch {
     return new Set()
   }
@@ -59,8 +61,8 @@ function readOpen(connectionId: string): Set<string> {
 function useOpenZones(connectionId: string) {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => readOpen(connectionId))
   const toggle = useCallback((id: string) => setOpen(prev => {
-    const next = new Set(prev)
-    if (!next.delete(id)) next.add(id)
+    // Opening a zone closes the one open: the details of one zone at a time.
+    const next = new Set(prev.has(id) ? [] : [id])
     try {
       window.localStorage.setItem(openZonesKey(connectionId), JSON.stringify([...next]))
     } catch {

@@ -240,9 +240,9 @@ export default function ZonePanel(props: Props) {
 
   const header = (
     <>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-        <i className='ri-shield-fill' style={{ fontSize: 18, color: zone.color || undefined }} />
-        <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+        <i className='ri-shield-fill' style={{ fontSize: 18, color: zone.color || undefined, flexShrink: 0 }} />
+        <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '0 1 auto', minWidth: 0 }} />
         {!!signals?.count && (
           <Chip
             size='small'
@@ -255,15 +255,16 @@ export default function ZonePanel(props: Props) {
             sx={{ flexShrink: 0 }}
           />
         )}
-        <ZoneStateChip state={zone.state} />
-        <EgressChip state={egress} ready={egressReady} />
-        <IconButton size='small' aria-label={tz('expand')} onClick={() => setExpanded(true)}><i className='ri-fullscreen-line' /></IconButton>
-        <IconButton size='small' aria-label={t('close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
+        {/* One row over the whole width: the states as icons (their words in the tooltips), the actions, enlarge and close. */}
+        <Box data-testid='zone-panel-controls' sx={{ flex: '1 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.25, ml: 1 }}>
+          <ZoneStateChip state={zone.state} iconOnly />
+          <EgressChip state={egress} ready={egressReady} iconOnly />
+          <ZoneHeaderActions zone={zone} edits={edits} onAssign={onAssign} onDeleted={onClose} spread />
+          <IconButton size='small' aria-label={tz('expand')} onClick={() => setExpanded(true)}><i className='ri-fullscreen-line' /></IconButton>
+          <IconButton size='small' aria-label={t('close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
+        </Box>
       </Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, mt: 1 }}>
-        <TruncatedText text={zone.label} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
-        <ZoneHeaderActions zone={zone} edits={edits} onAssign={onAssign} onDeleted={onClose} />
-      </Box>
+      {zone.label && <TruncatedText text={zone.label} variant='body2' color='text.secondary' sx={{ mt: 0.5, minWidth: 0 }} />}
     </>
   )
 

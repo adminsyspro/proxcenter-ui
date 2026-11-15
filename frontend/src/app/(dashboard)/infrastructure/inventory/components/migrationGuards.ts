@@ -151,3 +151,29 @@ export function formatDowntimeBudget(seconds: number): string {
 
   return restMinutes ? `${hours} h ${restMinutes} min` : `${hours} h`
 }
+
+/**
+ * Cutover fields of a warm launch, shared by the single-VM request and the
+ * batch one. Both modes carry the downtime field: the budget an automatic
+ * cutover waits for, the target a manual one is measured against (suggested
+ * interval, cutover estimate) without anything switching on it. A manual one
+ * also carries the hold, plus the interval between two syncs only when the
+ * operator changed it: left alone, the setting of the source connection
+ * applies, even if it changes while the migration waits.
+ */
+export function warmCutoverPayload(o: {
+  migType: string; manualCutover: boolean; downtimeBudget: string; syncIntervalSec: number | null | undefined
+  /** The setting of the source connection, when it could be read. */
+  defaultSyncIntervalSec?: number | null
+}): { cutoverMode?: 'manual'; downtimeBudgetSec?: number; syncIntervalSec?: number } {
+  if (o.migType !== 'warm') return {}
+  const budget = o.downtimeBudget.trim()
+  const downtime = budget !== '' ? { downtimeBudgetSec: Number(budget) } : {}
+  if (o.manualCutover) {
+    // A slider brought back onto the setting of the source connection is not
+    // an override: the migration then keeps following that setting.
+    const own = typeof o.syncIntervalSec === 'number' && o.syncIntervalSec !== o.defaultSyncIntervalSec
+    return { cutoverMode: 'manual', ...downtime, ...(own && { syncIntervalSec: o.syncIntervalSec as number }) }
+  }
+  return downtime
+}

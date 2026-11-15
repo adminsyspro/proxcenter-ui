@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 
-import { vsanBlocksMigrationType, vsanBlocksDirectEsxiRun, requiredTempBytes, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_MIN_SEC, DOWNTIME_BUDGET_MAX_SEC, DOWNTIME_BUDGET_PRESETS, DOWNTIME_BUDGET_DEFAULT_SEC, downtimeBudgetIndex, formatDowntimeBudget } from "./migrationGuards"
+import { warmCutoverPayload, vsanBlocksMigrationType, vsanBlocksDirectEsxiRun, requiredTempBytes, warmNeedsBlockStorage, isDowntimeBudgetValid, DOWNTIME_BUDGET_MIN_SEC, DOWNTIME_BUDGET_MAX_SEC, DOWNTIME_BUDGET_PRESETS, DOWNTIME_BUDGET_DEFAULT_SEC, downtimeBudgetIndex, formatDowntimeBudget } from "./migrationGuards"
 
 describe("vsanBlocksMigrationType", () => {
   it("blocks the file-based types on a vSAN source", () => {
@@ -176,5 +176,34 @@ describe("requiredTempBytes", () => {
   it("never demands a negative amount", () => {
     expect(requiredTempBytes(-1, "nfs")).toBe(0)
     expect(requiredTempBytes(0, "lvm")).toBe(0)
+  })
+})
+
+describe("warmCutoverPayload", () => {
+  const base = { migType: "warm", manualCutover: false, downtimeBudget: "300", syncIntervalSec: null as number | null }
+
+  it("sends nothing for a migration that is not warm", () => {
+    expect(warmCutoverPayload({ ...base, migType: "cold", manualCutover: true, syncIntervalSec: 900 })).toEqual({})
+  })
+
+  it("sends the downtime budget of an automatic cutover, and no interval", () => {
+    expect(warmCutoverPayload({ ...base, downtimeBudget: " 600 ", syncIntervalSec: 900 })).toEqual({ downtimeBudgetSec: 600 })
+    expect(warmCutoverPayload({ ...base, downtimeBudget: "" })).toEqual({})
+  })
+
+  it("sends a manual cutover with the downtime it aims at, and the interval only when the operator changed it", () => {
+    // Nothing switches on that number in manual mode: it is the target the
+    // suggested interval and the cutover estimate are measured against.
+    expect(warmCutoverPayload({ ...base, manualCutover: true })).toEqual({ cutoverMode: "manual", downtimeBudgetSec: 300 })
+    expect(warmCutoverPayload({ ...base, manualCutover: true, downtimeBudget: "" })).toEqual({ cutoverMode: "manual" })
+    expect(warmCutoverPayload({ ...base, manualCutover: true, downtimeBudget: "120", syncIntervalSec: 1800 })).toEqual({ cutoverMode: "manual", downtimeBudgetSec: 120, syncIntervalSec: 1800 })
+  })
+
+  it("does not pin an interval brought back onto the setting of the source connection", () => {
+    const manual = { ...base, manualCutover: true, downtimeBudget: "" }
+    expect(warmCutoverPayload({ ...manual, syncIntervalSec: 900, defaultSyncIntervalSec: 900 })).toEqual({ cutoverMode: "manual" })
+    expect(warmCutoverPayload({ ...manual, syncIntervalSec: 900, defaultSyncIntervalSec: 3600 })).toEqual({ cutoverMode: "manual", syncIntervalSec: 900 })
+    // setting unknown (it could not be read): what the operator chose is sent
+    expect(warmCutoverPayload({ ...manual, syncIntervalSec: 60, defaultSyncIntervalSec: null })).toEqual({ cutoverMode: "manual", syncIntervalSec: 60 })
   })
 })

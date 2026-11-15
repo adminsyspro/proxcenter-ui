@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   MIGRATION_LIMIT_MAX, MIGRATION_PARALLEL_DEFAULT, MIGRATION_PER_NODE_DEFAULT, MIGRATION_PER_SOURCE_HOST_DEFAULT,
-  effectiveMigrationLimits, migrationLimitFields, pickJobsToStart, sourceHostKey,
+  effectiveMigrationLimits, hasFreeSlot, migrationLimitFields, pickJobsToStart, sourceHostKey,
 } from "./migration-limits"
 
 const limits = { batch: 5, cluster: 5, perNode: 2, perSourceHost: 4 }
@@ -126,5 +126,33 @@ describe("migrationLimitFields", () => {
   it("passes null through (back to the default) and drops what was not sent", () => {
     expect(migrationLimitFields("pve", { migrationMaxParallel: null })).toEqual({ migrationMaxParallel: null })
     expect(migrationLimitFields("pbs", body)).toEqual({})
+  })
+
+  it("keeps the sync interval on a VMware or XCP-ng source only", () => {
+    const withInterval = { ...body, migrationSyncIntervalSec: 900 }
+    expect(migrationLimitFields("vmware", withInterval)).toEqual({ migrationMaxPerSourceHost: 6, migrationSyncIntervalSec: 900 })
+    expect(migrationLimitFields("xcpng", withInterval)).toEqual({ migrationSyncIntervalSec: 900 })
+    expect(migrationLimitFields("pve", withInterval)).toEqual({ migrationMaxParallel: 10, migrationMaxPerNode: 3 })
+    expect(migrationLimitFields("hyperv", withInterval)).toEqual({})
+    expect(migrationLimitFields("xcpng", { migrationSyncIntervalSec: null })).toEqual({ migrationSyncIntervalSec: null })
+  })
+})
+
+describe("hasFreeSlot", () => {
+  const l = { cluster: 3, perNode: 2, perSourceHost: 1 }
+  const run = (targetNode: string, host: string | null, sameTarget = true) => ({ targetNode, sourceHostKey: host, sameTarget })
+
+  it("is free when nothing runs", () => {
+    expect(hasFreeSlot(job("j"), [], l)).toBe(true)
+  })
+
+  it("is full when the cluster, the node or the source host is at its limit", () => {
+    expect(hasFreeSlot(job("j", "pve1", "src|esx9"), [run("pve2", null), run("pve3", null), run("pve4", null)], l)).toBe(false)
+    expect(hasFreeSlot(job("j", "pve1", "src|esx9"), [run("pve1", null), run("pve1", null)], l)).toBe(false)
+    expect(hasFreeSlot(job("j", "pve1", "src|esx1"), [run("pve9", "src|esx1", false)], l)).toBe(false)
+  })
+
+  it("ignores what runs into another cluster, except for the shared source host", () => {
+    expect(hasFreeSlot(job("j", "pve1", "src|esx1"), [run("pve1", "src|esx2", false), run("pve1", null, false), run("pve1", null, false)], l)).toBe(true)
   })
 })

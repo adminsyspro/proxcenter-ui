@@ -28,7 +28,7 @@ vi.mock("@/lib/scheduler/lease", () => ({
 }))
 
 import {
-  BATCH_REVOKED_ERROR, JOB_REVOKED_ERROR, batchStillAuthorized, jobStillAuthorized, cancelQueuedJobs, holdsBatchSlot, launchInBackground, pauseBatch, pumpBatch, pumpRunningBatches, resumeBatch,
+  BATCH_REVOKED_ERROR, JOB_REVOKED_ERROR, batchStillAuthorized, jobStillAuthorized, cancelQueuedJobs, holdsBatchSlot, isUnfinished, launchInBackground, pauseBatch, pumpBatch, pumpRunningBatches, resumeBatch,
   startBatchPump, stopBatchPump,
 } from "./batch-scheduler"
 import { startMigrationJob } from "@/lib/migration/start-job"
@@ -83,10 +83,22 @@ beforeEach(async () => {
 
 describe("holdsBatchSlot", () => {
   it("counts started, unfinished jobs only", () => {
-    expect(holdsBatchSlot("queued")).toBe(false)
-    expect(holdsBatchSlot("pending")).toBe(true)
-    expect(holdsBatchSlot("full_copy")).toBe(true)
-    for (const s of ["completed", "failed", "cancelled"]) expect(holdsBatchSlot(s)).toBe(false)
+    const slot = (status: string, holdIdleAt: Date | null = null) => holdsBatchSlot({ status, holdIdleAt })
+    expect(slot("queued")).toBe(false)
+    expect(slot("pending")).toBe(true)
+    expect(slot("full_copy")).toBe(true)
+    for (const s of ["completed", "failed", "cancelled"]) expect(slot(s)).toBe(false)
+  })
+
+  it("frees the slot of a warm job asleep between two passes of a manual hold", () => {
+    expect(holdsBatchSlot({ status: "delta_sync", holdIdleAt: new Date() })).toBe(false)
+    expect(holdsBatchSlot({ status: "delta_sync", holdIdleAt: null })).toBe(true)
+  })
+
+  it("still counts a job asleep in a hold as unfinished", () => {
+    expect(isUnfinished("delta_sync")).toBe(true)
+    expect(isUnfinished("queued")).toBe(false)
+    for (const s of ["completed", "failed", "cancelled"]) expect(isUnfinished(s)).toBe(false)
   })
 })
 
@@ -156,6 +168,34 @@ describe("pumpBatch", () => {
     expect(await batchStatus(batchId)).toBe("completed")
   })
 
+  const hold = (id: string, idle: boolean) => prismaTest.migrationJob.update({ where: { id }, data: { status: "delta_sync", holdIdleAt: idle ? new Date() : null } })
+
+  it("starts the next jobs while the first ones sleep in a manual hold", async () => {
+    const { batchId, ids } = await makeBatch(5, { concurrency: 2 })
+    await hold(ids[0], true)
+    await hold(ids[1], true)
+
+    expect((await pumpBatch(batchId, { launch: vi.fn() })).started).toEqual([ids[2], ids[3]])
+    expect(await statusOf(ids[4])).toBe("queued")
+  })
+
+  it("keeps the slot of a held job while its delta pass runs", async () => {
+    const { batchId, ids } = await makeBatch(5, { concurrency: 2 })
+    await hold(ids[0], false)
+    await hold(ids[1], false)
+
+    expect((await pumpBatch(batchId, { launch: vi.fn() })).started).toEqual([])
+  })
+
+  it("keeps a batch running while all its jobs wait for their cutover", async () => {
+    const { batchId, ids } = await makeBatch(2, { concurrency: 2 })
+    await hold(ids[0], true)
+    await hold(ids[1], true)
+
+    expect((await pumpBatch(batchId, { launch: vi.fn() })).status).toBe("running")
+    expect(await batchStatus(batchId)).toBe("running")
+  })
+
   it("skips a queued job cancelled on its own and starts the next", async () => {
     const { batchId, ids } = await makeBatch(2, { concurrency: 1 })
     await setStatus(ids[0], "cancelled")
@@ -219,6 +259,26 @@ describe("pumpBatch limits", () => {
     await setNodes(ids, ["pve1", "pve2", "pve3"])
 
     expect((await pumpBatch(batchId, { launch: vi.fn() })).started).toEqual([ids[0]])
+  })
+
+  it("does not count migrations asleep in a manual hold against the cluster, node and host limits", async () => {
+    await conn("tgt", "pve", { migrationMaxParallel: 2, migrationMaxPerNode: 1 })
+    await conn("src", "vmware", { migrationMaxPerSourceHost: 1 })
+    const idle = { holdIdleAt: new Date(), config: { migrationType: "warm", sourceType: "vcenter", vcenterHost: "esx1" } }
+    await single("delta_sync", "pve1", idle)
+    await single("delta_sync", "pve1", idle)
+    const { batchId, ids } = await makeBatch(1, { concurrency: 1 })
+    await setHosts(ids, ["esx1"])
+
+    expect((await pumpBatch(batchId, { launch: vi.fn() })).started).toEqual([ids[0]])
+  })
+
+  it("counts a held migration again while its delta pass runs", async () => {
+    await conn("tgt", "pve", { migrationMaxPerNode: 1 })
+    await single("delta_sync", "pve1", { holdIdleAt: null })
+    const { batchId } = await makeBatch(1, { concurrency: 1 })
+
+    expect((await pumpBatch(batchId, { launch: vi.fn() })).started).toEqual([])
   })
 
   it("never runs more jobs of a batch than the cluster limit, whatever concurrency it was created with", async () => {

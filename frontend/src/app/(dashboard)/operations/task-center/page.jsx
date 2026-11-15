@@ -35,6 +35,9 @@ import { CardsSkeleton, TableSkeleton } from '@/components/skeletons'
 import { jobActionPermission, jobActions, runJobAction } from '@/lib/tasks/jobActions'
 import { rollingUpdateDetail } from '@/lib/tasks/rollingUpdateDetail'
 import JobDetailDialog from '@/components/tasks/JobDetailDialog'
+import { useRouter } from 'next/navigation'
+import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
+import { migrationFromTaskCenterJob, openMigration } from '@/lib/migration/migrationJobOpen'
 import StopTaskButton from '@/components/tasks/StopTaskButton'
 import TaskLogButton from '@/components/tasks/TaskLogButton'
 import FailureReasonText from '@/components/tasks/FailureReasonText'
@@ -191,8 +194,19 @@ export default function JobsPage() {
     }
   }, [isEnterprise, hasPermission, t])
 
-  // Handle row double-click
+  // Handle row double-click. A migration opens the dialog it was started
+  // from, like the task bar and the running-tasks menu: its migrate dialog,
+  // or the follow-up of its batch (lib/migration/migrationJobOpen).
+  const router = useRouter()
+  const { restoreTask } = useProxCenterTasks()
   const handleRowDoubleClick = (params) => {
+    const migration = migrationFromTaskCenterJob(params.row)
+    if (migration) {
+      openMigration(migration, { restore: restoreTask, navigate: url => router.push(url) })
+
+      return
+    }
+
     setActionError(null)
     setSelectedJob(params.row)
     setDialogOpen(true)

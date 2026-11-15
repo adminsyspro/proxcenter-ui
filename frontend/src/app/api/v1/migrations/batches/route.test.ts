@@ -318,6 +318,19 @@ describe("GET /api/v1/migrations/batches/[id]", () => {
     expect(data.jobs[0]).toMatchObject({ id: "j1", bytesTransferred: 5, totalBytes: null, logs: [] })
   })
 
+  it("tells which jobs are held for a manual cutover, without sending their config", async () => {
+    h.jobs = [
+      { id: "j1", status: "delta_sync", bytesTransferred: null, totalBytes: null, logs: null, config: { cutoverMode: "manual", vddkLibdir: "/opt/vddk" } },
+      { id: "j2", status: "delta_sync", bytesTransferred: null, totalBytes: null, logs: null, config: { cutoverMode: "auto" } },
+      { id: "j3", status: "full_copy", bytesTransferred: null, totalBytes: null, logs: null, config: null },
+    ]
+
+    const data = (await readJson<any>(await callRoute(DETAIL, { params: { id: "b1" } }))).data
+
+    expect(data.jobs.map((j: any) => j.cutoverMode)).toEqual(["manual", "auto", "auto"])
+    for (const j of data.jobs) expect(j).not.toHaveProperty("config")
+  })
+
   it("answers a bare 404 for a batch of another tenant", async () => {
     h.batch = null
     const res = await callRoute(DETAIL, { params: { id: "b1" } })

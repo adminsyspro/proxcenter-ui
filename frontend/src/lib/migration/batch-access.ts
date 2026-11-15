@@ -18,6 +18,8 @@ import { canMigrateConnections, getTenantInfrastructureScope } from "@/lib/tenan
 import { mayMigrateBetweenClusters, migrateScope } from "@/lib/migration/authorize"
 
 import { sliceJobLogs } from "./jobLogs"
+import { parseSyncInterval } from "./warm/sync-interval"
+import { resolveSyncIntervalSec } from "./warm/sync-interval-source"
 
 export interface BatchRow {
   id: string
@@ -81,10 +83,27 @@ export function batchCounts(jobs: Array<{ status: string }>) {
  * `logsAfter` holds, per job in that order, the lines the caller already has:
  * each job then sends only the rest. A list of another length (not the same
  * jobs) is ignored. The job config is left out (GET /api/v1/migrations/[id]
- * has it).
+ * has it), except its cutover mode.
  */
 export async function batchWithJobs(prisma: Awaited<ReturnType<typeof getSessionPrisma>>, batch: BatchRow, logsAfter?: number[]) {
-  const jobs = await prisma.migrationJob.findMany({ where: { batchId: batch.id }, omit: { config: true }, orderBy: [{ batchOrder: "asc" }, { createdAt: "asc" }] })
+  const jobs = await prisma.migrationJob.findMany({ where: { batchId: batch.id }, orderBy: [{ batchOrder: "asc" }, { createdAt: "asc" }] })
   const after = logsAfter?.length === jobs.length ? logsAfter : undefined
-  return { ...batch, counts: batchCounts(jobs), jobs: jobs.map((j, i) => serializeMigrationJob(j, after?.[i])) }
+  const isManual = (config: unknown) => (config as { cutoverMode?: unknown } | null)?.cutoverMode === "manual"
+  // One read of the source connection's setting, and only when a job of the
+  // batch waits for a manual cutover: the follow-up polls this every 3 s.
+  const defaultIntervalSec = jobs.some(j => isManual(j.config))
+    ? await resolveSyncIntervalSec(undefined, batch.sourceConnectionId, prisma as any)
+    : undefined
+  return {
+    ...batch,
+    counts: batchCounts(jobs),
+    jobs: jobs.map(({ config, ...job }, i) => ({
+      ...serializeMigrationJob(job, after?.[i]),
+      // The launch options the follow-up needs: a job held for a manual cutover
+      // waits for the operator in delta_sync, where an automatic one is only
+      // passing through, and it syncs at an interval the operator can change.
+      cutoverMode: isManual(config) ? "manual" : "auto",
+      ...(isManual(config) && { syncIntervalSec: parseSyncInterval((config as { syncIntervalSec?: unknown }).syncIntervalSec) || defaultIntervalSec }),
+    })),
+  }
 }

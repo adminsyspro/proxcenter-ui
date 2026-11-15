@@ -46,6 +46,19 @@ vi.mock("./xcpng-node-preflight", () => ({ checkNbdNodePreflight: vi.fn() }))
 vi.mock("./xapi-reader", () => ({ startXapiReader: vi.fn(), stopXapiReader: vi.fn(), readAllocatedExtents: vi.fn() }))
 vi.mock("./checksum-detector", () => ({ detectChangedExtentsByChecksum: vi.fn(), scanBlockChecksums: vi.fn() }))
 vi.mock("./session-keepalive", () => ({ startSessionKeepAlive: vi.fn() }))
+// The slot a waiting job gives back and reclaims lives in Postgres and has its
+// own tests (hold-slot.test.ts); here the hold only has to sleep its interval
+// and wake on the operator's cutover, one minute as without any setting.
+vi.mock("./hold-slot", async () => {
+  const control = await import("./job-control")
+  return {
+    holdBetweenPasses: async (jobId: string, interval: number | (() => Promise<number>)) => {
+      const intervalSec = typeof interval === "number" ? interval : await interval()
+      return (await control.sleepUnlessCutover(jobId, intervalSec * 1000)) ? "pass" : "cutover"
+    },
+  }
+})
+vi.mock("./sync-interval-source", () => ({ resolveSyncIntervalSec: vi.fn(async (own?: number) => own ?? 60) }))
 vi.mock("@/lib/xcpng/xapi-client", async importOriginal => {
   const actual = await importOriginal<typeof import("@/lib/xcpng/xapi-client")>()
   // CBT_CAPABLE_SR_TYPES and XapiError stay real.
@@ -233,8 +246,15 @@ function makeFakePrisma() {
     return row
   })
   // Same guard as production: a throttled live flush never touches a terminal row.
+  // updateJob writes a step of a run still working through updateMany too,
+  // guarded against a row cancelled meanwhile: those go through the recorder.
   const updateMany = vi.fn(async ({ where, data }: any) => {
     if (where?.status?.notIn?.includes(row.status)) return { count: 0 }
+    if (where?.status?.not !== undefined) {
+      if (where.status.not === row.status) return { count: 0 }
+      await update({ data })
+      return { count: 1 }
+    }
     Object.assign(row, data)
     return { count: 1 }
   })
@@ -249,6 +269,7 @@ let prisma: ReturnType<typeof makeFakePrisma>
 
 const messages = () => (prisma.row.logs as Array<{ msg: string }>).map(l => l.msg)
 const hasLog = (needle: string) => messages().some(m => m.includes(needle))
+const logIndex = (needle: string) => messages().findIndex(m => m.includes(needle))
 /** Reader tags in start order, from the socket names the pipeline chose. */
 const readerTags = (jobId: string) =>
   vi.mocked(startXapiReader).mock.calls.map(c => c[2].sock.replace(`/tmp/proxcenter-xapi-${jobId}-`, "").replace(/\.sock$/, ""))
@@ -446,7 +467,7 @@ describe("runXcpngWarmMigration CBT path", () => {
     expect(hasLog("Delta pass 1: 0.1 MB")).toBe(true)
     expect(hasLog("Delta pass 2: 0.0 MB")).toBe(true)
     // 50 s of shutdown, boot and transfer, plus the guest conversion (#1000), on by default
-    expect(prisma.row.projectedDowntimeSec).toBe(110)
+    expect(prisma.row.projectedDowntimeSec).toBe(150)
 
     // cutover: confirmed power off, final delta, CBT switched back off
     expect(xapiCleanShutdown).toHaveBeenCalledTimes(1)
@@ -550,8 +571,11 @@ describe("runXcpngWarmMigration CBT path", () => {
     expect(prisma.updates.some(u => u.status === "delta_sync" && u.progress === 90)).toBe(true)
     // the verify reader refused to start: warning, not failure
     expect(hasLog("Verify (sampled) skipped on disk 1: nbd-client failed to attach")).toBe(true)
-    expect(createdSnapshots()).toBe(4) // full, delta-1, delta-2, cutover
-    expect(destroyed).toHaveLength(4)
+    // the copy is brought up to date while the source still runs, then the source stops
+    expect(hasLog("Cutover: one more sync first, while the source VM still runs")).toBe(true)
+    expect(logIndex("Catch-up sync:")).toBeLessThan(logIndex("Cutover: requesting clean guest shutdown"))
+    expect(createdSnapshots()).toBe(5) // full, delta-1, delta-2, catch-up, cutover
+    expect(destroyed).toHaveLength(5)
     expect(xapiLogout).toHaveBeenCalledTimes(1)
   })
 
@@ -570,7 +594,7 @@ describe("runXcpngWarmMigration CBT path", () => {
     expect(err).toBeNull()
     expect(prisma.row.status).toBe("completed")
     expect(prisma.statusHistory).toEqual(["planning", "enabling_cbt", "preparing_disks", "full_copy", "delta_sync", "awaiting_cutover", "cutover", "verify", "completed"])
-    expect(hasLog("Reached 1 delta passes; projected cutover downtime ~510s")).toBe(true)
+    expect(hasLog("Reached 1 delta passes; projected cutover downtime ~550s")).toBe(true)
     expect(hasLog("The source is changing faster than it converges.")).toBe(true)
     expect(hasLog("Operator requested cutover")).toBe(true)
     expect(createdSnapshots()).toBe(3) // full, delta-1, cutover
@@ -582,8 +606,9 @@ describe("runXcpngWarmMigration CBT path", () => {
   it("falls back to the allocated map of a disk whose CBT chain is broken", { timeout: 20000 }, async () => {
     const jobId = "xcp-it-cbtfail"
     // The operator asks for the cutover while the full copy is still running, so
-    // the delta loop breaks at its first check and the cutover pass is the only
-    // delta: its VDI.list_changed_blocks fails the way XAPI does after a coalesce.
+    // the delta loop breaks at its first check and the catch-up sync, run while
+    // the source is still up, is the first delta: its VDI.list_changed_blocks
+    // fails the way XAPI does after a coalesce.
     changedBlocks = [new XapiError("VDI_NO_CBT_METADATA", ["OpaqueRef:snapvdi2-0"])]
     hooks.onLog = msg => { if (msg.startsWith("Full copy done")) requestWarmCutover(jobId) }
 
@@ -595,10 +620,11 @@ describe("runXcpngWarmMigration CBT path", () => {
     expect(prisma.statusHistory).toEqual(["planning", "enabling_cbt", "preparing_disks", "full_copy", "cutover", "verify", "completed"])
     expect(hasLog("Operator requested cutover: proceeding to final delta")).toBe(true)
     expect(hasLog('Disk 0 ("disk"): changed block list unavailable (VDI_NO_CBT_METADATA OpaqueRef:snapvdi2-0); copying every allocated block')).toBe(true)
-    // allocated map read twice: the full pass, then the cutover pass as fallback
+    // allocated map read twice: the full pass, then the catch-up sync as fallback;
+    // the cutover pass that follows finds nothing left to copy
     expect(readAllocatedExtents).toHaveBeenCalledTimes(2)
-    expect(readerTags(jobId)).toEqual(["full-0", "cutover-0", "vrfy-0"])
-    expect(destroyed).toEqual(["OpaqueRef:snap1", "OpaqueRef:snap2"])
+    expect(readerTags(jobId)).toEqual(["full-0", "catchup-0", "vrfy-0"])
+    expect(destroyed).toEqual(["OpaqueRef:snap1", "OpaqueRef:snap2", "OpaqueRef:snap3"])
   })
 
   it("waits for a confirmed power off and honours the operator's forced power off", { timeout: 30000 }, async () => {

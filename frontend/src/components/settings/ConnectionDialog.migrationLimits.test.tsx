@@ -64,4 +64,39 @@ describe('ConnectionDialog bulk migration limits (ui#1332)', () => {
     renderWithProviders(<ConnectionDialog open onClose={vi.fn()} onSave={vi.fn()} type="vmware" initialData={vcenter as any} mode="edit" />)
     expect(screen.queryByTestId('connection-tab-migrations')).toBeNull()
   })
+
+  it('shows the sync interval saved on a VMware source and sends the edited one in seconds', async () => {
+    licensed(true)
+    const onSave = vi.fn<(d: any) => Promise<void>>().mockResolvedValue(undefined)
+    renderWithProviders(<ConnectionDialog open onClose={vi.fn()} onSave={onSave} type="vmware" initialData={{ ...vcenter, migrationSyncIntervalSec: 900 } as any} mode="edit" />)
+    fireEvent.click(screen.getByTestId('connection-tab-migrations'))
+    expect(screen.getByTestId('connection-migrationSyncIntervalSec-value')).toHaveTextContent('15 min')
+    fireEvent.change(screen.getByTestId('connection-migrationSyncIntervalSec'), { target: { value: 6 } })
+    await waitFor(() => expect(screen.getByTestId('connection-migrationSyncIntervalSec-value')).toHaveTextContent('1 h'))
+    fireEvent.click(screen.getByRole('button', { name: /save|update/i }))
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(onSave.mock.calls[0][0]).toMatchObject({ migrationSyncIntervalSec: 3600 })
+  })
+
+  it('offers the sync interval alone on an XCP-ng source, one minute by default', () => {
+    licensed(true)
+    renderWithProviders(<ConnectionDialog open onClose={vi.fn()} onSave={vi.fn()} type="xcpng" initialData={{ id: 'x1', name: 'XCP', type: 'xcpng', subType: 'xapi', baseUrl: 'https://10.0.0.51' } as any} mode="edit" />)
+    fireEvent.click(screen.getByTestId('connection-tab-migrations'))
+    expect(screen.getByTestId('connection-migrationSyncIntervalSec-value')).toHaveTextContent('1 min')
+    expect(screen.queryByTestId('connection-migrationMaxPerSourceHost')).toBeNull()
+    expect(screen.queryByTestId('connection-migrationMaxParallel')).toBeNull()
+  })
+
+  it('offers no Migrations tab on an XCP-ng pool reached through Xen Orchestra, which only migrates offline', () => {
+    licensed(true)
+    renderWithProviders(<ConnectionDialog open onClose={vi.fn()} onSave={vi.fn()} type="xcpng" initialData={{ id: 'x2', name: 'XOA', type: 'xcpng', subType: 'xo', baseUrl: 'http://10.0.0.52' } as any} mode="edit" />)
+    expect(screen.queryByTestId('connection-tab-migrations')).toBeNull()
+  })
+
+  it('does not offer the sync interval on a PVE target', () => {
+    licensed(true)
+    renderWithProviders(<ConnectionDialog open onClose={vi.fn()} onSave={vi.fn()} type="pve" initialData={pve as any} mode="edit" migrationSourcesConfigured />)
+    fireEvent.click(screen.getByTestId('connection-tab-migrations'))
+    expect(screen.queryByTestId('connection-migrationSyncIntervalSec')).toBeNull()
+  })
 })

@@ -14968,5 +14968,30 @@
       "save": "Speichern",
       "saved": "Einstellungen der Verschiebungen gespeichert"
     }
+  },
+  "copyRate": {
+    "button": "Kopierraten-Limit",
+    "label": "Kopierraten-Limit (MB/s)",
+    "unlimited": "Unbegrenzt",
+    "unit": "MB/s",
+    "help": "Begrenzt, wie schnell die Kopie die Quelle liest, damit sie nicht die ganze Leitung oder die Quell-Datastores belegt. Leer bedeutet kein Limit. Der letzte Cutover-Durchlauf wird nie begrenzt.",
+    "sharedHelp": "Wird von den VMs des Stapels geteilt, die gleichzeitig kopieren.",
+    "schedule": "Zeitfenster",
+    "from": "Von",
+    "to": "Bis",
+    "timeZone": "Uhrzeiten in {tz}",
+    "offHours": "Außerhalb des Fensters (MB/s)",
+    "dialogTitle": "Kopierraten-Limit der Migration",
+    "dialogTitleBatch": "Kopierraten-Limit des Stapels",
+    "dialogBody": "Die laufende Kopie übernimmt das neue Limit innerhalb von etwa zehn Sekunden.",
+    "dialogBodyBatch": "Jede Kopie des Stapels übernimmt das neue Limit innerhalb von etwa zehn Sekunden.",
+    "inForce": "Derzeit gültig: {rate}",
+    "perHostNote": "Die Quellverbindung begrenzt außerdem jeden ihrer Hosts auf {rate}, geteilt von allen Kopien, die von ihm lesen.",
+    "remove": "Limit entfernen",
+    "apply": "Anwenden",
+    "perHostTitle": "Kopierrate der Warm-Migrationen",
+    "perHostInfo": "Limit für die Warm-Kopien, die von einem Host dieser Quelle lesen, geteilt von diesen Kopien unabhängig von ihrem Stapel.",
+    "perHost": "Kopierraten-Limit pro Quellhost (MB/s)",
+    "perHostCaption": "Leer bedeutet kein Limit. Ein Stapel oder eine Migration kann ein eigenes, niedrigeres Limit setzen: Jede Kopie nimmt das niedrigere der beiden."
   }
 }

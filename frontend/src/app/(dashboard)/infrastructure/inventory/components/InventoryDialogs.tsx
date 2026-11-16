@@ -48,6 +48,8 @@ import NumericTextField from '@/components/ui/NumericTextField'
 import { NFC_CONCURRENCY_MIN, NFC_CONCURRENCY_MAX } from '@/lib/migration/nfc-progress'
 import { isZeroRateLimitValid, describeZeroRateLimit } from '@/lib/migration/warm/zero-rate'
 import ZeroRateSlider from '@/components/migration/ZeroRateSlider'
+import CopyRateLimitFields from '@/components/migration/CopyRateLimitFields'
+import { copyRatePayload, type CopyRateLimit } from '@/lib/migration/warm/copy-rate'
 import { estimateIntegritySecondsPerDisk, integritySettingsFromConnection } from '@/lib/migration/integrity-settings'
 import { MIGRATION_CPU_TYPES, MIGRATION_CPU_TYPE_DEFAULT, type MigrationCpuType } from '@/lib/migration/cpu-type'
 import { EL10_CPU_TYPE, cpuModelLevel, cpuTooLowForEl10 } from '@/lib/migration/cpu-level'
@@ -105,6 +107,7 @@ import { SYNC_INTERVAL_STEPS_SEC, formatSyncInterval, syncIntervalStepIndex } fr
 import WarmCutoverButton from './WarmCutoverButton'
 import BulkCutoverDialog from './BulkCutoverDialog'
 import SyncIntervalButton from './SyncIntervalButton'
+import CopyRateButton from './CopyRateButton'
 import MigrationTestButton from './MigrationTestButton'
 import CancelMigrationDialog from './CancelMigrationDialog'
 import MigrationTestBanner from './MigrationTestBanner'
@@ -352,6 +355,8 @@ export interface InventoryDialogsProps {
   setMigDowntimeBudget: (v: string) => void
   migZeroRateLimit: string
   setMigZeroRateLimit: (v: string) => void
+  migCopyRateLimit: CopyRateLimit | null
+  setMigCopyRateLimit: (v: CopyRateLimit | null) => void
   migBulkConcurrency: number
   setMigBulkConcurrency: (v: number) => void
   migCopyVmk: string
@@ -604,6 +609,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     migConvertGuest, setMigConvertGuest, migEfiPreEnrolledKeys, setMigEfiPreEnrolledKeys,
     migDowntimeBudget, setMigDowntimeBudget,
     migZeroRateLimit, setMigZeroRateLimit,
+    migCopyRateLimit, setMigCopyRateLimit,
     migBulkConcurrency, setMigBulkConcurrency,
     migCopyVmk, setMigCopyVmk,
     migDiskPaths, setMigDiskPaths, migTempStorage, setMigTempStorage, migV2vRoot, setMigV2vRoot,
@@ -1556,6 +1562,9 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
   // (Settings > Connections), read here so the field says what it is.
   const showZeroRateLimit = migType === 'warm' && migTargetIsThickLvm
   const zeroRateLimitInvalid = showZeroRateLimit && !isZeroRateLimitValid(migZeroRateLimit)
+  // A copy rate cap typed but not valid ("1.5"): the fields keep the last valid value, so launching is held until it is fixed.
+  const [copyRateFieldsValid, setCopyRateFieldsValid] = useState(true)
+  const copyRateInvalid = migType === 'warm' && !copyRateFieldsValid
   // The target connection carries the migration settings of its cluster: the
   // zeroing cap (roadmap#45) and the post-copy integrity check (roadmap#1).
   const { data: targetConnection } = useSWR<{ data?: { warmZeroRateLimitMBps?: number | null; integrityCheckEnabled?: boolean | null; integrityRegionCount?: number | null; integrityRegionSizeMiB?: number | null; migrationMaxParallel?: number | null; migrationMaxPerNode?: number | null } }>(
@@ -1861,6 +1870,14 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
           valueTestId="warm-zero-rate-value"
         />
       )}
+    </Box>
+  )
+
+  // Warm only: cap on the copy's read rate, with an optional time window
+  // (lib/migration/warm/copy-rate). A batch's cap is shared by its VMs.
+  const renderCopyRateFields = (shared: boolean) => migType === 'warm' && (
+    <Box data-testid="warm-copy-rate">
+      <CopyRateLimitFields value={migCopyRateLimit} onChange={setMigCopyRateLimit} shared={shared} onValidityChange={setCopyRateFieldsValid} />
     </Box>
   )
 
@@ -2344,6 +2361,8 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
           }),
           // VMkernel adapter of the copy (roadmap#53); empty keeps the host default.
           ...(showCopyVmk && migCopyVmk && copyVnic && { copyVmk: migCopyVmk }),
+          // Copy rate cap of this migration, warm only.
+          ...copyRatePayload(migType, migCopyRateLimit),
           // Forward tempStorage for every source type — v2v uses it as virt-v2v's -os,
           // direct-ESXi uses it as the base path for SSHFS mount + VMDK dumps + clones.
           ...(migTempStorage !== '/tmp' && {
@@ -4426,6 +4445,7 @@ return
                   {renderConvertGuestReadiness()}
                   {renderDowntimeBudgetField()}
                   {renderSyncIntervalField()}
+                  {renderCopyRateFields(false)}
                   {renderZeroRateLimitField()}
                   {renderCopyVmkSelect()}
                   {renderIntegrityNote(esxiMigrateVm?.hostType)}
@@ -4648,7 +4668,11 @@ return
                         {migJob.bytesTransferred ? `${(Number(migJob.bytesTransferred) / 1073741824).toFixed(1)} GB` : '0 GB'}
                         {migJob.totalBytes ? ` / ${(Number(migJob.totalBytes) / 1073741824).toFixed(1)} GB` : ''}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">{migJob.transferSpeed}</Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Typography variant="caption" color="text.secondary">{migJob.transferSpeed}</Typography>
+                        {/* The copy rate cap is changed right where its effect shows. */}
+                        <CopyRateButton job={migJob} variant="icon" />
+                      </Box>
                     </Box>
                   )}
                 </Box>
@@ -4786,6 +4810,7 @@ return
                   // Warm: the node cannot reach the VMkernel adapter the copy goes through (roadmap#53).
                   if (migType === 'warm' && warmCopyUnreachable) return true
                   if (zeroRateLimitInvalid) return true
+                  if (copyRateInvalid) return true
                   return false
                 })()}
                 sx={{ textTransform: 'none' }}
@@ -5542,6 +5567,7 @@ return
                 {renderConvertGuestSwitch(bulkMigHostInfo?.hostType)}
                 {renderDowntimeBudgetField()}
                 {renderSyncIntervalField()}
+                {renderCopyRateFields(true)}
                 {renderNfcConcurrencyField(bulkMigHostInfo?.hostType === 'vcenter')}
                 {renderZeroRateLimitField()}
                 {renderCopyVmkSelect()}
@@ -5729,6 +5755,7 @@ return
                             {t('inventoryPage.esxiMigration.syncIntervalChange')}
                           </Button>
                         )}
+                        <CopyRateButton batchId={bulkMigBatch.id} batchStatus={batchStatus} variant="text" />
                         {bulkAwaitingCutover.length > 0 && (
                           <Button size="small" variant="text" color="warning" disabled={bulkBatchBusy} startIcon={<i className="ri-swap-box-line" />} onClick={() => setBulkCutoverOpen(true)} sx={{ textTransform: 'none', fontSize: 12 }} data-testid="bulk-batch-cutover">
                             {t('inventoryPage.esxiMigration.bulkCutover', { count: bulkAwaitingCutover.length })}
@@ -6005,6 +6032,7 @@ return
                   if (migType === 'cold' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && (vm.status === 'running' || vm.status === 'poweredOn'))) return true
                   if (migType === 'warm' && bulkMigHostInfo?.vms?.some((vm: any) => bulkMigSelected.has(vm.vmid) && !isSourcePoweredOn(vm.status))) return true
                   if (zeroRateLimitInvalid) return true
+                  if (copyRateInvalid) return true
                   // Offline batches stage every source disk on the temporary storage: mandatory when offered.
                   if (migType !== 'warm' && vcenterPreflight?.tempStorages && vcenterPreflight.tempStorages.length > 0 && !migTempStorage) return true
                   // The target storage cannot hold the whole batch (roadmap#53).
@@ -6099,6 +6127,8 @@ return
                         ...(migType === 'warm' && (bulkMigHostInfo.hostType === 'vmware' || isVcenterBulk || bulkMigHostInfo.hostType === 'xcpng') && { convertGuest: migConvertGuest }),
                         // Thick zeroing cap of a warm batch (roadmap#45).
                         ...(showZeroRateLimit && migZeroRateLimit.trim() !== '' && { zeroRateLimitMBps: Number(migZeroRateLimit.trim()) }),
+                        // Copy rate cap of a warm batch, shared by its VMs while they copy.
+                        ...copyRatePayload(bulkJobMigrationType(migType, { coldOnly: isHypervBulk || isNutanixBulk, vcenter: isVcenterBulk }), migCopyRateLimit),
                         // MAC policy and disk profile of the batch (ui#1330, #1331), every source;
                         // the network table (ui#1333) on VMware sources, whose engines match port groups.
                         ...(bulkRegenerateMacs && { macPolicy: 'regenerate' as const }),

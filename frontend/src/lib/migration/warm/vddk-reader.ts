@@ -1,6 +1,7 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { NBD_RELEASE_HOLDERS_FN, nbdReleaseHoldersCall } from "../nbd-holders"
 import { buildNbdkitVddkCmd, type VddkOpts } from "./vddk-cmd"
+import { rateFileOf } from "./rate-file"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 /** The only shape a kernel NBD device parsed from remote output may take before it reaches a command. */
@@ -92,7 +93,7 @@ export function nbdAttachError(connectOutput: string, nbdkitLog: string): string
  * an already-gone resource.
  */
 export function buildReaderTeardownCmd(h: VddkReaderHandle): string {
-  const files = [h.sock, h.pwFile, h.logFile].filter((f): f is string => !!f).map(shellEscape).join(" ")
+  const files = [h.sock, h.sock && rateFileOf(h.sock), h.pwFile, h.logFile].filter((f): f is string => !!f).map(shellEscape).join(" ")
   // Only detach a device we actually own. When attach failed before any device
   // was chosen (h.nbdDev === ""), a bare `nbd-client -d` would error and could
   // target an unintended device — so skip it entirely in that case. The device
@@ -173,7 +174,7 @@ export async function startVddkReader(
   // part of the password.
   const launch =
     `(umask 077; printf '%s' ${shellEscape(esxiPassword)} > ${shellEscape(opts.passwordFile)}); ` +
-    `fuser -k ${shellEscape(opts.sock)} 2>/dev/null; rm -f ${shellEscape(opts.sock)}; ` +
+    `fuser -k ${shellEscape(opts.sock)} 2>/dev/null; rm -f ${shellEscape(opts.sock)} ${shellEscape(rateFileOf(opts.sock))}; ` +
     `nohup ${buildNbdkitVddkCmd(opts)} > ${shellEscape(logFile)} 2>&1 & echo $!`
   const launchRes = await executeSSH(connectionId, nodeIp, launch, VDDK_LAUNCH_TIMEOUT_MS)
   if (!launchRes.success) {

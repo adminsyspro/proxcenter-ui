@@ -15398,5 +15398,30 @@
       "save": "Enregistrer",
       "saved": "Réglages des déplacements enregistrés"
     }
+  },
+  "copyRate": {
+    "button": "Plafond de débit",
+    "label": "Plafond de débit (Mo/s)",
+    "unlimited": "Illimité",
+    "unit": "Mo/s",
+    "help": "Limite la vitesse de lecture de la source, pour que la copie ne prenne pas tout le lien ni les datastores source. Vide = sans plafond. La passe finale du cutover n'est jamais plafonnée.",
+    "sharedHelp": "Partagé entre les VM du lot qui copient en même temps.",
+    "schedule": "Plage horaire",
+    "from": "De",
+    "to": "À",
+    "timeZone": "Heures du fuseau {tz}",
+    "offHours": "Hors plage (Mo/s)",
+    "dialogTitle": "Plafond de débit de la migration",
+    "dialogTitleBatch": "Plafond de débit du lot",
+    "dialogBody": "La copie en cours suit le nouveau plafond en une dizaine de secondes.",
+    "dialogBodyBatch": "Chaque copie du lot suit le nouveau plafond en une dizaine de secondes.",
+    "inForce": "En vigueur en ce moment : {rate}",
+    "perHostNote": "La connexion source plafonne aussi chacun de ses hôtes à {rate}, partagé entre toutes les copies qui le lisent.",
+    "remove": "Retirer le plafond",
+    "apply": "Appliquer",
+    "perHostTitle": "Débit des copies warm",
+    "perHostInfo": "Plafond des copies warm qui lisent un même hôte de cette source, partagé entre ces copies quel que soit leur lot.",
+    "perHost": "Plafond de débit par hôte source (Mo/s)",
+    "perHostCaption": "Vide = sans plafond. Un lot ou une migration peut fixer un plafond plus bas : chaque copie prend le plus petit des deux."
   }
 }

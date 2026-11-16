@@ -27,13 +27,20 @@ describe("buildNbdkitXapiCmd", () => {
   it("builds a read-only TLS nbd plugin command with a safely escaped export", () => {
     const cmd = buildNbdkitXapiCmd(TARGET, "/tmp/xapi.sock.ca")
 
-    expect(cmd).toContain("nbdkit -f -r -U '/tmp/xapi.sock' nbd")
+    expect(cmd).toContain("nbdkit -f -r -U '/tmp/xapi.sock' --filter=rate nbd")
     expect(cmd).toContain("hostname='10.0.0.9'")
     expect(cmd).toContain("port='10809'")
     expect(cmd).toContain("export='vdi/abc?session_id=OpaqueRef:session'")
     expect(cmd).toContain("tls=require")
     expect(cmd).toContain("tls-certificates='/tmp/xapi.sock.ca'")
     expect(cmd).not.toContain("tls-verify")
+  })
+
+  it("caps the read through the rate filter and its rate file", () => {
+    const cmd = buildNbdkitXapiCmd({ ...TARGET, initialRateMbps: 20 }, "/tmp/xapi.sock.ca")
+    expect(cmd).toContain(" rate=160M ")
+    expect(cmd).toContain("rate-file='/tmp/xapi.sock.rate'")
+    expect(cmd.indexOf("--filter=rate")).toBeLessThan(cmd.indexOf(" nbd "))
   })
 })
 
@@ -125,6 +132,8 @@ describe("startXapiReader", () => {
     expect(launchCmd).toContain("rm -rf '/tmp/xapi.sock.ca'; (umask 077; mkdir -p '/tmp/xapi.sock.ca'")
     expect(launchCmd).toContain("printf '%s\\n' '-----BEGIN CERTIFICATE-----\ntest-certificate\n-----END CERTIFICATE-----' > '/tmp/xapi.sock.ca/ca-cert.pem'")
     expect(launchCmd.indexOf("mkdir -p '/tmp/xapi.sock.ca'")).toBeLessThan(launchCmd.indexOf("nohup nbdkit"))
+    // A rate file left by an earlier reader on the same socket must not cap this one.
+    expect(launchCmd).toContain("rm -f '/tmp/xapi.sock' '/tmp/xapi.sock.rate';")
   })
 
   it("tears down and rejects when the socket never appears", async () => {

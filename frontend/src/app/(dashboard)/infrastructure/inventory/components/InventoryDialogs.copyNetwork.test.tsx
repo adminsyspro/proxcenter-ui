@@ -297,6 +297,8 @@ function makeProps(overrides: Partial<InventoryDialogsProps> = {}): InventoryDia
 
     migZeroRateLimit: '',
     setMigZeroRateLimit: vi.fn(),
+    migCopyRateLimit: null,
+    setMigCopyRateLimit: vi.fn(),
     migCpuType: 'x86-64-v2-AES',
     setMigCpuType: vi.fn(),
     migStep: 'config',

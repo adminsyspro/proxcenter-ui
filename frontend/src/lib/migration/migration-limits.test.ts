@@ -128,6 +128,12 @@ describe("migrationLimitFields", () => {
     expect(migrationLimitFields("pbs", body)).toEqual({})
   })
 
+  it("keeps the per-host copy rate cap on a VMware or XCP-ng source, 0 clearing it", () => {
+    expect(migrationLimitFields("vmware", { migrationCopyRateLimitPerHostMBps: 50 })).toEqual({ migrationCopyRateLimitPerHostMBps: 50 })
+    expect(migrationLimitFields("xcpng", { migrationCopyRateLimitPerHostMBps: 0 })).toEqual({ migrationCopyRateLimitPerHostMBps: null })
+    expect(migrationLimitFields("pve", { migrationCopyRateLimitPerHostMBps: 50 })).toEqual({})
+  })
+
   it("keeps the sync interval on a VMware or XCP-ng source only", () => {
     const withInterval = { ...body, migrationSyncIntervalSec: 900 }
     expect(migrationLimitFields("vmware", withInterval)).toEqual({ migrationMaxPerSourceHost: 6, migrationSyncIntervalSec: 900 })

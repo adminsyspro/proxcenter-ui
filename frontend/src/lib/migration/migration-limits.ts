@@ -145,17 +145,21 @@ const SOURCE_LIMIT_FIELDS = ["migrationMaxPerSourceHost"] as const
 // cutover (lib/migration/warm/sync-interval): a setting of the sources whose
 // warm pipeline holds, VMware and XCP-ng.
 const SYNC_INTERVAL_FIELDS = ["migrationSyncIntervalSec"] as const
-export type MigrationLimitField = typeof TARGET_LIMIT_FIELDS[number] | typeof SOURCE_LIMIT_FIELDS[number] | typeof SYNC_INTERVAL_FIELDS[number]
+// Cap on the warm copies reading from one host of a VMware or XCP-ng source
+// (lib/migration/warm/copy-rate-governor), MB/s; 0 clears it like null.
+const COPY_RATE_FIELDS = ["migrationCopyRateLimitPerHostMBps"] as const
+export type MigrationLimitField = typeof TARGET_LIMIT_FIELDS[number] | typeof SOURCE_LIMIT_FIELDS[number] | typeof SYNC_INTERVAL_FIELDS[number] | typeof COPY_RATE_FIELDS[number]
 const LIMIT_FIELDS_BY_TYPE: Record<string, readonly MigrationLimitField[]> = {
   pve: TARGET_LIMIT_FIELDS,
-  vmware: [...SOURCE_LIMIT_FIELDS, ...SYNC_INTERVAL_FIELDS],
-  xcpng: SYNC_INTERVAL_FIELDS,
+  vmware: [...SOURCE_LIMIT_FIELDS, ...SYNC_INTERVAL_FIELDS, ...COPY_RATE_FIELDS],
+  xcpng: [...SYNC_INTERVAL_FIELDS, ...COPY_RATE_FIELDS],
 }
 
 /**
  * The limit settings of `body` that belong to a connection of `type`: the
  * cluster and per-node limits on a PVE target, the per-host limit on a VMware
- * source, the sync interval on a VMware or XCP-ng source. Null (back to the
+ * source, the sync interval and the per-host copy rate cap on a VMware or
+ * XCP-ng source. Null (back to the
  * default) is kept; a field not sent is left out.
  */
 export function migrationLimitFields(type: string | null | undefined, body: Record<string, unknown>): Partial<Record<MigrationLimitField, number | null>> {
@@ -163,7 +167,7 @@ export function migrationLimitFields(type: string | null | undefined, body: Reco
   const out: Partial<Record<MigrationLimitField, number | null>> = {}
   for (const f of fields) {
     const v = body[f]
-    if (v === null) out[f] = null
+    if (v === null || (v === 0 && (COPY_RATE_FIELDS as readonly string[]).includes(f))) out[f] = null
     else if (typeof v === "number") out[f] = v
   }
   return out

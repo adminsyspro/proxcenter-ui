@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { buildApplyScripts, MAX_APPLY_CMD_BYTES } from "./block-applier"
+import { buildApplyCommands, buildApplyScripts, MAX_APPLY_CMD_BYTES } from "./block-applier"
 
 const MiB = 1024 * 1024
 
@@ -65,5 +65,24 @@ describe("buildApplyScripts", () => {
       expect(seeks).toHaveLength(2000)
       for (let i = 1; i < seeks.length; i++) expect(seeks[i]).toBeGreaterThan(seeks[i - 1])
     })
+  })
+})
+
+describe("buildApplyCommands", () => {
+  // The apply budget grows with the bytes of each command (copy rate cap), so
+  // every command comes with the bytes its dd lines copy.
+  it("gives each command the bytes of its extents, after alignment and merge", () => {
+    const MiB = 1024 * 1024
+    const cmds = buildApplyCommands("/dev/nbd0", "/dev/t", [{ offset: 0, length: 3 * MiB }, { offset: 10 * MiB, length: MiB }], 64 * MiB)
+    expect(cmds).toHaveLength(1)
+    expect(cmds[0].bytes).toBe(4 * MiB)
+    expect(cmds[0].script).toBe(buildApplyScripts("/dev/nbd0", "/dev/t", [{ offset: 0, length: 3 * MiB }, { offset: 10 * MiB, length: MiB }], 64 * MiB)[0])
+  })
+
+  it("splits the bytes along with the commands", () => {
+    const extents = Array.from({ length: 800 }, (_, i) => ({ offset: i * 4 * 1024 * 1024, length: 1024 * 1024 }))
+    const cmds = buildApplyCommands("/dev/nbd0", "/dev/t", extents, 800 * 4 * 1024 * 1024)
+    expect(cmds.length).toBeGreaterThan(1)
+    expect(cmds.reduce((s, c) => s + c.bytes, 0)).toBe(800 * 1024 * 1024)
   })
 })

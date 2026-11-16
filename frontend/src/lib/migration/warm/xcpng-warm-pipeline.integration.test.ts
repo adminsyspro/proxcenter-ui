@@ -44,6 +44,7 @@ vi.mock("../qcow2-convert", () => ({ convertDisksToQcow2: vi.fn() }))
 vi.mock("../job-heartbeat", () => ({ startJobHeartbeat: vi.fn() }))
 vi.mock("./xcpng-node-preflight", () => ({ checkNbdNodePreflight: vi.fn() }))
 vi.mock("./xapi-reader", () => ({ startXapiReader: vi.fn(), stopXapiReader: vi.fn(), readAllocatedExtents: vi.fn() }))
+vi.mock("./copy-rate-governor", () => ({ openCopyRateGovernor: vi.fn(async () => null) }))
 vi.mock("./checksum-detector", () => ({ detectChangedExtentsByChecksum: vi.fn(), scanBlockChecksums: vi.fn() }))
 vi.mock("./session-keepalive", () => ({ startSessionKeepAlive: vi.fn() }))
 // The slot a waiting job gives back and reclaims lives in Postgres and has its
@@ -100,6 +101,7 @@ import type { WarmMigrationConfig } from "./types"
 import { requestWarmCutover, requestWarmForcePowerOff, requestWarmTest, cancelWarmMigrationJob, requestCancelRemovesTarget, acquireVmLock, releaseVmLock } from "./job-control"
 import { runXcpngWarmMigration, XCPNG_SNAPSHOT_PREFIX } from "./xcpng-warm-pipeline"
 import { runMigrationTest } from "./migration-test"
+import { openCopyRateGovernor } from "./copy-rate-governor"
 
 // ── Fixtures ──
 
@@ -689,6 +691,32 @@ describe("runXcpngWarmMigration CBT path", () => {
     // polled while Running, then saw Halted after the hard power off
     expect(vi.mocked(xapiPowerState).mock.calls.length).toBeGreaterThan(10)
     expect(hasLog("Source powered off (confirmed): applying final delta")).toBe(true)
+  })
+})
+
+describe("runXcpngWarmMigration copy rate cap", () => {
+  it("caps the full and delta passes through a governor per reader, never the cutover pass nor the integrity check", { timeout: 20000 }, async () => {
+    const jobId = "xcp-it-rate"
+    // delta 1 carries data, delta 2 is empty, then the cutover pass carries data too
+    changedBlocks = [SMALL_DELTA, [], SMALL_DELTA]
+    const events: string[] = []
+    vi.mocked(openCopyRateGovernor).mockImplementation(async a => a.capped
+      ? { initialMbps: 30, start: () => { events.push(`start ${a.sock}`) }, stop: async () => { events.push(`stop ${a.sock}`) } }
+      : null)
+
+    const err = await runToEnd(jobId, makeConfig())
+
+    expect(err).toBeNull()
+    const calls = vi.mocked(startXapiReader).mock.calls.map(c => [c[2].sock.replace(`/tmp/proxcenter-xapi-${jobId}-`, "").replace(/\.sock$/, ""), c[2].initialRateMbps ?? 0])
+    const rateOf = (prefix: string) => calls.filter(([tag]) => String(tag).startsWith(prefix)).map(([, r]) => r)
+    expect(rateOf("full-")).toEqual([30])
+    expect(rateOf("delta-1-")).toEqual([30])
+    expect(rateOf("cutover-")).toEqual([0])
+    expect(rateOf("vrfy-").every(r => r === 0)).toBe(true)
+    // every governor started was stopped
+    const started = events.filter(e => e.startsWith("start ")).map(e => e.slice(6))
+    expect(started.length).toBeGreaterThan(0)
+    expect(events.filter(e => e.startsWith("stop ")).map(e => e.slice(5))).toEqual(started)
   })
 })
 

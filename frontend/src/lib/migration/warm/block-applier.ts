@@ -36,23 +36,41 @@ export function buildApplyScripts(
   diskLength: number,
   alignment = 1024 * 1024,
 ): string[] {
+  return buildApplyCommands(nbdDev, targetDev, extents, diskLength, alignment).map(c => c.script)
+}
+
+/**
+ * Same commands as buildApplyScripts, each with the bytes its dd lines copy
+ * (after alignment and merge), so the caller can size each command's budget
+ * to its volume (a copy under a low rate cap runs for a long time).
+ */
+export function buildApplyCommands(
+  nbdDev: string,
+  targetDev: string,
+  extents: Extent[],
+  diskLength: number,
+  alignment = 1024 * 1024,
+): Array<{ script: string; bytes: number }> {
   const norm = normalizeExtents(extents, alignment, diskLength)
-  const scripts: string[] = []
+  const commands: Array<{ script: string; bytes: number }> = []
   let lines = [HEADER]
   let size = HEADER.length
+  let bytes = 0
   for (const e of norm) {
     const line = buildDeltaApplyCmd(nbdDev, targetDev, e)
     // +1 for the newline that join() inserts before this line. Flush the current
     // command before it would cross the budget, but never emit a header-only
     // command (lines.length > 1 guarantees at least one dd is already buffered).
     if (lines.length > 1 && size + 1 + line.length > MAX_APPLY_CMD_BYTES) {
-      scripts.push(lines.join("\n"))
+      commands.push({ script: lines.join("\n"), bytes })
       lines = [HEADER]
       size = HEADER.length
+      bytes = 0
     }
     lines.push(line)
     size += 1 + line.length
+    bytes += e.length
   }
-  if (lines.length > 1) scripts.push(lines.join("\n"))
-  return scripts
+  if (lines.length > 1) commands.push({ script: lines.join("\n"), bytes })
+  return commands
 }

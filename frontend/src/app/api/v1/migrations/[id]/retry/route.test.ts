@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   prisma: {
     migrationJob: { findFirst: vi.fn(), create: vi.fn(async () => ({ id: "job-2" })) },
     connection: { findUnique: vi.fn() },
+    migrationBatch: { findUnique: vi.fn() },
   },
 }))
 
@@ -65,9 +66,28 @@ beforeEach(() => {
   h.prisma.migrationJob.findFirst.mockReset()
   h.prisma.migrationJob.create.mockReset().mockResolvedValue({ id: "job-2" })
   h.prisma.connection.findUnique.mockReset()
+  h.prisma.migrationBatch.findUnique.mockReset().mockResolvedValue(null)
 })
 
 describe("POST /api/v1/migrations/[id]/retry", () => {
+  // A retried job leaves its batch: it keeps the batch's copy rate cap as its own,
+  // or it would read at full speed in the hours the batch was capped for.
+  it("gives the retry of a batch job the batch's copy rate cap", async () => {
+    const cap = { mbps: 50, schedule: { from: "08:00", to: "19:00", tz: "Europe/Paris", offHoursMbps: 0 } }
+    h.prisma.migrationJob.findFirst.mockResolvedValueOnce({ ...failedJob, batchId: "b1", config: { ...failedJob.config, migrationType: "warm" } })
+    h.prisma.migrationBatch.findUnique.mockResolvedValueOnce({ copyRateLimit: cap })
+
+    expect((await callRoute(POST, { params: { id: "job-1" }, method: "POST" })).status).toBe(200)
+    expect((h.prisma.migrationJob.create as any).mock.calls[0][0].data.config).toMatchObject({ copyRateLimit: cap })
+  })
+
+  it("keeps the config as it was for a job outside a batch", async () => {
+    h.prisma.migrationJob.findFirst.mockResolvedValueOnce(failedJob)
+    expect((await callRoute(POST, { params: { id: "job-1" }, method: "POST" })).status).toBe(200)
+    expect((h.prisma.migrationJob.create as any).mock.calls[0][0].data.config).toEqual(failedJob.config)
+    expect(h.prisma.migrationBatch.findUnique).not.toHaveBeenCalled()
+  })
+
   it("creates the retry job tagged with this server's instance id and dispatches it", async () => {
     h.prisma.migrationJob.findFirst.mockResolvedValueOnce(failedJob)
 

@@ -116,6 +116,15 @@ describe('connection schemas warmZeroRateLimitMBps (roadmap#45)', () => {
   })
 })
 
+describe('connection schemas per-host copy rate cap', () => {
+  it('accepts 0 to 100000 MB/s and null', () => {
+    for (const v of [0, 1, 50, 100_000, null]) expect(updateConnectionSchema.safeParse({ migrationCopyRateLimitPerHostMBps: v }).success, `${v}`).toBe(true)
+  })
+  it('refuses a negative value, more than 100000, a fraction or a string', () => {
+    for (const v of [-1, 100_001, 2.5, '4']) expect(updateConnectionSchema.safeParse({ migrationCopyRateLimitPerHostMBps: v }).success, `${v}`).toBe(false)
+  })
+})
+
 describe('connection schemas migration limits (ui#1332)', () => {
   const fields = ['migrationMaxParallel', 'migrationMaxPerNode', 'migrationMaxPerSourceHost']
   const pve = { name: 'p', type: 'pve' as const, baseUrl: 'https://10.0.0.1:8006', apiToken: 't' }

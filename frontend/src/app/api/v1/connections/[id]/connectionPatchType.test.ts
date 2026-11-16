@@ -116,6 +116,20 @@ describe('PATCH /api/v1/connections/[id] migration limits (ui#1332)', () => {
     expect(updateMock.mock.calls[1][0].data).not.toHaveProperty('migrationMaxParallel')
   })
 
+  it('stores the per-host copy rate cap on a VMware or XCP-ng source, not on a PVE target', async () => {
+    findUniqueMock.mockResolvedValue({ type: 'vmware' })
+    expect((await patch('vc-1', { migrationCopyRateLimitPerHostMBps: 50 })).status).toBe(200)
+    expect(updateMock.mock.calls[0][0].data).toMatchObject({ migrationCopyRateLimitPerHostMBps: 50 })
+
+    findUniqueMock.mockResolvedValue({ type: 'xcpng' })
+    expect((await patch('xo-1', { migrationCopyRateLimitPerHostMBps: 0 })).status).toBe(200)
+    expect(updateMock.mock.calls[1][0].data).toMatchObject({ migrationCopyRateLimitPerHostMBps: null })
+
+    findUniqueMock.mockResolvedValue({ type: 'pve' })
+    expect((await patch('pve-1', { migrationCopyRateLimitPerHostMBps: 50, name: 'x' })).status).toBe(200)
+    expect(updateMock.mock.calls[2][0].data).not.toHaveProperty('migrationCopyRateLimitPerHostMBps')
+  })
+
   it('puts a limit back to its default with null, and ignores the limits on Community', async () => {
     findUniqueMock.mockResolvedValue({ type: 'pve' })
     await patch('pve-1', { migrationMaxPerNode: null })

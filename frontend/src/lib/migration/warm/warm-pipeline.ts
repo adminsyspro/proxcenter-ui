@@ -33,6 +33,8 @@ import type { Extent } from "./extents"
 import { startSoapKeepAlive } from "./session-keepalive"
 import { startJobHeartbeat } from "../job-heartbeat"
 import { resolveWarmZeroRateLimit } from "./zero-rate-target"
+import { isCappedPass } from "./copy-rate"
+import { openCopyRateGovernor } from "./copy-rate-governor"
 import { resolveIntegritySettings } from "../integrity-target"
 import { faultInjectionFromEnv } from "../integrity"
 import { estimateIntegritySecondsPerDisk } from "../integrity-settings"
@@ -482,15 +484,22 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
       diskState.set(deviceKey, initDiskState(deviceKey))
     }
 
+    // Copy rate cap of a reader (copy-rate.ts): a governor on every capped pass.
+    const openCappedReaderGovernor = (sock: string, capped: boolean) => openCopyRateGovernor({
+      capped, jobId, connectionId: config.targetConnectionId, nodeIp, sock, log: (msg, level) => appendLog(jobId, msg, level),
+    })
+
     // Read one disk of a snapshot through VDDK and apply its extents to the target.
     async function readAndApply(disk: EsxiDiskInfo, diskIndex: number, snapMor: string, extents: Extent[], pass: PassProgress): Promise<number> {
       const bytes = extents.reduce((s, e) => s + e.length, 0)
       if (extents.length === 0) return 0
       const sock = `/tmp/proxcenter-vddk-${jobId}-${disk.deviceKey}.sock`
       const pwFile = `/tmp/proxcenter-vddk-${jobId}-${disk.deviceKey}.pw`
-      const opts: VddkOpts = { sock, libdir, server: copy.server, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName, snapshot: snapMor }
-      const reader = await startVddkReader(config.targetConnectionId, nodeIp, opts, password)
+      const governor = await openCappedReaderGovernor(sock, isCappedPass(pass.currentStep))
+      const opts: VddkOpts = { sock, libdir, server: copy.server, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName, snapshot: snapMor, initialRateMbps: governor?.initialMbps }
+      const reader = await startVddkReader(config.targetConnectionId, nodeIp, opts, password).catch(async (e) => { await governor?.stop(); throw e })
       activeReaders.push(reader)
+      governor?.start()
       try {
         await applyExtentsWithProgress({
           jobId, connectionId: config.targetConnectionId, nodeIp, nbdDev: reader.nbdDev, dev: targetDev.get(disk.deviceKey)!,
@@ -498,6 +507,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
         })
         return bytes
       } finally {
+        await governor?.stop()
         await stopVddkReader(config.targetConnectionId, nodeIp, reader).catch(() => {})
         const idx = activeReaders.indexOf(reader)
         if (idx >= 0) activeReaders.splice(idx, 1)
@@ -829,9 +839,11 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
           const disk = vmConfig.disks[i]
           const sock = `/tmp/proxcenter-vddk-${jobId}-${disk.deviceKey}.sock`
           const pwFile = `/tmp/proxcenter-vddk-${jobId}-${disk.deviceKey}.pw`
-          const opts: VddkOpts = { sock, libdir, server: copy.server, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName, snapshot: snapMor }
-          const reader = await startVddkReader(config.targetConnectionId, nodeIp, opts, password)
+          const governor = await openCappedReaderGovernor(sock, true)
+          const opts: VddkOpts = { sock, libdir, server: copy.server, user: username, passwordFile: pwFile, thumbprint, moref: config.sourceVmId, diskPath: disk.fileName, snapshot: snapMor, initialRateMbps: governor?.initialMbps }
+          const reader = await startVddkReader(config.targetConnectionId, nodeIp, opts, password).catch(async (e) => { await governor?.stop(); throw e })
           activeReaders.push(reader)
+          governor?.start()
           try {
             const dev = targetDev.get(disk.deviceKey)!
             // Per-disk progress windows: unlike runCbtPass there is no upfront
@@ -847,6 +859,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
             let lastScanFlush = 0
             const extents = await detectChangedExtentsByChecksum(config.targetConnectionId, nodeIp, reader.nbdDev, dev, 256 * 1024 * 1024, disk.capacityBytes, {
               inactivityMs: APPLY_INACTIVITY_MS,
+              cancelled: () => isCancelled(jobId),
               onProgress: (scannedBlocks, totalBlocks) => {
                 const now = Date.now()
                 if (now - lastScanFlush < PROGRESS_LOG_INTERVAL_MS) return
@@ -873,6 +886,7 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
             })
             copiedBytes += extents.reduce((s, e) => s + e.length, 0)
           } finally {
+            await governor?.stop()
             await stopVddkReader(config.targetConnectionId, nodeIp, reader).catch(() => {})
             const idx = activeReaders.indexOf(reader)
             if (idx >= 0) activeReaders.splice(idx, 1)

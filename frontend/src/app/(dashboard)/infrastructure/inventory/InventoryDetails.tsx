@@ -134,6 +134,7 @@ import VmActions from './components/VmActions'
 import NodeActions from './components/NodeActions'
 import WarmCutoverButton, { canRequestCutover, isAwaitingOperator } from './components/WarmCutoverButton'
 import SyncIntervalButton from './components/SyncIntervalButton'
+import CopyRateButton from './components/CopyRateButton'
 import MigrationLogLines from './components/MigrationLogLines'
 import LiveLogBox from '@/components/ui/LiveLogBox'
 import { migrationLogText } from './migrationLogText'
@@ -495,6 +496,7 @@ export default function InventoryDetails({
     migConvertGuest, setMigConvertGuest, migEfiPreEnrolledKeys, setMigEfiPreEnrolledKeys,
     migDowntimeBudget, setMigDowntimeBudget,
     migZeroRateLimit, setMigZeroRateLimit,
+    migCopyRateLimit, setMigCopyRateLimit,
     migBulkConcurrency, setMigBulkConcurrency,
     migCopyVmk, setMigCopyVmk,
     migCpuType, setMigCpuType,
@@ -4583,6 +4585,7 @@ return vm?.isCluster ?? false
                               )}
                             </Box>
                             <SyncIntervalButton job={vmMigJob} />
+                            <CopyRateButton job={vmMigJob} />
                             <WarmCutoverButton job={vmMigJob} />
                             <ForcePowerOffButton job={vmMigJob} />
                             <RootChoiceButton job={vmMigJob} />
@@ -5045,6 +5048,8 @@ return vm?.isCluster ?? false
         setMigDowntimeBudget={setMigDowntimeBudget}
         migZeroRateLimit={migZeroRateLimit}
         setMigZeroRateLimit={setMigZeroRateLimit}
+        migCopyRateLimit={migCopyRateLimit}
+        setMigCopyRateLimit={setMigCopyRateLimit}
         migBulkConcurrency={migBulkConcurrency}
         setMigBulkConcurrency={setMigBulkConcurrency}
         migCopyVmk={migCopyVmk}

@@ -48,6 +48,7 @@ vi.mock("./apply", async importOriginal => {
   const actual = await importOriginal<typeof import("./apply")>()
   return { ...actual, applyExtentsWithProgress: vi.fn(async () => {}) }
 })
+vi.mock("./copy-rate-governor", () => ({ openCopyRateGovernor: vi.fn() }))
 vi.mock("./checksum-detector", () => ({ detectChangedExtentsByChecksum: vi.fn() }))
 vi.mock("./power-off", async importOriginal => {
   const actual = await importOriginal<typeof import("./power-off")>()
@@ -105,6 +106,7 @@ import { ZERO_MODE_OFFLOAD_MARKER } from "./target-provision"
 import type { WarmMigrationConfig } from "./types"
 import { runWarmMigration } from "./warm-pipeline"
 import { runMigrationTest } from "./migration-test"
+import { openCopyRateGovernor } from "./copy-rate-governor"
 
 // ── Fixtures ──
 
@@ -246,6 +248,7 @@ beforeEach(() => {
     baseline === "*" ? [{ offset: 0, length: capacityBytes }] : [])
   vi.mocked(soapGetSnapshotChangeIds).mockResolvedValue(new Map(DISKS.map(d => [d.deviceKey, `52 de ad/${d.deviceKey}`])))
   vi.mocked(startVddkReader).mockImplementation(async (_c, _ip, opts) => ({ nbdDev: `/dev/nbd${readerCounter++}`, sock: opts.sock, pwFile: opts.passwordFile }))
+  vi.mocked(openCopyRateGovernor).mockResolvedValue(null)
 })
 
 describe("runWarmMigration per-disk choices (#317 lot 2)", () => {
@@ -540,5 +543,50 @@ describe("runWarmMigration on a vCenter source the node cannot reach (roadmap#17
       : sshRouter(c, h, command, t, o)) as any)
     const err = await runToEnd("warm-vc-4", makeConfig())
     expect(err?.message).toBe(`Could not read the TLS certificate of ${VC} from the Proxmox node pve1: Command timed out`)
+  })
+})
+
+describe("runWarmMigration copy rate cap", () => {
+  it("caps the full pass through a governor around each reader and leaves the final cutover pass unlimited", async () => {
+    const order: string[] = []
+    vi.mocked(openCopyRateGovernor).mockImplementation(async a => a.capped
+      ? { initialMbps: 25, start: () => { order.push(`start ${a.sock}`) }, stop: async () => { order.push(`stop ${a.sock}`) } }
+      : null)
+    vi.mocked(startVddkReader).mockImplementation(async (_c, _ip, opts) => {
+      order.push(`reader ${opts.sock} ${opts.initialRateMbps ?? 0}`)
+      return { nbdDev: `/dev/nbd${readerCounter++}`, sock: opts.sock, pwFile: opts.passwordFile }
+    })
+    const { stopVddkReader } = await import("./vddk-reader")
+    vi.mocked(stopVddkReader).mockImplementation(async (_c, _ip, h) => { order.push(`release ${h.sock}`) })
+    // The cutover snapshot finds a change on every disk, so that pass opens readers too.
+    const names = new Map<string, string>()
+    vi.mocked(soapCreateSnapshot).mockImplementation(async (_s, _vm, name) => { const mor = `snapshot-${++snapCounter}`; names.set(mor, name); return mor })
+    vi.mocked(queryAllChangedAreas).mockImplementation(async (_s, _vm, snap, _key, baseline, capacityBytes) => {
+      if (baseline === "*") return [{ offset: 0, length: capacityBytes }]
+      return names.get(snap)?.endsWith("-cutover") ? [{ offset: 0, length: MiB }] : []
+    })
+
+    const err = await runToEnd("warm-rate-1", makeConfig())
+
+    expect(err).toBeNull()
+    const capped = vi.mocked(openCopyRateGovernor).mock.calls.map(c => [c[0].capped, c[0].jobId])
+    expect(capped.filter(([c]) => c)).toHaveLength(DISKS.length)
+    expect(capped.filter(([c]) => !c)).toHaveLength(DISKS.length)
+    const sock0 = `/tmp/proxcenter-vddk-warm-rate-1-${DISKS[0].deviceKey}.sock`
+    // full pass: the reader starts at the governor's share, the governor runs while it reads and stops before it is released
+    expect(order.slice(0, 4)).toEqual([`reader ${sock0} 25`, `start ${sock0}`, `stop ${sock0}`, `release ${sock0}`])
+    // cutover pass: unlimited reader, no governor
+    expect(order.filter(o => o === `reader ${sock0} 0`)).toHaveLength(1)
+  })
+
+  it("stops the governor when the reader cannot start", async () => {
+    const stop = vi.fn(async () => {})
+    vi.mocked(openCopyRateGovernor).mockImplementation(async a => a.capped ? { initialMbps: 10, start: vi.fn(), stop } : null)
+    vi.mocked(startVddkReader).mockRejectedValue(new Error("nbdkit-vddk socket never appeared"))
+
+    const err = await runToEnd("warm-rate-2", makeConfig())
+
+    expect(err?.message).toContain("nbdkit-vddk socket never appeared")
+    expect(stop).toHaveBeenCalledTimes(1)
   })
 })

@@ -72,6 +72,10 @@ model Connection {
   migrationMaxParallel      Int?
   migrationMaxPerNode       Int?
   migrationMaxPerSourceHost Int?
+  // On a VMware or XCP-ng source, cap in MB/s on the warm copies reading from
+  // one of its hosts, shared by those copies whatever their batch
+  // (lib/migration/warm/copy-rate-governor). Null = no cap. Enterprise.
+  migrationCopyRateLimitPerHostMBps Int?
   // Seconds between two delta passes of a warm migration waiting for a manual
   // cutover out of this source (VMware, XCP-ng); null = 60.
   migrationSyncIntervalSec  Int?
@@ -371,6 +375,11 @@ model MigrationJob {
   testState                Json?     @map("test_state")
   // The operator cancelled and asked to remove what was copied on the target.
   cancelRemovesTarget      Boolean   @default(false) @map("cancel_removes_target")
+  // Heartbeat of a warm copy reading under the copy rate cap, refreshed every
+  // 10 s while a reader runs and cleared when it stops: the copies whose
+  // heartbeat is under 30 s old share the cap of their batch and of their
+  // source host (lib/migration/warm/copy-rate-governor).
+  copyActiveAt             DateTime? @map("copy_active_at")
 
   error            String?
 
@@ -402,6 +411,7 @@ model MigrationJob {
   @@index([sourceConnectionId])
   @@index([targetConnectionId])
   @@index([batchId])
+  @@index([copyActiveAt])
   @@map("migration_jobs")
 }
 
@@ -416,6 +426,10 @@ model MigrationBatch {
   targetConnectionId String   @map("target_connection_id")
   // Jobs of the batch running at once, 1..BULK_CONCURRENCY_MAX.
   concurrency        Int      @default(1)
+  // Copy rate cap of the batch (lib/migration/warm/copy-rate, CopyRateLimit:
+  // MB/s, optional time window), shared by its jobs while they copy and
+  // changeable while the batch runs. Null = no cap of its own.
+  copyRateLimit      Json?    @map("copy_rate_limit")
   status             String   @default("running") // running|paused|cancelled|completed
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")

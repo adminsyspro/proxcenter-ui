@@ -55,6 +55,7 @@ import SudoCheckLines, { NotDeployedLine, profilesAbsentEverywhere, uniformSudoC
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { isZeroRateLimitValid, ZERO_RATE_LIMIT_MAX_MBPS } from '@/lib/migration/warm/zero-rate'
 import ZeroRateSlider from '@/components/migration/ZeroRateSlider'
+import CopyRateLimitField from '@/components/migration/CopyRateLimitField'
 import { DEFAULT_INTEGRITY_SETTINGS, INTEGRITY_REGION_COUNT_MAX, INTEGRITY_REGION_SIZE_MIB_MAX, estimateIntegritySecondsPerDisk, integritySettingsFromConnection } from '@/lib/migration/integrity-settings'
 import { MIGRATION_LIMIT_MAX, MIGRATION_PARALLEL_DEFAULT, MIGRATION_PER_NODE_DEFAULT, MIGRATION_PER_SOURCE_HOST_DEFAULT } from '@/lib/migration/migration-limits'
 import { SYNC_INTERVAL_DEFAULT_SEC, SYNC_INTERVAL_STEPS_SEC, formatSyncInterval, syncIntervalStepIndex } from '@/lib/migration/warm/sync-interval'
@@ -102,6 +103,7 @@ export type ConnectionFormData = {
   migrationMaxPerSourceHost: number
   /** Seconds between two syncs of a warm migration waiting for a manual cutover (VMware, XCP-ng sources). */
   migrationSyncIntervalSec: number
+  migrationCopyRateLimitPerHostMBps: number
   // Provider-only, create mode: own the connection by an MSP tenant ('' = pool)
   ownerTenantId: string
 }
@@ -159,6 +161,7 @@ const defaultFormData: ConnectionFormData = {
   migrationMaxPerNode: MIGRATION_PER_NODE_DEFAULT,
   migrationMaxPerSourceHost: MIGRATION_PER_SOURCE_HOST_DEFAULT,
   migrationSyncIntervalSec: SYNC_INTERVAL_DEFAULT_SEC,
+  migrationCopyRateLimitPerHostMBps: 0,
   ownerTenantId: '',
 }
 
@@ -314,6 +317,7 @@ export default function ConnectionDialog({
           migrationMaxPerNode: (initialData as any).migrationMaxPerNode ?? MIGRATION_PER_NODE_DEFAULT,
           migrationMaxPerSourceHost: (initialData as any).migrationMaxPerSourceHost ?? MIGRATION_PER_SOURCE_HOST_DEFAULT,
           migrationSyncIntervalSec: (initialData as any).migrationSyncIntervalSec ?? SYNC_INTERVAL_DEFAULT_SEC,
+          migrationCopyRateLimitPerHostMBps: (initialData as any).migrationCopyRateLimitPerHostMBps ?? 0,
           subType: editSubType,
           // External hypervisors keep "user:password" encrypted; the list payload
           // hands the user back as apiUser (never the password). Without it the
@@ -1650,6 +1654,21 @@ export default function ConnectionDialog({
               />
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 {t('settings.migrationSyncIntervalCaption')}
+              </Typography>
+            </Box>
+            {/* Warm copies OUT of this source: cap on what the copies reading
+                from one of its hosts take together, whatever their batch. */}
+            <Divider sx={{ my: 2.5 }} />
+            <SectionTitle icon="ri-speed-line" title={t('copyRate.perHostTitle')} optional={t('common.optional')} info={t('copyRate.perHostInfo')} />
+            <Box sx={{ mt: 1, mb: 1 }}>
+              <CopyRateLimitField
+                label={t('copyRate.perHost')}
+                value={form.migrationCopyRateLimitPerHostMBps}
+                onChange={v => handleChange('migrationCopyRateLimitPerHostMBps', v)}
+                testId="connection-copy-rate-per-host"
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                {t('copyRate.perHostCaption')}
               </Typography>
             </Box>
           </>

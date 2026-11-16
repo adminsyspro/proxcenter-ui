@@ -15397,5 +15397,30 @@
       "save": "保存",
       "saved": "移动设置已保存"
     }
+  },
+  "copyRate": {
+    "button": "复制速率上限",
+    "label": "复制速率上限 (MB/s)",
+    "unlimited": "不限",
+    "unit": "MB/s",
+    "help": "限制复制读取源端的速度，避免占满整条链路或源数据存储。留空表示不限。最终切换阶段从不限速。",
+    "sharedHelp": "由批次中同时复制的虚拟机共享。",
+    "schedule": "时间段",
+    "from": "开始",
+    "to": "结束",
+    "timeZone": "时间按 {tz}",
+    "offHours": "时间段外 (MB/s)",
+    "dialogTitle": "迁移的复制速率上限",
+    "dialogTitleBatch": "批次的复制速率上限",
+    "dialogBody": "正在进行的复制会在约十秒内遵循新的上限。",
+    "dialogBodyBatch": "批次中的每个复制会在约十秒内遵循新的上限。",
+    "inForce": "当前生效：{rate}",
+    "perHostNote": "源连接还将其每台主机限制为 {rate}，由所有从该主机读取的复制共享。",
+    "remove": "取消上限",
+    "apply": "应用",
+    "perHostTitle": "热迁移复制速率",
+    "perHostInfo": "对从此源的同一台主机读取的热迁移复制设置上限，无论属于哪个批次，这些复制共享该上限。",
+    "perHost": "每台源主机的复制速率上限 (MB/s)",
+    "perHostCaption": "留空表示不限。批次或迁移可以设置更低的自有上限：每个复制取两者中较低的值。"
   }
 }

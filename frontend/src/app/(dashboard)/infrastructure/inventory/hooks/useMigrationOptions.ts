@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { CopyRateLimit } from '@/lib/migration/warm/copy-rate'
 
 import { DOWNTIME_BUDGET_DEFAULT_SEC } from '../components/migrationGuards'
 import { NFC_CONCURRENCY_DEFAULT } from '@/lib/migration/nfc-progress'
@@ -117,6 +118,10 @@ export function useMigrationOptions({
   // cap of the target PVE connection", 0 means unlimited. Starts empty so
   // a cap typed for one busy array never silently slows the next run.
   const [migZeroRateLimit, setMigZeroRateLimit] = useState('')
+  // Warm only: copy rate cap of the migration or the batch (lib/migration/warm/copy-rate).
+  // Starts without a cap every time: a cap chosen for a busy day must never
+  // silently slow the next run.
+  const [migCopyRateLimit, setMigCopyRateLimit] = useState<CopyRateLimit | null>(null)
   // Bulk only (roadmap#53): how many migrations of the batch run at once, 1 to
   // 5. Starts sequential every time: a wave sized for an idle night must never
   // inherit the parallelism of the previous one.
@@ -157,6 +162,7 @@ export function useMigrationOptions({
     setMigEfiPreEnrolledKeys(true)
     setMigDowntimeBudget(String(DOWNTIME_BUDGET_DEFAULT_SEC))
     setMigZeroRateLimit('')
+    setMigCopyRateLimit(null)
     setMigBulkConcurrency(BULK_MIG_CONCURRENCY_DEFAULT)
     setMigCopyVmk('')
   }, [esxiMigrateVm, bulkMigOpen])
@@ -200,6 +206,8 @@ export function useMigrationOptions({
     setMigDowntimeBudget,
     migZeroRateLimit,
     setMigZeroRateLimit,
+    migCopyRateLimit,
+    setMigCopyRateLimit,
     migStep,
     setMigStep,
     migHardware,

@@ -14,7 +14,7 @@
     "src/app/(dashboard)/infrastructure/inventory/components/GroupedVmsView.tsx": 1,
     "src/app/(dashboard)/infrastructure/inventory/components/InventoryDialogs.test.tsx": 2,
     "src/app/(dashboard)/infrastructure/inventory/components/InventoryDialogs.tsx": 17,
-    "src/app/(dashboard)/infrastructure/inventory/components/InventorySummary.tsx": 2,
+    "src/app/(dashboard)/infrastructure/inventory/components/InventorySummary.tsx": 1,
     "src/app/(dashboard)/infrastructure/inventory/components/StorageDetailPanel.tsx": 3,
     "src/app/(dashboard)/infrastructure/inventory/helpers.ts": 3,
     "src/app/(dashboard)/infrastructure/inventory/hooks/useFavorites.test.tsx": 1,

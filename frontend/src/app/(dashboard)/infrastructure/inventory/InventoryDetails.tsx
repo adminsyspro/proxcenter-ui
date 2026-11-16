@@ -132,6 +132,7 @@ import TagManager from './components/TagManager'
 import EntityTagManager from './components/EntityTagManager'
 import VmActions from './components/VmActions'
 import NodeActions from './components/NodeActions'
+import NodeHostBadges from './components/NodeHostBadges'
 import WarmCutoverButton, { canRequestCutover, isAwaitingOperator } from './components/WarmCutoverButton'
 import SyncIntervalButton from './components/SyncIntervalButton'
 import CopyRateButton from './components/CopyRateButton'
@@ -3310,7 +3311,11 @@ return vm?.isCluster ?? false
       ) : null}
 
       {selection && data ? (
-        <Stack spacing={2} sx={{ width: '100%', flex: 1, overflow: 'hidden', minHeight: 0 }}>
+        /* Scrolls when the header and summary leave the tabs too little room.
+           It reaches 8px into the panel padding and pads that back, so the
+           content stays put and the scrollbar, overlay ones included, sits in
+           that gutter instead of over the header buttons. */
+        <Stack spacing={2} sx={{ width: 'calc(100% + 8px)', mr: '-8px', pr: '8px', flex: 1, overflowX: 'hidden', overflowY: 'auto', minHeight: 0 }}>
           {/* Collapsible header zone for VMs and Nodes */}
           <Collapse in={!((selection?.type === 'vm' || selection?.type === 'node') && headerCollapsed)} timeout={200} sx={{ flexShrink: 0 }}>
           {/* Header title + tags (VM only) + ACTIONS TOP RIGHT */}
@@ -3640,11 +3645,22 @@ return vm?.isCluster ?? false
               {/* Refresh + Boutons Create VM/LXC pour clusters et hosts (hidden when node offline) */}
               {(selection?.type === 'cluster' || (selection?.type === 'node' && data.status !== 'crit')) && (
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: 'auto' }}>
-                  <MuiTooltip title={t('common.refresh')}>
-                    <IconButton size="small" onClick={refreshData} disabled={refreshing} sx={{ bgcolor: 'action.hover', '&:hover': { bgcolor: 'action.selected' }, '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } }, ...(refreshing && { '& i': { animation: 'spin 1s linear infinite' } }) }}>
-                      <i className="ri-refresh-line" style={{ fontSize: 18 }} />
-                    </IconButton>
-                  </MuiTooltip>
+                  {/* Pending updates and subscription of the node, each badge
+                      opening its own dialog (admin only). */}
+                  {selection?.type === 'node' && (
+                    <NodeHostBadges
+                      hostInfo={data.hostInfo}
+                      connId={parseNodeId(selection.id).connId}
+                      nodeName={parseNodeId(selection.id).node}
+                      vmCount={data.vmsData?.filter((vm: any) => vm.status === 'running').length}
+                      isCluster={!!data.clusterName}
+                      hasCeph={data.cephHealth ? true : undefined}
+                      onRefreshSubscription={async () => {
+                        const payload = await fetchDetails(selection)
+                        setData(payload)
+                      }}
+                    />
+                  )}
                   {selection?.type === 'node' && data.hostInfo?.maintenance && (
                     <Button
                       size="small"
@@ -3707,6 +3723,12 @@ return vm?.isCluster ?? false
                       />
                     </>
                   )}
+                  {/* Refresh last, right of the node power actions */}
+                  <MuiTooltip title={t('common.refresh')}>
+                    <IconButton size="small" onClick={refreshData} disabled={refreshing} sx={{ bgcolor: 'action.hover', '&:hover': { bgcolor: 'action.selected' }, '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } }, ...(refreshing && { '& i': { animation: 'spin 1s linear infinite' } }) }}>
+                      <i className="ri-refresh-line" style={{ fontSize: 18 }} />
+                    </IconButton>
+                  </MuiTooltip>
                 </Stack>
               )}
             </Box>
@@ -3836,20 +3858,9 @@ return vm?.isCluster ?? false
             guestInfo={guestInfo}
             guestInfoLoading={guestInfoLoading}
             clusterPveVersion={(selection?.type as string) === 'cluster' ? clusterPveVersion : undefined}
-            connId={selection?.type === 'node' ? parseNodeId(selection.id).connId : undefined}
-            nodeName={selection?.type === 'node' ? parseNodeId(selection.id).node : undefined}
-            onRefreshSubscription={async () => {
-              if (selection) {
-                const payload = await fetchDetails(selection)
-                setData(payload)
-              }
-            }}
             cephHealth={data.cephHealth}
             nodesOnline={data.nodesData?.filter(n => n.status === 'online').length}
             nodesTotal={data.nodesData?.length}
-            vmCount={selection?.type === 'node' ? data.vmsData?.filter((vm: any) => vm.status === 'running').length : undefined}
-            isCluster={!!data.clusterName}
-            hasCeph={data.cephHealth ? true : undefined}
             haState={selection?.type === 'vm' ? (allVms.find(vm => `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}` === selection.id)?.hastate || null) : null}
             haGroup={selection?.type === 'vm' ? (allVms.find(vm => `${vm.connId}:${vm.node}:${vm.type}:${vm.vmid}` === selection.id)?.hagroup || null) : null}
             agentEnabled={selection?.type === 'vm' ? data.optionsInfo?.agentEnabled ?? null : null}

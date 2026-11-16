@@ -14100,6 +14100,7 @@
         "outsideHint": "区域之外的目标（CIDR）。源区域阻断其出站流量后，发往这些目标的流量才会生效。",
         "notApplied": "出站未受控",
         "aria": "区域 {name}，{state}，{members}",
+        "enterHint": "双击查看内部",
         "membersUnknown": "成员数未知",
         "unzoned": "无区域的客户机（{count, number}）",
         "unzonedHint": "不在任何区域中的运行中客户机。偏差中也列出了它们。",
@@ -14152,6 +14153,7 @@
         "noFlows": "无"
       },
       "zonePanel": {
+        "inside": "查看区域内部",
         "detailsTitle": "区域详情 · {name}",
         "subSuggestions": "待处理建议",
         "subMembers": "成员",
@@ -14263,6 +14265,11 @@
         "zone": "中心区域",
         "option": "{name} · {count, plural, other {# 次命中}}",
         "hint": "点击另一个区域可将其置于中心。"
+      },
+      "inside": {
+        "back": "返回地图",
+        "title": "区域 {name} 内部",
+        "hint": "区域内的每个客户机，以及它们彼此之间和与外部的流量。双击另一个区域可进入。"
       },
       "sankey": {
         "label": "以条带显示区域之间的流量",

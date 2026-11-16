@@ -1,7 +1,7 @@
 'use client'
 
 import { paletteAlpha } from '../paletteAlpha'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, type MouseEvent } from 'react'
 import {
   Background, ControlButton, Controls, MiniMap, ReactFlow, ReactFlowProvider, useReactFlow, type AriaLabelConfig, type Edge, type EdgeMouseHandler, type Node, type NodeMouseHandler,
 } from '@xyflow/react'
@@ -78,6 +78,8 @@ type Props = {
   edges: Edge[]
   /** A zone circle (or its "+N" node) was clicked, or activated with the keyboard. */
   onSelectZone: (zoneId: string) => void
+  /** A zone was double-clicked: the map enters it. */
+  onEnterZone?: (zoneId: string) => void
   /** A guest was clicked, or activated with the keyboard. */
   onSelectGuest: (nodeId: string) => void
   /** An edge (or its label) was clicked. */
@@ -99,7 +101,10 @@ export function fitOptions(fitTo: string[] | null | undefined) {
   return fitTo?.length ? { ...base, nodes: fitTo.map(id => ({ id })) } : base
 }
 
-function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHover, onFocusNode, onClear, panelOpen, fitTo }: Props) {
+/** The second click of a double click comes this long after the first, at most. */
+const DOUBLE_CLICK_MS = 600
+
+function Canvas({ nodes, edges, onSelectZone, onEnterZone, onSelectGuest, onSelectEdge, onHover, onFocusNode, onClear, panelOpen, fitTo }: Props) {
   const { fitView, zoomIn, zoomOut } = useReactFlow()
   const theme = useTheme()
   const t = useTranslations('microsegPilot.overview')
@@ -126,12 +131,25 @@ function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHov
     return () => clearTimeout(timer)
   }, [shape, fitView, panelOpen, focusKey])
 
+  // The zone the last click was on. A double click enters it, and its first click has already opened the panel of the
+  // zone: the canvas got narrower and fits the graph again, so the second click may land beside the zone. The zone
+  // entered is therefore the one of the first click, wherever the second one falls on the canvas.
+  const lastZone = useRef<{ id: string; at: number } | null>(null)
   const onNodeClick: NodeMouseHandler = useCallback((_event, node) => {
     const d = node.data as unknown as MapNodeData
+    lastZone.current = d.kind === 'zone' ? { id: d.zone.id, at: Date.now() } : null
     if (d.kind === 'zone') onSelectZone(d.zone.id)
     else if (d.kind === 'guest') onSelectGuest(node.id)
     else if (d.kind === 'more' && d.groupId !== UNZONED_ID && !isPveGroup(d.groupId)) onSelectZone(d.groupId)
   }, [onSelectZone, onSelectGuest])
+  const onSecondClick = useCallback((event: MouseEvent) => {
+    const first = lastZone.current
+    if (event.detail !== 2 || !first || !onEnterZone) return
+    lastZone.current = null
+    if (Date.now() - first.at > DOUBLE_CLICK_MS) return
+    event.stopPropagation()
+    onEnterZone(first.id)
+  }, [onEnterZone])
   const onEdgeClick: EdgeMouseHandler = useCallback((_event, edge) => onSelectEdge(edge.id), [onSelectEdge])
   const onNodeMouseEnter: NodeMouseHandler = useCallback((_event, node) => onHover(node.id), [onHover])
   const onEdgeMouseEnter: EdgeMouseHandler = useCallback((_event, edge) => onHover(edge.id), [onHover])
@@ -147,7 +165,7 @@ function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHov
   return (
     <MapActionsContext.Provider value={actions}>
       <EdgeClickContext.Provider value={onSelectEdge}>
-        <Box sx={canvasSx(theme)}>
+        <Box sx={canvasSx(theme)} onClickCapture={onSecondClick}>
           <ReactFlow
             nodes={labelledNodes}
             edges={labelledEdges}
@@ -165,6 +183,7 @@ function Canvas({ nodes, edges, onSelectZone, onSelectGuest, onSelectEdge, onHov
             nodesConnectable={false}
             elementsSelectable={false}
             panOnDrag
+            zoomOnDoubleClick={false}
             elevateNodesOnSelect={false}
             fitView
             fitViewOptions={{ padding: 0.1, maxZoom: 1 }}

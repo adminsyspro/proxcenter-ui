@@ -20,8 +20,11 @@ export function useMapView(): [MapView, (next: MapView) => void] {
   return useStoredChoice(VIEW_KEY, MAP_VIEWS, 'groups')
 }
 
-/** The rendering selector: one icon button per rendering, its name in a tooltip and for screen readers. */
-export function ViewSwitch({ view, onView }: { view: MapView; onView: (next: MapView) => void }) {
+/**
+ * The rendering selector: one icon button per rendering, its name in a tooltip and for screen readers. No rendering is
+ * pressed (`view` null) inside an entered zone: any of them leaves it.
+ */
+export function ViewSwitch({ view, onView }: { view: MapView | null; onView: (next: MapView) => void }) {
   const t = useTranslations('microsegPilot.overview.view')
   return (
     <ToggleButtonGroup
@@ -70,8 +73,8 @@ const FILTERS = [
 ] as const
 
 type Props = {
-  /** The rendering selector is drawn only when both are given. */
-  view?: MapView
+  /** The rendering selector is drawn only when both are given (null: none of them is the one shown). */
+  view?: MapView | null
   onView?: (next: MapView) => void
   /** Drawn after the rendering selector (the Overview puts its "Target a VM" search there). */
   lead?: ReactNode
@@ -87,7 +90,7 @@ export default function MapToolbar({ view, onView, lead, filters, onFilters }: P
   const t = useTranslations('microsegPilot.overview')
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', minHeight: 36 }}>
-      {view && onView && <ViewSwitch view={view} onView={onView} />}
+      {view !== undefined && onView && <ViewSwitch view={view} onView={onView} />}
       {lead}
       <Box role='group' aria-label={t('filters.title')} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
         <Typography variant='body2' color='text.secondary' sx={{ mr: 0.5 }}>{t('filters.title')}</Typography>

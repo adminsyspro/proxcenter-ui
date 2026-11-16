@@ -14101,6 +14101,7 @@
         "outsideHint": "Destinations hors des zones (un CIDR). Les flux vers elles sont appliqués dès que la zone source bloque sa sortie.",
         "notApplied": "sortie non contrôlée",
         "aria": "Zone {name} : {state}, {members}",
+        "enterHint": "Double-clic pour voir l'intérieur",
         "membersUnknown": "membres inconnus",
         "unzoned": "Invités sans zone ({count, number})",
         "unzonedHint": "Invités en marche dans aucune zone. Écarts les liste aussi.",
@@ -14153,6 +14154,7 @@
         "noFlows": "Aucun"
       },
       "zonePanel": {
+        "inside": "Voir l'intérieur de la zone",
         "detailsTitle": "Détails de la zone · {name}",
         "subSuggestions": "Suggestions en attente",
         "subMembers": "Membres",
@@ -14264,6 +14266,11 @@
         "zone": "Zone au centre",
         "option": "{name} · {count, plural, one {# occurrence} other {# occurrences}}",
         "hint": "Cliquez sur une autre zone pour la mettre au centre."
+      },
+      "inside": {
+        "back": "Retour à la carte",
+        "title": "Intérieur de la zone {name}",
+        "hint": "Chaque VM de la zone, ce qu'elles échangent entre elles et avec le reste. Double-cliquez sur une autre zone pour y entrer."
       },
       "sankey": {
         "label": "Trafic entre les zones en rubans",

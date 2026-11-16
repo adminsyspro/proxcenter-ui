@@ -49,7 +49,8 @@ function insideCounts(suggestions: MicrosegSuggestion[], known: ReadonlyMap<stri
   return counts
 }
 
-function placeBox(out: Placement, zone: MicrosegZone, members: number | null, inside: number, c: { x: number; y: number }) {
+/** The box of a zone, with what the edges need of it (obstacle, outline). */
+export function placeBox(out: Placement, zone: MicrosegZone, members: number | null, inside: number, c: { x: number; y: number }) {
   const id = zoneNodeId(zone.id)
   const data: ZoneNodeData = { kind: 'zone', zone, members, state: zone.state, radius: 0, ...(inside ? { inside } : {}) }
   out.nodes.push({ id, type: 'zoneBox', position: { x: c.x - BOX_W / 2, y: c.y - BOX_H / 2 }, width: BOX_W, height: BOX_H, focusable: false, data })

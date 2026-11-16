@@ -15,7 +15,7 @@ import GuestViewBar from './GuestViewBar'
 import { defaultCentre } from './guestViewModel'
 import { MapNamesContext, edgeAria, type EdgeT, type MapNames } from './FlowEdge'
 import MapToolbar, { useFlowFilters, useMapView, type MapView } from './MapToolbar'
-import { mapViewGraph } from './mapViewGraph'
+import { mapViewGraph, type ShownView } from './mapViewGraph'
 import { applyInsideFilters } from './nodeViewModel'
 import { pairEndOf } from './pairModel'
 import { buildMatrix, matrixEdge, type MatrixEnd } from './matrixModel'
@@ -82,8 +82,10 @@ const sameFlow = (a: MicrosegFlow, b: MicrosegFlow) => a.src_zone_id === b.src_z
  * ribbons from the sources to the destinations, wider with more hits. Nodes: a circle per Proxmox node holding its
  * guests in the colour of their zone, the observed flows and the exceptions from node to node (a click on a guest
  * targets it, an edge opens no panel). Hover or select something
- * to light it and its flows; click a zone for its panel, an edge (or a cell) for its flows. Nothing polls beyond the
- * shared hooks (one inventory read, one suggestions read).
+ * to light it and its flows; click a zone for its panel, an edge (or a cell) for its flows. A double click on a zone
+ * (or the button of its panel) enters it: the canvas shows the zone alone, its guests spread out with what they
+ * exchange with each other and with the rest, until "Back to the map" or another rendering is picked. Nothing polls
+ * beyond the shared hooks (one inventory read, one suggestions read).
  */
 export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan, targetVm, pveNodes: nodeNames, pveNodeStatus }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.overview')
@@ -102,6 +104,9 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
   const [view, setView] = useMapView()
   const [centre, setCentre] = useState<string | null>(null)
+  // The zone that was entered (a double click on it): the canvas shows its inside until the way back, without
+  // changing the rendering kept in the browser. A zone deleted meanwhile brings the map back.
+  const [inside, setInside] = useState<string | null>(null)
 
   const { zones, flows, exceptions, pending_members: pendingMembers } = policy
   const tagPrefix = policy.policy.tag_prefix
@@ -111,6 +116,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   )
   const membersKnown = guestsStatus === 'ready'
   const zonesById = useMemo(() => new Map(zones.map(z => [z.id, z])), [zones])
+  const insideZone = inside ? zonesById.get(inside) ?? null : null
+  const shown: ShownView = insideZone ? 'inside' : view
   const mapTarget = useMapTarget(guests, membersByZone, targetVm)
   const { target } = mapTarget
 
@@ -140,7 +147,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     [centre, zonesById, zones, input.suggestions],
   )
   // Once the guest view has found its zone (the observed flows are read), it keeps it: a refresh does not move it.
-  const centreKnown = view === 'guests' && !centre && !!suggestions.data && !!centreId
+  const centreKnown = shown === 'guests' && !centre && !!suggestions.data && !!centreId
   useEffect(() => {
     if (!centreKnown) return
     const timer = setTimeout(() => setCentre(centreId), 0)
@@ -156,12 +163,13 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     return () => clearTimeout(timer)
   }, [targetKey, targetZone])
   // The matrix holds the pairs of the matrix and of the Sankey diagram (their flow panel).
-  const matrix = useMemo(() => (view === 'matrix' || view === 'sankey' ? buildMatrix(input) : null), [view, input])
+  const matrix = useMemo(() => (shown === 'matrix' || shown === 'sankey' ? buildMatrix(input) : null), [shown, input])
   // The Sankey diagram lays the pairs out itself, for the size of the map box.
-  const sankey = view === 'sankey' ? matrix : null
-  const drawn = useMemo(() => mapViewGraph(view, input, centreId), [view, input, centreId])
+  const sankey = shown === 'sankey' ? matrix : null
+  const drawnCentre = insideZone ? insideZone.id : centreId
+  const drawn = useMemo(() => mapViewGraph(shown, input, drawnCentre), [shown, input, drawnCentre])
   // The circle of a Proxmox node counts the flows inside it for the kinds the checkboxes show.
-  const graph = useMemo(() => (view === 'nodes' ? applyInsideFilters(drawn, filters) : drawn), [view, drawn, filters])
+  const graph = useMemo(() => (shown === 'nodes' ? applyInsideFilters(drawn, filters) : drawn), [shown, drawn, filters])
   const sankeyTarget = useMemo(
     () => (target && matrix && sankey ? targetSankey(matrix, filters, target) : null),
     [target, matrix, sankey, filters],
@@ -173,7 +181,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const graphEdge = graph.edges.find(e => selection?.kind === 'edge' && e.id === selection.id)
   const cellEdge = matrix && selection?.kind === 'edge' ? matrixEdge(matrix, selection.id, filters, unapplied) : null
   // An edge of the node view links two Proxmox nodes, not two zones: it is lit, it opens no flow panel.
-  const selectedEdge = view === 'nodes' ? null : panelEdgeOf(cellEdge, graphEdge)
+  const selectedEdge = shown === 'nodes' ? null : panelEdgeOf(cellEdge, graphEdge)
   const selectedNode = selectedNodeOf(selectedZone, selection)
   const selectedFocus = selectedNode ?? (selection?.kind === 'edge' ? selection.id : null)
   const focusId = hover ?? keyFocus ?? selectedFocus
@@ -245,17 +253,33 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   // In the guest view another zone is not opened but put in the centre; the zone in the centre opens its panel.
   const selectZone = useCallback((zoneId: string) => {
     setResolved(null)
-    if (view === 'guests' && zoneId !== centreId) {
+    if (shown === 'guests' && zoneId !== centreId) {
       setCentre(zoneId)
       setSelection(null)
       setHover(null)
       return
     }
     setSelection({ kind: 'zone', id: zoneId })
-  }, [view, centreId])
+  }, [shown, centreId])
+  // A zone is entered (double click, or the button of its panel): its panel is open, the canvas shows its inside.
+  const enterZone = useCallback((zoneId: string) => {
+    setResolved(null)
+    setInside(zoneId)
+    setSelection({ kind: 'zone', id: zoneId })
+    setHover(null)
+    setKeyFocus(null)
+  }, [])
+  // Back to the map the zone was entered from: its panel stays open.
+  const leaveZone = useCallback(() => {
+    setInside(null)
+    setSelection(s => (s?.kind === 'zone' ? s : null))
+    setHover(null)
+    setKeyFocus(null)
+  }, [])
   // A zone panel stays open across renderings; an edge, a cell or a guest belongs to the rendering it was picked in.
   const changeView = useCallback((next: MapView) => {
     setView(next)
+    setInside(null)
     setSelection(s => (s?.kind === 'zone' ? s : null))
     setHover(null)
     setKeyFocus(null)
@@ -271,6 +295,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const { pick, showPanel, hidePanel } = mapTarget
   const changeTarget = useCallback((next: TargetGuest | null) => {
     pick(next)
+    // A target is followed on the map itself, not inside a zone.
+    if (next) setInside(null)
     setSelection(null)
     setResolved(null)
   }, [pick])
@@ -278,14 +304,14 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   // A guest of the node view has no edge of its own to isolate: a click targets it (its panel opens, the map locks on it).
   const { candidates } = mapTarget
   const selectGuest = useCallback((nodeId: string) => {
-    if (view !== 'nodes') {
+    if (shown !== 'nodes') {
       setSelection({ kind: 'guest', id: nodeId })
       return
     }
     const d = graph.nodes.find(n => n.id === nodeId)?.data as unknown as MapNodeData | undefined
     const guest = d?.kind === 'guest' ? candidates.find(c => c.key === d.member.key) : undefined
     if (guest) changeTarget(guest)
-  }, [view, graph.nodes, candidates, changeTarget])
+  }, [shown, graph.nodes, candidates, changeTarget])
   const openTargetZone = useCallback((zoneId: string) => { setResolved(null); setSelection({ kind: 'zone', id: zoneId }) }, [])
 
   if (zones.length === 0) {
@@ -299,16 +325,18 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
 
   // The node view draws guests only: it says so when their list could not be read, or when there is none to draw.
   let nodesNote: 'unavailable' | 'none' | null = null
-  if (view === 'nodes' && guestsStatus === 'error') nodesNote = 'unavailable'
-  else if (view === 'nodes' && membersKnown && graph.nodes.length === 0) nodesNote = 'none'
+  if (shown === 'nodes' && guestsStatus === 'error') nodesNote = 'unavailable'
+  else if (shown === 'nodes' && membersKnown && graph.nodes.length === 0) nodesNote = 'none'
   const targetPanel = !!target && mapTarget.panelOpen && !selectedZone && !selectedEdge
   const panelOpen = !!selectedZone || !!selectedEdge || targetPanel
+  // Inside a zone every flow drawn is one of its own: the zone selected isolates nothing, so the map does not offer it.
+  const insideCentreSelected = !!insideZone && selectedNode === zoneNodeId(insideZone.id)
   return (
     <Box sx={{ px: 3, pb: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1, flexWrap: 'wrap' }}>
         <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>
           <MapToolbar
-            view={view}
+            view={insideZone ? null : view}
             onView={changeView}
             lead={<TargetPicker candidates={mapTarget.candidates} zonesById={zonesById} target={target} onTarget={changeTarget} onShowPanel={showTarget} observedCount={targetFlowCount} />}
             filters={filters}
@@ -332,8 +360,18 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
           {tObs(resolved === 'dismiss' ? 'resolvedDismiss' : 'resolvedAccept', { count: 1 })}
         </Alert>
       )}
-      {view === 'guests' && (
+      {shown === 'guests' && (
         <GuestViewBar zones={zones} suggestions={input.suggestions} centre={centreId} onCentre={changeCentre} />
+      )}
+      {insideZone && (
+        <Box data-testid='zone-inside-bar' sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, minWidth: 0 }}>
+          <Button variant='outlined' size='small' startIcon={<i className='ri-arrow-left-line' />} onClick={leaveZone} sx={{ flexShrink: 0 }}>
+            {t('inside.back')}
+          </Button>
+          <i className='ri-shield-fill' aria-hidden style={{ fontSize: 16, color: insideZone.color || undefined, flexShrink: 0 }} />
+          <Typography noWrap fontWeight={600} sx={{ flexShrink: 0 }}>{t('inside.title', { name: insideZone.name })}</Typography>
+          <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{t('inside.hint')}</Typography>
+        </Box>
       )}
       <MapNamesContext.Provider value={names}>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch', flexWrap: { xs: 'wrap', lg: 'nowrap' }, flex: 1, minHeight: 560 }}>
@@ -368,7 +406,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
                 target={target}
               />
             )}
-            {!matrix && !lock && selectedNode && (
+            {!matrix && !lock && selectedNode && !insideCentreSelected && (
               <Box
                 data-testid='map-isolation'
                 sx={{ position: 'absolute', top: 8, left: 8, zIndex: 6, display: 'flex', alignItems: 'center', gap: 0.5, pl: 1.5, pr: 0.5, py: 0.25, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 5, boxShadow: 1 }}
@@ -389,6 +427,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
                 nodes={nodes}
                 edges={edges}
                 onSelectZone={selectZone}
+                onEnterZone={enterZone}
                 onSelectGuest={selectGuest}
                 onSelectEdge={selectEdge}
                 onHover={setHover}
@@ -410,6 +449,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
               edits={edits}
               onClose={clear}
               onAssign={() => setAssigning(true)}
+              onInside={insideZone?.id === selectedZone.id ? undefined : () => enterZone(selectedZone.id)}
               connectionId={connectionId}
               version={policy.version}
               suggestions={input.suggestions}

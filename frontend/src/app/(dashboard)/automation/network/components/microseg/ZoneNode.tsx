@@ -91,18 +91,20 @@ export function useZoneNodeProps(id: string, d: ZoneNodeData, selected: boolean 
     role: 'button', tabIndex: 0, 'aria-label': label, 'aria-pressed': !!selected,
     onKeyDown: onKeys(() => openZone(d.zone.id)), onFocus: () => setFocus(id), onBlur: () => setFocus(null),
   }
-  return { members, stateText, label, button }
+  // The pointer is told how to enter the zone; a screen reader has the button of its panel for it.
+  const tip = d.entered ? label : `${label} · ${t('overview.node.enterHint')}`
+  return { members, stateText, label, tip, button }
 }
 
 /** A zone: a circle in its colour, its name, state and member count on its top line, its guests inside. */
 function ZoneNodeComponent({ id, data, selected }: NodeProps) {
   const d = data as unknown as ZoneNodeData
   const { zone, state, radius: r } = d
-  const { members, label, button } = useZoneNodeProps(id, d, selected)
+  const { members, tip, button } = useZoneNodeProps(id, d, selected)
   const color = zone.color || 'currentColor'
 
   return (
-    <Tooltip title={label} describeChild placement='top' enterDelay={500}>
+    <Tooltip title={tip} describeChild placement='top' enterDelay={500}>
       <Box
         {...button}
         sx={theme => ({
@@ -166,6 +168,7 @@ function GuestNodeComponent({ id, data, selected }: NodeProps) {
   const { selectGuest, setFocus } = useContext(MapActionsContext)
   const [hovered, setHovered] = useState(false)
   const m = d.member
+  const width = d.width ?? GUEST_W
   const details = (
     <Box>
       <Typography variant='caption' fontWeight={600} sx={{ display: 'block' }}>{m.name}</Typography>
@@ -185,7 +188,7 @@ function GuestNodeComponent({ id, data, selected }: NodeProps) {
         onKeyDown={d.inert ? undefined : onKeys(() => selectGuest(id))}
         onFocus={d.inert ? undefined : () => setFocus(id)}
         onBlur={d.inert ? undefined : () => setFocus(null)}
-        sx={{ position: 'relative', width: GUEST_W, height: GUEST_H, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: d.inert ? 'default' : 'pointer', borderRadius: 1, '&:focus-visible': FOCUS_RING }}
+        sx={{ position: 'relative', width, height: GUEST_H, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: d.inert ? 'default' : 'pointer', borderRadius: 1, '&:focus-visible': FOCUS_RING }}
       >
         <Handles top={GLYPH_Y} />
         <Box
@@ -201,7 +204,7 @@ function GuestNodeComponent({ id, data, selected }: NodeProps) {
           <StatusIcon type='vm' vmType={m.type} status={m.status} size={14} />
         </Box>
         {/* On a paper background: an edge passing under the guest goes behind its name, not through it. */}
-        <Typography noWrap sx={{ fontSize: '0.65rem', lineHeight: 1.4, maxWidth: GUEST_W, mt: 0.25, px: 0.25, borderRadius: 0.5, bgcolor: 'background.paper' }}>{m.name}</Typography>
+        <Typography noWrap sx={{ fontSize: d.width ? '0.75rem' : '0.65rem', lineHeight: 1.4, maxWidth: width, mt: 0.25, px: 0.25, borderRadius: 0.5, bgcolor: 'background.paper' }}>{m.name}</Typography>
       </Box>
     </Tooltip>
   )

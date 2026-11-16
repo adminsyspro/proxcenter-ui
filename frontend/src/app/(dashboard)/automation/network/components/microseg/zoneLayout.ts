@@ -66,6 +66,61 @@ export function slotPositions(slots: number, r: number): Point[] {
   return out
 }
 
+/** Inside a zone: its guests are wider (their name is read in full) and up to this many are drawn before the "+N" node. */
+export const INSIDE_GUEST_W = 120
+export const INSIDE_MAX_SHOWN = 60
+/** The rings the guests of an entered zone stand on: the radius of the first, the room between two, the arc a guest takes. */
+const RING_FIRST = 130
+const RING_STEP = 110
+const RING_ARC = 136
+/** Room between the last ring and the border of the circle (the name of the zone is above the top guest). */
+const RING_RIM = 85
+/** The circle of an entered zone with no guest, or with one in its centre. */
+export const INSIDE_MIN_R = 150
+
+/** How many guests are drawn inside an entered zone and how many its "+N" node stands for. */
+export function insideSlots(count: number): { shown: number; more: number } {
+  if (count <= INSIDE_MAX_SHOWN) return { shown: count, more: 0 }
+  return { shown: INSIDE_MAX_SHOWN - 1, more: count - (INSIDE_MAX_SHOWN - 1) }
+}
+
+/**
+ * The guests of an entered zone, spread on concentric rings so that the flows between them are chords that can be
+ * read: as few rings as hold them, each ring filled in proportion of its length. Returns the radius of the circle and
+ * the center of each glyph relative to the center of the circle (a single guest sits in the middle).
+ */
+export function ringLayout(slots: number): { radius: number; centers: Point[] } {
+  if (slots <= 0) return { radius: INSIDE_MIN_R, centers: [] }
+  if (slots === 1) return { radius: INSIDE_MIN_R, centers: [{ x: 0, y: 0 }] }
+  const radii: number[] = []
+  const room: number[] = []
+  for (let total = 0; total < slots;) {
+    const r = RING_FIRST + radii.length * RING_STEP
+    const holds = Math.max(2, Math.floor((2 * Math.PI * r) / RING_ARC))
+    radii.push(r)
+    room.push(holds)
+    total += holds
+  }
+  const total = room.reduce((sum, n) => sum + n, 0)
+  const counts = room.map(n => Math.floor((slots * n) / total))
+  // What the rounding left goes to the ring with the most room, the outer one on a tie.
+  for (let left = slots - counts.reduce((sum, n) => sum + n, 0); left > 0; left--) {
+    let best = 0
+    for (let k = 1; k < room.length; k++) if (room[k] - counts[k] >= room[best] - counts[best]) best = k
+    counts[best]++
+  }
+  const centers: Point[] = []
+  counts.forEach((n, k) => {
+    // Every other ring is turned by half a step: two guests of neighbouring rings do not line up.
+    const turn = k % 2 ? Math.PI / n : 0
+    for (let i = 0; i < n; i++) {
+      const angle = -Math.PI / 2 + turn + (2 * Math.PI * i) / n
+      centers.push({ x: Math.round(radii[k] * Math.cos(angle)), y: Math.round(radii[k] * Math.sin(angle)) })
+    }
+  })
+  return { radius: radii[radii.length - 1] + RING_RIM, centers }
+}
+
 /**
  * The column of every zone: 1 + the column of its furthest source (a longest-path layering), 1 for a zone no zone
  * sends to. Cycles are broken first: a depth-first walk (zones and their targets in name order) drops the edges that

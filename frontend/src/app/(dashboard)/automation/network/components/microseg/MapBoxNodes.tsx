@@ -18,9 +18,9 @@ function ZoneBoxNodeComponent({ id, data, selected }: NodeProps) {
   const d = data as unknown as ZoneNodeData
   const t = useTranslations('microsegPilot.overview.node')
   const { zone, state } = d
-  const { members, stateText, label, button } = useZoneNodeProps(id, d, selected)
+  const { members, stateText, tip: base, button } = useZoneNodeProps(id, d, selected)
   // The flows seen inside the zone have no edge here (the diagonal of the matrix shows them): the tooltip counts them.
-  const tip = d.inside ? `${label} · ${t('inside', { count: d.inside })}` : label
+  const tip = d.inside ? `${base} · ${t('inside', { count: d.inside })}` : base
 
   return (
     <Tooltip title={tip} describeChild placement='top' enterDelay={500}>

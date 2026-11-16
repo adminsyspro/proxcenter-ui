@@ -13671,6 +13671,7 @@
         "outsideHint": "Ziele außerhalb der Zonen (ein CIDR). Flüsse dorthin werden angewendet, sobald die Quellzone ihren Ausgang blockiert.",
         "notApplied": "Ausgang nicht kontrolliert",
         "aria": "Zone {name}: {state}, {members}",
+        "enterHint": "Doppelklick für die Innenansicht",
         "membersUnknown": "Mitglieder unbekannt",
         "unzoned": "Gäste ohne Zone ({count, number})",
         "unzonedHint": "Laufende Gäste in keiner Zone. Abweichungen listet sie auch.",
@@ -13723,6 +13724,7 @@
         "noFlows": "Keine"
       },
       "zonePanel": {
+        "inside": "Innenansicht der Zone anzeigen",
         "detailsTitle": "Zonendetails · {name}",
         "subSuggestions": "Ausstehende Vorschläge",
         "subMembers": "Mitglieder",
@@ -13834,6 +13836,11 @@
         "zone": "Zone in der Mitte",
         "option": "{name} · {count, plural, one {# Treffer} other {# Treffer}}",
         "hint": "Klicken Sie auf eine andere Zone, um sie in die Mitte zu setzen."
+      },
+      "inside": {
+        "back": "Zurück zur Karte",
+        "title": "Innenansicht der Zone {name}",
+        "hint": "Jeder Gast der Zone, was sie untereinander und mit dem Rest austauschen. Doppelklick auf eine andere Zone, um sie zu betreten."
       },
       "sankey": {
         "label": "Verkehr zwischen den Zonen als Bänder",

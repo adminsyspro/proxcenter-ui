@@ -174,6 +174,11 @@ const SUGGESTIONS: SuggestionSeed[] = [
   { id: 'demo-sugg-12', kind: 'would_block', status: 'pending', src: { ip: '192.168.1.92' }, dst: { zone: 'monitoring', vmid: 133 }, proto: 'tcp', dport: '9090', hits: 415, firstHours: 38, lastHours: 0 },
   { id: 'demo-sugg-13', kind: 'would_block', status: 'pending', src: { zone: 'app', vmid: 153 }, dst: { zone: 'monitoring', vmid: 134 }, proto: 'tcp', dport: '3100', hits: 2260, firstHours: 45, lastHours: 0 },
   { id: 'demo-sugg-14', kind: 'would_block', status: 'pending', src: { zone: 'web', vmid: 102 }, dst: { zone: 'monitoring', vmid: 134 }, proto: 'tcp', dport: '3100', hits: 1180, firstHours: 45, lastHours: 0 },
+  // What the guests of a zone exchange with each other: the inside of a zone shows it guest to guest.
+  { id: 'demo-sugg-15', kind: 'would_block', status: 'pending', src: { zone: 'monitoring', vmid: 131 }, dst: { zone: 'monitoring', vmid: 133 }, proto: 'tcp', dport: '9090', hits: 3400, firstHours: 46, lastHours: 0 },
+  { id: 'demo-sugg-16', kind: 'would_block', status: 'pending', src: { zone: 'monitoring', vmid: 131 }, dst: { zone: 'monitoring', vmid: 134 }, proto: 'tcp', dport: '3100', hits: 960, firstHours: 44, lastHours: 0 },
+  { id: 'demo-sugg-17', kind: 'would_block', status: 'pending', src: { zone: 'app', vmid: 151 }, dst: { zone: 'app', vmid: 152 }, proto: 'tcp', dport: '8080', hits: 540, firstHours: 40, lastHours: 1 },
+  { id: 'demo-sugg-18', kind: 'blocked', status: 'pending', src: { zone: 'web', vmid: 100 }, dst: { zone: 'web', vmid: 101 }, proto: 'tcp', dport: '22', hits: 9, firstHours: 12, lastHours: 4 },
 ]
 
 /** The destination of a seed: a guest of a zone, an address outside the zones, or the aggregate of many destinations. */

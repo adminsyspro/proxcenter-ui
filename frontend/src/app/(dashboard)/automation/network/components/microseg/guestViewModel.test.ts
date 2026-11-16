@@ -8,9 +8,11 @@ import { describe, expect, it } from 'vitest'
 import type { Edge, Node } from '@xyflow/react'
 
 import { crossesBox, crossesCircle, rectAround, rectHitsCircle, rectsOverlap } from './edgeGeometry'
-import { EMPTY_PEER_R, MAX_IPS, MAX_PER_COLUMN, buildGuestView, defaultCentre, ipNodeId, zoneTraffic } from './guestViewModel'
-import { demoInput, exception, seen, zone } from './mapViewsTestKit'
-import { EDGE_COLORS, NODE_H, NODE_W, type MapEdgeData, type ZoneNodeData } from './zoneGraph'
+import { EMPTY_PEER_R, MAX_BOXES_PER_COLUMN, MAX_IPS, MAX_PER_COLUMN, buildGuestView, buildZoneInside, defaultCentre, ipNodeId, zoneTraffic } from './guestViewModel'
+import { BOX_W } from './compactGraph'
+import { demoInput, exception, member, seen, zone } from './mapViewsTestKit'
+import { EDGE_COLORS, NODE_H, NODE_W, type GuestNodeData, type MapEdgeData, type ZoneNodeData } from './zoneGraph'
+import { INSIDE_GUEST_W, INSIDE_MAX_SHOWN } from './zoneLayout'
 
 const data = (e: Edge) => e.data as unknown as MapEdgeData
 const demo = demoInput()
@@ -245,5 +247,92 @@ describe('the exceptions of the view', () => {
     expect(exceptionIds(buildGuestView({ ...demo, members: null, exceptions: [exception('x1')], centre: 'zd' }))).toEqual([])
     // Without exceptions the view is what it was.
     expect(buildGuestView({ ...demo, exceptions: [], centre: 'zd' })).toEqual(view('zd'))
+  })
+})
+
+describe('inside a zone', () => {
+  const inside = (centre: string, over: Partial<ReturnType<typeof demoInput>> = {}) => buildZoneInside({ ...demo, ...over, centre })
+
+  it('draws the zone alone as a circle with every guest, wide enough for its name, and a box per zone around it', () => {
+    const g = inside('zd')
+    expect(top(g.nodes).map(n => `${n.type}:${n.id}`).sort()).toEqual(['boundary:outside', 'zone:zone:zd', 'zoneBox:zone:za', 'zoneBox:zone:zc', 'zoneBox:zone:zm', 'zoneBox:zone:zw'])
+    const guests = g.nodes.filter(n => n.parentId === 'zone:zd')
+    expect(guests.map(n => n.id).sort()).toEqual(['guest:zd:qemu/400', 'guest:zd:qemu/401', 'guest:zd:qemu/402', 'guest:zd:qemu/403'])
+    for (const n of guests) {
+      expect(n.width).toBe(INSIDE_GUEST_W)
+      expect((n.data as unknown as GuestNodeData).width).toBe(INSIDE_GUEST_W)
+    }
+    // No guest of another zone is drawn: the other zones are folded into their boxes, with their member count.
+    expect(g.nodes.filter(n => n.parentId && n.parentId !== 'zone:zd')).toHaveLength(0)
+    expect((g.nodes.find(n => n.id === 'zone:zw')!.data as unknown as ZoneNodeData).members).toBe(8)
+    expect(g.nodes.find(n => n.id === 'zone:zw')!.width).toBe(BOX_W)
+    const centre = g.nodes.find(n => n.id === 'zone:zd')!.data as unknown as ZoneNodeData
+    expect(centre.entered).toBe(true)
+    expect(centre.members).toBe(4)
+  })
+
+  it('keeps every guest inside the circle and the zone larger than on the guest view', () => {
+    const g = inside('zw')
+    const circle = g.nodes.find(n => n.id === 'zone:zw')!
+    const r = circle.width! / 2
+    expect(r).toBeGreaterThan(view('zw').nodes.find(n => n.id === 'zone:zw')!.width! / 2)
+    for (const n of g.nodes.filter(x => x.parentId === 'zone:zw')) {
+      expect(Math.hypot(n.position.x + n.width! / 2 - r, n.position.y + n.height! / 2 - r)).toBeLessThan(r)
+    }
+  })
+
+  it('draws what its guests exchange with each other guest to guest, and every flow with another zone from its guest to the box', () => {
+    const g = inside('zd', { suggestions: [...demo.suggestions, seen('in1', { src_zone_id: 'zd', src_ip: '10.0.4.1', dst_zone_id: 'zd', dst_ip: '10.0.4.4', dport: '5432', hits: 9 })] })
+    expect(g.edges.map(e => e.id).sort()).toEqual([
+      'allowed:zone:za>zone:zd',
+      'allowed:zone:zm>zone:zd',
+      'blocked:zone:zc>guest:zd:qemu/402',
+      'blocked:zone:zw>guest:zd:qemu/401',
+      'outside:zone:zd>outside',
+      'unprotected:guest:zd:qemu/400>guest:zd:qemu/403',
+      'unprotected:zone:zw>guest:zd:qemu/400',
+    ])
+    const own = g.edges.find(e => e.id === 'unprotected:guest:zd:qemu/400>guest:zd:qemu/403')!
+    expect(data(own)).toMatchObject({ fromGroup: 'zone:zd', toGroup: 'zone:zd', hits: 9, small: true })
+    expect(data(g.edges.find(e => e.id === 'blocked:zone:zw>guest:zd:qemu/401')!)).toMatchObject({ fromGroup: 'zone:zw', toGroup: 'zone:zd', hits: 150 })
+  })
+
+  it('puts the zones that talk to it on its left, the ones only it talks to on its right, in columns of boxes', () => {
+    const g = inside('zd')
+    for (const id of ['zone:za', 'zone:zc', 'zone:zm', 'zone:zw']) expect(cx(g.nodes, id)).toBeLessThan(cx(g.nodes, 'zone:zd'))
+    expect(cx(g.nodes, 'outside')).toBeGreaterThan(cx(g.nodes, 'zone:zd'))
+    const many = Array.from({ length: MAX_BOXES_PER_COLUMN + 2 }, (_, i) => zone(`p${i}`, `peer-${i}`))
+    const wide = buildZoneInside({
+      zones: [zone('zd', 'db'), ...many], flows: [], members: new Map([['zd', [member(400, 'db-1', ['10.0.4.1'])]]]),
+      suggestions: many.map((z, i) => seen(`s${i}`, { src_zone_id: z.id, src_ip: `10.1.0.${i + 1}`, dst_zone_id: 'zd', dst_ip: '10.0.4.1' })), centre: 'zd',
+    })
+    const columns = new Set(top(wide.nodes).filter(n => n.type === 'zoneBox').map(n => n.position.x))
+    expect(columns.size).toBe(2)
+  })
+
+  it('draws an exception from the guest of another zone as an edge from its box, one between two of its guests guest to guest', () => {
+    const g = inside('zd', { exceptions: [exception('e1'), exception('e2', { sources: [{ type: 'qemu', vmid: 400, name: 'db-1' }], destinations: [{ type: 'qemu', vmid: 403, name: 'db-4' }] })] } as never)
+    expect(g.edges.map(e => e.id)).toContain('exception:zone:zw>guest:zd:qemu/402')
+    expect(g.edges.map(e => e.id)).toContain('exception:guest:zd:qemu/400>guest:zd:qemu/403')
+  })
+
+  it('draws the guests with a flow first in a zone too large to be drawn whole, the rest behind "+N"', () => {
+    const big = Array.from({ length: INSIDE_MAX_SHOWN + 20 }, (_, i) => member(1000 + i, `big-${String(i).padStart(3, '0')}`, [`10.7.${Math.floor(i / 200)}.${(i % 200) + 1}`]))
+    const last = big[big.length - 1]
+    const g = buildZoneInside({
+      zones: [zone('zb', 'big'), zone('zw', 'web')], flows: [], members: new Map([['zb', big], ['zw', []]]),
+      suggestions: [seen('s1', { src_zone_id: 'zw', src_ip: '10.0.1.1', dst_zone_id: 'zb', dst_ip: last.ips[0] })], centre: 'zb',
+    })
+    const drawn = g.nodes.filter(n => n.parentId === 'zone:zb')
+    expect(drawn.filter(n => n.type === 'guest')).toHaveLength(INSIDE_MAX_SHOWN - 1)
+    expect(drawn.find(n => n.type === 'more')!.data).toMatchObject({ count: 21 })
+    expect(g.edges.map(e => e.id)).toEqual([`unprotected:zone:zw>guest:zb:${last.key}`])
+  })
+
+  it('draws the circle without guests while they are unknown, and nothing for a zone that is gone', () => {
+    const g = buildZoneInside({ zones: demo.zones, flows: demo.flows, suggestions: demo.suggestions, centre: 'zd' })
+    expect(g.nodes.filter(n => n.parentId)).toHaveLength(0)
+    expect((g.nodes.find(n => n.id === 'zone:zd')!.data as unknown as ZoneNodeData).members).toBeNull()
+    expect(inside('gone')).toEqual({ nodes: [], edges: [] })
   })
 })

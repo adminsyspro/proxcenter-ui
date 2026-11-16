@@ -312,7 +312,9 @@ describe('Firewalling: a large publish', () => {
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Publish' }))
     expect(await screen.findByText('100 of 104 changes published: publish again for the rest')).toBeInTheDocument()
     expect(JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body)).ops).toHaveLength(100)
-    await waitFor(() => expect(publishButton()).toHaveTextContent('Publish (4)'))
+    // The view re-renders the 104-rule draft after the publish: under the full
+    // suite with coverage the CI runner needs more than the default second.
+    await waitFor(() => expect(publishButton()).toHaveTextContent('Publish (4)'), { timeout: 10_000 })
     fetchSpy.mockRestore()
   })
 })

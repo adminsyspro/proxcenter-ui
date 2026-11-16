@@ -99,4 +99,31 @@ describe('ConnectionDialog bulk migration limits (ui#1332)', () => {
     fireEvent.click(screen.getByTestId('connection-tab-migrations'))
     expect(screen.queryByTestId('connection-migrationSyncIntervalSec')).toBeNull()
   })
+
+  it('sends the per-host copy rate cap of a VMware source typed in its field, unlimited by default', async () => {
+    licensed(true)
+    const onSave = vi.fn<(d: any) => Promise<void>>().mockResolvedValue(undefined)
+    renderWithProviders(<ConnectionDialog open onClose={vi.fn()} onSave={onSave} type="vmware" initialData={vcenter as any} mode="edit" />)
+    fireEvent.click(screen.getByTestId('connection-tab-migrations'))
+    const field = screen.getByTestId('connection-copy-rate-per-host-input') as HTMLInputElement
+    expect(field.value).toBe('')
+    fireEvent.change(field, { target: { value: '50' } })
+    fireEvent.click(screen.getByRole('button', { name: /save|update/i }))
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(onSave.mock.calls[0][0]).toMatchObject({ migrationCopyRateLimitPerHostMBps: 50 })
+  })
+
+  it('shows the per-host copy rate cap saved on an XCP-ng source', () => {
+    licensed(true)
+    renderWithProviders(<ConnectionDialog open onClose={vi.fn()} onSave={vi.fn()} type="xcpng" initialData={{ id: 'x1', name: 'XCP', type: 'xcpng', subType: 'xapi', baseUrl: 'https://10.0.0.51', migrationCopyRateLimitPerHostMBps: 80 } as any} mode="edit" />)
+    fireEvent.click(screen.getByTestId('connection-tab-migrations'))
+    expect((screen.getByTestId('connection-copy-rate-per-host-input') as HTMLInputElement).value).toBe('80')
+  })
+
+  it('does not offer the per-host copy rate cap on a PVE target', () => {
+    licensed(true)
+    renderWithProviders(<ConnectionDialog open onClose={vi.fn()} onSave={vi.fn()} type="pve" initialData={pve as any} mode="edit" migrationSourcesConfigured />)
+    fireEvent.click(screen.getByTestId('connection-tab-migrations'))
+    expect(screen.queryByTestId('connection-copy-rate-per-host-input')).toBeNull()
+  })
 })

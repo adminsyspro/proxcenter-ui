@@ -8,6 +8,7 @@ import { resolveInstanceId } from "@/lib/migration/orphan-sweep"
 import { startMigrationJob } from "@/lib/migration/start-job"
 import { authorizeMigrationTarget, migrateScope, scopedJobWhere } from "@/lib/migration/authorize"
 import { withAudit } from "@/lib/audit/withAudit"
+import { parseCopyRateLimit } from "@/lib/migration/warm/copy-rate"
 
 export const runtime = "nodejs"
 
@@ -58,6 +59,16 @@ async function handlePost(
     })
     if (unauthorized) return unauthorized
 
+    // A job of a batch shares the batch's copy rate cap, kept on the batch row
+    // (lib/migration/warm/copy-rate-governor). The retry leaves the batch: it
+    // takes that cap as its own, or it would read at full speed.
+    let config = job.config as Record<string, any>
+    if (job.batchId && config.copyRateLimit === undefined) {
+      const batch = await prisma.migrationBatch.findUnique({ where: { id: job.batchId }, select: { copyRateLimit: true } })
+      const cap = parseCopyRateLimit(batch?.copyRateLimit)
+      if (cap) config = { ...config, copyRateLimit: cap }
+    }
+
     // Create a new job for the retry
     const newJob = await prisma.migrationJob.create({
       data: {
@@ -68,7 +79,7 @@ async function handlePost(
         targetConnectionId: job.targetConnectionId,
         targetNode: job.targetNode,
         targetStorage: job.targetStorage,
-        config: job.config,
+        config,
         status: "pending",
         currentStep: "pending",
         startedAt: new Date(),
@@ -94,7 +105,7 @@ async function handlePost(
     // The new row is a copy of the failed one: start it from the original's
     // fields and config under the new id.
     after(async () => {
-      await startMigrationJob({ ...job, id: newJob.id }, tenantId, sourceConn ?? null)
+      await startMigrationJob({ ...job, config, id: newJob.id }, tenantId, sourceConn ?? null)
     })
 
     return NextResponse.json({ data: { jobId: newJob.id, status: "pending" } })

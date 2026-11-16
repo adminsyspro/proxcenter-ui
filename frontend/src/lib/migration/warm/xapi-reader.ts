@@ -1,12 +1,17 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import { buildNbdConnectCmd, buildReaderTeardownCmd, NBD_DEVICE_RE, nbdAttachError, type PollOpts } from "./vddk-reader"
+import { nbdkitRateFilterArgs, rateFileOf } from "./rate-file"
 import type { Extent } from "./extents"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 /** The xapi-nbd export to re-serve locally: unix socket to create, plus the
  *  TLS NBD endpoint XAPI handed us (address, port, export name with session)
  *  and the PEM certificate of that host, both from VDI.get_nbd_info. */
-export interface XapiNbdTarget { sock: string; address: string; port: number; exportname: string; cert: string }
+export interface XapiNbdTarget {
+  sock: string; address: string; port: number; exportname: string; cert: string
+  /** Copy rate cap the reader starts at, MB/s (copy-rate.ts); absent or 0 = unlimited until the rate file says otherwise. */
+  initialRateMbps?: number
+}
 
 /** A running nbdkit-nbd reader: the kernel device it is attached to plus the
  *  node-side resources (socket, log, pinned-CA directory) to clean up. */
@@ -35,10 +40,11 @@ function redactLogTail(text: string | undefined): string {
 export function buildNbdkitXapiCmd(t: XapiNbdTarget, caDir: string): string {
   // -f: stay in the foreground of the backgrounded launch, so errors land in the
   // reader's log rather than syslog (same reason as buildNbdkitVddkCmd).
-  return ["nbdkit", "-f", "-r", "-U", shellEscape(t.sock), "nbd",
+  const rate = nbdkitRateFilterArgs(t.sock, t.initialRateMbps ?? 0)
+  return ["nbdkit", "-f", "-r", "-U", shellEscape(t.sock), ...rate.filters, "nbd",
     `hostname=${shellEscape(t.address)}`, `port=${shellEscape(String(t.port))}`,
     `export=${shellEscape(t.exportname)}`, "tls=require",
-    `tls-certificates=${shellEscape(caDir)}`].join(" ")
+    `tls-certificates=${shellEscape(caDir)}`, ...rate.params].join(" ")
 }
 
 /**
@@ -81,7 +87,7 @@ export async function startXapiReader(connectionId: string, nodeIp: SshTarget, t
   const launch =
     `rm -rf ${shellEscape(caDir)}; ` +
     `(umask 077; mkdir -p ${shellEscape(caDir)}; printf '%s\\n' ${shellEscape(t.cert)} > ${shellEscape(`${caDir}/ca-cert.pem`)}; rm -f ${shellEscape(logFile)}; : > ${shellEscape(logFile)}); ` +
-    `fuser -k ${shellEscape(t.sock)} 2>/dev/null; rm -f ${shellEscape(t.sock)}; ` +
+    `fuser -k ${shellEscape(t.sock)} 2>/dev/null; rm -f ${shellEscape(t.sock)} ${shellEscape(rateFileOf(t.sock))}; ` +
     `nohup ${buildNbdkitXapiCmd(t, caDir)} >> ${shellEscape(logFile)} 2>&1 & echo $!`
   const launchRes = await executeSSH(connectionId, nodeIp, launch)
   if (!launchRes.success) {

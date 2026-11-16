@@ -1,5 +1,7 @@
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import type { Extent } from "./extents"
+import { applyTimeoutMs } from "./copy-rate"
+import { buildStopCopyCmd, watchCancel } from "./cancel-watch"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 /**
@@ -25,7 +27,9 @@ export function diffChecksums(srcSums: string[], dstSums: string[], blockSize: n
  * hashed as read. The device path is system-generated but escaped defensively.
  */
 export function buildBlockChecksumCmd(device: string, blockSize: number, numBlocks: number): string {
-  return `for i in $(seq 0 ${numBlocks - 1}); do ` +
+  // The leading no-op names the device in the loop's command line, so a
+  // cancelled migration can stop this very loop (cancel-watch).
+  return `: scan=${shellEscape(device)}; for i in $(seq 0 ${numBlocks - 1}); do ` +
     `dd if=${shellEscape(device)} bs=${blockSize} skip=$i count=1 2>/dev/null | md5sum | cut -d' ' -f1; done`
 }
 
@@ -53,7 +57,9 @@ export async function scanBlockChecksums(
   // The whole disk is scanned block-by-block, which on a multi-TB disk can run
   // for many minutes; this is the no-CBT fallback where downtime scales with
   // disk size. Give it a generous timeout.
-  const res = await executeSSH(connectionId, nodeIp, buildBlockChecksumCmd(device, blockSize, numBlocks), 6 * 60 * 60 * 1000, opts)
+  // The scan reads the whole disk, through the copy rate cap for the source:
+  // its budget grows with the disk like an apply command's.
+  const res = await executeSSH(connectionId, nodeIp, buildBlockChecksumCmd(device, blockSize, numBlocks), applyTimeoutMs(numBlocks * blockSize), opts)
   if (!res.success) throw new Error(`block checksum scan failed on ${device}: ${res.error || res.output}`)
   return (res.output || "").split("\n").map(s => s.trim()).filter(Boolean)
 }
@@ -78,14 +84,17 @@ export async function detectChangedExtentsByChecksum(
   dstDevice: string,
   blockSize: number,
   diskLength: number,
-  opts: { inactivityMs?: number; onProgress?: (scannedBlocks: number, totalBlocks: number) => void } = {},
+  opts: { inactivityMs?: number; onProgress?: (scannedBlocks: number, totalBlocks: number) => void; cancelled?: () => boolean } = {},
 ): Promise<Extent[]> {
   const numBlocks = Math.ceil(diskLength / blockSize)
   let srcLines = 0
   let dstLines = 0
   const countLines = (chunk: string) => chunk.split("\n").length - 1
   const report = () => opts.onProgress?.(srcLines + dstLines, 2 * numBlocks)
-  const [srcSums, dstSums] = await Promise.all([
+  const watch = opts.cancelled
+    ? watchCancel({ cancelled: opts.cancelled, stop: () => executeSSH(connectionId, nodeIp, buildStopCopyCmd([srcDevice, dstDevice])) })
+    : null
+  const scans = Promise.all([
     scanBlockChecksums(connectionId, nodeIp, srcDevice, blockSize, numBlocks, {
       inactivityMs: opts.inactivityMs,
       onData: chunk => { srcLines += countLines(chunk); report() },
@@ -95,5 +104,16 @@ export async function detectChangedExtentsByChecksum(
       onData: chunk => { dstLines += countLines(chunk); report() },
     }),
   ])
+  let srcSums: string[]
+  let dstSums: string[]
+  try {
+    [srcSums, dstSums] = await scans
+  } catch (e) {
+    if (watch?.fired()) throw new Error("Migration cancelled")
+    throw e
+  } finally {
+    watch?.done()
+  }
+  if (watch?.fired()) throw new Error("Migration cancelled")
   return diffChecksums(srcSums, dstSums, blockSize)
 }

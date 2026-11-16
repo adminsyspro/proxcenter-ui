@@ -20,6 +20,7 @@ import { parseHardwareOverrides, parseNicMappings, parseDiskMappings, parseMacPo
 import { parseZeroRateLimit, ZERO_RATE_LIMIT_MIN_MBPS, ZERO_RATE_LIMIT_MAX_MBPS } from "@/lib/migration/warm/zero-rate"
 import { parseSyncInterval, SYNC_INTERVAL_MIN_SEC, SYNC_INTERVAL_MAX_SEC } from "@/lib/migration/warm/sync-interval"
 import { hasServerFeature } from "@/lib/auth/requireEnterprise"
+import { COPY_RATE_MAX_MBPS, COPY_RATE_MIN_MBPS, parseCopyRateLimit } from "@/lib/migration/warm/copy-rate"
 import { Features } from "@/lib/license/features"
 import { TERMINAL_STATUSES } from "@/lib/tasks/sharedTask"
 import { authorizeMigrationTarget } from "@/lib/migration/authorize"
@@ -200,6 +201,16 @@ export async function validateMigrationRequest(
   // With it, the engine still only lets it tighten the target cluster's cap.
   const zeroRateLimitMBps = parsedZeroRate !== undefined && await hasServerFeature(Features.VMWARE_MIGRATION) ? parsedZeroRate : undefined
 
+  // Warm only: cap on the copy's read rate, MB/s, with an optional time window
+  // (lib/migration/warm/copy-rate). Refused on a bad value, like the zeroing
+  // cap; dropped without the migration feature. A batch keeps it on its own
+  // row (batches route), shared by its jobs.
+  const parsedCopyRate = parseCopyRateLimit(body.copyRateLimit)
+  if (parsedCopyRate === null) {
+    return bad(`copyRateLimit must be { mbps } with mbps 0 (unlimited) or an integer between ${COPY_RATE_MIN_MBPS} and ${COPY_RATE_MAX_MBPS} MB/s, and an optional schedule { from: "HH:MM", to: "HH:MM", tz, offHoursMbps }`)
+  }
+  const copyRateLimit = parsedCopyRate !== undefined && await hasServerFeature(Features.VMWARE_MIGRATION) ? parsedCopyRate : undefined
+
   // Warm only (roadmap#53): the VMkernel adapter of the source host the NFC
   // copy must use, as "vmkN". Only the device is kept: the engine reads its
   // address from vSphere at run time (lib/migration/warm/copy-path), so an
@@ -366,7 +377,7 @@ export async function validateMigrationRequest(
       // Warm-only options (vddkLibdir, downtimeBudgetSec) are persisted here so a
       // retry — which rebuilds the config from job.config — keeps them instead of
       // silently reverting to the defaults.
-      config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }), ...(syncIntervalSec !== undefined && { syncIntervalSec }), ...(convertGuest !== undefined && { convertGuest }), ...(zeroRateLimitMBps !== undefined && { zeroRateLimitMBps }), ...(copyVmk && { copyVmk }),
+      config: { sourceConnectionId, sourceVmId, sourceVmName: body.sourceVmName, targetConnectionId, targetNode, targetStorage, networkBridge, vlanTag, startAfterMigration, convertDisksToQcow2, cpuType, migrationType, transferMode, ...(targetVmid !== undefined && { targetVmid }), ...(body.vddkLibdir && { vddkLibdir: body.vddkLibdir }), ...(downtimeBudgetSec !== undefined && { downtimeBudgetSec }), ...(cutoverMode !== undefined && { cutoverMode }), ...(syncIntervalSec !== undefined && { syncIntervalSec }), ...(convertGuest !== undefined && { convertGuest }), ...(zeroRateLimitMBps !== undefined && { zeroRateLimitMBps }), ...(warm && copyRateLimit !== undefined && { copyRateLimit }), ...(copyVmk && { copyVmk }),
         // Review-step overrides (#317), persisted so a retry keeps the same
         // hardware, NIC layout and disk placement.
         ...(hardware && { hardware }), ...(nics && { nics }), ...(disks && { disks }),

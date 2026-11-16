@@ -60,7 +60,7 @@ describe("pure builders", () => {
     const c = buildReaderTeardownCmd({ nbdDev: "/dev/nbd3", sock: "/tmp/v.sock", pwFile: "/tmp/pw", logFile: "/tmp/v.log" })
     expect(c).toContain("/tmp/v.log")
     const lastLine = c.split("\n").at(-1)
-    expect(lastLine).toMatch(/rm -f '\/tmp\/v\.sock' '\/tmp\/pw' '\/tmp\/v\.log'$/)
+    expect(lastLine).toMatch(/rm -f '\/tmp\/v\.sock' '\/tmp\/v\.sock\.rate' '\/tmp\/pw' '\/tmp\/v\.log'$/)
     expect(lastLine).toContain("pkill -f '[n]bdkit.*/tmp/v.sock'")
   })
   it("omits the device detach when no device was allocated (attach failed before a device was chosen)", () => {
@@ -71,7 +71,7 @@ describe("pure builders", () => {
     expect(c).not.toContain("nbd_release_holders")
     // nbdkit and temp files are still cleaned up.
     expect(c).toContain("pkill -f '[n]bdkit.*/tmp/v.sock'")
-    expect(c).toContain("rm -f '/tmp/v.sock' '/tmp/pw'")
+    expect(c).toContain("rm -f '/tmp/v.sock' '/tmp/v.sock.rate' '/tmp/pw'")
   })
   it("quotes a socket path holding shell characters and detaches only a real /dev/nbdN", () => {
     const sock = "/tmp/v $(touch /tmp/pwned) `id`.sock"
@@ -80,7 +80,7 @@ describe("pure builders", () => {
     expect(c).not.toContain("nbd-client -d")
     expect(c).not.toContain("reboot")
     expect(c).toContain(`pkill -f '[n]bdkit.*${sock}'`)
-    expect(c).toContain(`rm -f '${sock}' '/tmp/pw'`)
+    expect(c).toContain(`rm -f '${sock}' '${sock}.rate' '/tmp/pw'`)
     expect(buildNbdConnectCmd(sock)).toContain(`nbd-client -unix '${sock}' /dev/nbd$i`)
   })
 })
@@ -105,7 +105,9 @@ describe("startVddkReader", () => {
     // The launch call writes the password (no trailing newline) and backgrounds nbdkit to a log file.
     const launchCmd = mockSSH.mock.calls[0][2] as string
     expect(launchCmd).toContain("printf '%s'")
-    expect(launchCmd).toContain("nohup nbdkit -f -r -U '/tmp/v.sock' --filter=retry vddk")
+    expect(launchCmd).toContain("nohup nbdkit -f -r -U '/tmp/v.sock' --filter=rate --filter=retry vddk")
+    // A rate file left by an earlier reader on the same socket must not cap this one.
+    expect(launchCmd).toContain("rm -f '/tmp/v.sock' '/tmp/v.sock.rate';")
     expect(launchCmd).not.toContain("\ns3cr3t\n") // password not heredoc'd raw
     // The device-attach call uses the free-device connect builder.
     const connectCmd = mockSSH.mock.calls[3][2] as string
@@ -155,7 +157,7 @@ describe("startVddkReader", () => {
     expect(mockSSH.mock.calls[0][3]).toBe(VDDK_LAUNCH_TIMEOUT_MS)
     const teardown = String(mockSSH.mock.calls[1][2])
     expect(teardown).toContain("pkill -f '[n]bdkit.*/tmp/v.sock'")
-    expect(teardown).toContain("rm -f '/tmp/v.sock' '/tmp/pw' '/tmp/v.sock.log'")
+    expect(teardown).toContain("rm -f '/tmp/v.sock' '/tmp/v.sock.rate' '/tmp/pw' '/tmp/v.sock.log'")
     // no device was attached, so none is detached
     expect(teardown).not.toContain("nbd-client -d")
     expect(mockSSH).toHaveBeenCalledTimes(2)

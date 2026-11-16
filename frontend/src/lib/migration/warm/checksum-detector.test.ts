@@ -11,6 +11,7 @@ vi.mock("@/lib/ssh/exec", async (importActual) => {
   return { ...actual, executeSSH: vi.fn() }
 })
 import { executeSSH } from "@/lib/ssh/exec"
+import { applyTimeoutMs } from "./copy-rate"
 const mockSSH = executeSSH as unknown as ReturnType<typeof vi.fn>
 
 const B = 256 * 1024 * 1024
@@ -59,6 +60,16 @@ describe("scanBlockChecksums", () => {
     await scanBlockChecksums("conn", "ip", "/dev/nbd3", B, 1, { inactivityMs: 1234, onData })
     expect(mockSSH).toHaveBeenCalledTimes(1)
     expect(mockSSH.mock.calls[0][4]).toEqual({ inactivityMs: 1234, onData })
+  })
+  it("gives the scan a budget that grows with the disk (copy rate cap)", async () => {
+    mockSSH.mockResolvedValue({ success: true, output: "aaa" })
+    await scanBlockChecksums("conn", "ip", "/dev/nbd3", B, 4096)
+    expect(mockSSH.mock.calls[0][3]).toBe(applyTimeoutMs(4096 * B))
+  })
+  it("marks the scan loop with its device, so a cancelled migration can stop it", async () => {
+    mockSSH.mockResolvedValue({ success: true, output: "aaa" })
+    await scanBlockChecksums("conn", "ip", "/dev/nbd3", B, 1)
+    expect(mockSSH.mock.calls[0][2]).toMatch(/^: scan='\/dev\/nbd3'; for i in/)
   })
   it("returns an empty list for a zero-length disk without issuing SSH", async () => {
     const sums = await scanBlockChecksums("conn", "ip", "/dev/nbd3", B, 0)
@@ -130,5 +141,26 @@ describe("detectChangedExtentsByChecksum", () => {
     await expect(
       detectChangedExtentsByChecksum("conn", "ip", "/dev/nbd3", "/dev/dm-9", B, B),
     ).resolves.toEqual([])
+  })
+
+  it("stops both scans and says so when the migration is cancelled", async () => {
+    vi.useFakeTimers()
+    try {
+      const finishers: Array<(v: any) => void> = []
+      mockSSH.mockReset().mockImplementation((_c: string, _ip: string, cmd: string) =>
+        cmd.startsWith("pkill") ? Promise.resolve({ success: true, output: "" }) : new Promise(r => { finishers.push(r) }))
+      let cancelled = false
+      const outcome = detectChangedExtentsByChecksum("conn", "ip", "/dev/nbd4", "/dev/r177/vm-9-disk-0", B, 2 * B, { cancelled: () => cancelled })
+        .then(() => null, (e: Error) => e)
+      cancelled = true
+      await vi.advanceTimersByTimeAsync(3000)
+      const stop = mockSSH.mock.calls.map(c => c[2]).find((c: string) => c.startsWith("pkill"))
+      expect(stop).toContain("[s]can=.?/dev/nbd4")
+      expect(stop).toContain("[s]can=.?/dev/r177/vm-9-disk-0")
+      for (const f of finishers) f({ success: false, output: "" })
+      expect((await outcome)?.message).toBe("Migration cancelled")
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

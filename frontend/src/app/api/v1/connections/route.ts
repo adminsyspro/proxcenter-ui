@@ -155,7 +155,7 @@ export async function GET(req: Request) {
         integrityRegionSizeMiB: true,
         migrationMaxParallel: true,
         migrationMaxPerNode: true,
-        migrationMaxPerSourceHost: true, migrationSyncIntervalSec: true,
+        migrationMaxPerSourceHost: true, migrationSyncIntervalSec: true, migrationCopyRateLimitPerHostMBps: true,
         apiTokenEnc: true,
         sshKeyEnc: true,
         sshPassEnc: true,
@@ -538,7 +538,7 @@ async function handlePost(req: Request) {
           sshUser: true, sshAuthMethod: true, sshUseSudo: true, replicationNetwork: true,
           warmZeroRateLimitMBps: true,
           integrityCheckEnabled: true, integrityRegionCount: true, integrityRegionSizeMiB: true,
-          migrationMaxParallel: true, migrationMaxPerNode: true, migrationMaxPerSourceHost: true, migrationSyncIntervalSec: true,
+          migrationMaxParallel: true, migrationMaxPerNode: true, migrationMaxPerSourceHost: true, migrationSyncIntervalSec: true, migrationCopyRateLimitPerHostMBps: true,
           createdAt: true, updatedAt: true,
         },
       })

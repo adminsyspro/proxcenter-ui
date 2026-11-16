@@ -16,7 +16,7 @@ describe("buildNbdkitVddkCmd", () => {
       moref: "vm-9",
       diskPath: "[ds] vm/vm.vmdk",
     })
-    expect(cmd).toContain("nbdkit -f -r -U '/tmp/v.sock' --filter=retry vddk") // -f: errors in the reader's log; -r: read-only (source disk)
+    expect(cmd).toContain("nbdkit -f -r -U '/tmp/v.sock' --filter=rate --filter=retry vddk") // -f: errors in the reader's log; -r: read-only (source disk)
     // The retry filter reopens the disk after a failed read (roadmap#177):
     // it must sit before the plugin name, its parameters after it.
     expect(cmd.indexOf("--filter=retry")).toBeLessThan(cmd.indexOf(" vddk "))
@@ -76,5 +76,29 @@ describe("buildNbdkitVddkCmd", () => {
       diskPath: "[ds] o'brien/vm.vmdk",
     })
     expect(cmd).toContain("file='[ds] o'\\''brien/vm.vmdk'")
+  })
+
+  // Copy rate cap: the rate filter sits in front of the retry filter, its
+  // parameters with the plugin's, and its rate file next to the socket so the
+  // engine can change the cap while the copy runs.
+  it("puts the rate filter first and starts it at the initial share", () => {
+    const cmd = buildNbdkitVddkCmd({
+      sock: "/tmp/v.sock", libdir: "/opt/vddk", server: "10.0.0.9", user: "root",
+      passwordFile: "/tmp/pw", thumbprint: "AB:CD", moref: "vm-9", diskPath: "[ds] vm/vm.vmdk", initialRateMbps: 50,
+    })
+    expect(cmd.indexOf("--filter=rate")).toBeLessThan(cmd.indexOf("--filter=retry"))
+    expect(cmd).toContain(" rate=400M ")
+    expect(cmd).toContain(" rate-file='/tmp/v.sock.rate'")
+    expect(cmd.indexOf("rate-file=")).toBeGreaterThan(cmd.indexOf(" file='"))
+  })
+
+  it("starts unlimited, watching the rate file, without an initial share", () => {
+    const cmd = buildNbdkitVddkCmd({
+      sock: "/tmp/v.sock", libdir: "/opt/vddk", server: "10.0.0.9", user: "root",
+      passwordFile: "/tmp/pw", thumbprint: "AB:CD", moref: "vm-9", diskPath: "[ds] vm/vm.vmdk",
+    })
+    expect(cmd).toContain("--filter=rate")
+    expect(cmd).not.toMatch(/ rate=/)
+    expect(cmd).toContain(" rate-file='/tmp/v.sock.rate'")
   })
 })

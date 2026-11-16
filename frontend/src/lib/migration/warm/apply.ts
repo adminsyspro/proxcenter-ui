@@ -1,9 +1,11 @@
 import { executeSSH } from "@/lib/ssh/exec"
-import { buildApplyScripts } from "./block-applier"
+import { buildApplyCommands } from "./block-applier"
+import { applyTimeoutMs } from "./copy-rate"
 import { createDdProgressAccumulator } from "./dd-progress"
 import type { Extent } from "./extents"
 import type { WarmStatus } from "./types"
-import { updateJobLive, appendLog } from "./job-control"
+import { updateJobLive, appendLog, isCancelled } from "./job-control"
+import { buildStopCopyCmd, watchCancel } from "./cancel-watch"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
 
 // Long-running SSH operations (block apply, checksum scan) need a generous timeout.
@@ -15,6 +17,12 @@ export const APPLY_TIMEOUT_MS = 12 * 60 * 60 * 1000
 export const APPLY_INACTIVITY_MS = 10 * 60 * 1000
 // Throttle live throughput log lines so a multi-hour copy doesn't flood the job log.
 export const PROGRESS_LOG_INTERVAL_MS = 30_000
+// First throughput readout of an apply, after its start. A capped copy starts
+// with nbdkit's credit of 2 s of its cap, and dd's average over its first
+// seconds read 52 MB/s for a 20 MB/s cap (lab 16/11); at 10 s that burst only
+// adds a fifth. The readout starts once the apply has run that long by the
+// wall clock, or once the running dd says it has.
+export const FIRST_READOUT_DELAY_MS = 10_000
 
 /**
  * Map a phase's byte counter onto its window of the warm run's locked progress
@@ -73,7 +81,7 @@ export function warmFinalTransfer(capacities: number[], copiedBytes: number): { 
   return { totalBytes: whole(capacities.reduce((s, c) => s + (c || 0), 0)), bytesTransferred: whole(copiedBytes) }
 }
 
-// Apply a disk's changed extents to its target. buildApplyScripts splits the
+// Apply a disk's changed extents to its target. buildApplyCommands splits the
 // dd batch into one or more commands, each bounded so no single command
 // exceeds the OS argument-length limit (see MAX_APPLY_CMD_BYTES) — a large
 // change set in one command was rejected at exec and surfaced as an opaque
@@ -95,11 +103,14 @@ export async function applyExtentsWithProgress(a: {
   // copy is never cut off and a stalled one fails within APPLY_INACTIVITY_MS
   // instead of hanging to the 12h cap.
   const accumulate = createDdProgressAccumulator()
+  const startedAt = Date.now()
   let lastFlush = 0
   const onData = (chunk: string): void => {
     const p = accumulate(chunk)
     if (!p) return
     const now = Date.now()
+    // Past the start burst: by the wall clock, or by the running dd's own account.
+    if (lastFlush === 0 && now - startedAt < FIRST_READOUT_DELAY_MS && p.seconds * 1000 < FIRST_READOUT_DELAY_MS) return
     if (now - lastFlush < PROGRESS_LOG_INTERVAL_MS) return
     lastFlush = now
     const passBytes = Math.min(pass.doneBytes + p.bytes, pass.totalBytes)
@@ -112,8 +123,19 @@ export async function applyExtentsWithProgress(a: {
       await appendLog(jobId, `Disk ${diskIndex + 1}: copying ${(passBytes / 1073741824).toFixed(1)} GB at ${(p.bytesPerSec / 1048576).toFixed(0)} MB/s`)
     })().catch(() => {})
   }
-  for (const script of buildApplyScripts(nbdDev, dev, extents, capacityBytes)) {
-    const res = await executeSSH(connectionId, nodeIp, script, APPLY_TIMEOUT_MS, { inactivityMs: APPLY_INACTIVITY_MS, onData })
+  for (const { script, bytes } of buildApplyCommands(nbdDev, dev, extents, capacityBytes)) {
+    // The budget grows with the command's bytes: under a copy rate cap a large
+    // disk takes longer than the former fixed 12 h (copy-rate.ts).
+    if (isCancelled(jobId)) throw new Error("Migration cancelled")
+    // A cancellation stops the running dd instead of waiting for the end of the command.
+    const watch = watchCancel({ cancelled: () => isCancelled(jobId), stop: () => executeSSH(connectionId, nodeIp, buildStopCopyCmd([nbdDev])) })
+    let res: Awaited<ReturnType<typeof executeSSH>>
+    try {
+      res = await executeSSH(connectionId, nodeIp, script, applyTimeoutMs(bytes), { inactivityMs: APPLY_INACTIVITY_MS, onData })
+    } finally {
+      watch.done()
+    }
+    if (watch.fired() || isCancelled(jobId)) throw new Error("Migration cancelled")
     // Surface res.output first, like the thick-zero step does (#946). The apply
     // script redirects each dd's stderr into stdout, so the real cause ("Input/output
     // error" on the nbd source, "No space left on device" on the target) lands in

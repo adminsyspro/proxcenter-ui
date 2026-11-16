@@ -1,5 +1,7 @@
 import { shellEscape } from "@/lib/ssh/exec"
 
+import { nbdkitRateFilterArgs } from "./rate-file"
+
 export interface VddkOpts {
   /** Unix socket nbdkit listens on (-U). */
   sock: string
@@ -23,6 +25,8 @@ export interface VddkOpts {
    * needs. Omit only for a static read of the VM's current disk.
    */
   snapshot?: string
+  /** Copy rate cap the reader starts at, MB/s (copy-rate.ts); absent or 0 = unlimited until the rate file says otherwise. */
+  initialRateMbps?: number
 }
 
 /**
@@ -59,6 +63,7 @@ export const NBDKIT_VDDK_TRANSPORTS = "transports=nbdssl:nbd"
  * in the process argument list.
  */
 export function buildNbdkitVddkCmd(o: VddkOpts): string {
+  const rate = nbdkitRateFilterArgs(o.sock, o.initialRateMbps ?? 0)
   const parts = [
     // -r (read-only): warm only ever reads the source. Without it nbdkit serves
     // a read-write export, so VDDK opens the disk read-write, which a running VM
@@ -68,7 +73,8 @@ export function buildNbdkitVddkCmd(o: VddkOpts): string {
     // the log stays empty and every failed open reached the job as "nbdkit log:
     // (empty)" without the VDDK's reason (roadmap#177).
     // Filters go before the plugin name; their parameters ride with the plugin's.
-    "nbdkit", "-f", "-r", "-U", shellEscape(o.sock), ...NBDKIT_RETRY_FILTER, "vddk",
+    // The rate filter (copy rate cap) goes first, in front of the retry filter.
+    "nbdkit", "-f", "-r", "-U", shellEscape(o.sock), ...rate.filters, ...NBDKIT_RETRY_FILTER, "vddk",
     ...NBDKIT_RETRY_PARAMS,
     `libdir=${shellEscape(o.libdir)}`,
     `server=${shellEscape(o.server)}`,
@@ -80,5 +86,7 @@ export function buildNbdkitVddkCmd(o: VddkOpts): string {
   ]
   if (o.snapshot) parts.push(`snapshot=${shellEscape(o.snapshot)}`)
   parts.push(`file=${shellEscape(o.diskPath)}`)
+  // The rate filter's parameters last: "rate-file=" must not read as the disk's "file=".
+  parts.push(...rate.params)
   return parts.join(" ")
 }

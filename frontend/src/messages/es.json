@@ -15397,5 +15397,30 @@
       "save": "Guardar",
       "saved": "Ajustes de movimientos guardados"
     }
+  },
+  "copyRate": {
+    "button": "Límite de velocidad de copia",
+    "label": "Límite de velocidad de copia (MB/s)",
+    "unlimited": "Sin límite",
+    "unit": "MB/s",
+    "help": "Limita la velocidad a la que la copia lee el origen, para que no ocupe todo el enlace ni los datastores de origen. Vacío significa sin límite. La pasada final del cutover nunca se limita.",
+    "sharedHelp": "Compartido por las VM del lote que copian al mismo tiempo.",
+    "schedule": "Franja horaria",
+    "from": "Desde",
+    "to": "Hasta",
+    "timeZone": "Horas en {tz}",
+    "offHours": "Fuera de la franja (MB/s)",
+    "dialogTitle": "Límite de velocidad de copia de la migración",
+    "dialogTitleBatch": "Límite de velocidad de copia del lote",
+    "dialogBody": "La copia en curso sigue el nuevo límite en unos diez segundos.",
+    "dialogBodyBatch": "Cada copia del lote sigue el nuevo límite en unos diez segundos.",
+    "inForce": "Vigente ahora mismo: {rate}",
+    "perHostNote": "La conexión de origen también limita cada uno de sus hosts a {rate}, compartido por todas las copias que leen de él.",
+    "remove": "Quitar el límite",
+    "apply": "Aplicar",
+    "perHostTitle": "Velocidad de las copias warm",
+    "perHostInfo": "Límite de las copias warm que leen de un mismo host de este origen, compartido por esas copias sea cual sea su lote.",
+    "perHost": "Límite de velocidad de copia por host de origen (MB/s)",
+    "perHostCaption": "Vacío significa sin límite. Un lote o una migración puede fijar un límite propio más bajo: cada copia toma el menor de los dos."
   }
 }

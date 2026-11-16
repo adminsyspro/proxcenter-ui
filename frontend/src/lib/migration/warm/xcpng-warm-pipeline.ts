@@ -37,6 +37,8 @@ import { awaitNextHoldPass, describeHoldInterval, type HoldTest } from "./hold-w
 import { runMigrationTest } from "./migration-test"
 import { catchUpBeforeCutover } from "./catch-up"
 import { resolveWarmZeroRateLimit } from "./zero-rate-target"
+import { isCappedPass } from "./copy-rate"
+import { openCopyRateGovernor, type CopyRateGovernor } from "./copy-rate-governor"
 import { sweepOrphanReaders } from "./orphan-readers"
 import { cleanShutdownAndConfirm, isXapiGuestAgentMissing, type PowerOffOps } from "./power-off"
 import { attachDisksAndBoot, releaseTargetVolumes, removeTargetVmOnFailure, unmapTargetVolumes, verifySampledFirstBlock } from "./finish"
@@ -98,6 +100,8 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
   const ourSnapshots: string[] = []            // snapshot VM refs we created
   const allocatedVolumes: AllocatedVolume[] = []
   const activeReaders: XapiReaderHandle[] = []
+  // Copy rate governor of each capped reader (copy-rate-governor), stopped with it.
+  const governors = new Map<XapiReaderHandle, CopyRateGovernor>()
   const targetDev = new Map<number, string>()  // disk position -> device path
   let pveConn: any = null
   // "XenServer" or "XCP-ng", from the pool master once logged in: the job log names what the operator runs.
@@ -237,16 +241,27 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
       },
     }
 
-    /** Expose a VDI on the node through an nbdkit-nbd reader pinned to the host certificate XAPI handed us. */
-    const readerFor = async (vdiRef: string, tag: string): Promise<XapiReaderHandle> => {
+    /**
+     * Expose a VDI on the node through an nbdkit-nbd reader pinned to the host
+     * certificate XAPI handed us. A `capped` reader reads under the copy rate
+     * cap (copy-rate.ts), its governor stopped by release().
+     */
+    const readerFor = async (vdiRef: string, tag: string, capped = false): Promise<XapiReaderHandle> => {
       const nbd = await xapiGetNbdInfo(session!, vdiRef)
-      const reader = await startXapiReader(config.targetConnectionId, nodeIp, {
-        sock: `/tmp/proxcenter-xapi-${jobId}-${tag}.sock`, address: nbd.address, port: nbd.port, exportname: nbd.exportname, cert: nbd.cert,
+      const sock = `/tmp/proxcenter-xapi-${jobId}-${tag}.sock`
+      const governor = await openCopyRateGovernor({
+        capped, jobId, connectionId: config.targetConnectionId, nodeIp, sock, log: (msg, level) => appendLog(jobId, msg, level),
       })
+      const reader = await startXapiReader(config.targetConnectionId, nodeIp, {
+        sock, address: nbd.address, port: nbd.port, exportname: nbd.exportname, cert: nbd.cert, initialRateMbps: governor?.initialMbps,
+      }).catch(async (e) => { await governor?.stop(); throw e })
       activeReaders.push(reader)
+      if (governor) { governors.set(reader, governor); governor.start() }
       return reader
     }
     const release = async (reader: XapiReaderHandle) => {
+      await governors.get(reader)?.stop()
+      governors.delete(reader)
       await stopXapiReader(config.targetConnectionId, nodeIp, reader).catch(() => {})
       const i = activeReaders.indexOf(reader); if (i >= 0) activeReaders.splice(i, 1)
     }
@@ -296,7 +311,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
             }
           }
           if (extents === null) {
-            const reader = await readerFor(sd.vdiRef, `${label}-${disk.position}`)
+            const reader = await readerFor(sd.vdiRef, `${label}-${disk.position}`, isCappedPass(window.currentStep))
             readers.set(disk.position, reader)
             extents = await readAllocatedExtents(config.targetConnectionId, nodeIp, reader.sock, disk.sizeBytes)
           }
@@ -313,7 +328,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
           if (extents.length > 0) {
             let reader = readers.get(disk.position)
             if (!reader) {
-              reader = await readerFor(snapDisk(disk).vdiRef, `${label}-${disk.position}`)
+              reader = await readerFor(snapDisk(disk).vdiRef, `${label}-${disk.position}`, isCappedPass(window.currentStep))
               readers.set(disk.position, reader)
             }
             await applyExtentsWithProgress({
@@ -453,7 +468,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
           const disk = vmConfig.disks[i]
           const sd = snap.disks.find(x => x.position === disk.position)
           if (!sd) throw new Error(`snapshot has no disk at position ${disk.position}`)
-          const reader = await readerFor(sd.vdiRef, `checksum-${disk.position}`)
+          const reader = await readerFor(sd.vdiRef, `checksum-${disk.position}`, true)
           try {
             const dev = targetDev.get(disk.position)!
             const win = checksumDiskWindows(i, vmConfig.disks.length)
@@ -461,6 +476,7 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
             let lastScanFlush = 0
             const extents = await detectChangedExtentsByChecksum(config.targetConnectionId, nodeIp, reader.nbdDev, dev, 256 * 1024 * 1024, disk.sizeBytes, {
               inactivityMs: APPLY_INACTIVITY_MS,
+              cancelled: () => isCancelled(jobId),
               onProgress: (scanned, total) => {
                 const now = Date.now(); if (now - lastScanFlush < PROGRESS_LOG_INTERVAL_MS) return; lastScanFlush = now
                 const pct = scaleWarmProgress(win.scanStart, win.scanEnd, scanned, total)
@@ -544,6 +560,8 @@ export async function runXcpngWarmMigration(jobId: string, config: WarmMigration
   } catch (err: any) {
     await updateJob(jobId, isCancelled(jobId) ? "cancelled" : "failed", { error: String(err?.message || err) }).catch(() => {})
     await appendLog(jobId, `Warm migration failed: ${err?.message || err}`, "error").catch(() => {})
+    await Promise.all([...governors.values()].map(g => g.stop()))
+    governors.clear()
     for (const r of activeReaders) if (nodeIp) await stopXapiReader(config.targetConnectionId, nodeIp, r).catch(() => {})
     if (session) {
       // Every destroy that fails is named in the log: a snapshot left on the pool

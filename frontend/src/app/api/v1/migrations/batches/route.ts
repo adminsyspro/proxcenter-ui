@@ -147,9 +147,19 @@ async function handlePost(req: Request) {
       return NextResponse.json({ error: space.problems.map(p => p.message).join("; "), problems: space.problems }, { status: 400 })
     }
     const createdBy = session?.user?.id || null
+    // The copy rate cap of a batch is shared by its jobs and changed on the
+    // batch (lib/migration/warm/copy-rate-governor): it lives on the batch row.
+    const copyRateLimit = first.config.copyRateLimit
+    const jobConfig = (config: Record<string, unknown>) => {
+      const { copyRateLimit: _cap, ...rest } = config
+      return rest
+    }
     const { batch, jobIds } = await prisma.$transaction(async (tx: any) => {
       const batch = await tx.migrationBatch.create({
-        data: { tenantId, createdBy, sourceConnectionId: first.sourceConnectionId, targetConnectionId: first.targetConnectionId, concurrency, status: "running" },
+        data: {
+          tenantId, createdBy, sourceConnectionId: first.sourceConnectionId, targetConnectionId: first.targetConnectionId, concurrency, status: "running",
+          ...(copyRateLimit !== undefined && { copyRateLimit }),
+        },
       })
       const jobIds: string[] = []
       for (const [batchOrder, v] of validated.entries()) {
@@ -163,7 +173,7 @@ async function handlePost(req: Request) {
             targetConnectionId: v.targetConnectionId,
             targetNode: v.targetNode,
             targetStorage: v.targetStorage,
-            config: v.config,
+            config: jobConfig(v.config),
             // Not started: no startedAt and no owner until the scheduler claims it.
             status: QUEUED_STATUS,
             currentStep: QUEUED_STATUS,

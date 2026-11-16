@@ -15397,5 +15397,30 @@
       "save": "Save",
       "saved": "Move settings saved"
     }
+  },
+  "copyRate": {
+    "button": "Copy rate cap",
+    "label": "Copy rate cap (MB/s)",
+    "unlimited": "Unlimited",
+    "unit": "MB/s",
+    "help": "Caps how fast the copy reads the source, so it does not take the whole link or the source datastores. Empty means no cap. The final cutover pass is never capped.",
+    "sharedHelp": "Shared by the VMs of the batch that copy at the same time.",
+    "schedule": "Time window",
+    "from": "From",
+    "to": "To",
+    "timeZone": "Times in {tz}",
+    "offHours": "Outside the window (MB/s)",
+    "dialogTitle": "Copy rate cap of the migration",
+    "dialogTitleBatch": "Copy rate cap of the batch",
+    "dialogBody": "The running copy follows the new cap within about ten seconds.",
+    "dialogBodyBatch": "Every copy of the batch follows the new cap within about ten seconds.",
+    "inForce": "In force right now: {rate}",
+    "perHostNote": "The source connection also caps each of its hosts at {rate}, shared by every copy reading from it.",
+    "remove": "Remove the cap",
+    "apply": "Apply",
+    "perHostTitle": "Warm copy rate",
+    "perHostInfo": "Cap on the warm copies reading from one host of this source, shared by those copies whatever their batch.",
+    "perHost": "Copy rate cap per source host (MB/s)",
+    "perHostCaption": "Empty means no cap. A batch or a migration can set a lower cap of its own: each copy takes the lower of the two."
   }
 }

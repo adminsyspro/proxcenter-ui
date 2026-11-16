@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { MIGRATION_LIMIT_MAX } from '@/lib/migration/migration-limits'
 import { SYNC_INTERVAL_MAX_SEC, SYNC_INTERVAL_MIN_SEC } from './migration/warm/sync-interval'
 import { ZERO_RATE_LIMIT_MAX_MBPS, ZERO_RATE_UNLIMITED } from './migration/warm/zero-rate'
+import { COPY_RATE_MAX_MBPS, COPY_RATE_UNLIMITED } from './migration/warm/copy-rate'
 import { INTEGRITY_REGION_COUNT_MAX, INTEGRITY_REGION_SIZE_MIB_MAX } from './migration/integrity-settings'
 
 import type { BroadcastInput } from '@/lib/broadcast/types'
@@ -34,6 +35,7 @@ function refineReplicationNetwork(data: { sshEnabled?: boolean; replicationNetwo
 
 const migrationLimitSchema = z.number().int().min(1).max(MIGRATION_LIMIT_MAX).nullable().optional()
 const migrationSyncIntervalSchema = z.number().int().min(SYNC_INTERVAL_MIN_SEC).max(SYNC_INTERVAL_MAX_SEC).nullable().optional()
+const copyRatePerHostSchema = z.number().int().min(COPY_RATE_UNLIMITED).max(COPY_RATE_MAX_MBPS).nullable().optional()
 
 export const createConnectionSchema = z.object({
   name: z.string().min(1, 'name is required').transform(s => s.trim()),
@@ -89,6 +91,9 @@ export const createConnectionSchema = z.object({
   // Seconds between two delta passes of a warm migration waiting for a manual
   // cutover, on a VMware or XCP-ng source (lib/migration/warm/sync-interval).
   migrationSyncIntervalSec: migrationSyncIntervalSchema,
+  // Cap in MB/s on the warm copies reading from one host of a VMware or XCP-ng
+  // source (lib/migration/warm/copy-rate-governor); 0 or null = no cap.
+  migrationCopyRateLimitPerHostMBps: copyRatePerHostSchema,
 }).superRefine((data, ctx) => {
   // PVE/PBS require apiToken
   if ((data.type === 'pve' || data.type === 'pbs') && !data.apiToken) {
@@ -200,6 +205,9 @@ export const updateConnectionSchema = z.object({
   // Seconds between two delta passes of a warm migration waiting for a manual
   // cutover, on a VMware or XCP-ng source (lib/migration/warm/sync-interval).
   migrationSyncIntervalSec: migrationSyncIntervalSchema,
+  // Cap in MB/s on the warm copies reading from one host of a VMware or XCP-ng
+  // source (lib/migration/warm/copy-rate-governor); 0 or null = no cap.
+  migrationCopyRateLimitPerHostMBps: copyRatePerHostSchema,
 }).superRefine((data, ctx) => {
   refineReplicationNetwork(data, ctx)
 })

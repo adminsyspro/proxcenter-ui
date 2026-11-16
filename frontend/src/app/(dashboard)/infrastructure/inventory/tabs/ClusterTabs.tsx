@@ -103,6 +103,7 @@ import CephHealthCheckDetail from '@/components/ceph/CephHealthCheckDetail'
 import { isNodeReachable, nodeStatusMeta } from '../nodeStatusMeta'
 import { jsonInit, requireOk } from '@/lib/api/fetchJsonSafe'
 import GpuInventoryPanel, { GPU_TAB_VALUE } from '@/components/gpu/GpuInventoryPanel'
+import { DETAIL_TABS_MIN_HEIGHT } from '../detailLayout'
 
 const INVENTORY_OSD_STYLE: Record<OsdGridState, { color: string; label: string; opacity: number }> = {
   down: { color: '#ef4444', label: 'Down', opacity: 1 },
@@ -741,7 +742,7 @@ export default function ClusterTabs(props: any) {
     <>
           {/* Onglets pour Cluster: Summary / Nodes / VMs / HA / Backups / Snapshots / Notes / Ceph / Storage / Firewall / SDN / Cluster / Rolling Update / ... */}
           {selection?.type === 'cluster' && data.nodesData ? (
-            <Card variant="outlined" sx={{ width: '100%', borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <Card variant="outlined" sx={{ width: '100%', borderRadius: 2, flex: 1, minHeight: DETAIL_TABS_MIN_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <Tabs
                 value={clusterTab}
                 onChange={(_e, v) => setClusterTab(v)}

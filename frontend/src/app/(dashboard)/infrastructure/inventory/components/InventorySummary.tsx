@@ -2,26 +2,16 @@
 
 import React, { useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { useBranding } from '@/contexts/BrandingContext'
 import { useRBAC } from '@/contexts/RBACContext'
 import { useTenant } from '@/contexts/TenantContext'
 
 import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
   Alert,
   Box,
-  Button,
   Card,
   CardContent,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
   IconButton,
   Menu,
   MenuItem,
@@ -40,12 +30,11 @@ import type { Status, Kpi, DetailsPayload, SeriesPoint } from '../types'
 import { formatBps, formatUptime } from '../helpers'
 import { computeNodeProvisioning, describeNodeProvisioning, type ProvisioningLabels } from '../nodeProvisioning'
 import { ProvisioningChip, ProvisioningTooltip } from './ProvisioningInfo'
-import { hostSideBlockSx, hostSideHandleSx } from './hostSideBlock'
+import { hostSummaryRowSx } from './hostSummaryLayout'
 import { SensorTemp } from './SensorTemp'
 import UsageBar from './UsageBar'
 import ConsolePreview from './ConsolePreview'
 import StatusChip from './StatusChip'
-import NodeUpdateDialog from '@/components/NodeUpdateDialog'
 import { jsonInit, requireOk } from '@/lib/api/fetchJsonSafe'
 
 /* ------------------------------------------------------------------ */
@@ -217,15 +206,9 @@ function InventorySummary({
   guestInfo,
   guestInfoLoading,
   clusterPveVersion,
-  connId,
-  nodeName,
-  onRefreshSubscription,
   cephHealth,
   nodesOnline,
   nodesTotal,
-  vmCount,
-  isCluster,
-  hasCeph,
   haState,
   haGroup,
   agentEnabled,
@@ -250,15 +233,9 @@ function InventorySummary({
   guestInfo?: { ip?: string; uptime?: number; diskUsage?: { used: number; total: number }; osInfo?: { type: 'linux' | 'windows' | 'other'; name: string | null; version: string | null; kernel: string | null } | null } | null
   guestInfoLoading?: boolean
   clusterPveVersion?: string
-  connId?: string
-  nodeName?: string
-  onRefreshSubscription?: () => void
   cephHealth?: string
   nodesOnline?: number
   nodesTotal?: number
-  vmCount?: number
-  isCluster?: boolean
-  hasCeph?: boolean
   haState?: string | null
   haGroup?: string | null
   agentEnabled?: boolean | null
@@ -271,7 +248,6 @@ function InventorySummary({
   nodeVms?: DetailsPayload['vmsData']
 }) {
   const t = useTranslations()
-  const { branding } = useBranding()
   const theme = useTheme()
   const primaryColor = theme.palette.primary.main
   const primaryColorLight = lighten(primaryColor, 0.3)
@@ -324,39 +300,6 @@ function InventorySummary({
   // can't change it (cluster-level concern, not vDC-scoped).
   const { currentTenant, loading: tenantLoading } = useTenant()
   const isProviderTenant = !tenantLoading && currentTenant?.id === 'default'
-
-  // État pour les blocs collapsibles dans la vue host
-  const [hostBlocksCollapsed, setHostBlocksCollapsed] = useState<{
-    updates: boolean
-    subscription: boolean
-  }>({
-    updates: true,
-    subscription: true,
-  })
-
-  // États pour les modales
-  const [nodeUpdateDialogOpen, setNodeUpdateDialogOpen] = useState(false)
-  const [changelogDialogOpen, setChangelogDialogOpen] = useState(false)
-  const [checkingSubscription, setCheckingSubscription] = useState(false)
-
-  // Handler pour vérifier la subscription
-  const handleCheckSubscription = async () => {
-    if (!connId || !nodeName) return
-    setCheckingSubscription(true)
-
-    try {
-      // Appel API pour rafraîchir la subscription
-      await fetch(`/api/v1/connections/${encodeURIComponent(connId)}/nodes/${encodeURIComponent(nodeName)}/subscription`, {
-        method: 'POST'
-      })
-      // Callback pour rafraîchir les données
-      onRefreshSubscription?.()
-    } catch (err) {
-      console.error('Failed to check subscription:', err)
-    } finally {
-      setCheckingSubscription(false)
-    }
-  }
 
   // Formater l'uptime
   const formatUptime = (secs?: number) => {
@@ -582,11 +525,13 @@ return `${mins}m`
         ) : hostInfo ? (
 
           /* Affichage détaillé pour les Hosts - 3 colonnes */
-          <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', xl: 'row' } }}>
+          <Box sx={{ containerType: 'inline-size' }}>
+          <Box sx={hostSummaryRowSx()}>
             {/* Colonne 1 - CPU, Load, RAM, SWAP, IO delay, KSM */}
             <Box
               sx={{
                 flex: 1,
+                minWidth: 0,
                 border: '1px solid',
                 borderColor: 'divider',
                 borderRadius: 2,
@@ -658,6 +603,7 @@ return `${mins}m`
             <Box
               sx={{
                 flex: 1,
+                minWidth: 0,
                 display: 'flex',
                 flexDirection: 'column',
                 border: '1px solid',
@@ -720,264 +666,7 @@ return `${mins}m`
                 ) : null}
               </Stack>
             </Box>
-
-            {/* Colonne 4 - Mises à jour disponibles (admin only) */}
-            {isAdmin && hostInfo.updates && hostInfo.updates.length > 0 && (
-              <Box
-                sx={{
-                  ...hostSideBlockSx(hostBlocksCollapsed.updates),
-                  border: '1px solid',
-                  borderColor: 'warning.main',
-                  borderRadius: 2,
-                  bgcolor: 'rgba(255, 152, 0, 0.05)',
-                  overflow: 'hidden',
-                  transition: 'all 0.3s ease',
-                }}
-              >
-                {hostBlocksCollapsed.updates ? (
-                  // Mode collapsé vertical - juste une icône cliquable
-                  <Box
-                    onClick={() => setHostBlocksCollapsed(prev => ({ ...prev, updates: false }))}
-                    sx={{
-                      ...hostSideHandleSx(),
-                      '&:hover': { bgcolor: 'rgba(255, 152, 0, 0.1)' }
-                    }}
-                  >
-                    <i className="ri-download-cloud-line" style={{ fontSize: 20, color: '#ff9800' }} />
-                    <Chip
-                      size="small"
-                      label={hostInfo.updates.length}
-                      color="warning"
-                      sx={{ height: 18, fontSize: 11, fontWeight: 500, mt: { xs: 0, xl: 1 } }}
-                    />
-                    <Box
-                      component="i"
-                      className="ri-arrow-right-s-line"
-                      sx={{ fontSize: 16, opacity: 0.5, mt: { xs: 0, xl: 1 } }}
-                    />
-                  </Box>
-                ) : (
-                  // Mode étendu
-                  <>
-                    <Box
-                      onClick={() => setHostBlocksCollapsed(prev => ({ ...prev, updates: true }))}
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        p: 1.25,
-                        pb: 0.75,
-                        cursor: 'pointer',
-                        '&:hover': { bgcolor: 'rgba(255, 152, 0, 0.08)' }
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                        <i className="ri-download-cloud-line" style={{ fontSize: 16, color: '#ff9800' }} />
-                        <Typography variant="body2" sx={{ fontWeight: 500, color: 'warning.main' }}>
-                          {t('updates.availableUpdates')}
-                        </Typography>
-                        <Chip
-                          size="small"
-                          label={hostInfo.updates.length}
-                          color="warning"
-                          sx={{ height: 18, fontSize: 11, fontWeight: 500 }}
-                        />
-                      </Box>
-                      <i className="ri-arrow-left-s-line" style={{ fontSize: 18, opacity: 0.5 }} />
-                    </Box>
-
-                    <Box sx={{ px: 1.25, pb: 1.25 }}>
-                      <Box sx={{ maxHeight: 120, overflow: 'auto', mb: 1.5 }}>
-                        {hostInfo.updates.slice(0, 5).map((update: any, idx: number) => (
-                          <Box
-                            key={idx}
-                            sx={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              py: 0.5,
-                              borderBottom: idx < Math.min(hostInfo.updates.length, 5) - 1 ? '1px solid' : 'none',
-                              borderColor: 'divider'
-                            }}
-                          >
-                            <Typography variant="caption" sx={{ fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {update.package}
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }}>
-                              <Typography variant="caption" sx={{ opacity: 0.5 }}>{update.currentVersion}</Typography>
-                              <i className="ri-arrow-right-line" style={{ fontSize: 10, opacity: 0.5 }} />
-                              <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 500 }}>{update.newVersion}</Typography>
-                            </Box>
-                          </Box>
-                        ))}
-                        {hostInfo.updates.length > 5 && (
-                          <Typography variant="caption" sx={{ opacity: 0.6, display: 'block', mt: 0.5 }}>
-                            +{hostInfo.updates.length - 5} {t('updates.morePackages')}
-                          </Typography>
-                        )}
-                      </Box>
-
-                      <Stack direction="row" spacing={1}>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          color="warning"
-                          startIcon={<i className="ri-download-line" />}
-                          sx={{ flex: 1, fontSize: '0.7rem' }}
-                          onClick={() => setNodeUpdateDialogOpen(true)}
-                        >
-                          {t('updates.upgrade')}
-                        </Button>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          color="warning"
-                          startIcon={<i className="ri-file-list-line" />}
-                          sx={{ fontSize: '0.7rem' }}
-                          onClick={() => setChangelogDialogOpen(true)}
-                        >
-                          Changelog
-                        </Button>
-                      </Stack>
-                    </Box>
-                  </>
-                )}
-              </Box>
-            )}
-
-            {/* Colonne 5 - Subscription Status (admin only) */}
-            {isAdmin && (!branding.enabled || branding.showSubscription !== false) && hostInfo.subscription && (() => {
-              // Calculer si l'échéance est proche (moins de 30 jours)
-              const isActive = hostInfo.subscription.status === 'active'
-              const nextDueDate = hostInfo.subscription.nextDueDate ? new Date(hostInfo.subscription.nextDueDate) : null
-              const daysUntilDue = nextDueDate ? Math.ceil((nextDueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null
-              const isExpiringSoon = isActive && daysUntilDue !== null && daysUntilDue <= 30 && daysUntilDue > 0
-              const isExpired = !isActive || (daysUntilDue !== null && daysUntilDue <= 0)
-
-              // Déterminer la couleur selon le statut
-              const statusColor = isExpired ? '#f44336' : isExpiringSoon ? '#ff9800' : '#4caf50'
-              const statusBgColor = isExpired ? 'rgba(244, 67, 54, 0.05)' : isExpiringSoon ? 'rgba(255, 152, 0, 0.05)' : 'rgba(76, 175, 80, 0.05)'
-              const statusHoverBgColor = isExpired ? 'rgba(244, 67, 54, 0.1)' : isExpiringSoon ? 'rgba(255, 152, 0, 0.1)' : 'rgba(76, 175, 80, 0.1)'
-              const chipColor = isExpired ? 'error' : isExpiringSoon ? 'warning' : 'success'
-
-              return (
-              <Box
-                sx={{
-                  ...hostSideBlockSx(hostBlocksCollapsed.subscription),
-                  border: '1px solid',
-                  borderColor: statusColor,
-                  borderRadius: 2,
-                  bgcolor: statusBgColor,
-                  overflow: 'hidden',
-                  transition: 'all 0.3s ease',
-                }}
-              >
-                {hostBlocksCollapsed.subscription ? (
-                  // Mode collapsé vertical - juste une icône cliquable
-                  <Box
-                    onClick={() => setHostBlocksCollapsed(prev => ({ ...prev, subscription: false }))}
-                    sx={{
-                      ...hostSideHandleSx(),
-                      '&:hover': { bgcolor: statusHoverBgColor }
-                    }}
-                  >
-                    <i className="ri-vip-crown-line" style={{ fontSize: 20, color: statusColor }} />
-                    <Chip
-                      size="small"
-                      label={isExpired ? '✗' : isExpiringSoon ? '!' : '✓'}
-                      color={chipColor}
-                      sx={{ height: 18, fontSize: 11, fontWeight: 500, mt: { xs: 0, xl: 1 } }}
-                    />
-                    <Box
-                      component="i"
-                      className="ri-arrow-right-s-line"
-                      sx={{ fontSize: 16, opacity: 0.5, mt: { xs: 0, xl: 1 } }}
-                    />
-                  </Box>
-                ) : (
-                  // Mode étendu
-                  <>
-                    <Box
-                      onClick={() => setHostBlocksCollapsed(prev => ({ ...prev, subscription: true }))}
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        p: 1.25,
-                        pb: 0.75,
-                        cursor: 'pointer',
-                        '&:hover': { bgcolor: statusHoverBgColor }
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                        <i className="ri-vip-crown-line" style={{ fontSize: 16, color: statusColor }} />
-                        <Typography variant="body2" sx={{ fontWeight: 500, color: statusColor }}>
-                          Subscription
-                        </Typography>
-                        <Chip
-                          size="small"
-                          label={isExpired ? t('subscription.inactive') : isExpiringSoon ? t('subscription.expiringSoon') : t('subscription.active')}
-                          color={chipColor}
-                          sx={{ height: 18, fontSize: 11, fontWeight: 500 }}
-                        />
-                      </Box>
-                      <i className="ri-arrow-left-s-line" style={{ fontSize: 18, opacity: 0.5 }} />
-                    </Box>
-
-                    <Box sx={{ px: 1.25, pb: 1.25 }}>
-                      <Stack spacing={1}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('subscription.type')}</Typography>
-                          <Typography variant="caption" sx={{ fontWeight: 500, textAlign: 'right', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hostInfo.subscription.type}</Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('subscription.key')}</Typography>
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 10 }}>{hostInfo.subscription.key}</Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('subscription.serverId')}</Typography>
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 9, opacity: 0.8 }}>{hostInfo.subscription.serverId?.substring(0, 16)}...</Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('subscription.sockets')}</Typography>
-                          <Typography variant="caption" sx={{ fontWeight: 500 }}>{hostInfo.subscription.sockets}</Typography>
-                        </Box>
-                        <Divider sx={{ my: 0.5 }} />
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('subscription.lastChecked')}</Typography>
-                          <Typography variant="caption">{hostInfo.subscription.lastChecked}</Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Typography variant="caption" sx={{ opacity: 0.6 }}>{t('subscription.nextDueDate')}</Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            {isExpiringSoon && <i className="ri-error-warning-line" style={{ fontSize: 12, color: '#ff9800' }} />}
-                            <Typography variant="caption" sx={{ fontWeight: 500, color: statusColor }}>
-                              {hostInfo.subscription.nextDueDate}
-                              {isExpiringSoon && daysUntilDue !== null && ` (${daysUntilDue}j)`}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Stack>
-
-                      <Box sx={{ mt: 1.5 }}>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          fullWidth
-                          startIcon={checkingSubscription ? <CircularProgress size={12} /> : <i className="ri-refresh-line" />}
-                          sx={{ fontSize: '0.65rem', borderColor: statusColor, color: statusColor }}
-                          onClick={handleCheckSubscription}
-                          disabled={checkingSubscription}
-                        >
-                          {t('subscription.check')}
-                        </Button>
-                      </Box>
-                    </Box>
-                  </>
-                )}
-              </Box>
-              )
-            })()}
+          </Box>
           </Box>
         ) : (
           <Box
@@ -1017,88 +706,6 @@ return `${mins}m`
           </Box>
         )}
       </CardContent>
-
-      {/* Node Update Dialog */}
-      {connId && nodeName && (
-        <NodeUpdateDialog
-          open={nodeUpdateDialogOpen}
-          onClose={() => setNodeUpdateDialogOpen(false)}
-          connectionId={connId}
-          nodeName={nodeName}
-          vmCount={vmCount || 0}
-          nodeUpdates={nodeName ? {
-            [nodeName]: {
-              count: hostInfo?.updates?.length || 0,
-              updates: (hostInfo?.updates || []).map((u: any) => ({
-                Package: u.package,
-                OldVersion: u.currentVersion,
-                Version: u.newVersion,
-              })),
-              version: hostInfo?.pveVersion || null,
-            }
-          } : {}}
-          isCluster={isCluster}
-          hasCeph={hasCeph}
-        />
-      )}
-
-      {/* Modal Changelog */}
-      <Dialog
-        open={changelogDialogOpen}
-        onClose={() => setChangelogDialogOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <i className="ri-file-list-line" style={{ fontSize: 24, color: '#ff9800' }} />{' '}
-          Changelog
-        </DialogTitle>
-        <DialogContent sx={{ p: 0 }}>
-          {/* Liste des paquets avec changelog */}
-          <Box sx={{ maxHeight: 500, overflow: 'auto' }}>
-            {hostInfo?.updates?.map((update: any, idx: number) => (
-              <Accordion
-                key={idx}
-                disableGutters
-                elevation={0}
-                square
-                sx={{
-                  '&:before': { display: 'none' },
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                  '&:last-child': { borderBottom: 'none' }
-                }}
-              >
-                <AccordionSummary
-                  expandIcon={<i className="ri-subtract-line" style={{ fontSize: 14, opacity: 0.5 }} />}
-                  sx={{ minHeight: 44, '& .MuiAccordionSummary-content': { my: 0 } }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                    <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>
-                      {update.package}
-                    </Typography>
-                    <Chip
-                      size="small"
-                      label={`${update.currentVersion || 'null'} → ${update.newVersion}`}
-                      sx={{ height: 20, fontSize: 10, fontFamily: 'monospace' }}
-                    />
-                  </Box>
-                </AccordionSummary>
-                <AccordionDetails sx={{ bgcolor: 'action.hover', py: 1.5 }}>
-                  <Typography variant="caption" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', opacity: 0.8 }}>
-                    {update.description || t('updates.noChangelogAvailable')}
-                  </Typography>
-                </AccordionDetails>
-              </Accordion>
-            ))}
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setChangelogDialogOpen(false)}>
-            {t('common.close')}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
     </Card>
   )

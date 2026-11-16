@@ -99,6 +99,7 @@ import { diskIoLegendSeries, hasIoPressureSeries } from '@/lib/metrics/diskIoCha
 import NumericTextField from '@/components/ui/NumericTextField'
 import { extractCustomCpuModels } from '@/lib/inventory/cpuModels'
 import { cpuGroupHeaderSx } from '../cpuSelectStyles'
+import { DETAIL_TABS_MIN_HEIGHT } from '../detailLayout'
 
 // Latency curves sit on the Disk I/O chart next to red bandwidth areas: amber
 // first, then violet and teal for a second and third disk.
@@ -546,7 +547,7 @@ export default function VmDetailTabs(props: any) {
     <>
           {/* Onglets pour VMs: Résumé / Matériel / Options / Historique / Sauvegardes / Snapshots / Notes / HA */}
           {selection?.type === 'vm' && (
-            <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <Box sx={{ flex: 1, minHeight: DETAIL_TABS_MIN_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <Tabs
                 value={detailTab}
                 onChange={(_e, v) => setDetailTab(v)}

@@ -1,5 +1,39 @@
 [
   {
+    "version": "1.5.0",
+    "date": "2026-11-16",
+    "title": "Managed micro-segmentation",
+    "summary": [
+      "ProxCenter now manages micro-segmentation on the Proxmox firewall: group guests into zones, declare the flows allowed between them, watch in observation what would be blocked, then enforce. Every change is a plan you review before anything is written, with outbound control, per-VM exceptions, a zone map and a posture dashboard.",
+      "An EVPN zone can be shared between clusters with self-service tenant networks, each tenant signs in through its own OIDC identity provider, a VM moves to another vDC of its tenant, and the GPU page shows load, history and alerts. Warm migrations that wait for a manual cutover can be paced, tested, capped in MB/s and cancelled cleanly, and API tokens now manage tenants, vDCs and role assignments.",
+      "SSH host keys are confirmed by an operator instead of trusted on first use, node commands can run through a restricted sudoers file, HA clusters get a hardened layout with a rolling upgrade, and accounts that sign in through OIDC or LDAP lose their local password."
+    ],
+    "items": [
+      { "type": "new", "text": "Managed micro-segmentation: zones, allowed flows, observation, then enforcement on the Proxmox firewall" },
+      { "type": "new", "text": "Outbound control, per-VM exceptions, zone map and posture dashboard for micro-segmentation" },
+      { "type": "new", "text": "Firewalling in draft then publish, and a wizard that turns the cluster firewall on" },
+      { "type": "new", "text": "An EVPN zone shared between clusters, with self-service tenant networks and per-vDC quotas" },
+      { "type": "new", "text": "Each tenant signs in through its own OIDC identity provider" },
+      { "type": "new", "text": "A provider role catalogue published to tenants, with service desk assignments" },
+      { "type": "new", "text": "Move a VM to another vDC of its tenant, with a target storage policy per disk" },
+      { "type": "new", "text": "GPU page with load, history and alerts, and GPU contingents for vDCs" },
+      { "type": "new", "text": "Mount and eject ISO images from the VM console toolbar" },
+      { "type": "improved", "text": "API tokens manage tenants, vDCs, quotas, EVPN zones, users and role assignments, and can be rotated" },
+      { "type": "improved", "text": "Warm migrations waiting for a manual cutover can be paced, tested and cancelled with their copy removed" },
+      { "type": "new", "text": "A read rate cap for warm migrations, per batch, per migration and per source host" },
+      { "type": "improved", "text": "MAC addresses, disk options and network mapping are chosen when migrating to Proxmox" },
+      { "type": "improved", "text": "Bulk migrations run more than 5 at once, bounded per target node and per source ESXi host" },
+      { "type": "improved", "text": "SSH host keys are confirmed by an operator instead of trusted on first use" },
+      { "type": "improved", "text": "Node commands can run through a dedicated SSH account with a restricted sudoers file" },
+      { "type": "improved", "text": "HA clusters get a hardened layout, with a rolling security upgrade from the HA tab" },
+      { "type": "improved", "text": "Accounts that sign in through OIDC or LDAP lose their local password" },
+      { "type": "fix", "text": "XenServer Windows guests boot on Proxmox after a migration" },
+      { "type": "fix", "text": "VMs whose name holds a '+' warm migrate" },
+      { "type": "fix", "text": "The frontend starts on CPUs without x86-64-v2" },
+      { "type": "fix", "text": "A finished backup is notified once" }
+    ]
+  },
+  {
     "version": "1.4.14",
     "date": "2026-11-04",
     "title": "A Ceph cockpit, bulk power actions, multi-node maintenance",

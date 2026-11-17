@@ -7,6 +7,7 @@ import { ALL_SCOPE_IDS } from '@/lib/api-tokens/scopes'
 import { assessFramework } from '@/lib/compliance/frameworkAssessment'
 import { FRAMEWORKS, getCrosswalk } from '@/lib/compliance/frameworks'
 import type { HardeningCheck } from '@/lib/compliance/hardening'
+import type { HostHistory, HostHistoryRange, OrchestratorTask, PlatformStatus } from '@/lib/platform/types'
 import { DEFAULT_TLS_SETTINGS } from '@/lib/tls/schema'
 import { aggregateUsage, USAGE_BUCKETS, type UsageBucket, type UsageSampleRow } from '@/lib/vdc/usageHistory/aggregate'
 
@@ -742,7 +743,105 @@ function broadcasts() {
   ]
 }
 
+// ---------------------------------------------------------------------------
+// Platform status (Settings > Platform status)
+// ---------------------------------------------------------------------------
+
+const GIB = 2 ** 30
+const MIB = 2 ** 20
+
+/** A healthy Enterprise install, dated "now" so the relative times read right. */
+export function demoPlatformStatus(nowMs = Date.now()): PlatformStatus {
+  const ago = (seconds: number) => new Date(nowMs - seconds * 1000).toISOString()
+  const task = (name: string, schedule: string, lastRunAgo: number, durationMs: number, runs: number): OrchestratorTask => ({
+    name, schedule, exclusive: false, running: false, runs, failures: 0, last_run: ago(lastRunAgo), last_duration_ms: durationMs,
+  })
+  const table = (name: string, totalBytes: number, rows: number, deadRows: number, vacuumAgo: number) => ({
+    name, totalBytes, rows, deadRows, lastVacuum: ago(vacuumAgo),
+  })
+
+  return {
+    generatedAt: new Date(nowMs).toISOString(),
+    edition: 'enterprise',
+    overall: 'up',
+    services: [
+      { id: 'frontend', state: 'up', version: '1.5.0', uptimeSeconds: 12 * DAY / 1000, cpuPercent: 4.2, memoryBytes: 412 * MIB, memoryLimitBytes: null, reason: null },
+      { id: 'database', state: 'up', version: '16.9', uptimeSeconds: 41 * DAY / 1000, cpuPercent: null, memoryBytes: null, memoryLimitBytes: null, reason: null },
+      { id: 'orchestrator', state: 'up', version: '1.5.0', uptimeSeconds: 12 * DAY / 1000, cpuPercent: 2.8, memoryBytes: 96 * MIB, memoryLimitBytes: null, reason: null },
+      { id: 'renderer', state: 'up', version: null, uptimeSeconds: null, cpuPercent: null, memoryBytes: null, memoryLimitBytes: null, reason: null },
+    ],
+    frontend: { version: '1.5.0', gitSha: '', nodeVersion: 'v26.12.1', hostname: 'proxcenter-demo', uptimeSeconds: 12 * DAY / 1000, rssBytes: 412 * MIB, heapUsedBytes: 188 * MIB, eventLoopDelayMs: 21 },
+    container: { memoryBytes: 412 * MIB, memoryLimitBytes: 0, cpuPercent: 4.2, cpuLimit: 0 },
+    host: { load1: 0.42, load5: 0.51, load15: 0.47, cpus: 8, memTotalBytes: 16 * GIB, memAvailableBytes: 9.5 * GIB, uptimeSeconds: 41 * DAY / 1000 },
+    disks: [
+      { label: 'data', path: '/app/data', totalBytes: 80 * GIB, freeBytes: 52 * GIB },
+      { label: 'orchestrator', path: '/app/data', totalBytes: 80 * GIB, freeBytes: 52 * GIB },
+    ],
+    database: {
+      version: '16.9', startedAt: ago(41 * DAY / 1000), sizeBytes: 612 * MIB, connections: 14, activeConnections: 1, maxConnections: 100,
+      cacheHitPercent: 99.7, deadlocks: 0, inRecovery: false,
+      tables: [
+        table('metrics_records', 318 * MIB, 412_600, 1840, 900),
+        table('audit_logs', 96 * MIB, 184_300, 0, 5400),
+        table('pve_tasks', 61 * MIB, 96_800, 310, 2700),
+        table('disk_latency_samples', 44 * MIB, 201_600, 950, 1200),
+        table('notifications', 21 * MIB, 28_400, 120, 3300),
+        table('vdc_usage_history', 12 * MIB, 51_900, 0, 7200),
+        table('changes', 6 * MIB, 4_120, 0, 14_400),
+        table('alerts', 2 * MIB, 1_260, 14, 9000),
+      ],
+    },
+    orchestrator: {
+      version: '1.5.0', hostname: 'proxcenter-orchestrator', started_at: ago(12 * DAY / 1000), uptime_seconds: 12 * DAY / 1000,
+      runtime: { go_version: 'go1.27.3', goroutines: 64, heap_alloc_bytes: 38 * MIB, sys_bytes: 96 * MIB, gc_count: 5120 },
+      container: { memory_bytes: 96 * MIB, memory_limit_bytes: 0, cpu_limit: 0, cpu_percent: 2.8 },
+      disks: [{ label: 'data', path: '/app/data', total_bytes: 80 * GIB, free_bytes: 52 * GIB }],
+      db_pool: { max_open: 10, open: 4, in_use: 1, idle: 3, wait_count: 0, wait_duration_ms: 0 },
+      renderer: { configured: true, healthy: true, latency_ms: 4 },
+      tasks: [
+        task('metrics', '@every 1m0s', 22, 1840, 17_280),
+        task('replication', '@every 30s', 9, 12, 34_560),
+        task('drs', '@every 1h0m0s', 1260, 3120, 288),
+        task('ceph-metrics', '@every 1m0s', 22, 410, 17_280),
+        task('metrics-retention', '@every 1h0m0s', 1800, 240, 288),
+        task('notifications-retention', '@every 1h0m0s', 1800, 35, 288),
+        task('task-history-retention', '@every 6h0m0s', 9000, 61, 48),
+        task('reload-connections', '@every 5m0s', 140, 22, 3456),
+      ],
+      retention: { notifications: 30, task_history: 90, metrics: 14, disk_latency: 7, ceph_metrics: 30, gpu_metrics: 30, changes: 30, availability: 400 },
+    },
+    ha: null,
+  }
+}
+
+const HISTORY_SPAN_MS: Record<HostHistoryRange, number> = { '1h': 3600000, '6h': 6 * 3600000, '24h': DAY }
+
+/** A calm host with a daily rhythm: 120 points over the range, the same curve for every visitor. */
+export function demoHostHistory(range: HostHistoryRange, nowMs = Date.now()): HostHistory {
+  const span = HISTORY_SPAN_MS[range]
+  const step = span / 120
+  const wave = (t: number, periodMs: number) => Math.sin((2 * Math.PI * t) / periodMs)
+  const samples = Array.from({ length: 121 }, (_, i) => {
+    const t = nowMs - span + i * step
+    const load = 0.9 + 0.5 * wave(t, DAY) + 0.25 * wave(t, 47 * 60000)
+
+    return {
+      t,
+      load1: Math.max(0.05, load + 0.2 * wave(t, 7 * 60000)),
+      load5: Math.max(0.05, load),
+      load15: Math.max(0.05, 0.9 + 0.5 * wave(t - 10 * 60000, DAY)),
+      memUsedBytes: (6.5 + 0.6 * wave(t, DAY)) * GIB,
+    }
+  })
+
+  return { range, from: nowMs - span, to: nowMs, intervalSeconds: step / 1000, cpus: 8, memTotalBytes: 16 * GIB, samples }
+}
+
 export const SETTINGS_MOCKS: DemoMockMap = {
+  get 'GET:/api/v1/system/status'() {
+    return demoPlatformStatus()
+  },
+  'GET:/api/v1/orchestrator/notifications/retention': { retentionDays: 30, maxRetentionDays: 365 },
   // Per-user appearance lives in the cookie: nothing stored server side for the demo visitor.
   'GET:/api/v1/settings/appearance': { data: {}, stored: false },
   get 'GET:/api/v1/settings/broadcast'() {
@@ -892,6 +991,12 @@ const VDC_VNET = /^\/api\/v1\/vdcs\/([^/]+)\/vnets\/([^/]+)(\/ipam|\/ipam\/next-
 
 export const resolveSettingsMock: DemoMockResolver = (method, cleanPath, url) => {
   if (method !== 'GET') return null
+
+  if (cleanPath === '/api/v1/system/status/history') {
+    const range = url.searchParams.get('range')
+
+    return demoHostHistory(range === '6h' || range === '24h' ? range : '1h')
+  }
 
   // A signed request file to download: answer like a disabled action rather than saving `{ data: [] }`.
   if (cleanPath === '/api/v1/license/request') {

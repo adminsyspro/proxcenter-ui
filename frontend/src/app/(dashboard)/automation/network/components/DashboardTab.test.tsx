@@ -396,7 +396,11 @@ describe('DashboardTab: time range (UA55)', () => {
     // The verdict toggle filters the history rows.
     fireEvent.click(within(screen.getByTestId('timeline')).getByRole('button', { name: 'Blocked' }))
     await waitFor(() => expect(screen.getByTestId('timeline-max').textContent).toBe('3'))
-    expect(trafficUrls()).toHaveLength(1)
+    // The toggle reads nothing again: no window is fetched twice. Counting the
+    // reads would fail whenever the run straddles a 5-minute edge, where the
+    // window itself moves and a second, different read is legitimate.
+    expect(new Set(trafficUrls()).size).toBe(trafficUrls().length)
+    expect(trafficUrls().every(u => new URL(u, 'http://x').searchParams.get('step') === '300')).toBe(true)
   })
 
   it('reads the steps of each range, and remembers the range per browser', async () => {

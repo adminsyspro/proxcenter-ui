@@ -32,10 +32,7 @@ const dialog = skin => ({
         borderBottom: '1px solid',
         borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
         fontSize: '1rem',
-        fontWeight: 700,
-        '& + .MuiDialogActions-root': {
-          paddingTop: 0
-        }
+        fontWeight: 700
       })
     }
   },
@@ -43,7 +40,9 @@ const dialog = skin => ({
     styleOverrides: {
       root: ({ theme }) => ({
         padding: theme.spacing(5),
-        '& + .MuiDialogContent-root, & + .MuiDialogActions-root': {
+        // The actions are a bar of their own, with a top border: they keep
+        // their padding, or the buttons touch that border.
+        '& + .MuiDialogContent-root': {
           paddingTop: 0
         }
       })

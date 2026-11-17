@@ -1,4 +1,169 @@
 {
+  "platformStatus": {
+    "ha": {
+      "title": "클러스터 노드",
+      "vip": "가상 IP {address}",
+      "paused": "자동 장애 조치 일시 중지됨",
+      "noLeader": "주 데이터베이스 없음",
+      "node": "노드",
+      "role": "데이터베이스 역할",
+      "dbUnreachable": "연결할 수 없음",
+      "load": "부하(1분)",
+      "loadValue": "{load} / {cpus}코어",
+      "serviceState": {
+        "running": "실행 중",
+        "stopped": "중지됨",
+        "unknown": "알 수 없음"
+      }
+    },
+    "history": {
+      "range": "기간",
+      "ranges": {
+        "1h": "1시간",
+        "6h": "6시간",
+        "24h": "24시간"
+      },
+      "load": "평균 부하",
+      "load1": "1분",
+      "load5": "5분",
+      "load15": "15분",
+      "cores": "{cpus}코어",
+      "memory": "메모리",
+      "memoryUsed": "사용 중",
+      "memoryTotal": "전체 {total}",
+      "collecting": "기록은 ProxCenter가 시작될 때부터 쌓입니다. 첫 곡선은 1분 안에 표시됩니다.",
+      "unavailable": "기록을 불러올 수 없습니다."
+    },
+    "frontend": {
+      "title": "웹 인터페이스",
+      "instance": "인스턴스",
+      "memory": "메모리",
+      "heap": "힙",
+      "eventLoop": "이벤트 루프(p99)",
+      "nodeVersion": "Node.js"
+    },
+    "views": {
+      "overview": "개요",
+      "database": "데이터베이스",
+      "orchestrator": "오케스트레이터"
+    },
+    "tabLabel": "플랫폼 상태",
+    "loading": "플랫폼 상태를 불러오는 중",
+    "loadError": "플랫폼 상태를 불러올 수 없습니다.",
+    "staleError": "마지막 새로 고침에 실패했습니다. 아래 수치가 최신이 아닐 수 있습니다.",
+    "refresh": "새로 고침",
+    "never": "없음",
+    "summary": "{host}의 ProxCenter {version}, {time}에 업데이트됨",
+    "overall": {
+      "up": "모든 서비스 실행 중",
+      "degraded": "성능 저하",
+      "down": "서비스 중단 발생",
+      "unknown": "알 수 없음"
+    },
+    "state": {
+      "up": "실행 중",
+      "degraded": "성능 저하",
+      "down": "중단됨",
+      "unknown": "알 수 없음"
+    },
+    "reason": {
+      "unreachable": "연결할 수 없음",
+      "tasksFailing": "예약 작업 실패 중",
+      "notConfigured": "구성되지 않음",
+      "orchestratorDown": "알 수 없음, 오케스트레이터에 연결할 수 없음"
+    },
+    "services": {
+      "title": "서비스",
+      "titleOn": "{node}의 서비스",
+      "service": "서비스",
+      "version": "버전",
+      "uptime": "가동 시간",
+      "cpu": "CPU",
+      "memory": "메모리",
+      "state": "상태",
+      "names": {
+        "frontend": "웹 인터페이스",
+        "database": "PostgreSQL 데이터베이스",
+        "orchestrator": "오케스트레이터",
+        "renderer": "PDF 보고서 생성기"
+      }
+    },
+    "host": {
+      "title": "호스트",
+      "titleOn": "호스트 {node}",
+      "unavailable": "이 플랫폼은 호스트 수치를 제공하지 않습니다.",
+      "cpus": "CPU 코어",
+      "uptime": "호스트 가동 시간",
+      "loadNow": "평균 부하(1, 5, 15분)",
+      "memory": "메모리",
+      "disk": {
+        "data": "애플리케이션 데이터 디스크",
+        "orchestrator": "오케스트레이터 데이터 디스크"
+      }
+    },
+    "database": {
+      "title": "데이터베이스",
+      "unreachable": "데이터베이스가 응답하지 않습니다.",
+      "size": "크기",
+      "connections": "연결",
+      "active": "활성 쿼리",
+      "cacheHit": "캐시 적중률",
+      "deadlocks": "교착 상태",
+      "role": "역할",
+      "primary": "주 서버",
+      "replica": "복제본",
+      "tables": "테이블",
+      "table": "테이블",
+      "rows": "행(추정)",
+      "tableSize": "크기",
+      "deadRows": "죽은 행",
+      "lastVacuum": "마지막 vacuum"
+    },
+    "orchestrator": {
+      "title": "오케스트레이터",
+      "unreachable": "오케스트레이터가 응답하지 않습니다.",
+      "instance": "인스턴스",
+      "role": "역할",
+      "leader": "리더",
+      "follower": "팔로워",
+      "goroutines": "고루틴",
+      "heap": "힙",
+      "pool": "SQL 연결",
+      "poolWaits": "SQL 대기",
+      "goVersion": "Go"
+    },
+    "tasks": {
+      "task": "예약 작업",
+      "schedule": "주기",
+      "lastRun": "마지막 실행",
+      "duration": "소요 시간",
+      "failures": "실패 / 실행",
+      "status": "상태",
+      "showError": "마지막 오류 표시",
+      "state": {
+        "ok": "정상",
+        "failing": "실패 중",
+        "running": "실행 중",
+        "idle": "대기 중"
+      }
+    },
+    "retention": {
+      "title": "데이터 보존",
+      "data": "데이터",
+      "kept": "보존 기간",
+      "days": "{days}일",
+      "sets": {
+        "notifications": "알림 기록",
+        "task_history": "Proxmox 작업 기록",
+        "metrics": "클러스터 메트릭",
+        "disk_latency": "디스크 지연 시간 샘플",
+        "ceph_metrics": "Ceph 메트릭",
+        "gpu_metrics": "GPU 메트릭",
+        "changes": "변경 추적",
+        "availability": "가용성 기록"
+      }
+    }
+  },
   "common": {
     "add": "추가",
     "edit": "편집",
@@ -4901,6 +5066,7 @@
       "green_metrics": "Green 지표 / RSE",
       "ceph_replication": "사이트 복구 (Ceph 복제)",
       "syslog_forwarding": "Syslog / SIEM 전달",
+      "platform_status": "플랫폼 상태",
       "backup_restore_drills": "백업 복원 훈련",
       "gpu_management": "GPU 관리"
     },
@@ -5504,6 +5670,15 @@
     "ldapPasswordChangeNotice": "비밀번호를 변경하려면 시스템 관리자에게 문의하거나 디렉터리 관리 도구를 사용하세요."
   },
   "notifications": {
+    "retention": {
+      "save": "보존 기간 저장",
+      "title": "기록 보존 기간",
+      "description": "이 기간보다 오래된 알림은 기록에서 삭제됩니다. 성공한 복제 실행마다 하나씩을 포함해 모든 알림이 기록됩니다.",
+      "label": "기록 보존 기간",
+      "unit": "일",
+      "range": "1에서 {max} 사이의 정수를 입력하세요.",
+      "saved": "보존 기간이 저장되었습니다."
+    },
     "title": "알림",
     "description": "마이그레이션, 백업 및 중요 이벤트에 대한 알림을 받으려면 이메일 알림을 구성하세요.",
     "loadingError": "로드 오류:",

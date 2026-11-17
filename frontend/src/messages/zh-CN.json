@@ -1,4 +1,169 @@
 {
+  "platformStatus": {
+    "ha": {
+      "title": "集群节点",
+      "vip": "虚拟 IP {address}",
+      "paused": "自动故障转移已暂停",
+      "noLeader": "没有主数据库",
+      "node": "节点",
+      "role": "数据库角色",
+      "dbUnreachable": "无法连接",
+      "load": "负载（1 分钟）",
+      "loadValue": "{load} / {cpus} 核",
+      "serviceState": {
+        "running": "运行中",
+        "stopped": "已停止",
+        "unknown": "未知"
+      }
+    },
+    "history": {
+      "range": "时间范围",
+      "ranges": {
+        "1h": "1 小时",
+        "6h": "6 小时",
+        "24h": "24 小时"
+      },
+      "load": "平均负载",
+      "load1": "1 分钟",
+      "load5": "5 分钟",
+      "load15": "15 分钟",
+      "cores": "{cpus} 核",
+      "memory": "内存",
+      "memoryUsed": "已用",
+      "memoryTotal": "总计 {total}",
+      "collecting": "历史记录从 ProxCenter 启动时开始：第一条曲线将在一分钟内出现。",
+      "unavailable": "无法加载历史记录。"
+    },
+    "frontend": {
+      "title": "Web 界面",
+      "instance": "实例",
+      "memory": "内存",
+      "heap": "堆",
+      "eventLoop": "事件循环（p99）",
+      "nodeVersion": "Node.js"
+    },
+    "views": {
+      "overview": "概览",
+      "database": "数据库",
+      "orchestrator": "编排器"
+    },
+    "tabLabel": "平台状态",
+    "loading": "正在加载平台状态",
+    "loadError": "无法加载平台状态。",
+    "staleError": "上次刷新失败：以下数据可能已过期。",
+    "refresh": "刷新",
+    "never": "从未",
+    "summary": "{host} 上的 ProxCenter {version}，更新于 {time}",
+    "overall": {
+      "up": "所有服务运行正常",
+      "degraded": "性能下降",
+      "down": "有服务已停止",
+      "unknown": "未知"
+    },
+    "state": {
+      "up": "运行中",
+      "degraded": "性能下降",
+      "down": "已停止",
+      "unknown": "未知"
+    },
+    "reason": {
+      "unreachable": "无法连接",
+      "tasksFailing": "计划任务执行失败",
+      "notConfigured": "未配置",
+      "orchestratorDown": "未知，无法连接编排器"
+    },
+    "services": {
+      "title": "服务",
+      "titleOn": "{node} 上的服务",
+      "service": "服务",
+      "version": "版本",
+      "uptime": "运行时间",
+      "cpu": "CPU",
+      "memory": "内存",
+      "state": "状态",
+      "names": {
+        "frontend": "Web 界面",
+        "database": "PostgreSQL 数据库",
+        "orchestrator": "编排器",
+        "renderer": "PDF 报告生成器"
+      }
+    },
+    "host": {
+      "title": "主机",
+      "titleOn": "主机 {node}",
+      "unavailable": "此平台不提供主机数据。",
+      "cpus": "CPU 核心",
+      "uptime": "主机运行时间",
+      "loadNow": "平均负载（1、5、15 分钟）",
+      "memory": "内存",
+      "disk": {
+        "data": "应用数据磁盘",
+        "orchestrator": "编排器数据磁盘"
+      }
+    },
+    "database": {
+      "title": "数据库",
+      "unreachable": "数据库无响应。",
+      "size": "大小",
+      "connections": "连接数",
+      "active": "活动查询",
+      "cacheHit": "缓存命中率",
+      "deadlocks": "死锁",
+      "role": "角色",
+      "primary": "主库",
+      "replica": "副本",
+      "tables": "表",
+      "table": "表",
+      "rows": "行数（估算）",
+      "tableSize": "大小",
+      "deadRows": "死行",
+      "lastVacuum": "上次 vacuum"
+    },
+    "orchestrator": {
+      "title": "编排器",
+      "unreachable": "编排器无响应。",
+      "instance": "实例",
+      "role": "角色",
+      "leader": "主节点",
+      "follower": "从节点",
+      "goroutines": "协程数",
+      "heap": "堆",
+      "pool": "SQL 连接",
+      "poolWaits": "SQL 等待",
+      "goVersion": "Go"
+    },
+    "tasks": {
+      "task": "计划任务",
+      "schedule": "间隔",
+      "lastRun": "上次运行",
+      "duration": "耗时",
+      "failures": "失败 / 运行",
+      "status": "状态",
+      "showError": "显示上次错误",
+      "state": {
+        "ok": "正常",
+        "failing": "失败",
+        "running": "运行中",
+        "idle": "等待中"
+      }
+    },
+    "retention": {
+      "title": "数据保留",
+      "data": "数据",
+      "kept": "保留期",
+      "days": "{days} 天",
+      "sets": {
+        "notifications": "通知历史",
+        "task_history": "Proxmox 任务历史",
+        "metrics": "集群指标",
+        "disk_latency": "磁盘延迟样本",
+        "ceph_metrics": "Ceph 指标",
+        "gpu_metrics": "GPU 指标",
+        "changes": "变更跟踪",
+        "availability": "可用性历史"
+      }
+    }
+  },
   "common": {
     "add": "添加",
     "edit": "编辑",
@@ -4901,6 +5066,7 @@
       "green_metrics": "绿色指标 / RSE",
       "ceph_replication": "站点恢复（Ceph 复制）",
       "syslog_forwarding": "Syslog / SIEM 转发",
+      "platform_status": "平台状态",
       "backup_restore_drills": "备份恢复演练",
       "gpu_management": "GPU 管理"
     },
@@ -5504,6 +5670,15 @@
     "ldapPasswordChangeNotice": "如需更改密码，请联系系统管理员或使用目录管理工具。"
   },
   "notifications": {
+    "retention": {
+      "save": "保存保留期",
+      "title": "历史记录保留期",
+      "description": "早于此期限的通知将从历史记录中删除。每条通知都会被记录，包括每次成功复制产生的一条。",
+      "label": "历史记录保留",
+      "unit": "天",
+      "range": "请输入 1 到 {max} 之间的整数。",
+      "saved": "保留期已保存。"
+    },
     "title": "通知",
     "description": "配置邮件通知，接收有关迁移、备份和重要事件的告警。",
     "loadingError": "加载错误：",

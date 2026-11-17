@@ -86,6 +86,7 @@ import EntityTagManager from '../components/EntityTagManager'
 import { flattenVdevs } from '@/lib/disks/zfsTree'
 import { summarizeScan } from '@/lib/disks/normalize'
 import SmartDetail from '@/components/hardware/SmartDetail'
+import { DETAIL_TABS_MIN_HEIGHT } from '../detailLayout'
 
 /**
  * Renders a Ceph config-style text verbatim (indentation preserved) with light
@@ -497,7 +498,7 @@ export default function NodeTabs(props: any) {
     <>
           {/* Onglets pour Node: Summary / Notes / Shell / VMs / Disks / System / Ceph (si cluster) / Backups / Cluster (si standalone) / Replication / Subscription */}
           {selection?.type === 'node' && data.vmsData ? (
-            <Card variant="outlined" sx={{ width: '100%', borderRadius: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <Card variant="outlined" sx={{ width: '100%', borderRadius: 2, flex: 1, minHeight: DETAIL_TABS_MIN_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <Tabs
                 value={nodeTab}
                 onChange={(_e, v) => setNodeTab(v)}

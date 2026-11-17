@@ -177,6 +177,11 @@ const ConfigBackupTab = dynamic(() => import('@/components/settings/ConfigBackup
   loading: tabLoading
 })
 
+const PlatformStatusTab = dynamic(() => import('@/components/settings/platform/PlatformStatusTab'), {
+  ssr: false,
+  loading: tabLoading
+})
+
 const DatacentersSection = dynamic(() => import('@/components/settings/green/DatacentersSection'), {
   ssr: false,
   loading: () => <Box sx={{ p: 2, textAlign: 'center' }}><LinearProgress /></Box>
@@ -2578,6 +2583,7 @@ export default function SettingsPage() {
     { name: 'white-label', group: 'personalization', label: 'White Label', icon: 'ri-pantone-line', component: WhiteLabelTab, requiredFeature: Features.WHITE_LABEL, superAdminOnly: true },
     { name: 'license', group: 'system', label: t('settings.license'), icon: 'ri-award-line', component: LicenseTab, providerOnly: true },
     { name: 'backup', group: 'system', label: t('settings.configBackup.tabLabel'), icon: 'ri-save-3-line', component: ConfigBackupTab, providerOnly: true },
+    { name: 'platform', group: 'system', label: t('platformStatus.tabLabel'), icon: 'ri-pulse-line', component: PlatformStatusTab, requiredFeature: Features.PLATFORM_STATUS, providerOnly: true },
   ]
 
   // Two different gates, deliberately:

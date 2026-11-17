@@ -1,4 +1,169 @@
 {
+  "platformStatus": {
+    "ha": {
+      "title": "Cluster nodes",
+      "vip": "Virtual IP {address}",
+      "paused": "Automatic failover paused",
+      "noLeader": "No database primary",
+      "node": "Node",
+      "role": "Database role",
+      "dbUnreachable": "Unreachable",
+      "load": "Load (1 min)",
+      "loadValue": "{load} / {cpus} cores",
+      "serviceState": {
+        "running": "Running",
+        "stopped": "Stopped",
+        "unknown": "Unknown"
+      }
+    },
+    "history": {
+      "range": "Period",
+      "ranges": {
+        "1h": "1 h",
+        "6h": "6 h",
+        "24h": "24 h"
+      },
+      "load": "Load average",
+      "load1": "1 min",
+      "load5": "5 min",
+      "load15": "15 min",
+      "cores": "{cpus} cores",
+      "memory": "Memory",
+      "memoryUsed": "Used",
+      "memoryTotal": "Total {total}",
+      "collecting": "The history starts when ProxCenter starts: the first curve appears within a minute.",
+      "unavailable": "The history could not be loaded."
+    },
+    "frontend": {
+      "title": "Web interface",
+      "instance": "Instance",
+      "memory": "Memory",
+      "heap": "Heap",
+      "eventLoop": "Event loop (p99)",
+      "nodeVersion": "Node.js"
+    },
+    "views": {
+      "overview": "Overview",
+      "database": "Database",
+      "orchestrator": "Orchestrator"
+    },
+    "tabLabel": "Platform status",
+    "loading": "Loading the platform status",
+    "loadError": "The platform status could not be loaded.",
+    "staleError": "The last refresh failed: the figures below may be out of date.",
+    "refresh": "Refresh",
+    "never": "Never",
+    "summary": "ProxCenter {version} on {host}, updated at {time}",
+    "overall": {
+      "up": "All services running",
+      "degraded": "Degraded",
+      "down": "A service is down",
+      "unknown": "Unknown"
+    },
+    "state": {
+      "up": "Running",
+      "degraded": "Degraded",
+      "down": "Down",
+      "unknown": "Unknown"
+    },
+    "reason": {
+      "unreachable": "Unreachable",
+      "tasksFailing": "Scheduled tasks failing",
+      "notConfigured": "Not configured",
+      "orchestratorDown": "Unknown, orchestrator unreachable"
+    },
+    "services": {
+      "title": "Services",
+      "titleOn": "Services on {node}",
+      "service": "Service",
+      "version": "Version",
+      "uptime": "Uptime",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "state": "State",
+      "names": {
+        "frontend": "Web interface",
+        "database": "PostgreSQL database",
+        "orchestrator": "Orchestrator",
+        "renderer": "PDF report renderer"
+      }
+    },
+    "host": {
+      "title": "Host",
+      "titleOn": "Host {node}",
+      "unavailable": "This platform does not expose host figures.",
+      "cpus": "CPU cores",
+      "uptime": "Host uptime",
+      "loadNow": "Load average (1, 5, 15 min)",
+      "memory": "Memory",
+      "disk": {
+        "data": "Application data disk",
+        "orchestrator": "Orchestrator data disk"
+      }
+    },
+    "database": {
+      "title": "Database",
+      "unreachable": "The database does not answer.",
+      "size": "Size",
+      "connections": "Connections",
+      "active": "Active queries",
+      "cacheHit": "Cache hit ratio",
+      "deadlocks": "Deadlocks",
+      "role": "Role",
+      "primary": "Primary",
+      "replica": "Replica",
+      "tables": "Tables",
+      "table": "Table",
+      "rows": "Rows (estimate)",
+      "tableSize": "Size",
+      "deadRows": "Dead rows",
+      "lastVacuum": "Last vacuum"
+    },
+    "orchestrator": {
+      "title": "Orchestrator",
+      "unreachable": "The orchestrator does not answer.",
+      "instance": "Instance",
+      "role": "Role",
+      "leader": "Leader",
+      "follower": "Follower",
+      "goroutines": "Goroutines",
+      "heap": "Heap",
+      "pool": "SQL connections",
+      "poolWaits": "SQL waits",
+      "goVersion": "Go"
+    },
+    "tasks": {
+      "task": "Scheduled task",
+      "schedule": "Every",
+      "lastRun": "Last run",
+      "duration": "Duration",
+      "failures": "Failures / runs",
+      "status": "State",
+      "showError": "Show the last error",
+      "state": {
+        "ok": "OK",
+        "failing": "Failing",
+        "running": "Running",
+        "idle": "Waiting"
+      }
+    },
+    "retention": {
+      "title": "Data retention",
+      "data": "Data",
+      "kept": "Kept for",
+      "days": "{days} days",
+      "sets": {
+        "notifications": "Notification history",
+        "task_history": "Proxmox task history",
+        "metrics": "Cluster metrics",
+        "disk_latency": "Disk latency samples",
+        "ceph_metrics": "Ceph metrics",
+        "gpu_metrics": "GPU metrics",
+        "changes": "Change tracking",
+        "availability": "Availability history"
+      }
+    }
+  },
   "common": {
     "add": "Add",
     "edit": "Edit",
@@ -4901,6 +5066,7 @@
       "green_metrics": "Green Metrics / RSE",
       "ceph_replication": "Site Recovery (Ceph Replication)",
       "syslog_forwarding": "Syslog / SIEM forwarding",
+      "platform_status": "Platform status",
       "backup_restore_drills": "Backup restore drills",
       "gpu_management": "GPU management"
     },
@@ -5504,6 +5670,15 @@
     "ldapPasswordChangeNotice": "To change your password, please contact your system administrator or use your directory management tools."
   },
   "notifications": {
+    "retention": {
+      "save": "Save the retention",
+      "title": "History retention",
+      "description": "Notifications older than this are deleted from the history. Every notification is recorded, including one per successful replication run.",
+      "label": "Keep the history for",
+      "unit": "days",
+      "range": "Enter a whole number between 1 and {max}.",
+      "saved": "Retention saved."
+    },
     "title": "Notifications",
     "description": "Configure email notifications to receive alerts about migrations, backups, and important events.",
     "loadingError": "Error loading:",

@@ -1,4 +1,169 @@
 {
+  "platformStatus": {
+    "ha": {
+      "title": "Nodos del clúster",
+      "vip": "IP virtual {address}",
+      "paused": "Conmutación automática en pausa",
+      "noLeader": "Sin base de datos primaria",
+      "node": "Nodo",
+      "role": "Rol de la base de datos",
+      "dbUnreachable": "Inaccesible",
+      "load": "Carga (1 min)",
+      "loadValue": "{load} / {cpus} núcleos",
+      "serviceState": {
+        "running": "En marcha",
+        "stopped": "Detenido",
+        "unknown": "Desconocido"
+      }
+    },
+    "history": {
+      "range": "Período",
+      "ranges": {
+        "1h": "1 h",
+        "6h": "6 h",
+        "24h": "24 h"
+      },
+      "load": "Carga media",
+      "load1": "1 min",
+      "load5": "5 min",
+      "load15": "15 min",
+      "cores": "{cpus} núcleos",
+      "memory": "Memoria",
+      "memoryUsed": "En uso",
+      "memoryTotal": "Total {total}",
+      "collecting": "El historial empieza cuando arranca ProxCenter: la primera curva aparece en un minuto.",
+      "unavailable": "No se pudo cargar el historial."
+    },
+    "frontend": {
+      "title": "Interfaz web",
+      "instance": "Instancia",
+      "memory": "Memoria",
+      "heap": "Heap",
+      "eventLoop": "Bucle de eventos (p99)",
+      "nodeVersion": "Node.js"
+    },
+    "views": {
+      "overview": "Resumen",
+      "database": "Base de datos",
+      "orchestrator": "Orquestador"
+    },
+    "tabLabel": "Estado de la plataforma",
+    "loading": "Cargando el estado de la plataforma",
+    "loadError": "No se pudo cargar el estado de la plataforma.",
+    "staleError": "La última actualización falló: las cifras siguientes pueden estar desactualizadas.",
+    "refresh": "Actualizar",
+    "never": "Nunca",
+    "summary": "ProxCenter {version} en {host}, actualizado a las {time}",
+    "overall": {
+      "up": "Todos los servicios funcionan",
+      "degraded": "Degradado",
+      "down": "Un servicio está caído",
+      "unknown": "Desconocido"
+    },
+    "state": {
+      "up": "En marcha",
+      "degraded": "Degradado",
+      "down": "Caído",
+      "unknown": "Desconocido"
+    },
+    "reason": {
+      "unreachable": "Inaccesible",
+      "tasksFailing": "Tareas programadas con fallos",
+      "notConfigured": "No configurado",
+      "orchestratorDown": "Desconocido, orquestador inaccesible"
+    },
+    "services": {
+      "title": "Servicios",
+      "titleOn": "Servicios en {node}",
+      "service": "Servicio",
+      "version": "Versión",
+      "uptime": "Tiempo activo",
+      "cpu": "CPU",
+      "memory": "Memoria",
+      "state": "Estado",
+      "names": {
+        "frontend": "Interfaz web",
+        "database": "Base de datos PostgreSQL",
+        "orchestrator": "Orquestador",
+        "renderer": "Generador de informes PDF"
+      }
+    },
+    "host": {
+      "title": "Host",
+      "titleOn": "Host {node}",
+      "unavailable": "Esta plataforma no expone las cifras del host.",
+      "cpus": "Núcleos de CPU",
+      "uptime": "Tiempo activo del host",
+      "loadNow": "Carga media (1, 5, 15 min)",
+      "memory": "Memoria",
+      "disk": {
+        "data": "Disco de datos de la aplicación",
+        "orchestrator": "Disco de datos del orquestador"
+      }
+    },
+    "database": {
+      "title": "Base de datos",
+      "unreachable": "La base de datos no responde.",
+      "size": "Tamaño",
+      "connections": "Conexiones",
+      "active": "Consultas activas",
+      "cacheHit": "Tasa de aciertos de caché",
+      "deadlocks": "Interbloqueos",
+      "role": "Rol",
+      "primary": "Primaria",
+      "replica": "Réplica",
+      "tables": "Tablas",
+      "table": "Tabla",
+      "rows": "Filas (estimación)",
+      "tableSize": "Tamaño",
+      "deadRows": "Filas muertas",
+      "lastVacuum": "Último vacuum"
+    },
+    "orchestrator": {
+      "title": "Orquestador",
+      "unreachable": "El orquestador no responde.",
+      "instance": "Instancia",
+      "role": "Rol",
+      "leader": "Líder",
+      "follower": "Seguidor",
+      "goroutines": "Goroutines",
+      "heap": "Heap",
+      "pool": "Conexiones SQL",
+      "poolWaits": "Esperas SQL",
+      "goVersion": "Go"
+    },
+    "tasks": {
+      "task": "Tarea programada",
+      "schedule": "Cada",
+      "lastRun": "Última ejecución",
+      "duration": "Duración",
+      "failures": "Fallos / ejecuciones",
+      "status": "Estado",
+      "showError": "Mostrar el último error",
+      "state": {
+        "ok": "OK",
+        "failing": "Con fallos",
+        "running": "En curso",
+        "idle": "En espera"
+      }
+    },
+    "retention": {
+      "title": "Retención de datos",
+      "data": "Datos",
+      "kept": "Conservados",
+      "days": "{days} días",
+      "sets": {
+        "notifications": "Historial de notificaciones",
+        "task_history": "Historial de tareas de Proxmox",
+        "metrics": "Métricas de clústeres",
+        "disk_latency": "Muestras de latencia de disco",
+        "ceph_metrics": "Métricas de Ceph",
+        "gpu_metrics": "Métricas de GPU",
+        "changes": "Seguimiento de cambios",
+        "availability": "Historial de disponibilidad"
+      }
+    }
+  },
   "common": {
     "add": "Añadir",
     "edit": "Editar",
@@ -4901,6 +5066,7 @@
       "green_metrics": "Métricas Green / RSE",
       "ceph_replication": "Site Recovery (replicación Ceph)",
       "syslog_forwarding": "Reenvío Syslog / SIEM",
+      "platform_status": "Estado de la plataforma",
       "backup_restore_drills": "Simulacros de restauración de copias",
       "gpu_management": "Gestión de GPU"
     },
@@ -5504,6 +5670,15 @@
     "ldapPasswordChangeNotice": "Para cambiar tu contraseña, ponte en contacto con el administrador del sistema o utiliza tus herramientas de gestión de directorio."
   },
   "notifications": {
+    "retention": {
+      "save": "Guardar la retención",
+      "title": "Retención del historial",
+      "description": "Las notificaciones más antiguas se eliminan del historial. Se registra cada notificación, incluida una por cada replicación correcta.",
+      "label": "Conservar el historial",
+      "unit": "días",
+      "range": "Introduzca un número entero entre 1 y {max}.",
+      "saved": "Retención guardada."
+    },
     "title": "Notificaciones",
     "description": "Configura las notificaciones por correo electrónico para recibir alertas sobre migraciones, backups y eventos importantes.",
     "loadingError": "Error al cargar:",

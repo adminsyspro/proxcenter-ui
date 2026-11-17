@@ -41,6 +41,10 @@ export const Features = {
   // policies, maintenance windows and reports. Community keeps the live
   // health and 24 h node and cluster availability.
   SLA_MONITORING: 'sla_monitoring',
+  // Platform status: the state of the ProxCenter installation itself
+  // (services, host load, database, scheduled tasks, cluster nodes). Own
+  // tab in /settings, routes under /api/v1/system/status.
+  PLATFORM_STATUS: 'platform_status',
   // Incident register: alerts grouped into incidents with a journal, corrective
   // actions and a post-mortem. Default tenant only. Routes under /api/v1/incidents.
   INCIDENTS: 'incidents',
@@ -95,6 +99,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'sflow_monitoring',
     'backup_restore_drills',
     'sla_monitoring',
+    'platform_status',
     'incidents',
     'gpu_management',
   ],
@@ -126,6 +131,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'sflow_monitoring',
     'backup_restore_drills',
     'sla_monitoring',
+    'platform_status',
     'incidents',
     'gpu_management',
   ],

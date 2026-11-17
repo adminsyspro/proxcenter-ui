@@ -11,6 +11,7 @@ import { Agent, setGlobalDispatcher } from 'undici'
 
 import { startAuditRetentionSweeper } from '@/lib/audit/retentionSweeper'
 import { startSessionSweeper } from '@/lib/auth/sessionSweeper'
+import { startHostHistorySampler } from '@/lib/platform/history'
 import { backfillEmailLogos } from '@/lib/branding/emailLogo'
 import { importDiskAssets } from '@/lib/branding/importDiskAssets'
 import { prisma } from '@/lib/db/prisma'
@@ -116,6 +117,15 @@ export async function registerNode(): Promise<void> {
     // Boot must never depend on this: the history simply misses the periods
     // until the next boot starts the sampler.
     console.error('[startup] vDC usage sampler failed to start (non-fatal):', err)
+  }
+
+  try {
+    // Platform status: host load and memory of the last 24 hours, kept in
+    // memory so the charts are already drawn when an administrator opens the
+    // tab. Every replica samples its own host.
+    startHostHistorySampler()
+  } catch (err) {
+    console.error('[startup] host history sampler failed to start (non-fatal):', err)
   }
 
   try {

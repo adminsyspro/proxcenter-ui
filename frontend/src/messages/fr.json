@@ -1,4 +1,169 @@
 {
+  "platformStatus": {
+    "ha": {
+      "title": "Nœuds du cluster",
+      "vip": "IP virtuelle {address}",
+      "paused": "Bascule automatique en pause",
+      "noLeader": "Aucune base primaire",
+      "node": "Nœud",
+      "role": "Rôle de la base",
+      "dbUnreachable": "Injoignable",
+      "load": "Charge (1 min)",
+      "loadValue": "{load} / {cpus} cœurs",
+      "serviceState": {
+        "running": "En marche",
+        "stopped": "Arrêté",
+        "unknown": "Inconnu"
+      }
+    },
+    "history": {
+      "range": "Période",
+      "ranges": {
+        "1h": "1 h",
+        "6h": "6 h",
+        "24h": "24 h"
+      },
+      "load": "Charge moyenne",
+      "load1": "1 min",
+      "load5": "5 min",
+      "load15": "15 min",
+      "cores": "{cpus} cœurs",
+      "memory": "Mémoire",
+      "memoryUsed": "Utilisée",
+      "memoryTotal": "Total {total}",
+      "collecting": "L'historique démarre avec ProxCenter : la première courbe apparaît dans la minute.",
+      "unavailable": "L'historique n'a pas pu être chargé."
+    },
+    "frontend": {
+      "title": "Interface web",
+      "instance": "Instance",
+      "memory": "Mémoire",
+      "heap": "Tas",
+      "eventLoop": "Boucle d'événements (p99)",
+      "nodeVersion": "Node.js"
+    },
+    "views": {
+      "overview": "Vue d'ensemble",
+      "database": "Base de données",
+      "orchestrator": "Orchestrateur"
+    },
+    "tabLabel": "État de la plateforme",
+    "loading": "Chargement de l'état de la plateforme",
+    "loadError": "L'état de la plateforme n'a pas pu être chargé.",
+    "staleError": "La dernière actualisation a échoué : les chiffres ci-dessous peuvent être périmés.",
+    "refresh": "Actualiser",
+    "never": "Jamais",
+    "summary": "ProxCenter {version} sur {host}, mis à jour à {time}",
+    "overall": {
+      "up": "Tous les services fonctionnent",
+      "degraded": "Dégradé",
+      "down": "Un service est arrêté",
+      "unknown": "Inconnu"
+    },
+    "state": {
+      "up": "En marche",
+      "degraded": "Dégradé",
+      "down": "Arrêté",
+      "unknown": "Inconnu"
+    },
+    "reason": {
+      "unreachable": "Injoignable",
+      "tasksFailing": "Tâches planifiées en échec",
+      "notConfigured": "Non configuré",
+      "orchestratorDown": "Inconnu, orchestrateur injoignable"
+    },
+    "services": {
+      "title": "Services",
+      "titleOn": "Services sur {node}",
+      "service": "Service",
+      "version": "Version",
+      "uptime": "Démarré depuis",
+      "cpu": "CPU",
+      "memory": "Mémoire",
+      "state": "État",
+      "names": {
+        "frontend": "Interface web",
+        "database": "Base PostgreSQL",
+        "orchestrator": "Orchestrateur",
+        "renderer": "Générateur de rapports PDF"
+      }
+    },
+    "host": {
+      "title": "Hôte",
+      "titleOn": "Hôte {node}",
+      "unavailable": "Cette plateforme n'expose pas les chiffres de l'hôte.",
+      "cpus": "Cœurs CPU",
+      "uptime": "Hôte démarré depuis",
+      "loadNow": "Charge moyenne (1, 5, 15 min)",
+      "memory": "Mémoire",
+      "disk": {
+        "data": "Disque des données applicatives",
+        "orchestrator": "Disque des données de l'orchestrateur"
+      }
+    },
+    "database": {
+      "title": "Base de données",
+      "unreachable": "La base de données ne répond pas.",
+      "size": "Taille",
+      "connections": "Connexions",
+      "active": "Requêtes actives",
+      "cacheHit": "Taux de succès du cache",
+      "deadlocks": "Interblocages",
+      "role": "Rôle",
+      "primary": "Primaire",
+      "replica": "Réplica",
+      "tables": "Tables",
+      "table": "Table",
+      "rows": "Lignes (estimation)",
+      "tableSize": "Taille",
+      "deadRows": "Lignes mortes",
+      "lastVacuum": "Dernier vacuum"
+    },
+    "orchestrator": {
+      "title": "Orchestrateur",
+      "unreachable": "L'orchestrateur ne répond pas.",
+      "instance": "Instance",
+      "role": "Rôle",
+      "leader": "Leader",
+      "follower": "Suiveur",
+      "goroutines": "Goroutines",
+      "heap": "Tas",
+      "pool": "Connexions SQL",
+      "poolWaits": "Attentes SQL",
+      "goVersion": "Go"
+    },
+    "tasks": {
+      "task": "Tâche planifiée",
+      "schedule": "Toutes les",
+      "lastRun": "Dernière exécution",
+      "duration": "Durée",
+      "failures": "Échecs / exécutions",
+      "status": "État",
+      "showError": "Afficher la dernière erreur",
+      "state": {
+        "ok": "OK",
+        "failing": "En échec",
+        "running": "En cours",
+        "idle": "En attente"
+      }
+    },
+    "retention": {
+      "title": "Rétention des données",
+      "data": "Données",
+      "kept": "Conservées",
+      "days": "{days} jours",
+      "sets": {
+        "notifications": "Historique des notifications",
+        "task_history": "Historique des tâches Proxmox",
+        "metrics": "Métriques des clusters",
+        "disk_latency": "Mesures de latence disque",
+        "ceph_metrics": "Métriques Ceph",
+        "gpu_metrics": "Métriques GPU",
+        "changes": "Suivi des changements",
+        "availability": "Historique de disponibilité"
+      }
+    }
+  },
   "common": {
     "add": "Ajouter",
     "edit": "Modifier",
@@ -4901,6 +5066,7 @@
       "green_metrics": "Métriques vertes / RSE",
       "ceph_replication": "Site Recovery (Réplication Ceph)",
       "syslog_forwarding": "Transfert Syslog / SIEM",
+      "platform_status": "État de la plateforme",
       "backup_restore_drills": "Exercices de restauration",
       "gpu_management": "Pilotage des GPU"
     },
@@ -5504,6 +5670,15 @@
     "ldapPasswordChangeNotice": "Pour changer votre mot de passe, veuillez contacter votre administrateur système ou utiliser les outils de gestion de votre annuaire."
   },
   "notifications": {
+    "retention": {
+      "save": "Enregistrer la rétention",
+      "title": "Rétention de l'historique",
+      "description": "Les notifications plus anciennes sont supprimées de l'historique. Chaque notification est enregistrée, y compris une par réplication réussie.",
+      "label": "Conserver l'historique",
+      "unit": "jours",
+      "range": "Saisissez un nombre entier entre 1 et {max}.",
+      "saved": "Rétention enregistrée."
+    },
     "title": "Notifications",
     "description": "Configurez les notifications par email pour recevoir des alertes sur les migrations, backups et événements importants.",
     "loadingError": "Erreur lors du chargement:",

@@ -28,6 +28,7 @@ import {
 
 import NumericTextField from '@/components/ui/NumericTextField'
 import NotificationChannelsCard from '@/components/settings/NotificationChannelsCard'
+import NotificationRetentionCard from '@/components/settings/NotificationRetentionCard'
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
 import NotificationCategoryHelp from '@/components/settings/NotificationCategoryHelp'
 import NotificationSlaRow from '@/components/settings/NotificationSlaRow'
@@ -544,6 +545,9 @@ return
 
       {/* Section Canaux (Slack, Teams, ntfy, Discord, webhook) */}
       <NotificationChannelsCard />
+
+      {/* History retention, saved on its own like the channels */}
+      <NotificationRetentionCard />
 
       {/* Section Types de notifications */}
       <Card variant='outlined' sx={{ mb: 3 }}>

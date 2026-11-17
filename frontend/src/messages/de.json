@@ -1,4 +1,169 @@
 {
+  "platformStatus": {
+    "ha": {
+      "title": "Clusterknoten",
+      "vip": "Virtuelle IP {address}",
+      "paused": "Automatisches Failover pausiert",
+      "noLeader": "Keine primäre Datenbank",
+      "node": "Knoten",
+      "role": "Datenbankrolle",
+      "dbUnreachable": "Nicht erreichbar",
+      "load": "Last (1 Min.)",
+      "loadValue": "{load} / {cpus} Kerne",
+      "serviceState": {
+        "running": "Läuft",
+        "stopped": "Gestoppt",
+        "unknown": "Unbekannt"
+      }
+    },
+    "history": {
+      "range": "Zeitraum",
+      "ranges": {
+        "1h": "1 Std.",
+        "6h": "6 Std.",
+        "24h": "24 Std."
+      },
+      "load": "Durchschnittslast",
+      "load1": "1 Min.",
+      "load5": "5 Min.",
+      "load15": "15 Min.",
+      "cores": "{cpus} Kerne",
+      "memory": "Arbeitsspeicher",
+      "memoryUsed": "Belegt",
+      "memoryTotal": "Gesamt {total}",
+      "collecting": "Der Verlauf beginnt mit dem Start von ProxCenter: Die erste Kurve erscheint innerhalb einer Minute.",
+      "unavailable": "Der Verlauf konnte nicht geladen werden."
+    },
+    "frontend": {
+      "title": "Weboberfläche",
+      "instance": "Instanz",
+      "memory": "Speicher",
+      "heap": "Heap",
+      "eventLoop": "Ereignisschleife (p99)",
+      "nodeVersion": "Node.js"
+    },
+    "views": {
+      "overview": "Übersicht",
+      "database": "Datenbank",
+      "orchestrator": "Orchestrator"
+    },
+    "tabLabel": "Plattformstatus",
+    "loading": "Plattformstatus wird geladen",
+    "loadError": "Der Plattformstatus konnte nicht geladen werden.",
+    "staleError": "Die letzte Aktualisierung ist fehlgeschlagen: Die Werte unten können veraltet sein.",
+    "refresh": "Aktualisieren",
+    "never": "Nie",
+    "summary": "ProxCenter {version} auf {host}, aktualisiert um {time}",
+    "overall": {
+      "up": "Alle Dienste laufen",
+      "degraded": "Beeinträchtigt",
+      "down": "Ein Dienst ist ausgefallen",
+      "unknown": "Unbekannt"
+    },
+    "state": {
+      "up": "Läuft",
+      "degraded": "Beeinträchtigt",
+      "down": "Ausgefallen",
+      "unknown": "Unbekannt"
+    },
+    "reason": {
+      "unreachable": "Nicht erreichbar",
+      "tasksFailing": "Geplante Aufgaben schlagen fehl",
+      "notConfigured": "Nicht konfiguriert",
+      "orchestratorDown": "Unbekannt, Orchestrator nicht erreichbar"
+    },
+    "services": {
+      "title": "Dienste",
+      "titleOn": "Dienste auf {node}",
+      "service": "Dienst",
+      "version": "Version",
+      "uptime": "Laufzeit",
+      "cpu": "CPU",
+      "memory": "Arbeitsspeicher",
+      "state": "Zustand",
+      "names": {
+        "frontend": "Weboberfläche",
+        "database": "PostgreSQL-Datenbank",
+        "orchestrator": "Orchestrator",
+        "renderer": "PDF-Berichtserzeugung"
+      }
+    },
+    "host": {
+      "title": "Host",
+      "titleOn": "Host {node}",
+      "unavailable": "Diese Plattform stellt keine Hostwerte bereit.",
+      "cpus": "CPU-Kerne",
+      "uptime": "Host-Laufzeit",
+      "loadNow": "Durchschnittslast (1, 5, 15 Min.)",
+      "memory": "Arbeitsspeicher",
+      "disk": {
+        "data": "Datenträger der Anwendungsdaten",
+        "orchestrator": "Datenträger der Orchestrator-Daten"
+      }
+    },
+    "database": {
+      "title": "Datenbank",
+      "unreachable": "Die Datenbank antwortet nicht.",
+      "size": "Größe",
+      "connections": "Verbindungen",
+      "active": "Aktive Abfragen",
+      "cacheHit": "Cache-Trefferquote",
+      "deadlocks": "Deadlocks",
+      "role": "Rolle",
+      "primary": "Primär",
+      "replica": "Replikat",
+      "tables": "Tabellen",
+      "table": "Tabelle",
+      "rows": "Zeilen (Schätzung)",
+      "tableSize": "Größe",
+      "deadRows": "Tote Zeilen",
+      "lastVacuum": "Letztes Vacuum"
+    },
+    "orchestrator": {
+      "title": "Orchestrator",
+      "unreachable": "Der Orchestrator antwortet nicht.",
+      "instance": "Instanz",
+      "role": "Rolle",
+      "leader": "Leader",
+      "follower": "Follower",
+      "goroutines": "Goroutinen",
+      "heap": "Heap",
+      "pool": "SQL-Verbindungen",
+      "poolWaits": "SQL-Wartevorgänge",
+      "goVersion": "Go"
+    },
+    "tasks": {
+      "task": "Geplante Aufgabe",
+      "schedule": "Alle",
+      "lastRun": "Letzte Ausführung",
+      "duration": "Dauer",
+      "failures": "Fehler / Ausführungen",
+      "status": "Zustand",
+      "showError": "Letzten Fehler anzeigen",
+      "state": {
+        "ok": "OK",
+        "failing": "Fehlgeschlagen",
+        "running": "Läuft",
+        "idle": "Wartet"
+      }
+    },
+    "retention": {
+      "title": "Datenaufbewahrung",
+      "data": "Daten",
+      "kept": "Aufbewahrt für",
+      "days": "{days} Tage",
+      "sets": {
+        "notifications": "Benachrichtigungsverlauf",
+        "task_history": "Verlauf der Proxmox-Aufgaben",
+        "metrics": "Cluster-Metriken",
+        "disk_latency": "Messwerte der Datenträgerlatenz",
+        "ceph_metrics": "Ceph-Metriken",
+        "gpu_metrics": "GPU-Metriken",
+        "changes": "Änderungsverfolgung",
+        "availability": "Verfügbarkeitsverlauf"
+      }
+    }
+  },
   "common": {
     "showMore": "Mehr anzeigen",
     "showLess": "Weniger anzeigen",
@@ -4890,6 +5055,7 @@
       "green_metrics": "Green Metrics / CSR",
       "ceph_replication": "Site Recovery (Ceph Replikation)",
       "syslog_forwarding": "Syslog / SIEM-Weiterleitung",
+      "platform_status": "Plattformstatus",
       "backup_restore_drills": "Wiederherstellungstests für Backups",
       "gpu_management": "GPU-Verwaltung"
     },
@@ -5493,6 +5659,15 @@
     "ldapPasswordChangeNotice": "Um Ihr Passwort zu ändern, wenden Sie sich bitte an Ihren Systemadministrator oder verwenden Sie Ihre Verzeichnisverwaltungstools."
   },
   "notifications": {
+    "retention": {
+      "save": "Aufbewahrung speichern",
+      "title": "Aufbewahrung des Verlaufs",
+      "description": "Ältere Benachrichtigungen werden aus dem Verlauf gelöscht. Jede Benachrichtigung wird gespeichert, auch eine pro erfolgreicher Replikation.",
+      "label": "Verlauf aufbewahren für",
+      "unit": "Tage",
+      "range": "Geben Sie eine ganze Zahl zwischen 1 und {max} ein.",
+      "saved": "Aufbewahrung gespeichert."
+    },
     "title": "Benachrichtigungen",
     "description": "Konfigurieren Sie E-Mail-Benachrichtigungen, um Warnungen über Migrationen, Backups und wichtige Ereignisse zu erhalten.",
     "loadingError": "Fehler laden:",

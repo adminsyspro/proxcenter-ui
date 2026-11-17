@@ -248,3 +248,39 @@ describe('demo settings mocks: settings tabs', () => {
     expect((await demoGet('/api/v1/settings/appearance')).stored).toBe(false)
   })
 })
+
+describe('demo settings mocks: platform status', () => {
+  it('serves a healthy Enterprise install dated now, in the shape the tab reads', async () => {
+    const status = await demoGet('/api/v1/system/status')
+
+    expect(status.edition).toBe('enterprise')
+    expect(status.overall).toBe('up')
+    expect(status.services.map((s: any) => s.id)).toEqual(['frontend', 'database', 'orchestrator', 'renderer'])
+    expect(Math.abs(Date.parse(status.generatedAt) - Date.now())).toBeLessThan(5000)
+    expect(status.database.tables.length).toBeGreaterThan(0)
+    expect(status.orchestrator.tasks.every((t: any) => Date.parse(t.last_run) < Date.parse(status.generatedAt))).toBe(true)
+    expect(status.orchestrator.retention.notifications).toBe(30)
+  })
+
+  it('serves the notification history retention', async () => {
+    expect(await demoGet('/api/v1/orchestrator/notifications/retention')).toEqual({ retentionDays: 30, maxRetentionDays: 365 })
+  })
+})
+
+describe('demo settings mocks: host history', () => {
+  it('serves a curve over the requested range, ending now', async () => {
+    for (const [range, span] of [['1h', 3600000], ['6h', 6 * 3600000], ['24h', 24 * 3600000]] as const) {
+      const history = await demoGet(`/api/v1/system/status/history?range=${range}`)
+
+      expect(history.range).toBe(range)
+      expect(history.to - history.from).toBe(span)
+      expect(history.samples).toHaveLength(121)
+      expect(history.samples.at(-1).t).toBeCloseTo(history.to, -1)
+      expect(history.samples.every((s: any) => s.load1 > 0 && s.memUsedBytes < history.memTotalBytes)).toBe(true)
+    }
+  })
+
+  it('falls back to the last hour on an unknown range', async () => {
+    expect((await demoGet('/api/v1/system/status/history?range=7d')).range).toBe('1h')
+  })
+})

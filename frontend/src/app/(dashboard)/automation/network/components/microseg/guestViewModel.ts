@@ -1,5 +1,6 @@
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
+import { BOX_H, BOX_W, placeBox } from './compactGraph'
 import { flowService } from './FlowSummary'
 import { gatewayZones } from './gatewayNames'
 import type { Point } from './edgeGeometry'
@@ -7,9 +8,9 @@ import {
   BOX_SHAPE, EXTERNAL_ID, NODE_H, NODE_W, OUTSIDE_ID, UNZONED_ID, addAllowedPairs, addPair, addressBook, bareIp, cellCenters,
   comparePairs, exceptionLinks, groupOf, memberBook, outsideEgressOf, placeBoundary, placeGroup, placePairs, zoneNodeId,
   type AddressBooks, type Cell, type ExceptionLink, type Group, type IpNodeData, type MapEdgeKind, type MapInput, type MapMember, type Pair,
-  type Placement, type ZoneGraph,
+  type Placement, type ZoneGraph, type ZoneNodeData,
 } from './zoneGraph'
-import { byText } from './zoneLayout'
+import { INSIDE_GUEST_W, INSIDE_MAX_SHOWN, byText, insideSlots, ringLayout } from './zoneLayout'
 import { guestKey } from './zoneModel'
 
 /** The addresses in no zone drawn on their own (the busiest first); the others go to Unknown / External. */
@@ -20,6 +21,11 @@ export const ipNodeId = (ip: string) => `ip:${ip}`
 /** A peer zone with no guest drawn is a small circle; a side taller than MAX_PER_COLUMN nodes is split in columns. */
 export const EMPTY_PEER_R = 70
 export const MAX_PER_COLUMN = 3
+/** Around an entered zone the peers are boxes: more of them fit in a column. */
+export const MAX_BOXES_PER_COLUMN = 6
+/** Around an entered zone the columns are closer (boxes, not circles): the zone is drawn larger in the same view. */
+export const INSIDE_COL_GAP = 170
+export const INSIDE_ROW_GAP = 60
 
 export type GuestViewInput = MapInput & { centre: string }
 
@@ -100,8 +106,45 @@ function peerSides({ centre, known, flows, seen, links }: Around): { left: strin
 
 const hasAddress = (m: MapMember, ips: ReadonlySet<string> | undefined) => !!ips && m.ips.some(ip => ips.has(bareIp(ip)))
 
-/** The circles: the centre with every member, each peer with only the members that talked to the centre or that an exception links to it. */
-function buildCircles(around: Around, members: MapInput['members'], peers: string[]): { groups: Map<string, Group>; books: AddressBooks } {
+/** The addresses of the centre that were seen talking (or talked to), and its guests an exception names. */
+function busyInCentre({ centre, seen, links }: Around): (m: MapMember) => boolean {
+  const ips = new Set<string>()
+  for (const s of seen) {
+    if (s.src_zone_id === centre.id && s.src_ip) ips.add(bareIp(s.src_ip))
+    if (s.dst_zone_id === centre.id && s.dst_ip) ips.add(bareIp(s.dst_ip))
+  }
+  const keys = new Set<string>()
+  for (const l of links) {
+    if (l.srcZone === centre.id) keys.add(guestKey(l.source))
+    if (l.exception.zone_id === centre.id) keys.add(guestKey(l.destination))
+  }
+  return m => keys.has(guestKey(m)) || hasAddress(m, ips)
+}
+
+/**
+ * The circle of an entered zone: its guests on rings, up to INSIDE_MAX_SHOWN of them and a "+N" node past it. In a
+ * zone too large to be drawn whole, the guests with a flow or an exception come first.
+ */
+function insideGroup(around: Around, all: MapMember[] | null): Group {
+  const zone = around.centre
+  const list = [...(all ?? [])].sort((a, b) => byText(a.name, b.name) || byText(a.key, b.key))
+  if (list.length > INSIDE_MAX_SHOWN) {
+    const busy = busyInCentre(around)
+    const rank = new Map(list.map((m, i) => [m.key, (busy(m) ? 0 : list.length) + i]))
+    list.sort((a, b) => rank.get(a.key)! - rank.get(b.key)!)
+  }
+  const { shown, more } = insideSlots(list.length)
+  const radius = ringLayout(shown + (more ? 1 : 0)).radius
+  const data: ZoneNodeData = { kind: 'zone', zone, members: all ? all.length : null, state: zone.state, radius, entered: true }
+  return { id: zoneNodeId(zone.id), radius, all: list, shown: list.slice(0, shown), more, data }
+}
+
+/**
+ * The circles: the centre with every member, each peer with only the members that talked to the centre or that an
+ * exception links to it. Around an entered zone (`inside`) the centre spreads its guests on rings and a peer has no
+ * circle: it is a box, every flow with it ends on the box.
+ */
+function buildCircles(around: Around, members: MapInput['members'], peers: string[], inside: boolean): { groups: Map<string, Group>; books: AddressBooks } {
   const groups = new Map<string, Group>()
   const books: AddressBooks = new Map()
   const involved = involvedAddresses(around)
@@ -109,6 +152,16 @@ function buildCircles(around: Around, members: MapInput['members'], peers: strin
   for (const id of [around.centre.id, ...peers]) {
     const z = around.known.get(id)!
     const all = members ? (members.get(id) ?? []) : null
+    if (inside) {
+      if (id === around.centre.id) {
+        const g = insideGroup(around, all)
+        groups.set(g.id, g)
+        books.set(id, addressBook(g))
+      } else {
+        books.set(id, new Map())
+      }
+      continue
+    }
     const drawn = all && id !== around.centre.id ? all.filter(m => hasAddress(m, involved.get(id)) || !!named.get(id)?.has(guestKey(m))) : all
     const g = groupOf(zoneNodeId(id), drawn, { kind: 'zone', zone: z, members: all ? all.length : null, state: z.state, radius: 0 })
     if (id !== around.centre.id && g.shown.length === 0) {
@@ -163,11 +216,11 @@ function observedPairs(pairs: Map<string, Pair>, seen: MicrosegSuggestion[], kno
  * The exceptions, guest to guest: one dashed edge per source and destination with the services of the exceptions of
  * the pair, each end on its guest (the "+N" node of its circle when it is not drawn).
  */
-function exceptionPairs(pairs: Map<string, Pair>, links: readonly ExceptionLink[], groups: ReadonlyMap<string, Group>) {
+function exceptionPairs(pairs: Map<string, Pair>, links: readonly ExceptionLink[], groups: ReadonlyMap<string, Group>, boxes: ReadonlySet<string>) {
   const books = new Map([...groups].map(([id, g]) => [id, memberBook(g)]))
   const nodeOf = (zoneId: string, guest: { type: string; vmid: number }) => {
     const groupId = zoneId === UNZONED_ID ? UNZONED_ID : zoneNodeId(zoneId)
-    return books.get(groupId)?.get(guestKey(guest)) ?? (groups.has(groupId) ? groupId : null)
+    return books.get(groupId)?.get(guestKey(guest)) ?? (groups.has(groupId) || boxes.has(groupId) ? groupId : null)
   }
   for (const l of links) {
     const source = nodeOf(l.srcZone, l.source)
@@ -186,10 +239,10 @@ function placeIp(out: Placement, ip: string, c: Point, zones: readonly MicrosegZ
   out.endShapes.set(id, { center: c, shape: BOX_SHAPE, group: id })
 }
 
-/** A side in columns of MAX_PER_COLUMN nodes at most, the first column nearest the centre. */
-function columnsOf(side: Cell[]): Cell[][] {
+/** A side in columns of `per` nodes at most, the first column nearest the centre. */
+function columnsOf(side: Cell[], per: number): Cell[][] {
   const columns: Cell[][] = []
-  for (let i = 0; i < side.length; i += MAX_PER_COLUMN) columns.push(side.slice(i, i + MAX_PER_COLUMN))
+  for (let i = 0; i < side.length; i += per) columns.push(side.slice(i, i + per))
   return columns
 }
 
@@ -204,7 +257,22 @@ const circle = (g: Group): Cell => ({ id: g.id, w: 2 * g.radius, h: 2 * g.radius
  * circle, and an exception from its source guest to its destination guest, dashed (its source drawn in its zone as if
  * it had talked to the centre); nothing is drawn between two peers. Pure and deterministic.
  */
-export function buildGuestView({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null, centre }: GuestViewInput): ZoneGraph {
+export function buildGuestView(input: GuestViewInput): ZoneGraph {
+  return buildAround(input, false)
+}
+
+/**
+ * Inside a zone (a double click on it enters it): the zone alone as one large circle, every guest of it on rings
+ * with its full name (INSIDE_MAX_SHOWN and a "+N" past it), so that what its guests exchange with each other reads as
+ * chords of the circle. The rest of the map is folded around it: a box per zone that talks to it (left) or that only it
+ * talks to (right), with Unknown / External, the busiest addresses, the guests in no zone and Outside as on the guest
+ * view. Every flow with another zone goes from the guest of the zone to the box of the other. Pure and deterministic.
+ */
+export function buildZoneInside(input: GuestViewInput): ZoneGraph {
+  return buildAround(input, true)
+}
+
+function buildAround({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null, centre }: GuestViewInput, inside: boolean): ZoneGraph {
   const sorted = [...zones].sort((a, b) => byText(a.name, b.name) || byText(a.id, b.id))
   const known = new Map(sorted.map(z => [z.id, z]))
   const zone = known.get(centre)
@@ -220,7 +288,8 @@ export function buildGuestView({ zones, flows, suggestions, members = null, unzo
     named: namedGuests(zone, links),
   }
   const sides = peerSides(around)
-  const { groups, books } = buildCircles(around, members, [...sides.left, ...sides.right])
+  const { groups, books } = buildCircles(around, members, [...sides.left, ...sides.right], inside)
+  const boxes = new Set(inside ? [...sides.left, ...sides.right].map(zoneNodeId) : [])
   if (members) addUnzoned(groups, books, around, unzoned)
   const gateways = new Set(sorted.map(z => z.gateway ?? '').filter(Boolean))
   // A host CIDR of a flow ("10.30.0.1/32") that is a zone's gateway is drawn on its own, as the gateway it is.
@@ -237,27 +306,32 @@ export function buildGuestView({ zones, flows, suggestions, members = null, unzo
     const ip = gatewayOf(cidr)
     return ip && drawn.has(ip) ? ipNodeId(ip) : undefined
   })
-  exceptionPairs(pairs, around.links, groups)
+  exceptionPairs(pairs, around.links, groups, boxes)
   observedPairs(pairs, around.seen, known, books, drawn)
   const ordered = [...pairs.values()].sort(comparePairs)
 
   // Each side nearest first: the peer zones next to the centre, External the furthest left.
-  const left: Cell[] = sides.left.map(id => circle(groups.get(zoneNodeId(id))!))
+  const peer = (id: string): Cell => (inside ? { id: zoneNodeId(id), w: BOX_W, h: BOX_H } : circle(groups.get(zoneNodeId(id))!))
+  const per = inside ? MAX_BOXES_PER_COLUMN : MAX_PER_COLUMN
+  const left: Cell[] = sides.left.map(peer)
   const unzonedGroup = groups.get(UNZONED_ID)
   if (unzonedGroup) left.push(circle(unzonedGroup))
   left.push(...ips.map(ip => box(ipNodeId(ip))))
   if (ordered.some(p => p.source === EXTERNAL_ID)) left.push(box(EXTERNAL_ID))
-  const right: Cell[] = sides.right.map(id => circle(groups.get(zoneNodeId(id))!))
+  const right: Cell[] = sides.right.map(peer)
   if (ordered.some(p => p.target === OUTSIDE_ID)) right.push(box(OUTSIDE_ID))
-  const grid = [...columnsOf(left).reverse(), [circle(groups.get(zoneNodeId(centre))!)], ...columnsOf(right)]
-  const centers = cellCenters(grid)
+  const centreGroup = groups.get(zoneNodeId(centre))!
+  const grid = [...columnsOf(left, per).reverse(), [circle(centreGroup)], ...columnsOf(right, per)]
+  const rings = inside ? { centers: ringLayout(centreGroup.shown.length + (centreGroup.more ? 1 : 0)).centers, width: INSIDE_GUEST_W } : undefined
+  const centers = inside ? cellCenters(grid, INSIDE_COL_GAP, INSIDE_ROW_GAP) : cellCenters(grid)
   const outsideEgress = outsideEgressOf(around.flows, known)
 
   const out: Placement = { nodes: [], obstacles: [], endShapes: new Map() }
   for (const cell of grid.flat()) {
     const c = centers.get(cell.id)!
     const group = groups.get(cell.id)
-    if (group) placeGroup(out, group, c)
+    if (group) placeGroup(out, group, c, group === centreGroup ? rings : undefined)
+    else if (boxes.has(cell.id)) placeBox(out, known.get(cell.id.slice(5))!, members ? (members.get(cell.id.slice(5))?.length ?? 0) : null, 0, c)
     else if (cell.id.startsWith('ip:')) placeIp(out, cell.id.slice(3), c, sorted)
     else placeBoundary(out, cell.id, c, outsideEgress)
   }

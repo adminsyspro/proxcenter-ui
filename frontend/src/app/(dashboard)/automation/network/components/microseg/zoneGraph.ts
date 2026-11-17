@@ -58,6 +58,8 @@ export type ZoneNodeData = {
   radius: number
   /** The pending observed flows inside the zone (the compact rendering counts them, it draws no edge for them). */
   inside?: number
+  /** The map is inside this zone: it is not offered to enter it. */
+  entered?: boolean
 }
 export type UnzonedNodeData = { kind: 'unzoned'; count: number; radius: number }
 export type GuestNodeData = {
@@ -71,6 +73,8 @@ export type GuestNodeData = {
   zone?: string | null
   /** On the node view, a guest that is not running: it cannot be targeted, so it is no button. */
   inert?: boolean
+  /** Inside an entered zone: the width of the guest, wide enough for its name. */
+  width?: number
 }
 export type MoreNodeData = { kind: 'more'; count: number; groupId: string }
 /** `egress`, on the Outside box: the worst state of the outbound traffic of the zones that send a flow to it. */
@@ -483,21 +487,29 @@ export function placeBoundary(out: Placement, id: string, c: Point, egress?: Out
   out.endShapes.set(id, { center: c, shape: BOX_SHAPE, group: id })
 }
 
-/** A circle, then its guests and its "+N" node (React Flow wants a parent before its children). */
-export function placeGroup(out: Placement, group: Group, c: Point) {
+/** Where the guests of a circle go when it is not its grid: the center of each glyph from the center of the circle, and their width. */
+export type GuestPlaces = { centers: Point[]; width: number }
+
+/**
+ * A circle, then its guests and its "+N" node (React Flow wants a parent before its children). The guests fill the
+ * grid of the circle, or the `places` given (an entered zone spreads them on rings).
+ */
+export function placeGroup(out: Placement, group: Group, c: Point, places?: GuestPlaces) {
   const r = group.radius
   const origin = { x: c.x - r, y: c.y - r }
   out.nodes.push({ id: group.id, type: group.data.kind, position: origin, width: 2 * r, height: 2 * r, focusable: false, data: group.data })
   out.obstacles.push({ id: group.id, center: c, shape: { kind: 'circle', r } })
   out.endShapes.set(group.id, { center: c, shape: { kind: 'circle', r }, group: group.id })
   const groupId = groupKey(group)
-  const spots = slotPositions(group.shown.length + (group.more ? 1 : 0), r)
-  const child = (id: string, spot: Point, data: GuestNodeData | MoreNodeData) => {
-    out.nodes.push({ id, type: data.kind, parentId: group.id, position: spot, width: GUEST_W, height: GUEST_H, focusable: false, data })
-    out.endShapes.set(id, { center: { x: origin.x + spot.x + GUEST_W / 2, y: origin.y + spot.y + GLYPH_Y }, shape: { kind: 'circle', r: GUEST_R }, group: group.id })
+  const grid = places ? null : slotPositions(group.shown.length + (group.more ? 1 : 0), r)
+  const child = (id: string, i: number, data: GuestNodeData | MoreNodeData) => {
+    const width = data.kind === 'guest' && data.width ? data.width : GUEST_W
+    const spot = grid ? grid[i] : { x: r + places!.centers[i].x - width / 2, y: r + places!.centers[i].y - GLYPH_Y }
+    out.nodes.push({ id, type: data.kind, parentId: group.id, position: spot, width, height: GUEST_H, focusable: false, data })
+    out.endShapes.set(id, { center: { x: origin.x + spot.x + width / 2, y: origin.y + spot.y + GLYPH_Y }, shape: { kind: 'circle', r: GUEST_R }, group: group.id })
   }
-  group.shown.forEach((m, i) => child(guestNodeId(groupId, m.key), spots[i], { kind: 'guest', member: m, groupId }))
-  if (group.more) child(moreNodeId(groupId), spots[spots.length - 1], { kind: 'more', count: group.more, groupId })
+  group.shown.forEach((m, i) => child(guestNodeId(groupId, m.key), i, { kind: 'guest', member: m, groupId, ...(places ? { width: places.width } : {}) }))
+  if (group.more) child(moreNodeId(groupId), group.shown.length, { kind: 'more', count: group.more, groupId })
 }
 
 /** The nodes in grid order, with the obstacles the edges avoid and the outline every edge end clips on. */

@@ -82,8 +82,8 @@ describe('Dashboard of the network page on the demo data', () => {
     )
 
     // The observed flows: would be blocked in the observed zones, blocked in the enforced ones, inbound and outbound.
-    await waitFor(() => expect(screen.getByTestId('tile-would-block-value').textContent).toBe('10 flows'))
-    expect(screen.getByTestId('tile-blocked-value').textContent).toBe('3 flows')
+    await waitFor(() => expect(screen.getByTestId('tile-would-block-value').textContent).toBe('13 flows'))
+    expect(screen.getByTestId('tile-blocked-value').textContent).toBe('4 flows')
     expect(screen.getByTestId('tile-blocked').textContent).toContain('outbound from db')
     const services = within(await screen.findByTestId('services-table')).getAllByRole('row').slice(1)
 

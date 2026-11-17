@@ -41,6 +41,8 @@ type Props = {
   edits: ZoneEdits
   onClose: () => void
   onAssign: () => void
+  /** Enters the zone on the map (its guests and what they exchange); absent when the map is already inside it. */
+  onInside?: () => void
   connectionId: string
   /** The draft version the suggestions are resolved against. */
   version: number
@@ -239,7 +241,7 @@ export function useZoneWork({
  * drifts are read once per selection (the Drifts sub-tab's key), no refresh on focus.
  */
 export default function ZonePanel(props: Props) {
-  const { zone, onClose, onAssign, edits, connectionId, onOpenDrifts } = props
+  const { zone, onClose, onAssign, onInside, edits, connectionId, onOpenDrifts } = props
   const t = useTranslations('microsegPilot.overview.panel')
   const tz = useTranslations('microsegPilot.overview.zonePanel')
   const tsec = useTranslations('microsegPilot.overview.sections')
@@ -268,6 +270,11 @@ export default function ZonePanel(props: Props) {
           <ZoneStateChip state={zone.state} iconOnly />
           <EgressChip state={egress} ready={egressReady} iconOnly />
           <ZoneHeaderActions zone={zone} edits={edits} onAssign={onAssign} onDeleted={onClose} spread />
+          {onInside && (
+            <Tooltip title={tz('inside')}>
+              <IconButton size='small' aria-label={tz('inside')} onClick={onInside}><i className='ri-zoom-in-line' /></IconButton>
+            </Tooltip>
+          )}
           <IconButton size='small' aria-label={tz('expand')} onClick={() => setExpanded(true)}><i className='ri-fullscreen-line' /></IconButton>
           <IconButton size='small' aria-label={t('close')} onClick={onClose}><i className='ri-close-line' /></IconButton>
         </Box>

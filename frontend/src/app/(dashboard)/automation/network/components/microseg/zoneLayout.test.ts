@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   CELL_H, CELL_W, GUEST_H, GUEST_W, MAX_R, MAX_SHOWN, MIN_R, circleRadius, gridShape, layerZones, memberSlots, orderLayers, slotPositions,
-  foldColumns, gridExtent,
+  foldColumns, gridExtent, INSIDE_GUEST_W, INSIDE_MAX_SHOWN, INSIDE_MIN_R, insideSlots, ringLayout,
 } from './zoneLayout'
 
 describe('zone circles', () => {
@@ -150,5 +150,40 @@ describe('foldColumns', () => {
 
   it('returns an empty grid as it is', () => {
     expect(foldColumns([], 240, 90)).toEqual([])
+  })
+})
+
+describe('the rings of an entered zone', () => {
+  it('draws up to 60 guests, then the first 59 and a "+N" for the rest', () => {
+    expect(insideSlots(0)).toEqual({ shown: 0, more: 0 })
+    expect(insideSlots(INSIDE_MAX_SHOWN)).toEqual({ shown: INSIDE_MAX_SHOWN, more: 0 })
+    expect(insideSlots(INSIDE_MAX_SHOWN + 1)).toEqual({ shown: INSIDE_MAX_SHOWN - 1, more: 2 })
+    expect(insideSlots(250)).toEqual({ shown: INSIDE_MAX_SHOWN - 1, more: 250 - (INSIDE_MAX_SHOWN - 1) })
+  })
+
+  it('leaves an empty zone its circle and puts a single guest in the middle', () => {
+    expect(ringLayout(0)).toEqual({ radius: INSIDE_MIN_R, centers: [] })
+    expect(ringLayout(1)).toEqual({ radius: INSIDE_MIN_R, centers: [{ x: 0, y: 0 }] })
+  })
+
+  it('spreads the guests on rings: one place each, inside the circle, far enough apart for their names', () => {
+    for (const slots of [2, 3, 6, 7, 12, 18, 33, INSIDE_MAX_SHOWN]) {
+      const { radius, centers } = ringLayout(slots)
+      expect(centers).toHaveLength(slots)
+      for (const c of centers) expect(Math.hypot(c.x, c.y)).toBeLessThan(radius - 40)
+      for (let i = 0; i < centers.length; i++) {
+        for (let j = i + 1; j < centers.length; j++) {
+          const apart = Math.hypot(centers[i].x - centers[j].x, centers[i].y - centers[j].y)
+          // Two guests never overlap: side by side they are a guest width apart, one above the other a ring apart.
+          expect(apart, `${slots} guests, ${i} and ${j}`).toBeGreaterThanOrEqual(Math.min(INSIDE_GUEST_W, 100))
+        }
+      }
+    }
+  })
+
+  it('grows the circle with the guests and is the same on every call', () => {
+    expect(ringLayout(6).radius).toBeLessThan(ringLayout(7).radius)
+    expect(ringLayout(17).radius).toBeLessThan(ringLayout(18).radius)
+    expect(ringLayout(33)).toEqual(ringLayout(33))
   })
 })

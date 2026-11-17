@@ -14275,6 +14275,7 @@
         "outsideHint": "Destinos fuera de las zonas (un CIDR). Los flujos hacia ellos se aplican cuando la zona de origen bloquea su salida.",
         "notApplied": "salida no controlada",
         "aria": "Zona {name}, {state}, {members}",
+        "enterHint": "Doble clic para ver el interior",
         "membersUnknown": "miembros desconocidos",
         "unzoned": "Invitados sin zona ({count, number})",
         "unzonedHint": "Invitados en ejecución sin zona. Desviaciones también los lista.",
@@ -14327,6 +14328,7 @@
         "noFlows": "Ninguno"
       },
       "zonePanel": {
+        "inside": "Ver el interior de la zona",
         "detailsTitle": "Detalles de la zona · {name}",
         "subSuggestions": "Sugerencias pendientes",
         "subMembers": "Miembros",
@@ -14438,6 +14440,11 @@
         "zone": "Zona en el centro",
         "option": "{name} · {count, plural, one {# impacto} other {# impactos}}",
         "hint": "Haga clic en otra zona para ponerla en el centro."
+      },
+      "inside": {
+        "back": "Volver al mapa",
+        "title": "Interior de la zona {name}",
+        "hint": "Cada invitado de la zona, lo que intercambian entre sí y con el resto. Haga doble clic en otra zona para entrar en ella."
       },
       "sankey": {
         "label": "Tráfico entre las zonas como cintas",

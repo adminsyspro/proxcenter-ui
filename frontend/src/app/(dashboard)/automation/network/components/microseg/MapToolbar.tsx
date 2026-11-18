@@ -62,6 +62,15 @@ export function useFlowFilters(): [FlowFilters, (next: FlowFilters) => void] {
   return useStored(STORAGE_KEY, decodeFilters, encodeFilters)
 }
 
+const ADDRESSES_KEY = 'microseg.map.addresses'
+const decodeAddresses = (raw: string | null) => raw !== '0'
+const encodeAddresses = (shown: boolean) => (shown ? '1' : '0')
+
+/** Whether the views centred on a zone draw the addresses in no zone one by one, kept in this browser (on by default). */
+export function useExternalAddresses(): [boolean, (next: boolean) => void] {
+  return useStored(ADDRESSES_KEY, decodeAddresses, encodeAddresses)
+}
+
 function Swatch({ color, dash }: { color: string; dash: 'solid' | 'dashed' | 'dotted' }) {
   return <Box component='span' aria-hidden sx={{ width: 22, borderTop: `2px ${dash} ${color}`, flexShrink: 0 }} />
 }
@@ -80,13 +89,16 @@ type Props = {
   lead?: ReactNode
   filters: FlowFilters
   onFilters: (next: FlowFilters) => void
+  /** The "External addresses" checkbox, drawn only when both are given (the views centred on a zone). */
+  addresses?: boolean
+  onAddresses?: (next: boolean) => void
 }
 
 /**
  * The toolbar of the map: the rendering selector, "Flows:" with its three checkboxes (each with the line it draws, so it is the legend too),
  * then the three lines it draws without a checkbox (allowed not applied yet, exception between guests, to the outside).
  */
-export default function MapToolbar({ view, onView, lead, filters, onFilters }: Props) {
+export default function MapToolbar({ view, onView, lead, filters, onFilters, addresses, onAddresses }: Props) {
   const t = useTranslations('microsegPilot.overview')
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', minHeight: 36 }}>
@@ -100,13 +112,25 @@ export default function MapToolbar({ view, onView, lead, filters, onFilters }: P
             sx={{ mr: 1.5, ml: 0 }}
             control={<Checkbox size='small' checked={filters[f.key]} onChange={(_e, checked) => onFilters({ ...filters, [f.key]: checked })} sx={{ p: 0.5 }} />}
             label={(
-              <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+              <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, verticalAlign: 'middle' }}>
                 <Swatch color={f.color} dash={f.dash} />
                 <Typography component='span' variant='body2'>{t(`legend.${f.key}`)}</Typography>
               </Box>
             )}
           />
         ))}
+        {addresses !== undefined && onAddresses && (
+          <FormControlLabel
+            sx={{ mr: 1.5, ml: 0 }}
+            control={<Checkbox size='small' checked={addresses} onChange={(_e, checked) => onAddresses(checked)} sx={{ p: 0.5 }} />}
+            label={(
+              <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, verticalAlign: 'middle' }}>
+                <Box component='i' aria-hidden className='ri-map-pin-line' sx={{ fontSize: 16, color: 'text.secondary' }} />
+                <Typography component='span' variant='body2'>{t('legend.addresses')}</Typography>
+              </Box>
+            )}
+          />
+        )}
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>

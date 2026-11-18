@@ -13578,6 +13578,11 @@
     },
     "policy": {
       "zonesTitle": "Zonas",
+      "layout": {
+        "label": "Mostrar las zonas como",
+        "cards": "Tarjetas",
+        "rows": "Filas"
+      },
       "flowsTitle": "Flujos",
       "addZone": "Nueva zona",
       "addFlow": "Nuevo flujo",
@@ -13856,7 +13861,10 @@
         "pendingMove": "Moviendo a {zone}",
         "moveHint": "En cola para moverse a {zone}, selecciónelo de nuevo para mantenerlo en esta zona.",
         "partial": "Guardado solo en {clusters}; los demás clústeres no se guardaron: {error}",
-        "partialSome": "Guardado solo en una parte de los clústeres; los demás no se guardaron: {error}"
+        "partialSome": "Guardado solo en una parte de los clústeres; los demás no se guardaron: {error}",
+        "willRemove": "Se retirará",
+        "willRemoveHint": "Desmarcado: se saca de esta zona en la próxima aplicación. Márquelo de nuevo para conservarlo.",
+        "confirmChanges": "Guardar: {add, number} por asignar, {remove, number} por retirar"
       },
       "preflightButton": "Comprobaciones previas",
       "state": {
@@ -14401,7 +14409,9 @@
         "accept": "Aceptar"
       },
       "cidrOutTip": "Crea en el borrador el flujo {from} → la red de {ip} {service}, con el prefijo elegido.",
-      "bulkCidrOutbound": "Las redes salientes se aceptan una por una, para elegir cada prefijo."
+      "bulkCidrOutbound": "Las redes salientes se aceptan una por una, para elegir cada prefijo.",
+      "kindSeen": "{kind}, visto por última vez {time}",
+      "manySources": "Muchos orígenes"
     },
     "overview": {
       "empty": "Aún no hay ninguna zona que dibujar.",
@@ -14416,7 +14426,8 @@
         "unprotected": "Sin protección",
         "blocked": "Bloqueado",
         "draft": "Permitido, aún no aplicado",
-        "exception": "Excepción entre VM"
+        "exception": "Excepción entre VM",
+        "addresses": "Direcciones externas"
       },
       "node": {
         "members": "{count, plural, one {# miembro} other {# miembros}}",
@@ -14446,7 +14457,8 @@
         "inside": "{count, plural, one {# flujo observado} other {# flujos observados}} dentro de la zona",
         "observed": "salida en observación",
         "gateway": "Puerta de enlace",
-        "gatewayHint": "Puerta de enlace de {zones} ({ip}): su tráfico se nombra en el mapa y en la subpestaña Observación"
+        "gatewayHint": "Puerta de enlace de {zones} ({ip}): su tráfico se nombra en el mapa y en la subpestaña Observación",
+        "networkHint": "{name}: la red con nombre {cidr}. Sus direcciones que hablan con esta zona se dibujan aquí."
       },
       "edge": {
         "outside": "Salida no bloqueada: {services}",
@@ -14478,7 +14490,8 @@
         "noMembers": "Sin miembros",
         "membersUnknown": "No se pudo leer la lista de invitados.",
         "pending": "Pendiente",
-        "noFlows": "Ninguno"
+        "noFlows": "Ninguno",
+        "resize": "Arrastrar para ensanchar el panel (doble clic: su ancho original)"
       },
       "zonePanel": {
         "inside": "Ver el interior de la zona",
@@ -14597,9 +14610,7 @@
         "hint": "Haga clic en otra zona para ponerla en el centro."
       },
       "inside": {
-        "back": "Volver al mapa",
-        "title": "Interior de la zona {name}",
-        "hint": "Cada invitado de la zona, lo que intercambian entre sí y con el resto. Haga doble clic en otra zona para entrar en ella."
+        "back": "Volver al mapa"
       },
       "sankey": {
         "label": "Tráfico entre las zonas como cintas",
@@ -14676,6 +14687,40 @@
         "topBothEmpty": "Ninguna fuente ni destino en este intervalo",
         "fromInto": "Hacia esta zona, desde {name}",
         "toFrom": "Desde esta zona, hacia {name}"
+      },
+      "services": {
+        "button": "Servicios",
+        "all": "Todos los servicios",
+        "some": "Servicios: {shown, number} de {total, number}"
+      },
+      "seen": {
+        "title": "Flujos observados vistos",
+        "button": "Vistos: {period}",
+        "period": {
+          "1h": "última hora",
+          "24h": "últimas 24 horas",
+          "7d": "últimos 7 días",
+          "all": "cualquier momento"
+        },
+        "note": "Las ocurrencias de un flujo son su total desde que se vio por primera vez, sea cual sea el periodo."
+      },
+      "guestPanel": {
+        "label": "Invitado {name}",
+        "logTitle": "Registro del cortafuegos",
+        "refresh": "Volver a leer las líneas más recientes",
+        "reading": "Leyendo el registro...",
+        "error": "No se pudo leer el registro: {error}",
+        "empty": "Ninguna línea en el registro del cortafuegos de este invitado.",
+        "policyAction": "{action} (política)",
+        "noAction": "Registrado",
+        "search": "Buscar en el registro (dirección, puerto, acción...)",
+        "searchReading": "Leyendo las {count} líneas más recientes...",
+        "searchFound": "{count, plural, =0 {Ninguna línea encontrada} one {# línea encontrada} other {# líneas encontradas}} en las {scanned} más recientes",
+        "live": "En directo",
+        "liveStart": "Mostrar las líneas nuevas a medida que llegan: una lectura cada {seconds} s, durante {minutes} minutos",
+        "liveStop": "Detener el modo en directo",
+        "liveExpired": "Modo en directo detenido tras {minutes} minutos.",
+        "liveResume": "Reanudar"
       }
     },
     "preflight": {
@@ -14784,7 +14829,8 @@
         "observation": "Observación",
         "notifications": "Avisarme de",
         "advanced": "Avanzado",
-        "removal": "Retirada"
+        "removal": "Retirada",
+        "networks": "Redes con nombre"
       },
       "fields": {
         "tagPrefix": "Prefijo de etiqueta",
@@ -14834,7 +14880,12 @@
         "burstNumber": "La ráfaga del registro es un número entero, 0 o más.",
         "rateBoth": "Indique la tasa y la ráfaga del registro, o deje ambas vacías.",
         "selfIpInvalid": "{ip} no es una dirección IP válida.",
-        "selfIpTooMany": "Como máximo {max} direcciones."
+        "selfIpTooMany": "Como máximo {max} direcciones.",
+        "networkName": "Una red necesita un nombre de 1 a {max, number} caracteres.",
+        "networkCidr": "La red de {name} no es un CIDR válido, como 192.168.72.0/24.",
+        "networkNameTwice": "El nombre de red {name} se usa dos veces.",
+        "networkTwice": "La red de {name} ya tiene nombre.",
+        "networkTooMany": "Se pueden nombrar {max, number} redes como máximo."
       },
       "remove": {
         "row": "Retirar la microsegmentación",
@@ -14896,6 +14947,15 @@
           "typeName": "Escriba {name} para confirmar",
           "confirm": "Disociar"
         }
+      },
+      "networks": {
+        "hint": "Una dirección de una red con nombre que habla con una zona se muestra como esa red y cuenta como un solo origen.",
+        "name": "Nombre",
+        "cidr": "Red (CIDR)",
+        "add": "Añadir una red",
+        "remove": "Quitar esta red",
+        "empty": "Ninguna red tiene nombre.",
+        "unnamed": "Red {index, number}"
       }
     },
     "history": {
@@ -15151,7 +15211,6 @@
       "createFlow": "Crear flujo",
       "createFlowTip": "Añadir al borrador un flujo para este servicio",
       "draftNote": "Evaluado según el borrador, que tiene cambios sin aplicar",
-      "openFlowsTip": "Abrir la página Flujos de red agrupada por zona",
       "summary": {
         "title": "Tráfico por zona",
         "intra": "Dentro de una zona",

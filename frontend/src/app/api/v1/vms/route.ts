@@ -105,7 +105,11 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
     const includeAgent = url.searchParams.get('include') === 'agent'
     const agentDeadline = includeAgent ? Date.now() + AGENT_PROBE_BUDGET_MS : undefined
     const vmidFilter = parseVmidFilter(url.searchParams.get('vmids'))
-    const refreshAsked = url.searchParams.get('refresh') === '1'
+    const refreshParam = url.searchParams.get('refresh')
+    const refreshAsked = refreshParam === '1'
+    // `refresh=list`: the guest list alone is read again (2 calls), never the configs: the tags a micro-segmentation
+    // run just wrote are in it. Under the same limit as `refresh=1`, one forced read per 30 s per connection.
+    const listRefreshAsked = refreshParam === 'list'
 
     // Resolve infrastructure scope once; used for both connection enumeration
     // and vDC masking later. Provider and MSP avoid calling getVdcScope.
@@ -166,8 +170,9 @@ async function handler(req: Request, ctx: GuardedRouteContext) {
 
         // cluster/resources and nodes: the last read of the connection when
         // younger than 15 s, or the read running, else 2 calls.
-        const force = refreshAsked && takeForcedRefresh(conn.id)
-        const listing = await getGuestListing(conn.id, connData, { force })
+        const forced = (refreshAsked || listRefreshAsked) && takeForcedRefresh(conn.id)
+        const force = refreshAsked && forced
+        const listing = await getGuestListing(conn.id, connData, { force: forced })
 
         const resources = listing.resources
         // A rejected /nodes leaves node status UNKNOWN, not "everyone offline":

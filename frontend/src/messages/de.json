@@ -13149,6 +13149,11 @@
     },
     "policy": {
       "zonesTitle": "Zonen",
+      "layout": {
+        "label": "Zonen anzeigen als",
+        "cards": "Karten",
+        "rows": "Zeilen"
+      },
       "flowsTitle": "Flüsse",
       "addZone": "Neue Zone",
       "addFlow": "Neuer Fluss",
@@ -13427,7 +13432,10 @@
         "pendingMove": "Wechsel nach {zone}",
         "moveHint": "Für den Wechsel nach {zone} vorgemerkt, erneut auswählen, um ihn in dieser Zone zu behalten.",
         "partial": "Nur auf {clusters} gespeichert; die anderen Cluster wurden nicht gespeichert: {error}",
-        "partialSome": "Nur auf einem Teil der Cluster gespeichert; die anderen wurden nicht gespeichert: {error}"
+        "partialSome": "Nur auf einem Teil der Cluster gespeichert; die anderen wurden nicht gespeichert: {error}",
+        "willRemove": "Wird entfernt",
+        "willRemoveHint": "Abgewählt: wird bei der nächsten Anwendung aus dieser Zone genommen. Erneut ankreuzen, um ihn zu behalten.",
+        "confirmChanges": "Speichern: {add, number} zuweisen, {remove, number} entfernen"
       },
       "preflightButton": "Vorabprüfungen",
       "state": {
@@ -13972,7 +13980,9 @@
         "accept": "Akzeptieren"
       },
       "cidrOutTip": "Erstellt im Entwurf den Flow {from} → das Netzwerk von {ip} {service} mit dem gewählten Präfix.",
-      "bulkCidrOutbound": "Ausgehende Netzwerke werden einzeln akzeptiert, um jeweils das Präfix zu wählen."
+      "bulkCidrOutbound": "Ausgehende Netzwerke werden einzeln akzeptiert, um jeweils das Präfix zu wählen.",
+      "kindSeen": "{kind}, zuletzt gesehen {time}",
+      "manySources": "Viele Quellen"
     },
     "overview": {
       "empty": "Noch keine Zone zum Zeichnen.",
@@ -13987,7 +13997,8 @@
         "unprotected": "Ungeschützt",
         "blocked": "Blockiert",
         "draft": "Erlaubt, noch nicht angewendet",
-        "exception": "Ausnahme zwischen VMs"
+        "exception": "Ausnahme zwischen VMs",
+        "addresses": "Externe Adressen"
       },
       "node": {
         "members": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
@@ -14017,7 +14028,8 @@
         "inside": "{count, plural, one {# beobachteter Fluss} other {# beobachtete Flüsse}} innerhalb der Zone",
         "observed": "Ausgang beobachtet",
         "gateway": "Gateway",
-        "gatewayHint": "Gateway von {zones} ({ip}): sein Verkehr wird auf der Karte und im Unterreiter Beobachtung benannt"
+        "gatewayHint": "Gateway von {zones} ({ip}): sein Verkehr wird auf der Karte und im Unterreiter Beobachtung benannt",
+        "networkHint": "{name}: das benannte Netz {cidr}. Seine Adressen, die mit dieser Zone sprechen, werden hier gezeichnet."
       },
       "edge": {
         "outside": "Ausgang nicht blockiert: {services}",
@@ -14049,7 +14061,8 @@
         "noMembers": "Keine Mitglieder",
         "membersUnknown": "Die Gästeliste konnte nicht gelesen werden.",
         "pending": "Ausstehend",
-        "noFlows": "Keine"
+        "noFlows": "Keine",
+        "resize": "Ziehen, um das Feld zu verbreitern (Doppelklick: ursprüngliche Breite)"
       },
       "zonePanel": {
         "inside": "Innenansicht der Zone anzeigen",
@@ -14168,9 +14181,7 @@
         "hint": "Klicken Sie auf eine andere Zone, um sie in die Mitte zu setzen."
       },
       "inside": {
-        "back": "Zurück zur Karte",
-        "title": "Innenansicht der Zone {name}",
-        "hint": "Jeder Gast der Zone, was sie untereinander und mit dem Rest austauschen. Doppelklick auf eine andere Zone, um sie zu betreten."
+        "back": "Zurück zur Karte"
       },
       "sankey": {
         "label": "Verkehr zwischen den Zonen als Bänder",
@@ -14247,6 +14258,40 @@
         "topBothEmpty": "Weder Quelle noch Ziel in diesem Zeitraum",
         "fromInto": "In diese Zone, von {name}",
         "toFrom": "Aus dieser Zone, nach {name}"
+      },
+      "services": {
+        "button": "Dienste",
+        "all": "Alle Dienste",
+        "some": "Dienste: {shown, number} von {total, number}"
+      },
+      "seen": {
+        "title": "Beobachtete Flüsse gesehen",
+        "button": "Gesehen: {period}",
+        "period": {
+          "1h": "letzte Stunde",
+          "24h": "letzte 24 Stunden",
+          "7d": "letzte 7 Tage",
+          "all": "jederzeit"
+        },
+        "note": "Die Treffer eines Flusses sind seine Summe seit dem ersten Auftreten, unabhängig vom Zeitraum."
+      },
+      "guestPanel": {
+        "label": "Gast {name}",
+        "logTitle": "Firewall-Protokoll",
+        "refresh": "Die neuesten Zeilen erneut lesen",
+        "reading": "Protokoll wird gelesen...",
+        "error": "Das Protokoll konnte nicht gelesen werden: {error}",
+        "empty": "Keine Zeile im Firewall-Protokoll dieses Gasts.",
+        "policyAction": "{action} (Richtlinie)",
+        "noAction": "Protokolliert",
+        "search": "Im Protokoll suchen (Adresse, Port, Aktion...)",
+        "searchReading": "Die {count} neuesten Zeilen werden gelesen...",
+        "searchFound": "{count, plural, =0 {Keine Zeile gefunden} one {# Zeile gefunden} other {# Zeilen gefunden}} in den {scanned} neuesten",
+        "live": "Echtzeit",
+        "liveStart": "Neue Zeilen laufend anzeigen: ein Lesevorgang alle {seconds} s, {minutes} Minuten lang",
+        "liveStop": "Echtzeitmodus beenden",
+        "liveExpired": "Echtzeitmodus nach {minutes} Minuten beendet.",
+        "liveResume": "Fortsetzen"
       }
     },
     "preflight": {
@@ -14355,7 +14400,8 @@
         "observation": "Beobachtung",
         "notifications": "Benachrichtigen bei",
         "advanced": "Erweitert",
-        "removal": "Entfernung"
+        "removal": "Entfernung",
+        "networks": "Benannte Netze"
       },
       "fields": {
         "tagPrefix": "Tag-Präfix",
@@ -14405,7 +14451,12 @@
         "burstNumber": "Der Protokoll-Burst ist eine ganze Zahl ab 0.",
         "rateBoth": "Geben Sie Ratenlimit und Burst an oder lassen Sie beide leer.",
         "selfIpInvalid": "{ip} ist keine gültige IP-Adresse.",
-        "selfIpTooMany": "Höchstens {max} Adressen."
+        "selfIpTooMany": "Höchstens {max} Adressen.",
+        "networkName": "Ein Netz braucht einen Namen mit 1 bis {max, number} Zeichen.",
+        "networkCidr": "Das Netz von {name} ist kein gültiges CIDR wie 192.168.72.0/24.",
+        "networkNameTwice": "Der Netzname {name} wird zweimal verwendet.",
+        "networkTwice": "Das Netz von {name} ist bereits benannt.",
+        "networkTooMany": "Höchstens {max, number} Netze können benannt werden."
       },
       "remove": {
         "row": "Mikrosegmentierung entfernen",
@@ -14467,6 +14518,15 @@
           "typeName": "Geben Sie {name} zur Bestätigung ein",
           "confirm": "Trennen"
         }
+      },
+      "networks": {
+        "hint": "Eine Adresse eines benannten Netzes, die mit einer Zone spricht, wird als dieses Netz angezeigt und als eine Quelle gezählt.",
+        "name": "Name",
+        "cidr": "Netz (CIDR)",
+        "add": "Netz hinzufügen",
+        "remove": "Dieses Netz entfernen",
+        "empty": "Kein Netz ist benannt.",
+        "unnamed": "Netz {index, number}"
       }
     },
     "history": {
@@ -14722,7 +14782,6 @@
       "createFlow": "Fluss anlegen",
       "createFlowTip": "Dem Entwurf einen Fluss für diesen Dienst hinzufügen",
       "draftNote": "Bewertet nach dem Entwurf, der nicht angewendete Änderungen enthält",
-      "openFlowsTip": "Die Seite Netzwerk-Flows nach Zone gruppiert öffnen",
       "summary": {
         "title": "Datenverkehr nach Zone",
         "intra": "Innerhalb einer Zone",

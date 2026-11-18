@@ -14,7 +14,8 @@ import {
   NOTIFY_KEYS, RATE_UNITS, SETTING_NUMBER_KEYS, SETTING_UNITS, selfIpsFallback,
   type RateUnit, type SettingNumberKey, type SettingsForm, type SettingsProblems,
 } from './settingsModel'
-import { FLUSH_TOGGLE_SX, FormRow } from './dialogParts'
+import { FLUSH_TOGGLE_SX, FormRow, OneLine } from './dialogParts'
+import NamedNetworksField from './NamedNetworksField'
 
 /** Width of the name column: the setting names are longer than the zone dialog ones. */
 export const SETTINGS_LABEL_WIDTH = 300
@@ -228,6 +229,10 @@ export default function SettingsFields({ form, problems, busy, prefixWarning, ef
           />
         </FieldRow>
       ))}
+
+      <SectionTitle>{t('sections.networks')}</SectionTitle>
+      <OneLine text={t('networks.hint')} />
+      <NamedNetworksField networks={form.networks} disabled={busy} onChange={next => onChange('networks', next)} />
 
       <CollapsibleSection title={t('sections.advanced')}>
         <TextRow

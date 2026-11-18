@@ -1,16 +1,16 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
-import NextLink from 'next/link'
-import { Alert, Box, CircularProgress, IconButton, Link, Tab, Tabs, Tooltip, Typography } from '@mui/material'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Alert, Box, CircularProgress, IconButton, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 import { useSWRConfig } from 'swr'
 
 import { microsegApi, microsegBaseUrl } from '@/lib/microseg/api'
-import { isRunAffectedKey } from '@/lib/microseg/runRefresh'
+import { isRunAffectedKey, refreshZoneGuestsAfterRun } from '@/lib/microseg/runRefresh'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import { isClustersKey, useMicrosegGroup } from '@/lib/microseg/useMicrosegGroup'
 
+import { NamedNetworksProvider } from './namedNetworksContext'
 import DeploymentWizard from '../DeploymentWizard'
 import CheckNowButton from './CheckNowButton'
 import type { NamedConnection } from './clusterModel'
@@ -144,11 +144,20 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
   // A run changes Proxmox and records what it did: the draft, the status, the runs and revisions, the drifts
   // and the zone members (tags) are read again, so no list or count stays stale until a manual reload.
   const groupIds = group.ids.join('\n')
+  // The zone members are read from a guest list the server keeps for a while: they are asked for again, fresh.
+  const guestsRefresh = useRef<(() => void) | null>(null)
+  const refreshGuests = useCallback((ids: readonly string[]) => {
+    guestsRefresh.current?.()
+    guestsRefresh.current = refreshZoneGuestsAfterRun(mutate, ids)
+  }, [mutate])
+  useEffect(() => () => guestsRefresh.current?.(), [])
   const refreshAfterRun = useCallback(() => {
     void reload()
     // Every cluster of the group: a group action changed each of them.
-    void mutate(isRunAffectedKey(groupIds.split('\n')))
-  }, [reload, mutate, groupIds])
+    const ids = groupIds.split('\n')
+    void mutate(isRunAffectedKey(ids))
+    refreshGuests(ids)
+  }, [reload, mutate, groupIds, refreshGuests])
   // A removal on a shared policy takes its cluster out of the group: every group read is read again (the tab's own
   // included, which then holds the tab's cluster alone when that one left), with the draft and what the run changed on
   // the tab's cluster, never the clusters of the group it had (they would be read for a group that no longer is).
@@ -160,10 +169,11 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
       void reload()
       void mutate(isRunAffectedKey(connectionId))
       void mutate(isClustersKey)
+      refreshGuests([connectionId])
       return
     }
     refreshAfterRun()
-  }, [runs, endRun, refreshAfterRun, groupShared, reload, mutate, connectionId])
+  }, [runs, endRun, refreshAfterRun, groupShared, reload, mutate, connectionId, refreshGuests])
   // A check also reads the logs: the suggestions it learnt are read again with the rest.
   const refreshAfterCheck = useCallback(() => {
     refreshAfterRun()
@@ -205,6 +215,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
 
   return (
     <MicrosegAccessProvider value={access}>
+    <NamedNetworksProvider networks={policy?.policy.settings?.networks}>
     <MicrosegActionsSlot.Provider value={actionsSlot}>
     <RunsInProgressProvider value={inProgress}>
     <Box sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -241,13 +252,6 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
         {/* The actions of the row as one group: it wraps whole, to the right, when the row is too narrow. */}
         <Box data-testid='microseg-actions' sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap', ml: 'auto', minWidth: 0, flex: '1 1 auto' }}>
           <Box ref={setActionsSlot} data-testid='microseg-actions-slot' sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', flex: '1 1 auto', minWidth: 0, justifyContent: 'flex-end' }} />
-          {subTab === 'overview' && (
-            <Tooltip describeChild title={t('trafficLens.openFlowsTip')}>
-              <Link component={NextLink} href={`/operations/network-flows?groupBy=zone&connection=${encodeURIComponent(connectionId)}`} underline='hover' sx={{ fontSize: 13, flexShrink: 0 }}>
-                {t('trafficLens.summary.title')}
-              </Link>
-            </Tooltip>
-          )}
           <CheckNowButton
             connectionId={connectionId}
             deployed={!!policy.last_revision}
@@ -331,6 +335,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
     </Box>
     </RunsInProgressProvider>
     </MicrosegActionsSlot.Provider>
+    </NamedNetworksProvider>
     </MicrosegAccessProvider>
   )
 }

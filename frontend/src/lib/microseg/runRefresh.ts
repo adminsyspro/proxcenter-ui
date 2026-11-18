@@ -29,3 +29,41 @@ export function isRunAffectedKey(connIds: string | readonly string[]) {
     return matchers.some(match => match(head))
   }
 }
+
+/**
+ * How long after a run the zone members are read once more: the server keeps the guest list of a connection 15 s, and
+ * Proxmox can take a few seconds to list a tag just written.
+ */
+export const GUEST_LIST_SETTLE_MS = 16_000
+
+/** Matches the SWR keys of the zone members of these connections. */
+export function isZoneGuestsKey(connIds: readonly string[]) {
+  const urls = new Set(connIds.map(zoneGuestsUrl))
+  return (key: unknown): boolean => {
+    const head: unknown = Array.isArray(key) ? key[0] : key
+    return typeof head === 'string' && urls.has(head)
+  }
+}
+
+/**
+ * The zone members after a run, which moved tags: the guest list the server keeps 15 s was read before the run wrote
+ * them, so reading it again at once answers the old tags and nothing reads it later. The server is asked for a fresh
+ * list of each connection (`refresh=list`: 2 Proxmox calls, at most once per 30 s per connection), then the members
+ * are read again; and once more after GUEST_LIST_SETTLE_MS, for a forced read that was refused or a tag Proxmox did
+ * not list yet. Returns what cancels the reads still to come (a newer run, the tab left).
+ */
+export function refreshZoneGuestsAfterRun(
+  mutate: (matcher: (key: unknown) => boolean) => unknown,
+  connIds: readonly string[],
+  fetcher: (url: string) => Promise<unknown> = url => fetch(url),
+): () => void {
+  const guests = isZoneGuestsKey(connIds)
+  let cancelled = false
+  const again = () => { if (!cancelled) void mutate(guests) }
+  void Promise.allSettled(connIds.map(id => fetcher(`${zoneGuestsUrl(id)}&refresh=list`))).then(again)
+  const timer = setTimeout(again, GUEST_LIST_SETTLE_MS)
+  return () => {
+    cancelled = true
+    clearTimeout(timer)
+  }
+}

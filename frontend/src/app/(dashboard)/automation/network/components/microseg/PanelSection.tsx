@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useCallback, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { Box, ButtonBase, Collapse, Divider, Typography } from '@mui/material'
+import { useTranslations } from 'next-intl'
 
 /** The sections of the map panels the user folded, remembered per browser (their ids). */
 export const PANEL_SECTIONS_KEY = 'proxcenter.microseg.panelSections'
@@ -106,13 +107,97 @@ export default function PanelSection({ state, ...props }: Props) {
   return <OwnSection {...props} />
 }
 
+/** The widest a map panel may be dragged to (px), and the step of the arrow keys on its edge. */
+export const PANEL_MAX_WIDTH = 1100
+const PANEL_KEY_STEP = 32
+const PANEL_WIDTH_KEY = 'microseg.map.panelWidth'
+
+/** The width kept in this browser for the map panels, or none (each panel then takes its own). */
+function readPanelWidth(): number | null {
+  try {
+    const n = Number(window.localStorage.getItem(PANEL_WIDTH_KEY))
+    return Number.isFinite(n) && n > 0 ? n : null
+  } catch {
+    return null
+  }
+}
+
+function keepPanelWidth(width: number | null) {
+  try {
+    if (width === null) window.localStorage.removeItem(PANEL_WIDTH_KEY)
+    else window.localStorage.setItem(PANEL_WIDTH_KEY, String(Math.round(width)))
+  } catch {
+    // Storage refused: the width lasts as long as the page.
+  }
+}
+
+/** A width between the panel's own (its narrowest) and PANEL_MAX_WIDTH. */
+export const clampPanelWidth = (width: number, min: number) => Math.min(PANEL_MAX_WIDTH, Math.max(min, Math.round(width)))
+
+/**
+ * The width of a map panel on a wide screen: its own until the user drags its left edge (or moves it with the arrow
+ * keys), then the one chosen, the same for every map panel and kept in this browser; a double click on the edge gives
+ * the panel its own width back.
+ */
+function usePanelWidth(own: number) {
+  const [chosen, setChosen] = useState<number | null>(readPanelWidth)
+  const width = chosen === null ? own : clampPanelWidth(chosen, own)
+  const choose = useCallback((next: number | null) => {
+    setChosen(next)
+    keepPanelWidth(next)
+  }, [])
+  const startDrag = useCallback((e: PointerEvent<HTMLElement>) => {
+    e.preventDefault()
+    const from = e.clientX
+    let last = width
+    const move = (ev: globalThis.PointerEvent) => {
+      // The edge is on the left: dragging it to the left widens the panel.
+      last = clampPanelWidth(width + from - ev.clientX, own)
+      setChosen(last)
+    }
+    const stop = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+      keepPanelWidth(last)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+  }, [width, own])
+  const onKey = useCallback((e: KeyboardEvent<HTMLElement>) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault()
+    choose(clampPanelWidth(width + (e.key === 'ArrowLeft' ? PANEL_KEY_STEP : -PANEL_KEY_STEP), own))
+  }, [width, own, choose])
+  return { width, startDrag, onKey, reset: () => choose(null) }
+}
+
 /**
  * The frame of a map panel: as tall as the map block on a wide screen (its header stays, its body scrolls inside),
- * below the map with a bounded height on a narrow one.
+ * below the map with a bounded height on a narrow one. On a wide screen its left edge widens it (drag, arrow keys).
  */
-export function PanelFrame({ label, width, header, children, dataTarget }: { label: string; width: number; header: ReactNode; children: ReactNode; dataTarget?: string }) {
+export function PanelFrame({ label, width: own, header, children, dataTarget }: { label: string; width: number; header: ReactNode; children: ReactNode; dataTarget?: string }) {
+  const t = useTranslations('microsegPilot.overview.panel')
+  const { width, startDrag, onKey, reset } = usePanelWidth(own)
   return (
     <Box sx={{ width: { xs: '100%', lg: width }, flexShrink: 0, minWidth: 0, position: { lg: 'relative' } }}>
+      <Box
+        role='separator'
+        aria-orientation='vertical'
+        aria-label={t('resize')}
+        aria-valuenow={width}
+        aria-valuemin={own}
+        aria-valuemax={PANEL_MAX_WIDTH}
+        tabIndex={0}
+        title={t('resize')}
+        data-testid='panel-resize'
+        onPointerDown={startDrag}
+        onKeyDown={onKey}
+        onDoubleClick={reset}
+        sx={{
+          display: { xs: 'none', lg: 'block' }, position: 'absolute', top: 0, bottom: 0, left: -6, width: 8, zIndex: 2, cursor: 'col-resize',
+          touchAction: 'none', borderRadius: 1, '&:hover, &:focus-visible': { bgcolor: 'primary.main', opacity: 0.4, outline: 'none' },
+        }}
+      />
       <Box
         component='aside'
         aria-label={label}

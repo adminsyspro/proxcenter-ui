@@ -61,6 +61,23 @@ export function filterRows(rows: AssignRow[], search: string): AssignRow[] {
 /** A row the admin can tick: not a member yet, or a member whose removal / move is queued. */
 export const isSelectable = (row: AssignRow) => row.member === null || row.change !== undefined
 
+/** A member the dialog can take out of the zone by unticking it: tagged with no queued change, or queued for the zone. */
+export const isRemovable = (row: AssignRow) => row.member !== null && row.change === undefined
+
+/**
+ * The requests that take unticked members out, for one cluster and in this order: the tagged ones are queued for no
+ * zone (the next apply removes their tag), the ones only queued for the zone are forgotten from the draft. Each takes
+ * the draft version the previous request answered.
+ */
+export function removalBodies(removed: AssignRow[]): Array<(version: number) => MembersInput> {
+  const tagged = removed.filter(r => r.member === 'tag').map(r => r.ref)
+  const queued = removed.filter(r => r.member === 'pending').map(r => ({ type: r.ref.type, vmid: r.ref.vmid }))
+  return [
+    ...(tagged.length > 0 ? [(version: number): MembersInput => ({ version, zone_id: '', guests: tagged })] : []),
+    ...(queued.length > 0 ? [(version: number): MembersInput => ({ version, clear: queued })] : []),
+  ]
+}
+
 /**
  * The request of the dialog: the guests to queue for the zone, and the members whose queued removal or move is taken
  * back, cleared rather than queued again for their own zone (the draft then loses that change).

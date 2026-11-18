@@ -13578,6 +13578,11 @@
     },
     "policy": {
       "zonesTitle": "Zones",
+      "layout": {
+        "label": "Show the zones as",
+        "cards": "Cards",
+        "rows": "Rows"
+      },
       "flowsTitle": "Flows",
       "addZone": "New zone",
       "addFlow": "New flow",
@@ -13856,7 +13861,10 @@
         "pendingMove": "Moving to {zone}",
         "moveHint": "Queued to move to {zone}, select it again to keep it in this zone.",
         "partial": "Saved on {clusters} only; the other clusters were not saved: {error}",
-        "partialSome": "Saved on some clusters only; the others were not saved: {error}"
+        "partialSome": "Saved on some clusters only; the others were not saved: {error}",
+        "willRemove": "Will be removed",
+        "willRemoveHint": "Unticked: taken out of this zone on the next apply. Tick it again to keep it.",
+        "confirmChanges": "Save: {add, number} to assign, {remove, number} to remove"
       },
       "preflightButton": "Pre-flight checks",
       "state": {
@@ -14401,7 +14409,9 @@
         "accept": "Accept"
       },
       "cidrOutTip": "Creates the flow {from} → the network of {ip} {service} in the draft, with the prefix you choose.",
-      "bulkCidrOutbound": "Outbound networks are accepted one by one, to choose each prefix."
+      "bulkCidrOutbound": "Outbound networks are accepted one by one, to choose each prefix.",
+      "kindSeen": "{kind}, last seen {time}",
+      "manySources": "Many sources"
     },
     "overview": {
       "empty": "No zone to draw yet.",
@@ -14416,7 +14426,8 @@
         "unprotected": "Unprotected",
         "blocked": "Blocked",
         "draft": "Allowed, not applied yet",
-        "exception": "Exception between VMs"
+        "exception": "Exception between VMs",
+        "addresses": "External addresses"
       },
       "node": {
         "members": "{count, plural, one {# member} other {# members}}",
@@ -14446,7 +14457,8 @@
         "inside": "{count, plural, one {# observed flow} other {# observed flows}} inside the zone",
         "observed": "outbound observed",
         "gateway": "Gateway",
-        "gatewayHint": "Gateway of {zones} ({ip}): its traffic is named on the map and in the Observation sub-tab"
+        "gatewayHint": "Gateway of {zones} ({ip}): its traffic is named on the map and in the Observation sub-tab",
+        "networkHint": "{name}: the named network {cidr}. Its addresses that talk to this zone are drawn here."
       },
       "edge": {
         "outside": "Outbound not blocked: {services}",
@@ -14478,7 +14490,8 @@
         "noMembers": "No members",
         "membersUnknown": "The guest list could not be read.",
         "pending": "Pending",
-        "noFlows": "None"
+        "noFlows": "None",
+        "resize": "Drag to widen the panel (double click: its own width)"
       },
       "zonePanel": {
         "inside": "Show the inside of the zone",
@@ -14597,9 +14610,7 @@
         "hint": "Click another zone to put it in the centre."
       },
       "inside": {
-        "back": "Back to the map",
-        "title": "Inside the zone {name}",
-        "hint": "Every guest of the zone, what they exchange with each other and with the rest. Double-click another zone to enter it."
+        "back": "Back to the map"
       },
       "sankey": {
         "label": "Traffic between the zones as ribbons",
@@ -14676,6 +14687,40 @@
         "topBothEmpty": "No source nor destination in this range",
         "fromInto": "Into this zone, from {name}",
         "toFrom": "From this zone, to {name}"
+      },
+      "services": {
+        "button": "Services",
+        "all": "All services",
+        "some": "Services: {shown, number} of {total, number}"
+      },
+      "seen": {
+        "title": "Observed flows seen",
+        "button": "Seen: {period}",
+        "period": {
+          "1h": "last hour",
+          "24h": "last 24 hours",
+          "7d": "last 7 days",
+          "all": "any time"
+        },
+        "note": "The hits of a flow are its total since it was first seen, whatever the period."
+      },
+      "guestPanel": {
+        "label": "Guest {name}",
+        "logTitle": "Firewall log",
+        "refresh": "Read the newest lines again",
+        "reading": "Reading the log...",
+        "error": "The log could not be read: {error}",
+        "empty": "No line in the firewall log of this guest.",
+        "policyAction": "{action} (policy)",
+        "noAction": "Logged",
+        "search": "Search the log (address, port, action...)",
+        "searchReading": "Reading the {count} newest lines...",
+        "searchFound": "{count, plural, =0 {No line found} one {# line found} other {# lines found}} in the {scanned} newest",
+        "live": "Live",
+        "liveStart": "Show the new lines as they come: a read every {seconds} s, for {minutes} minutes",
+        "liveStop": "Stop the live mode",
+        "liveExpired": "Live mode stopped after {minutes} minutes.",
+        "liveResume": "Resume"
       }
     },
     "preflight": {
@@ -14784,7 +14829,8 @@
         "observation": "Observation",
         "notifications": "Notify me about",
         "advanced": "Advanced",
-        "removal": "Removal"
+        "removal": "Removal",
+        "networks": "Named networks"
       },
       "fields": {
         "tagPrefix": "Tag prefix",
@@ -14834,7 +14880,12 @@
         "burstNumber": "The log burst is a whole number, 0 or more.",
         "rateBoth": "Give both the log rate and the log burst, or leave both empty.",
         "selfIpInvalid": "{ip} is not a valid IP address.",
-        "selfIpTooMany": "At most {max} addresses."
+        "selfIpTooMany": "At most {max} addresses.",
+        "networkName": "A network needs a name of 1 to {max, number} characters.",
+        "networkCidr": "The network of {name} is not a valid CIDR, such as 192.168.72.0/24.",
+        "networkNameTwice": "The network name {name} is used twice.",
+        "networkTwice": "The network of {name} is already named.",
+        "networkTooMany": "At most {max, number} networks can be named."
       },
       "remove": {
         "row": "Remove micro-segmentation",
@@ -14896,6 +14947,15 @@
           "typeName": "Type {name} to confirm",
           "confirm": "Dissociate"
         }
+      },
+      "networks": {
+        "hint": "An address of a named network that talks to a zone is shown as that network, and counted as one source.",
+        "name": "Name",
+        "cidr": "Network (CIDR)",
+        "add": "Add a network",
+        "remove": "Remove this network",
+        "empty": "No network is named.",
+        "unnamed": "Network {index, number}"
       }
     },
     "history": {
@@ -15151,7 +15211,6 @@
       "createFlow": "Create flow",
       "createFlowTip": "Add a flow for this service to the draft",
       "draftNote": "Read against the draft, which has changes not applied yet",
-      "openFlowsTip": "Open the Network flows page grouped by zone",
       "summary": {
         "title": "Traffic by zone",
         "intra": "Intra-zone",

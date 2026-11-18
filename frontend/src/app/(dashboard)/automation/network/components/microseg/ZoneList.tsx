@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useContext, useMemo, useState } from 'react'
-import { Box, Button, IconButton, Typography } from '@mui/material'
+import { Box, Button, IconButton, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { PolicyDiff } from '@/lib/microseg/pendingChanges'
@@ -16,6 +16,8 @@ import { useBoxSize } from './useBoxSize'
 import { useNow } from './useNow'
 import { SUGGESTIONS_LIMIT } from './useZoneReadiness'
 import ZoneCard, { RemovedZoneCard, ZoneCardDetails, type ZoneCardProps } from './ZoneCard'
+import ZoneLine, { RemovedZoneLine, ZoneLineHeader } from './ZoneLine'
+import { useStoredChoice } from './useStoredChoice'
 import type { ZoneWorkContext } from './ZoneWorkspace'
 import type { ZoneRowProps } from './ZoneRow'
 import { zoneDriftSignals } from './zonePanelModel'
@@ -75,6 +77,11 @@ function useOpenZones(connectionId: string) {
 
 type Item = { zone: MicrosegZone; removed: boolean; members: ZoneMember[] }
 
+/** The zones as cards in a grid, or as rows one under the other; the choice is kept in this browser. */
+export const ZONE_LAYOUTS = ['cards', 'rows'] as const
+export type ZoneLayout = (typeof ZONE_LAYOUTS)[number]
+export const ZONE_LAYOUT_KEY = 'microseg.policy.zonesLayout'
+
 /** The smallest card width, and the gap between cards (px). */
 export const CARD_MIN = 280
 const CARD_GAP = 16
@@ -94,6 +101,7 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
   const inSlot = useContext(MicrosegActionsSlot) !== null
   const { canWrite } = useMicrosegWrite()
   const { open, toggle } = useOpenZones(connectionId)
+  const [layout, setLayout] = useStoredChoice<ZoneLayout>(ZONE_LAYOUT_KEY, ZONE_LAYOUTS, 'cards')
   const [gridRef, size] = useBoxSize<HTMLDivElement>()
   const { data: drifts } = useMicrosegDrifts(connectionId, { once: true })
   const { ignored } = useIgnoredDrifts(connectionId)
@@ -117,38 +125,41 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
   const rows: Item[][] = []
   for (let i = 0; i < paged.rows.length; i += columns) rows.push(paged.rows.slice(i, i + columns))
 
-  const card = (item: Item) => {
-    if (item.removed) return <RemovedZoneCard key={`removed-${item.zone.id}`} zone={item.zone} />
+  // What a card and a row show of a zone.
+  const zoneProps = (item: Item): ZoneCardProps => {
     // The drifts are those of this connection: they concern its members only.
     const signals = zoneDriftSignals(item.zone, item.members, drifts?.computed ? drifts.drifts : null, zones, ignored, connectionId)
-    return (
-      <ZoneCard
-        key={item.zone.id}
-        zone={item.zone}
-        members={item.members}
-        membersKnown={membersKnown}
-        flows={flows}
-        zonesById={zonesById}
-        diffKind={diff?.zones.get(item.zone.id)}
-        flowDiff={diff?.flows ?? null}
-        open={open.has(item.zone.id)}
-        onToggle={() => toggle(item.zone.id)}
-        drifts={signals?.count ?? null}
-        onOpenDrifts={onOpenDrifts}
-        egressReady={egressReady(item.zone)}
-        membersNote={membersNote}
-        uncovered={uncovered === 'failed' ? null : {
-          series: uncovered ? uncoveredSeriesOf(uncovered, item.zone.name, diff?.renamedZones.get(item.zone.id)) : null,
-          outSeries: uncovered ? uncoveredSeriesOf(uncovered, item.zone.name, diff?.renamedZones.get(item.zone.id), 'out') : null,
-          from: uncovered?.from ?? 0,
-          stepMs: uncovered?.stepMs ?? 3_600_000,
-        }}
-        {...handlers}
-      />
-    )
+    return {
+      zone: item.zone,
+      members: item.members,
+      membersKnown,
+      flows,
+      zonesById,
+      diffKind: diff?.zones.get(item.zone.id),
+      flowDiff: diff?.flows ?? null,
+      open: open.has(item.zone.id),
+      onToggle: () => toggle(item.zone.id),
+      drifts: signals?.count ?? null,
+      onOpenDrifts,
+      egressReady: egressReady(item.zone),
+      membersNote,
+      uncovered: uncovered === 'failed' ? null : {
+        series: uncovered ? uncoveredSeriesOf(uncovered, item.zone.name, diff?.renamedZones.get(item.zone.id)) : null,
+        outSeries: uncovered ? uncoveredSeriesOf(uncovered, item.zone.name, diff?.renamedZones.get(item.zone.id), 'out') : null,
+        from: uncovered?.from ?? 0,
+        stepMs: uncovered?.stepMs ?? 3_600_000,
+      },
+      ...handlers,
+    }
   }
+  const card = (item: Item) => (item.removed
+    ? <RemovedZoneCard key={`removed-${item.zone.id}`} zone={item.zone} />
+    : <ZoneCard key={item.zone.id} {...zoneProps(item)} />)
+  const line = (item: Item) => (item.removed
+    ? <RemovedZoneLine key={`removed-${item.zone.id}`} zone={item.zone} />
+    : <ZoneLine key={item.zone.id} {...zoneProps(item)} />)
   const details = (item: Item) => (
-    <Box key={`details-${item.zone.id}`} role='listitem' sx={{ gridColumn: '1 / -1', minWidth: 0 }}>
+    <Box key={`details-${item.zone.id}`} role='listitem' sx={{ gridColumn: '1 / -1', minWidth: 0, ...(layout === 'rows' ? { p: 1, borderBottom: 1, borderColor: 'divider' } : {}) }}>
       <ZoneCardDetails
         zone={item.zone}
         members={item.members}
@@ -175,6 +186,17 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
           </IconButton>
         </WriteTip>
         <Box sx={{ flex: 1 }} />
+        {items.length > 0 && (
+          <ToggleButtonGroup size='small' exclusive value={layout} onChange={(_e, next: ZoneLayout | null) => { if (next) setLayout(next) }} aria-label={t('layout.label')}>
+            {ZONE_LAYOUTS.map(v => (
+              <Tooltip key={v} title={t(`layout.${v}`)}>
+                <ToggleButton value={v} aria-label={t(`layout.${v}`)} sx={{ py: 0.25, px: 0.75 }}>
+                  <i className={v === 'cards' ? 'ri-layout-grid-line' : 'ri-list-check'} style={{ fontSize: 16 }} />
+                </ToggleButton>
+              </Tooltip>
+            ))}
+          </ToggleButtonGroup>
+        )}
         {/* Also on the row of the sub-tabs. */}
         {inSlot && (
           <SlotActions order={2}>
@@ -185,16 +207,28 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
         )}
       </Box>
       {items.length === 0 && <Typography color='text.secondary' sx={{ pb: 1.5 }}>{t('zonesEmpty')}</Typography>}
-      <Box
-        ref={gridRef}
-        role='list'
-        sx={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${CARD_MIN}px, 1fr))`, gap: `${CARD_GAP}px`, alignItems: 'stretch' }}
-      >
-        {rows.flatMap(row => [
-          ...row.map(card),
-          ...row.filter(item => !item.removed && open.has(item.zone.id)).map(details),
-        ])}
-      </Box>
+      {layout === 'rows' && items.length > 0 ? (
+        // As rows: the header of the columns, then each zone with its details opened below it; scrolls sideways when narrow.
+        <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, overflowX: 'auto', bgcolor: 'background.paper' }}>
+          <Box sx={{ minWidth: 1040 }}>
+            <ZoneLineHeader uncovered={uncovered !== 'failed'} />
+            <Box role='list' data-layout='rows'>
+              {paged.rows.flatMap(item => [line(item), ...(!item.removed && open.has(item.zone.id) ? [details(item)] : [])])}
+            </Box>
+          </Box>
+        </Box>
+      ) : (
+        <Box
+          ref={gridRef}
+          role='list'
+          sx={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${CARD_MIN}px, 1fr))`, gap: `${CARD_GAP}px`, alignItems: 'stretch' }}
+        >
+          {rows.flatMap(row => [
+            ...row.map(card),
+            ...row.filter(item => !item.removed && open.has(item.zone.id)).map(details),
+          ])}
+        </Box>
+      )}
       <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
     </Box>
   )

@@ -467,3 +467,31 @@ export async function deleteVMRule(connectionId: string, node: string, vmType: s
     method: 'DELETE',
   })
 }
+
+/** One page of a guest's firewall log, newest page first: `lines` oldest first, `total` the lines PVE counted. */
+export interface GuestLogPage {
+  total: number
+  lines: { n: number; t: string }[]
+}
+
+/**
+ * The page `page` of a guest's firewall log, `size` lines, page 0 the newest. Hand back the `total` of the first page
+ * to read the next ones in one PVE call each, the pages then staying put while new lines come in.
+ */
+export async function getGuestLogPage(connectionId: string, guest: { node: string; type: 'qemu' | 'lxc'; vmid: number }, page: number, size: number, total?: number): Promise<GuestLogPage> {
+  const q = new URLSearchParams({ page: String(page), size: String(size) })
+
+  if (total !== undefined) q.set('total', String(total))
+
+  return fetchAPI<GuestLogPage>(`/api/v1/firewall/vms/${encodeURIComponent(connectionId)}/${encodeURIComponent(guest.node)}/${guest.type}/${guest.vmid}/log?${q}`)
+}
+
+/**
+ * The lines of a guest's firewall log written after the first `after` (the count the caller holds), `size` at most, in
+ * one PVE read: the live mode of the guest panel. A `total` below `after` means the log was rotated.
+ */
+export async function getGuestLogAfter(connectionId: string, guest: { node: string; type: 'qemu' | 'lxc'; vmid: number }, after: number, size: number): Promise<GuestLogPage> {
+  const q = new URLSearchParams({ page: '0', after: String(after), size: String(size) })
+
+  return fetchAPI<GuestLogPage>(`/api/v1/firewall/vms/${encodeURIComponent(connectionId)}/${encodeURIComponent(guest.node)}/${guest.type}/${guest.vmid}/log?${q}`)
+}

@@ -75,6 +75,56 @@ describe('around the zone', () => {
     expect(g.nodes.find(n => n.id === ipNodeId('203.0.113.9'))).toMatchObject({ type: 'ip', width: NODE_W, height: NODE_H, data: { kind: 'ip', ip: '203.0.113.9' } })
   })
 
+  it('folds the addresses in no zone into Unknown / External when asked, keeping the gateway', () => {
+    const many = Array.from({ length: 4 }, (_, i) => seen(`ip${i}`, { kind: 'blocked', src_zone_id: '', src_ip: `198.51.100.${i + 1}`, dst_zone_id: 'zw', dst_ip: '10.0.1.3', hits: 10 + i }))
+    const zones = demo.zones.map(z => (z.id === 'zw' ? { ...z, gateway: '198.51.100.2' } : z))
+    const input = { ...demo, zones, suggestions: many, centre: 'zw' }
+    const boxes = (g: ReturnType<typeof buildGuestView>) => g.nodes.filter(n => n.type === 'ip').map(n => n.id).sort((a, b) => a.localeCompare(b))
+
+    // Drawn one by one by default, and when the option is on.
+    expect(boxes(buildGuestView(input))).toHaveLength(4)
+    expect(boxes(buildGuestView({ ...input, externalAddresses: true }))).toHaveLength(4)
+
+    for (const build of [buildGuestView, buildZoneInside]) {
+      const folded = build({ ...input, externalAddresses: false })
+      // Only the gateway keeps its box; the three other addresses talk from Unknown / External, with their hits.
+      expect(boxes(folded)).toEqual([ipNodeId('198.51.100.2')])
+      const fromExternal = folded.edges.filter(e => e.source === 'external' && e.id.startsWith('blocked:'))
+      expect(fromExternal.map(e => e.id)).toEqual(['blocked:external>guest:zw:qemu/102'])
+      const hits = (fromExternal[0].data as unknown as { observed: Array<{ hits: number }> }).observed.reduce((sum, o) => sum + o.hits, 0)
+      expect(hits).toBe(10 + 12 + 13)
+      expect(folded.edges.some(e => e.source === ipNodeId('198.51.100.2'))).toBe(true)
+    }
+  })
+
+  it('draws the addresses of a named network as one box, with its name, kept when the addresses are folded', () => {
+    const networks = [{ name: 'VPN', cidr: '192.168.72.0/24' }]
+    const suggestions = [
+      seen('a', { kind: 'blocked', src_zone_id: '', src_key: '192.168.72.0/24', src_ip: '192.168.72.17', dst_zone_id: 'zw', dst_ip: '10.0.1.3', hits: 5, pairs: [{ src_ip: '192.168.72.17', dst_ip: '10.0.1.3', hits: 3 }, { src_ip: '192.168.72.21', dst_ip: '10.0.1.3', hits: 2 }] }),
+      seen('b', { kind: 'blocked', src_zone_id: '', src_key: '192.168.72.43', src_ip: '192.168.72.43', dst_zone_id: 'zw', dst_ip: '10.0.1.3', hits: 4 }),
+      seen('c', { kind: 'blocked', src_zone_id: '', src_key: '203.0.113.9', src_ip: '203.0.113.9', dst_zone_id: 'zw', dst_ip: '10.0.1.3', hits: 1 }),
+    ]
+    const input = { ...demo, suggestions, networks, centre: 'zw' }
+    const vpn = ipNodeId('192.168.72.0/24')
+    const boxes = (g: ReturnType<typeof buildGuestView>) => g.nodes.filter(n => n.type === 'ip').map(n => n.id).sort((a, b) => a.localeCompare(b))
+    const hitsFrom = (g: ReturnType<typeof buildGuestView>, source: string) => g.edges.filter(e => e.source === source && e.id.startsWith('blocked:'))
+      .flatMap(e => (e.data as unknown as { observed: Array<{ hits: number }> }).observed).reduce((sum, o) => sum + o.hits, 0)
+
+    const g = buildGuestView(input)
+    expect(boxes(g)).toEqual([vpn, ipNodeId('203.0.113.9')].sort((a, b) => a.localeCompare(b)))
+    expect(g.nodes.find(n => n.id === vpn)?.data).toEqual({ kind: 'ip', ip: '192.168.72.0/24', network: 'VPN' })
+    // The three addresses of the network, its row and the one recorded before it was named, talk from its box.
+    expect(hitsFrom(g, vpn)).toBe(9)
+
+    const folded = buildZoneInside({ ...input, externalAddresses: false })
+    expect(boxes(folded)).toEqual([vpn])
+    expect(hitsFrom(folded, vpn)).toBe(9)
+    expect(hitsFrom(folded, 'external')).toBe(1)
+
+    // Without a name the same addresses are plain addresses.
+    expect(boxes(buildGuestView({ ...input, networks: [] }))).toHaveLength(4)
+  })
+
   it('names an address that is the gateway of a zone, and draws it before busier addresses', () => {
     const many = Array.from({ length: MAX_IPS + 2 }, (_, i) => seen(`ip${i}`, { src_zone_id: '', src_ip: `198.51.100.${i + 1}`, dst_zone_id: 'zw', hits: 100 - i }))
     const zones = demo.zones.map(z => (z.id === 'zw' ? { ...z, gateway: '198.51.100.10' } : z))

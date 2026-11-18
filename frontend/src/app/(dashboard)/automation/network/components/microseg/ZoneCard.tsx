@@ -109,25 +109,92 @@ function FlowPreview({ zone, flows, zonesById }: { zone: MicrosegZone; flows: Mi
   )
 }
 
+/** The chips of a zone at the right of its name: its state (a menu), its outbound, how the draft changes it, its drifts. */
+export function ZoneChips({ zone, diffKind, drifts, onOpenDrifts, egressReady = false, changing, onStateMenu, iconOnlyBelow, iconOnly = false }: Pick<ZoneCardProps, 'zone' | 'diffKind' | 'drifts' | 'onOpenDrifts' | 'egressReady'> & {
+  changing: boolean
+  onStateMenu?: (anchor: HTMLElement) => void
+  iconOnlyBelow?: number
+  /** The outbound chip keeps its icon only (its words in the tooltip): a zone row has no room for them. */
+  iconOnly?: boolean
+}) {
+  const ts = useTranslations('microsegPilot.overview.sections')
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 1, minWidth: 0 }}>
+      <ZoneStateChip state={zone.state} busy={changing} onClick={onStateMenu} />
+      <EgressChip state={zoneEgress(zone)} ready={egressReady} iconOnlyBelow={iconOnlyBelow} iconOnly={iconOnly} />
+      <DiffChip kind={diffKind} />
+      {!!drifts && (
+        <Chip
+          size='small'
+          color='warning'
+          variant='outlined'
+          icon={<i className='ri-error-warning-line' />}
+          label={ts('drifts', { count: drifts })}
+          onClick={onOpenDrifts ? () => onOpenDrifts(zone) : undefined}
+        />
+      )}
+    </Box>
+  )
+}
+
+/** The actions of a zone, shown on hover or focus (always on touch): edit, state, outbound, new flow, assign, delete. */
+export function ZoneActions({ zone, onEdit, onDelete, onSetEgress, onAssign, onAddFlow, changing, onStateMenu }: Pick<ZoneRowProps, 'zone' | 'onEdit' | 'onDelete' | 'onSetEgress' | 'onAssign' | 'onAddFlow'> & {
+  changing: boolean
+  onStateMenu: (anchor: HTMLElement) => void
+}) {
+  const t = useTranslations('microsegPilot.policy.zone')
+  // The same words as in the zone panel of the map.
+  const tz = useTranslations('microsegPilot.overview.zonePanel')
+  const { canWrite } = useMicrosegWrite()
+  // Assigning writes the members of each guest's cluster: the right on one cluster of the policy opens it.
+  const { canWriteSome: canAssign } = useMicrosegClusterWrite()
+  const egress = zoneEgress(zone)
+  return (
+    <Box className='zone-actions' sx={{ display: 'flex', alignItems: 'center' }}>
+      <WriteTip title={t('edit')}>
+        <IconButton size='small' aria-label={t('edit')} disabled={!canWrite} onClick={() => onEdit(zone)}><i className='ri-pencil-line' /></IconButton>
+      </WriteTip>
+      <WriteTip title={t('changeState')}>
+        <IconButton size='small' aria-label={t('changeState')} aria-haspopup='menu' disabled={!canWrite || changing} onClick={e => onStateMenu(e.currentTarget)}>
+          <i className='ri-toggle-line' />
+        </IconButton>
+      </WriteTip>
+      {onSetEgress && egress === 'observe' && (
+        <WriteTip title={tz('egressBlock')}>
+          <IconButton size='small' aria-label={tz('egressBlock')} disabled={!canWrite || changing} onClick={() => onSetEgress(zone, 'block')}><i className='ri-lock-line' /></IconButton>
+        </WriteTip>
+      )}
+      {onSetEgress && egress === 'enforce' && (
+        <WriteTip title={tz('egressReopen')}>
+          <IconButton size='small' aria-label={tz('egressReopen')} disabled={!canWrite || changing} onClick={() => onSetEgress(zone, 'reopen')}><i className='ri-lock-unlock-line' /></IconButton>
+        </WriteTip>
+      )}
+      <WriteTip title={t('addFlowInto', { zone: zone.name })}>
+        <IconButton size='small' aria-label={t('addFlowInto', { zone: zone.name })} disabled={!canWrite} onClick={() => onAddFlow(zone)}><i className='ri-route-line' /></IconButton>
+      </WriteTip>
+      <WriteTip allowed={canAssign} title={t('assign')}>
+        <IconButton size='small' aria-label={t('assign')} disabled={!canAssign} onClick={() => onAssign(zone)}><i className='ri-user-add-line' /></IconButton>
+      </WriteTip>
+      <WriteTip title={t('delete')}>
+        <IconButton size='small' aria-label={t('delete')} disabled={!canWrite} onClick={() => onDelete(zone)}><i className='ri-delete-bin-line' /></IconButton>
+      </WriteTip>
+    </Box>
+  )
+}
+
 /**
  * One zone as a card: its colour on top, shield with the state dot, name, diff badge, description, state chip (a
  * menu), drifts, the three counters, a preview of the first members and flows, then the footer: Details (the members
  * and the flows opened full width below the row of cards) and the actions, shown on hover or focus (always on touch).
  */
 export default function ZoneCard(props: ZoneCardProps) {
-  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onSetEgress, onAssign, onAddFlow, drifts, onOpenDrifts, uncovered, egressReady = false, membersNote } = props
+  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onSetState, drifts, onOpenDrifts, uncovered, egressReady = false, membersNote } = props
   const t = useTranslations('microsegPilot.policy.zone')
-  const ts = useTranslations('microsegPilot.overview.sections')
-  // The same words as in the zone panel of the map.
-  const tz = useTranslations('microsegPilot.overview.zonePanel')
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const { canWrite } = useMicrosegWrite()
-  // Assigning writes the members of each guest's cluster: the right on one cluster of the policy opens it.
-  const { canWriteSome: canAssign } = useMicrosegClusterWrite()
   // While a run writes the state of this zone, the chip says so and no other state can be asked for.
   const changing = useRunsInProgress().zones.has(zone.id)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
-  const egress = zoneEgress(zone)
 
   return (
     <Box
@@ -140,21 +207,7 @@ export default function ZoneCard(props: ZoneCardProps) {
         <Box data-zone-title sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, containerType: 'inline-size' }}>
           <ZoneGlyph zone={zone} label={t(`state.${zone.state}`)} />
           <TruncatedText text={zone.name} fontWeight={600} sx={{ flex: '1 1 0', minWidth: NAME_MIN_WIDTH }} />
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 1, minWidth: 0 }}>
-            <ZoneStateChip state={zone.state} busy={changing} onClick={canWrite && !changing ? setAnchor : undefined} />
-            <EgressChip state={egress} ready={egressReady} iconOnlyBelow={EGRESS_ICON_ONLY_BELOW} />
-            <DiffChip kind={diffKind} />
-            {!!drifts && (
-              <Chip
-                size='small'
-                color='warning'
-                variant='outlined'
-                icon={<i className='ri-error-warning-line' />}
-                label={ts('drifts', { count: drifts })}
-                onClick={onOpenDrifts ? () => onOpenDrifts(zone) : undefined}
-              />
-            )}
-          </Box>
+          <ZoneChips zone={zone} diffKind={diffKind} drifts={drifts} onOpenDrifts={onOpenDrifts} egressReady={egressReady} changing={changing} onStateMenu={canWrite && !changing ? setAnchor : undefined} iconOnlyBelow={EGRESS_ICON_ONLY_BELOW} />
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, minHeight: 20 }}>
           <TruncatedText text={zone.label} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
@@ -194,35 +247,7 @@ export default function ZoneCard(props: ZoneCardProps) {
         >
           {t('details')}
         </Button>
-        <Box className='zone-actions' sx={{ display: 'flex', alignItems: 'center' }}>
-          <WriteTip title={t('edit')}>
-            <IconButton size='small' aria-label={t('edit')} disabled={!canWrite} onClick={() => onEdit(zone)}><i className='ri-pencil-line' /></IconButton>
-          </WriteTip>
-          <WriteTip title={t('changeState')}>
-            <IconButton size='small' aria-label={t('changeState')} aria-haspopup='menu' disabled={!canWrite || changing} onClick={e => setAnchor(e.currentTarget)}>
-              <i className='ri-toggle-line' />
-            </IconButton>
-          </WriteTip>
-          {onSetEgress && egress === 'observe' && (
-            <WriteTip title={tz('egressBlock')}>
-              <IconButton size='small' aria-label={tz('egressBlock')} disabled={!canWrite || changing} onClick={() => onSetEgress(zone, 'block')}><i className='ri-lock-line' /></IconButton>
-            </WriteTip>
-          )}
-          {onSetEgress && egress === 'enforce' && (
-            <WriteTip title={tz('egressReopen')}>
-              <IconButton size='small' aria-label={tz('egressReopen')} disabled={!canWrite || changing} onClick={() => onSetEgress(zone, 'reopen')}><i className='ri-lock-unlock-line' /></IconButton>
-            </WriteTip>
-          )}
-          <WriteTip title={t('addFlowInto', { zone: zone.name })}>
-            <IconButton size='small' aria-label={t('addFlowInto', { zone: zone.name })} disabled={!canWrite} onClick={() => onAddFlow(zone)}><i className='ri-route-line' /></IconButton>
-          </WriteTip>
-          <WriteTip allowed={canAssign} title={t('assign')}>
-            <IconButton size='small' aria-label={t('assign')} disabled={!canAssign} onClick={() => onAssign(zone)}><i className='ri-user-add-line' /></IconButton>
-          </WriteTip>
-          <WriteTip title={t('delete')}>
-            <IconButton size='small' aria-label={t('delete')} disabled={!canWrite} onClick={() => onDelete(zone)}><i className='ri-delete-bin-line' /></IconButton>
-          </WriteTip>
-        </Box>
+        <ZoneActions {...props} changing={changing} onStateMenu={setAnchor} />
       </Box>
       <ZoneStateMenu zone={zone} anchor={anchor} onClose={() => setAnchor(null)} onPick={state => onSetState(zone, state)} />
     </Box>

@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react'
 import { Box, IconButton, Tooltip, Typography } from '@mui/material'
-import { useTranslations } from 'next-intl'
+import { useFormatter, useTranslations } from 'next-intl'
 
 import { microsegApi } from '@/lib/microseg/api'
 import { isAggregateDst, type FlowDirection, type MicrosegSuggestion, type SuggestionAction, type SuggestionKind } from '@/lib/microseg/types'
@@ -20,13 +20,22 @@ const KIND_GLYPH: Record<SuggestionKind, { icon: string; dot: string }> = {
   would_block: { icon: 'ri-eye-line', dot: 'error.main' },
 }
 
-/** The icon of an observed flow, with its kind as a coloured dot and in the tooltip. */
-export function ObservedKindGlyph({ kind }: { kind: SuggestionKind }) {
+/**
+ * The icon of an observed flow, with its kind as a coloured dot and in the tooltip. With `lastSeen`, the tooltip also
+ * says when the flow was last seen: its kind is what the firewall did then, which a zone that changed state since no
+ * longer does (a flow blocked yesterday, in a zone that only observes today).
+ */
+export function ObservedKindGlyph({ kind, lastSeen }: { kind: SuggestionKind; lastSeen?: string }) {
   const t = useTranslations('microsegPilot.observation')
+  const format = useFormatter()
   const glyph = KIND_GLYPH[kind] ?? KIND_GLYPH.would_block
+  const at = lastSeen ? new Date(lastSeen) : null
+  const title = at && !Number.isNaN(at.getTime())
+    ? t('kindSeen', { kind: t(`kind.${kind}`), time: format.dateTime(at, { dateStyle: 'medium', timeStyle: 'short' }) })
+    : t(`kind.${kind}`)
 
   return (
-    <Tooltip title={t(`kind.${kind}`)}>
+    <Tooltip title={title}>
       <Box component='span' data-kind={kind} sx={{ position: 'relative', display: 'inline-flex', width: 16, height: 16, flexShrink: 0 }}>
         <i className={glyph.icon} style={{ fontSize: 16 }} />
         <Box

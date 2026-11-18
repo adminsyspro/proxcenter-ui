@@ -13578,6 +13578,11 @@
     },
     "policy": {
       "zonesTitle": "영역",
+      "layout": {
+        "label": "영역 표시 방식",
+        "cards": "카드",
+        "rows": "행"
+      },
       "flowsTitle": "플로우",
       "addZone": "새 영역",
       "addFlow": "새 플로우",
@@ -13856,7 +13861,10 @@
         "pendingMove": "{zone}(으)로 이동 중",
         "moveHint": "{zone}(으)로 이동 대기 중입니다. 이 영역에 유지하려면 다시 선택하세요.",
         "partial": "{clusters}에만 저장되었습니다. 다른 클러스터는 저장되지 않았습니다: {error}",
-        "partialSome": "일부 클러스터에만 저장되었습니다. 나머지는 저장되지 않았습니다: {error}"
+        "partialSome": "일부 클러스터에만 저장되었습니다. 나머지는 저장되지 않았습니다: {error}",
+        "willRemove": "제거 예정",
+        "willRemoveHint": "선택 해제됨: 다음 적용 시 이 영역에서 제외됩니다. 유지하려면 다시 선택하세요.",
+        "confirmChanges": "저장: 할당 {add, number}개, 제거 {remove, number}개"
       },
       "preflightButton": "사전 점검",
       "state": {
@@ -14401,7 +14409,9 @@
         "accept": "수락"
       },
       "cidrOutTip": "선택한 프리픽스로 초안에 {from} → {ip}의 네트워크 {service} 흐름을 만듭니다.",
-      "bulkCidrOutbound": "아웃바운드 네트워크는 프리픽스를 각각 선택해야 하므로 하나씩 수락합니다."
+      "bulkCidrOutbound": "아웃바운드 네트워크는 프리픽스를 각각 선택해야 하므로 하나씩 수락합니다.",
+      "kindSeen": "{kind}, 마지막 관찰 {time}",
+      "manySources": "다수의 출발지"
     },
     "overview": {
       "empty": "아직 그릴 영역이 없습니다.",
@@ -14416,7 +14426,8 @@
         "unprotected": "보호되지 않음",
         "blocked": "차단됨",
         "draft": "허용됨, 아직 적용되지 않음",
-        "exception": "VM 간 예외"
+        "exception": "VM 간 예외",
+        "addresses": "외부 주소"
       },
       "node": {
         "members": "{count, plural, other {구성원 #개}}",
@@ -14446,7 +14457,8 @@
         "inside": "{count, plural, other {영역 내부에서 관찰된 흐름 #개}}",
         "observed": "송신 관찰 중",
         "gateway": "게이트웨이",
-        "gatewayHint": "{zones}의 게이트웨이({ip}): 해당 트래픽이 지도와 관찰 하위 탭에 이름으로 표시됩니다"
+        "gatewayHint": "{zones}의 게이트웨이({ip}): 해당 트래픽이 지도와 관찰 하위 탭에 이름으로 표시됩니다",
+        "networkHint": "{name}: 이름 있는 네트워크 {cidr}. 이 영역과 통신하는 해당 주소들이 여기에 표시됩니다."
       },
       "edge": {
         "outside": "송신 차단 안 됨: {services}",
@@ -14478,7 +14490,8 @@
         "noMembers": "구성원 없음",
         "membersUnknown": "게스트 목록을 읽을 수 없습니다.",
         "pending": "대기 중",
-        "noFlows": "없음"
+        "noFlows": "없음",
+        "resize": "끌어서 패널 너비 넓히기 (두 번 클릭: 원래 너비)"
       },
       "zonePanel": {
         "inside": "영역 내부 보기",
@@ -14597,9 +14610,7 @@
         "hint": "다른 영역을 클릭하면 가운데로 옮깁니다."
       },
       "inside": {
-        "back": "지도로 돌아가기",
-        "title": "{name} 영역 내부",
-        "hint": "영역의 각 게스트와 게스트끼리, 그리고 외부와 주고받는 흐름입니다. 다른 영역을 더블 클릭하면 그 영역으로 들어갑니다."
+        "back": "지도로 돌아가기"
       },
       "sankey": {
         "label": "영역 간 트래픽을 띠로 표시",
@@ -14676,6 +14687,40 @@
         "topBothEmpty": "이 기간에 출발지나 목적지 없음",
         "fromInto": "{name}에서 이 영역으로",
         "toFrom": "이 영역에서 {name}(으)로"
+      },
+      "services": {
+        "button": "서비스",
+        "all": "모든 서비스",
+        "some": "서비스: {total, number}개 중 {shown, number}개"
+      },
+      "seen": {
+        "title": "관찰된 흐름 표시 기간",
+        "button": "표시 기간: {period}",
+        "period": {
+          "1h": "최근 1시간",
+          "24h": "최근 24시간",
+          "7d": "최근 7일",
+          "all": "전체 기간"
+        },
+        "note": "흐름의 횟수는 기간과 관계없이 처음 관찰된 이후의 합계입니다."
+      },
+      "guestPanel": {
+        "label": "게스트 {name}",
+        "logTitle": "방화벽 로그",
+        "refresh": "최신 줄 다시 읽기",
+        "reading": "로그 읽는 중...",
+        "error": "로그를 읽을 수 없습니다: {error}",
+        "empty": "이 게스트의 방화벽 로그에 줄이 없습니다.",
+        "policyAction": "{action} (정책)",
+        "noAction": "기록됨",
+        "search": "로그 검색 (주소, 포트, 동작...)",
+        "searchReading": "최신 {count}줄을 읽는 중...",
+        "searchFound": "최신 {scanned}줄 중 {count, plural, =0 {찾은 줄 없음} other {#줄 찾음}}",
+        "live": "실시간",
+        "liveStart": "새 줄을 바로 표시: {seconds}초마다 한 번 읽기, {minutes}분 동안",
+        "liveStop": "실시간 모드 중지",
+        "liveExpired": "{minutes}분 후 실시간 모드가 중지되었습니다.",
+        "liveResume": "다시 시작"
       }
     },
     "preflight": {
@@ -14784,7 +14829,8 @@
         "observation": "관찰",
         "notifications": "알림 받기",
         "advanced": "고급",
-        "removal": "제거"
+        "removal": "제거",
+        "networks": "이름 있는 네트워크"
       },
       "fields": {
         "tagPrefix": "태그 접두사",
@@ -14834,7 +14880,12 @@
         "burstNumber": "로그 버스트는 0 이상의 정수여야 합니다.",
         "rateBoth": "로그 속도와 버스트를 모두 입력하거나 둘 다 비워 두세요.",
         "selfIpInvalid": "{ip}은(는) 올바른 IP 주소가 아닙니다.",
-        "selfIpTooMany": "주소는 최대 {max}개입니다."
+        "selfIpTooMany": "주소는 최대 {max}개입니다.",
+        "networkName": "네트워크 이름은 1~{max, number}자여야 합니다.",
+        "networkCidr": "{name}의 네트워크가 192.168.72.0/24 같은 올바른 CIDR이 아닙니다.",
+        "networkNameTwice": "네트워크 이름 {name}이(가) 두 번 사용되었습니다.",
+        "networkTwice": "{name}의 네트워크는 이미 이름이 있습니다.",
+        "networkTooMany": "최대 {max, number}개의 네트워크에 이름을 지정할 수 있습니다."
       },
       "remove": {
         "row": "마이크로 세그멘테이션 제거",
@@ -14896,6 +14947,15 @@
           "typeName": "확인하려면 {name}을(를) 입력하세요",
           "confirm": "연결 해제"
         }
+      },
+      "networks": {
+        "hint": "이름 있는 네트워크의 주소가 영역과 통신하면 해당 네트워크로 표시되고 하나의 출발지로 집계됩니다.",
+        "name": "이름",
+        "cidr": "네트워크(CIDR)",
+        "add": "네트워크 추가",
+        "remove": "이 네트워크 제거",
+        "empty": "이름이 지정된 네트워크가 없습니다.",
+        "unnamed": "네트워크 {index, number}"
       }
     },
     "history": {
@@ -15151,7 +15211,6 @@
       "createFlow": "플로우 만들기",
       "createFlowTip": "이 서비스에 대한 플로우를 초안에 추가합니다",
       "draftNote": "적용되지 않은 변경이 있는 초안을 기준으로 평가했습니다",
-      "openFlowsTip": "영역별로 그룹화된 네트워크 플로우 페이지 열기",
       "summary": {
         "title": "영역별 트래픽",
         "intra": "영역 내부",

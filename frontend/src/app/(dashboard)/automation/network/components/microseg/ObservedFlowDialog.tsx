@@ -187,7 +187,7 @@ export default function ObservedFlowDialog({ connectionId, suggestion: s, zones,
     <Dialog open onClose={onClose} maxWidth='md' fullWidth aria-labelledby='microseg-flow-title'>
       {/* Its own id: without one, DialogTitle takes the dialog's aria-labelledby id and the name gets the chips too. */}
       <DialogTitle id='microseg-flow-heading' sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, pr: 1 }}>
-        <ObservedKindGlyph kind={s.kind} />
+        <ObservedKindGlyph kind={s.kind} lastSeen={s.last_seen} />
         {/* The dialog is named by the title text alone, not by the chips and the close button beside it. */}
         <Box component='span' id='microseg-flow-title' sx={{ flex: '1 1 0', minWidth: 0, display: 'flex' }}>
           <TruncatedText text={t('dialog.title', { source, destination, service })} fontWeight={600} sx={{ minWidth: 0 }} />

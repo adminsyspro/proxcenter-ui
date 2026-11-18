@@ -172,8 +172,11 @@ describe('actions row', () => {
     expect(within(slot).getByRole('button', { name: 'New zone' })).toBeTruthy()
     expect(within(slot).getByRole('button', { name: 'New flow' })).toBeTruthy()
 
+    // Back on the Overview, the row keeps only what the map keeps of the flows.
     fireEvent.click(screen.getByRole('tab', { name: 'Overview' }))
-    await waitFor(() => expect(within(slot).queryByRole('button')).toBeNull())
+    await waitFor(() => expect(within(slot).queryByRole('button', { name: 'New zone' })).toBeNull())
+    expect(within(slot).queryByRole('button', { name: 'Pre-flight checks' })).toBeNull()
+    expect(within(slot).getAllByRole('button').map(b => b.textContent)).toEqual(['Services', 'Seen: any time'])
   })
 })
 

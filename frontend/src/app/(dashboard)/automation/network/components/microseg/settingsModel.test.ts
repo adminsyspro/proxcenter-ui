@@ -198,3 +198,26 @@ describe('adding a cluster', () => {
     expect(associateBlock(9, undefined, 2)).toBeNull()
   })
 })
+
+describe('the named networks of the settings', () => {
+  const vpn = { name: 'VPN', cidr: '192.168.72.0/24' }
+  const opened = formFromSettings('zone-', { ...base, networks: [vpn] })
+
+  it('opens with the networks saved, and with none for older settings', () => {
+    expect(opened.networks).toEqual([vpn])
+    expect(formFromSettings('zone-', base).networks).toEqual([])
+  })
+
+  it('sends the networks only when they changed, trimmed', () => {
+    expect(changedUpdate(opened, { ...opened, networks: [{ name: 'VPN', cidr: '192.168.72.0/24' }] })).toBeNull()
+    expect(changedUpdate(opened, { ...opened, networks: [vpn, { name: ' Offices ', cidr: ' 10.20.0.0/16 ' }] }))
+      .toEqual({ settings: { networks: [vpn, { name: 'Offices', cidr: '10.20.0.0/16' }] } })
+    expect(changedUpdate(opened, { ...opened, networks: [] })).toEqual({ settings: { networks: [] } })
+  })
+
+  it('says the first problem of the networks once they were edited', () => {
+    expect(validateSettingsForm(opened, opened).networks).toBeUndefined()
+    expect(validateSettingsForm({ ...opened, networks: [vpn, { name: '', cidr: '' }] }, opened).networks).toEqual({ key: 'networkName', values: { max: 40 } })
+    expect(validateSettingsForm({ ...opened, networks: [{ name: 'VPN', cidr: 'nope' }] }, opened).networks).toEqual({ key: 'networkCidr', values: { name: 'VPN' } })
+  })
+})

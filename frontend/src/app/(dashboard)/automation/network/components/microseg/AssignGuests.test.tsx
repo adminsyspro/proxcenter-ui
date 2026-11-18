@@ -81,7 +81,7 @@ describe('assign guests dialog: list', () => {
     expect((assignButton(dialog, 'Assign 0 guests') as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('shows a member and a pending guest as already in the zone, not selectable', async () => {
+  it('shows a member and a pending guest as already in the zone, ticked, and lets them be unticked', async () => {
     setup({
       zones: [web()],
       vms: [vm(100, 'tagged', ['zone-web']), vm(101, 'queued', []), vm(102, 'free', [])],
@@ -92,9 +92,43 @@ describe('assign guests dialog: list', () => {
     const queued = within(dialog).getByRole('listitem', { name: 'queued' })
     expect(within(tagged).getByText('Member')).toBeTruthy()
     expect(within(queued).getByText('Pending')).toBeTruthy()
-    expect((within(tagged).getByRole('checkbox') as HTMLInputElement).disabled).toBe(true)
-    expect((within(queued).getByRole('checkbox') as HTMLInputElement).disabled).toBe(true)
-    expect((within(dialog).getByRole('checkbox', { name: 'free' }) as HTMLInputElement).disabled).toBe(false)
+    for (const row of [tagged, queued]) {
+      const box = within(row).getByRole('checkbox') as HTMLInputElement
+      expect(box.disabled).toBe(false)
+      expect(box.checked).toBe(true)
+    }
+    const free = within(dialog).getByRole('checkbox', { name: 'free' }) as HTMLInputElement
+    expect(free.disabled).toBe(false)
+    expect(free.checked).toBe(false)
+  })
+
+  it('takes out the members that are unticked: the tagged one is queued for no zone, the queued one is forgotten', async () => {
+    mock.routes['POST /members'] = () => reply(200, { version: calls('POST /members').length + 3 })
+    setup({
+      zones: [web()],
+      vms: [vm(100, 'tagged', ['zone-web']), vm(101, 'queued', []), vm(102, 'free', []), vm(103, 'stays', ['zone-web'])],
+      pending_members: [{ id: 'p1', policy_id: 'p1', connection_id: 'c1', node: 'pve1', type: 'qemu', vmid: 101, zone_id: 'zw' }],
+    })
+    const dialog = await openDialog()
+    const tagged = await within(dialog).findByRole('listitem', { name: 'tagged' })
+    fireEvent.click(within(tagged).getByRole('checkbox'))
+    expect(within(tagged).getByText('Will be removed')).toBeTruthy()
+    expect(within(tagged).queryByText('Member')).toBeNull()
+    // Ticked again, it stays a member and nothing is to save.
+    fireEvent.click(within(tagged).getByRole('checkbox'))
+    expect(within(tagged).getByText('Member')).toBeTruthy()
+    expect((within(dialog).getByRole('button', { name: 'Assign 0 guests' }) as HTMLButtonElement).disabled).toBe(true)
+
+    fireEvent.click(within(tagged).getByRole('checkbox'))
+    fireEvent.click(within(within(dialog).getByRole('listitem', { name: 'queued' })).getByRole('checkbox'))
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'free' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save: 1 to assign, 2 to remove' }))
+    await waitFor(() => expect(calls('POST /members')).toHaveLength(3))
+    const sent = calls('POST /members').map(c => body(c[1] as RequestInit))
+    expect(sent[0]).toEqual({ version: 3, zone_id: 'zw', guests: [{ node: 'pve1', type: 'qemu', vmid: 102 }] })
+    expect(sent[1]).toEqual({ version: 4, zone_id: '', guests: [{ node: 'pve1', type: 'qemu', vmid: 100 }] })
+    expect(sent[2]).toEqual({ version: 5, clear: [{ type: 'qemu', vmid: 101 }] })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
 
   it('counts the tickable guests out of the paged total when members are in the list', async () => {
@@ -346,7 +380,10 @@ describe('queued removals and moves of tagged members', () => {
     const box = within(leaving).getByRole('checkbox') as HTMLInputElement
     expect(box.disabled).toBe(false)
     expect(box.checked).toBe(false)
-    expect((within(dialog).getByRole('checkbox', { name: 'web-2' }) as HTMLInputElement).disabled).toBe(true)
+    // A plain member is ticked and can be unticked.
+    const stays = within(dialog).getByRole('checkbox', { name: 'web-2' }) as HTMLInputElement
+    expect(stays.disabled).toBe(false)
+    expect(stays.checked).toBe(true)
 
     fireEvent.click(box)
     fireEvent.click(assignButton(dialog, 'Assign 1 guest'))
@@ -552,7 +589,8 @@ describe.each([['empty', ''], ['absent', undefined]])('pending rows whose connec
     const dialog = await openDialog()
     const queuedRow = await within(dialog).findByRole('listitem', { name: 'queued' })
     expect(within(queuedRow).getByText('Pending')).toBeTruthy()
-    expect((within(queuedRow).getByRole('checkbox') as HTMLInputElement).disabled).toBe(true)
+    // Already queued for the zone: shown ticked, never to be queued a second time.
+    expect((within(queuedRow).getByRole('checkbox') as HTMLInputElement).checked).toBe(true)
     expect(within(within(dialog).getByRole('listitem', { name: 'web-1' })).getByText('Moving to db')).toBeTruthy()
   })
 })

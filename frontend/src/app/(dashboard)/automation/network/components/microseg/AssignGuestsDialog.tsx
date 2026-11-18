@@ -10,7 +10,7 @@ import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/component
 import { microsegApi } from '@/lib/microseg/api'
 import type { MicrosegPolicy, MicrosegZone } from '@/lib/microseg/types'
 
-import { assignRows, chosenByCluster, filterRows, GUESTS_PAGE_SIZE, isSelectable, MAX_ASSIGN, membersBody, type AssignRow } from './assignModel'
+import { assignRows, chosenByCluster, filterRows, GUESTS_PAGE_SIZE, isRemovable, isSelectable, MAX_ASSIGN, membersBody, removalBodies, type AssignRow } from './assignModel'
 import ClusterChip from './ClusterChip'
 import { DialogErrorLine, isVersionConflict, ONE_LINE_SX, OneLine, useDialogAction, writeErrorMessage } from './dialogParts'
 import { GroupGuestsUnread } from './GroupGuestsUnread'
@@ -53,7 +53,7 @@ function preselectIds(preselect: readonly string[] | undefined, connectionId: st
   })
 }
 
-function GuestLine({ row, zoneName, checked, selectable, onToggle, cluster }: { row: AssignRow; zoneName: string; checked: boolean; selectable: boolean; onToggle: () => void; cluster?: string }) {
+function GuestLine({ row, zoneName, checked, selectable, removing, onToggle, cluster }: { row: AssignRow; zoneName: string; checked: boolean; selectable: boolean; removing: boolean; onToggle: () => void; cluster?: string }) {
   const t = useTranslations('microsegPilot.policy.assign')
   const { guest } = row
   const others = row.otherZones.join(', ')
@@ -61,7 +61,7 @@ function GuestLine({ row, zoneName, checked, selectable, onToggle, cluster }: { 
     <Box role='listitem' aria-label={guest.name} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, minHeight: 36 }}>
       <Checkbox
         size='small'
-        checked={checked || !selectable}
+        checked={checked}
         disabled={!selectable}
         onChange={onToggle}
         slotProps={{ input: { 'aria-label': guest.name } }}
@@ -71,7 +71,12 @@ function GuestLine({ row, zoneName, checked, selectable, onToggle, cluster }: { 
       {cluster !== undefined && <ClusterChip connectionId={guest.connectionId} name={cluster} compact />}
       <TruncatedText text={guest.name} sx={{ flex: '0 1 auto' }} />
       <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{`${guest.vmid} · ${guest.node}`}</Typography>
-      {row.member === 'tag' && !row.change && <Chip size='small' variant='outlined' label={t('member')} sx={{ flexShrink: 0 }} />}
+      {row.member === 'tag' && !row.change && !removing && <Chip size='small' variant='outlined' label={t('member')} sx={{ flexShrink: 0 }} />}
+      {removing && (
+        <Tooltip title={t('willRemoveHint')}>
+          <Chip size='small' color='warning' variant='outlined' label={t('willRemove')} sx={{ flexShrink: 0 }} />
+        </Tooltip>
+      )}
       {row.change?.kind === 'removal' && (
         <Tooltip title={t('removalHint')}>
           <Chip size='small' color='warning' variant='outlined' label={t('pendingRemoval')} sx={{ flexShrink: 0 }} />
@@ -82,7 +87,7 @@ function GuestLine({ row, zoneName, checked, selectable, onToggle, cluster }: { 
           <Chip size='small' color='warning' variant='outlined' label={t('pendingMove', { zone: row.change.zoneName })} sx={{ flexShrink: 1, minWidth: 0, maxWidth: 200 }} />
         </Tooltip>
       )}
-      {row.member === 'pending' && (
+      {row.member === 'pending' && !removing && (
         <Tooltip title={t('pendingHint')}>
           <Chip size='small' color='warning' variant='outlined' label={t('pending')} sx={{ flexShrink: 0 }} />
         </Tooltip>
@@ -104,9 +109,11 @@ function GuestLine({ row, zoneName, checked, selectable, onToggle, cluster }: { 
 }
 
 /**
- * Assign guests to a zone. The selection is sent as pending members of the zone
- * (a draft): nothing is written to Proxmox until the plan is applied. A guest
- * of another zone is flagged and will be moved. Select-all covers every
+ * Assign guests to a zone, or take members out of it. The selection is sent as
+ * pending members of the zone (a draft): nothing is written to Proxmox until
+ * the plan is applied. A guest of another zone is flagged and will be moved; a
+ * member is ticked, and unticking it queues its removal (or forgets it when it
+ * was only queued for the zone). Select-all covers every
  * filtered guest, across pages. On a shared policy the guests of every cluster
  * are listed (each with its cluster chip) and the selection is sent once per
  * cluster, through that cluster, each request with the draft version the
@@ -127,6 +134,8 @@ export default function AssignGuestsDialog({ open, connectionId, clusterIds, clu
   const [search, setSearch] = useState('')
   const preselected = useMemo(() => preselectIds(preselect, connectionId), [preselect, connectionId])
   const [selected, setSelected] = useState<Set<string>>(() => new Set(preselected))
+  // The members unticked: taken out of the zone on Save.
+  const [removed, setRemoved] = useState<Set<string>>(() => new Set())
 
   const rows = useMemo(
     () => assignRows(zone, policy.zones, policy.policy.tag_prefix, guests, policy.pending_members),
@@ -138,6 +147,9 @@ export default function AssignGuestsDialog({ open, connectionId, clusterIds, clu
   // A guest that became a member (after a reload) drops out of the selection.
   const canTick = useCallback((r: AssignRow) => isSelectable(r) || (r.member === 'tag' && preselected.includes(r.key)), [preselected])
   const chosen = useMemo(() => rows.filter(r => canTick(r) && selected.has(r.key)), [rows, selected, canTick])
+  // A member is unticked to take it out; one that is ticked to be assigned again (canTick) keeps that meaning.
+  const canUntick = useCallback((r: AssignRow) => isRemovable(r) && !canTick(r), [canTick])
+  const removals = useMemo(() => rows.filter(r => canUntick(r) && removed.has(r.key)), [rows, removed, canUntick])
   const selectable = filtered.filter(canTick)
   const selectedInFilter = selectable.filter(r => selected.has(r.key)).length
   const allChecked = selectable.length > 0 && selectedInFilter === selectable.length
@@ -145,6 +157,11 @@ export default function AssignGuestsDialog({ open, connectionId, clusterIds, clu
   const failure = partial ?? error
 
   const toggle = (key: string) => setSelected(prev => {
+    const next = new Set(prev)
+    if (!next.delete(key)) next.add(key)
+    return next
+  })
+  const toggleRemoved = (key: string) => setRemoved(prev => {
     const next = new Set(prev)
     if (!next.delete(key)) next.add(key)
     return next
@@ -169,16 +186,26 @@ export default function AssignGuestsDialog({ open, connectionId, clusterIds, clu
   }
 
   const submit = async () => {
-    if (chosen.length === 0 || tooMany) return
+    if (chosen.length + removals.length === 0 || tooMany) return
     setPartial(null)
     const ok = await run(async () => {
-      // POST /members writes the rows of its URL's cluster only: one request per cluster, never retried on its own.
+      // POST /members writes the rows of its URL's cluster only: the requests of a cluster go through it, one after
+      // the other (the guests to assign, then the members to take out), never retried on their own.
       const saved: string[] = []
       let version = policy.version
+      const assigned = new Map(chosenByCluster(chosen))
+      const takenOut = new Map(chosenByCluster(removals))
+      const clusters = [...new Set([...assigned.keys(), ...takenOut.keys()])].sort((a, b) => a.localeCompare(b))
       try {
-        for (const [cluster, rows] of chosenByCluster(chosen)) {
-          const answer = await microsegApi(cluster).setMembers(membersBody(version, zone.id, rows))
-          version = answer?.version ?? version
+        for (const cluster of clusters) {
+          const bodies = [
+            ...(assigned.has(cluster) ? [(v: number) => membersBody(v, zone.id, assigned.get(cluster)!)] : []),
+            ...removalBodies(takenOut.get(cluster) ?? []),
+          ]
+          for (const body of bodies) {
+            const answer = await microsegApi(cluster).setMembers(body(version))
+            version = answer?.version ?? version
+          }
           saved.push(cluster)
         }
       } catch (e) {
@@ -240,9 +267,10 @@ export default function AssignGuestsDialog({ open, connectionId, clusterIds, clu
                       key={row.key}
                       row={row}
                       zoneName={zone.name}
-                      checked={selected.has(row.key)}
-                      selectable={canTick(row)}
-                      onToggle={() => toggle(row.key)}
+                      checked={canUntick(row) ? !removed.has(row.key) : selected.has(row.key)}
+                      selectable={canTick(row) || canUntick(row)}
+                      removing={canUntick(row) && removed.has(row.key)}
+                      onToggle={() => (canUntick(row) ? toggleRemoved(row.key) : toggle(row.key))}
                       cluster={shared ? clusterName?.(row.guest.connectionId) ?? row.guest.connectionId : undefined}
                     />
                   ))}
@@ -263,8 +291,8 @@ export default function AssignGuestsDialog({ open, connectionId, clusterIds, clu
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={busy}>{tc('cancel')}</Button>
-        <Button onClick={submit} variant='contained' disabled={busy || chosen.length === 0 || tooMany}>
-          {t('confirm', { count: chosen.length })}
+        <Button onClick={submit} variant='contained' disabled={busy || chosen.length + removals.length === 0 || tooMany}>
+          {removals.length > 0 ? t('confirmChanges', { add: chosen.length, remove: removals.length }) : t('confirm', { count: chosen.length })}
         </Button>
       </DialogActions>
     </Dialog>

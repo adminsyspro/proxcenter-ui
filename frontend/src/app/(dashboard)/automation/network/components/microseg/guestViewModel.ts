@@ -1,3 +1,4 @@
+import { networkOf, type NamedNetwork } from '@/lib/microseg/namedNetworks'
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import { BOX_H, BOX_W, placeBox } from './compactGraph'
@@ -26,7 +27,15 @@ export const MAX_BOXES_PER_COLUMN = 6
 export const INSIDE_COL_GAP = 170
 export const INSIDE_ROW_GAP = 60
 
-export type GuestViewInput = MapInput & { centre: string }
+export type GuestViewInput = MapInput & {
+  centre: string
+  /**
+   * False: the addresses in no zone are not drawn one by one, they all go to the Unknown / External box (a zone open
+   * to many addresses is unreadable otherwise). The gateway of a zone and the named networks are still drawn.
+   * Absent: drawn.
+   */
+  externalAddresses?: boolean
+}
 
 const pending = (suggestions: MicrosegSuggestion[], known: ReadonlyMap<string, MicrosegZone>) =>
   suggestions.filter(s => s.status === 'pending' && known.has(s.dst_zone_id))
@@ -186,26 +195,33 @@ function addUnzoned(groups: Map<string, Group>, books: AddressBooks, around: Aro
   books.set(UNZONED_ID, addressBook(g))
 }
 
-/** The busiest addresses in no zone and no guest that talked to the centre, at most MAX_IPS. */
-function ownAddresses(seen: MicrosegSuggestion[], known: ReadonlyMap<string, MicrosegZone>, books: AddressBooks, gateways: ReadonlySet<string>): string[] {
+/** A box that stands for a named network: its key is the CIDR of the network. */
+const isNetworkBox = (key: string) => key.includes('/')
+
+/** The busiest addresses in no zone and no guest that talked to the centre (a named network is one), at most MAX_IPS. */
+function ownAddresses(seen: MicrosegSuggestion[], known: ReadonlyMap<string, MicrosegZone>, books: AddressBooks, gateways: ReadonlySet<string>, boxOf: (ip: string) => string): string[] {
   const hits = new Map<string, number>()
   for (const s of seen) {
     const ip = bareIp(s.src_ip || '')
     if (known.has(s.src_zone_id) || !ip || books.get(UNZONED_ID)?.has(ip)) continue
-    hits.set(ip, (hits.get(ip) ?? 0) + s.hits)
+    const box = boxOf(ip)
+    hits.set(box, (hits.get(box) ?? 0) + s.hits)
   }
-  // A gateway is drawn before the other addresses, whatever its traffic: it is named.
-  const rank = (ip: string) => (gateways.has(ip) ? 0 : 1)
+  // A gateway, then a named network, are drawn before the other addresses, whatever their traffic: they are named.
+  const rank = (ip: string) => {
+    if (gateways.has(ip)) return 0
+    return isNetworkBox(ip) ? 1 : 2
+  }
   return [...hits].sort((a, b) => rank(a[0]) - rank(b[0]) || b[1] - a[1] || byText(a[0], b[0])).slice(0, MAX_IPS).map(([ip]) => ip)
 }
 
-function observedPairs(pairs: Map<string, Pair>, seen: MicrosegSuggestion[], known: ReadonlyMap<string, MicrosegZone>, books: AddressBooks, ips: ReadonlySet<string>) {
+function observedPairs(pairs: Map<string, Pair>, seen: MicrosegSuggestion[], known: ReadonlyMap<string, MicrosegZone>, books: AddressBooks, ips: ReadonlySet<string>, boxOf: (ip: string) => string) {
   for (const s of seen) {
     const kind: MapEdgeKind = s.kind === 'blocked' ? 'blocked' : 'unprotected'
     const srcIp = bareIp(s.src_ip || '')
     let source: string
     if (known.has(s.src_zone_id)) source = books.get(s.src_zone_id)!.get(srcIp) ?? zoneNodeId(s.src_zone_id)
-    else source = books.get(UNZONED_ID)?.get(srcIp) ?? (ips.has(srcIp) ? ipNodeId(srcIp) : EXTERNAL_ID)
+    else source = books.get(UNZONED_ID)?.get(srcIp) ?? (srcIp && ips.has(boxOf(srcIp)) ? ipNodeId(boxOf(srcIp)) : EXTERNAL_ID)
     const target = books.get(s.dst_zone_id)!.get(bareIp(s.dst_ip || '')) ?? zoneNodeId(s.dst_zone_id)
     addPair(pairs, kind, source, target, flowService(s), undefined, s)
   }
@@ -229,10 +245,11 @@ function exceptionPairs(pairs: Map<string, Pair>, links: readonly ExceptionLink[
   }
 }
 
-function placeIp(out: Placement, ip: string, c: Point, zones: readonly MicrosegZone[]) {
+function placeIp(out: Placement, ip: string, c: Point, zones: readonly MicrosegZone[], networks: readonly NamedNetwork[]) {
   const id = ipNodeId(ip)
   const gatewayOf = gatewayZones(zones, ip)
-  const data: IpNodeData = { kind: 'ip', ip, ...(gatewayOf.length ? { gatewayOf } : {}) }
+  const network = isNetworkBox(ip) ? networks.find(n => n.cidr === ip)?.name : undefined
+  const data: IpNodeData = { kind: 'ip', ip, ...(gatewayOf.length ? { gatewayOf } : {}), ...(network ? { network } : {}) }
   out.nodes.push({ id, type: 'ip', position: { x: c.x - NODE_W / 2, y: c.y - NODE_H / 2 }, width: NODE_W, height: NODE_H, focusable: false, data })
   out.obstacles.push({ id, center: c, shape: BOX_SHAPE })
   out.endShapes.set(id, { center: c, shape: BOX_SHAPE, group: id })
@@ -271,7 +288,7 @@ export function buildZoneInside(input: GuestViewInput): ZoneGraph {
   return buildAround(input, true)
 }
 
-function buildAround({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null, clusters = null, centre }: GuestViewInput, inside: boolean): ZoneGraph {
+function buildAround({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null, clusters = null, networks = null, centre, externalAddresses = true }: GuestViewInput, inside: boolean): ZoneGraph {
   const sorted = [...zones].sort((a, b) => byText(a.name, b.name) || byText(a.id, b.id))
   const known = new Map(sorted.map(z => [z.id, z]))
   const zone = known.get(centre)
@@ -297,7 +314,12 @@ function buildAround({ zones, flows, suggestions, members = null, unzoned = null
     return ip !== cidr && gateways.has(ip) ? ip : undefined
   }
   const flowGateways = around.flows.flatMap(f => [gatewayOf(f.src_cidr), gatewayOf(f.dst_cidr)]).filter((ip): ip is string => !!ip)
-  const ips = [...new Set([...ownAddresses(around.seen, known, books, gateways), ...flowGateways])]
+  // An address of a named network is drawn as the box of that network (its CIDR).
+  const named = networks ?? []
+  const boxOf = (ip: string) => networkOf(ip, named)?.cidr ?? ip
+  // Folded: only the gateways and the named networks keep a box, every other address talks from Unknown / External.
+  const busiest = ownAddresses(around.seen, known, books, gateways, boxOf).filter(ip => externalAddresses || gateways.has(ip) || isNetworkBox(ip))
+  const ips = [...new Set([...busiest, ...flowGateways])]
   const drawn = new Set(ips)
 
   const pairs = new Map<string, Pair>()
@@ -306,7 +328,7 @@ function buildAround({ zones, flows, suggestions, members = null, unzoned = null
     return ip && drawn.has(ip) ? ipNodeId(ip) : undefined
   })
   exceptionPairs(pairs, around.links, groups, boxes)
-  observedPairs(pairs, around.seen, known, books, drawn)
+  observedPairs(pairs, around.seen, known, books, drawn, boxOf)
   const ordered = [...pairs.values()].sort(comparePairs)
 
   // Each side nearest first: the peer zones next to the centre, External the furthest left.
@@ -331,7 +353,7 @@ function buildAround({ zones, flows, suggestions, members = null, unzoned = null
     const group = groups.get(cell.id)
     if (group) placeGroup(out, group, c, group === centreGroup ? rings : undefined)
     else if (boxes.has(cell.id)) placeBox(out, known.get(cell.id.slice(5))!, members ? (members.get(cell.id.slice(5))?.length ?? 0) : null, 0, c)
-    else if (cell.id.startsWith('ip:')) placeIp(out, cell.id.slice(3), c, sorted)
+    else if (cell.id.startsWith('ip:')) placeIp(out, cell.id.slice(3), c, sorted, named)
     else placeBoundary(out, cell.id, c, outsideEgress)
   }
 

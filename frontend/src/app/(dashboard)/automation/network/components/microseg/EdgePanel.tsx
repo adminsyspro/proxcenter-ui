@@ -13,7 +13,7 @@ import ExpandDialog, { withCount, type DataTab } from './ExpandDialog'
 import { MapNamesContext, isSampled, joinParts, observedHits, type EdgeT } from './FlowEdge'
 import { flowService } from './FlowSummary'
 import { DirectionGlyph, ObservedKindGlyph, ResolveActions, outboundZoneAcceptTip, ServiceHits, useResolveSuggestions } from './observationParts'
-import { destinationName } from './ObservationRow'
+import { destinationName, sourceName } from './ObservationRow'
 import { newPairFlow, pairEventFilter, pairFlows, pairSuggestions, trafficPairOf, type PairEnd } from './pairModel'
 import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
 import { PagedList } from './PolicyPager'
@@ -22,6 +22,7 @@ import { formatWhen } from './summaryModel'
 import TruncatedText from './TruncatedText'
 import type { ZoneEdits } from './useZoneEdits'
 import { useGatewayName } from './useGatewayName'
+import { useNamedNetworks } from './namedNetworksContext'
 import { bareIp, type MapEdgeKind, type PanelEdgeData } from './zoneGraph'
 import type { ZoneMember } from './zoneModel'
 import { ExpandAddButton, FlowsList, NewFlowButton, useExceptionEditor, useFlowEditor } from './ZonePanelActions'
@@ -138,7 +139,8 @@ function ObservedRow({ s, example, zonesById, peers, busy, onResolve }: {
   const service = serviceTitle(s.proto, s.dport)
   const gatewayName = useGatewayName(zonesById.values())
   const zoneName = (id: string) => zonesById.get(id)?.name ?? to('deletedZone')
-  const source = s.src_zone_id ? zoneName(s.src_zone_id) : (s.src_ip && gatewayName(s.src_ip)) || s.src_ip || to('unknownEndpoint')
+  const networks = useNamedNetworks()
+  const source = s.src_zone_id ? zoneName(s.src_zone_id) : sourceName(s, zonesById, to as (key: string) => string, gatewayName, networks)
   // The destination of an outbound row may be an address, a guest or many destinations.
   const destination = destinationName(s, zonesById, ip => peers?.get(bareIp(ip)) ?? gatewayName(ip), to as (key: string) => string)
   const accept = t('flowPanel.acceptAs', { from: s.src_zone_id ? source : to('unknownEndpoint'), to: destination, service })
@@ -151,7 +153,7 @@ function ObservedRow({ s, example, zonesById, peers, busy, onResolve }: {
           <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} />
         </IconButton>
         <DirectionGlyph direction={s.direction} />
-        <ObservedKindGlyph kind={s.kind} />
+        <ObservedKindGlyph kind={s.kind} lastSeen={s.last_seen} />
         <TruncatedText text={`${source} → ${destination}`} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
         <ServiceHits suggestion={s} />
         <ResolveActions suggestion={s} busy={busy} onResolve={onResolve} acceptLabel={accept} acceptTip={outboundZoneAcceptTip(to, s, source, destination)} />

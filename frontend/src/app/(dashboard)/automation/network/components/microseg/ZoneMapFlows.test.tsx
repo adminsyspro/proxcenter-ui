@@ -60,7 +60,7 @@ describe('guests on the map', () => {
     expect(screen.getByTestId('edge-unprotected:guest:zw:qemu/100>guest:zd:qemu/200').getAttribute('aria-label')).toBe('web-1 (web) to db-1 (db): 1 unprotected flow')
   })
 
-  it('shows only the flows of a clicked guest, without opening a panel', async () => {
+  it('shows only the flows of a clicked guest, and opens its panel', async () => {
     setup({ vms: withIps, flows: [flowOf('f1')], suggestions: [wouldBlock('s1', { src_ip: '10.0.0.1', dst_ip: '10.0.0.2' })] })
     const id = 'unprotected:guest:zw:qemu/100>guest:zd:qemu/200'
     await pathOf(id)
@@ -74,7 +74,7 @@ describe('guests on the map', () => {
     // The allowed flow goes zone to zone: it is not one of the guest's.
     expect(screen.queryByTestId('edge-allowed:zone:zw>zone:zd')).toBeNull()
     expect(within(await node('guest:zw:qemu/100')).getByRole('button', { name: 'web-1, guest 100' }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.queryByRole('complementary')).toBeNull()
+    expect(await screen.findByRole('complementary', { name: 'Guest web-1' })).toBeTruthy()
   })
 
   it('brings the other flows back, dimmed, on "Show all flows", and isolates again on "Only its flows"', async () => {

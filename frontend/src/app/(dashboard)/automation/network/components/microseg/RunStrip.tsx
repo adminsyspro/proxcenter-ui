@@ -2,13 +2,15 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Alert, Box, CircularProgress, Portal, Tooltip, Typography } from '@mui/material'
+import { Alert, Box, CircularProgress, Collapse, IconButton, Portal, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { useMicrosegRun } from '@/lib/microseg/useMicroseg'
 
-import RunBar from './RunBar'
+import ClusterRunRow, { OUTCOME_SEVERITY, clusterRunLine, neverAppliedLeft, shownClusterName } from './ClusterRunRow'
+import RunBar, { groupProgress } from './RunBar'
 import type { TrackedRun } from './microsegTabTypes'
+import { polledOutcome, useGroupRunPoll, type PolledRun } from './useGroupRunPoll'
 
 /** A finished run stays visible this long (or until dismissed). A removal stays until dismissed. */
 export const RUN_LINGER_MS = 10_000
@@ -26,15 +28,12 @@ type LineProps = {
   floatHost: HTMLElement | null
 }
 
-/** One run on one line: running with its progress bar, then the counts of steps done, failed and not run (UA13). */
-function RunLine({ connectionId, run: tracked, onFinished, onRemove, floatHost }: LineProps) {
-  const t = useTranslations('microsegPilot.policy.run')
-  const tr = useTranslations('microsegPilot.settings.remove')
-  const { run, done, error } = useMicrosegRun(connectionId, tracked.runId)
-  const lost = !!error && !run
-
-  // The callbacks are read through refs: a parent handing new functions on each render must not re-run the effects
-  // (an onFinished that reloads would then reload, re-render and reload again, without end).
+/**
+ * What a line does once its run has ended: the refresh of what it changed, once, and its removal after a while.
+ * The callbacks are read through refs: a parent handing new functions on each render must not re-run the effects
+ * (an onFinished that reloads would then reload, re-render and reload again, without end).
+ */
+function useRunEnd(done: boolean, tracked: TrackedRun, onFinished: (runId: string) => void, onRemove: (runId: string) => void) {
   const finished = useRef(onFinished)
   const remove = useRef(onRemove)
   useEffect(() => {
@@ -55,6 +54,18 @@ function RunLine({ connectionId, run: tracked, onFinished, onRemove, floatHost }
     const timer = setTimeout(() => remove.current(tracked.runId), RUN_LINGER_MS)
     return () => clearTimeout(timer)
   }, [done, tracked.runId, lingers])
+}
+
+/** One run on one line: running with its progress bar, then the counts of steps done, failed and not run (UA13). */
+function RunLine({ connectionId, run: tracked, onFinished, onRemove, floatHost }: LineProps) {
+  const t = useTranslations('microsegPilot.policy.run')
+  const tr = useTranslations('microsegPilot.settings.remove')
+  // A run resumed on another cluster of the group is read through that cluster.
+  const only = tracked.runs?.[0]
+  const { run, done, error } = useMicrosegRun(only?.connection_id ?? connectionId, only?.run_id ?? tracked.runId)
+  const lost = !!error && !run
+
+  useRunEnd(done, tracked, onFinished, onRemove)
 
   const { label } = tracked
   let text = tracked.runningText
@@ -126,11 +137,118 @@ function RunLine({ connectionId, run: tracked, onFinished, onRemove, floatHost }
   )
 }
 
+/** True when a tracked run is followed on several clusters, or carries why a cluster's run did not start. */
+const isGroupRun = (run: TrackedRun) => !!run.runs && (run.runs.length > 1 || run.runs.some(r => !!r.error))
+
+type GroupLineProps = LineProps & {
+  clusterName?: (id: string) => string
+  /** The clusters never applied (link inactive): one that could not be reached does not catch up by itself. */
+  inactiveClusters?: ReadonlySet<string>
+}
+
+const NO_CLUSTER: ReadonlySet<string> = new Set()
+
+/**
+ * One group action (an application, a state change...) of a shared policy on one line: its bar sums the steps of
+ * every cluster, its outcome says on how many clusters it went through; the line of each cluster, with its own bar or
+ * outcome, is behind the chevron.
+ */
+function GroupRunLine({ connectionId, run: tracked, onFinished, onRemove, floatHost, clusterName, inactiveClusters = NO_CLUSTER }: GroupLineProps) {
+  const t = useTranslations('microsegPilot.policy.run')
+  const tp = useTranslations('microsegPilot.plan')
+  const polled = useGroupRunPoll(tracked.runs ?? null)
+  const [open, setOpen] = useState(false)
+  const done = polled.every(p => p.ended)
+  const lost = !done && polled.every(p => p.ended || (!!p.readError && !p.run))
+
+  useRunEnd(done, tracked, onFinished, onRemove)
+
+  const { label } = tracked
+  const outcome = polledOutcome(polled)
+  const applied = polled.filter(p => p.run?.status === 'done').length
+  let text = tracked.runningText
+  let severity: 'info' | 'success' | 'warning' | 'error' = 'info'
+  let icon: ReactNode = <CircularProgress size={16} />
+  if (done && outcome !== 'running') {
+    text = t(`group.${outcome === 'partial' && neverAppliedLeft(polled, inactiveClusters) ? 'partialApplyAgain' : outcome}`, { label, done: applied, total: polled.length })
+    severity = OUTCOME_SEVERITY[outcome]
+    icon = undefined
+  } else if (lost) {
+    text = t('unavailable', { label })
+    severity = 'warning'
+    icon = undefined
+  }
+  const running = !done && !lost
+  const progress = groupProgress(polled.map(p => p.run))
+  const toggle = t(open ? 'group.hideClusters' : 'group.showClusters')
+  const nameOf = (id: string) => shownClusterName(id, connectionId, clusterName, tp('cluster.other'))
+
+  const clusterLine = (p: PolledRun) => {
+    const { status, key, values } = clusterRunLine(p, inactiveClusters.has(p.connection_id))
+    const name = nameOf(p.connection_id)
+    const lineText = key ? tp(key, values) : ''
+    // The orchestrator's own reason of a failed run is shown on hover, as on a line of one cluster.
+    const tip = status === 'failed' && !p.fatal && p.run?.error ? `${lineText}${NOTE_SEPARATOR}${p.run.error}` : undefined
+    return (
+      <ClusterRunRow
+        key={p.connection_id}
+        connectionId={p.connection_id}
+        name={name}
+        status={status}
+        text={lineText}
+        tip={tip}
+        extra={status === 'running' ? <RunBar run={p.run} label={`${tracked.runningText}${NOTE_SEPARATOR}${name}`} /> : undefined}
+      />
+    )
+  }
+
+  const line = (floating: boolean) => (
+    <Alert
+      role={floating ? 'none' : undefined}
+      severity={severity}
+      icon={icon}
+      variant='outlined'
+      onClose={done || lost ? () => onRemove(tracked.runId) : undefined}
+      sx={{ py: 0, bgcolor: 'background.paper', '& .MuiAlert-message': { minWidth: 0, overflow: 'hidden', flex: 1 } }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+        <Tooltip title={text}>
+          <Typography variant='body2' noWrap sx={{ flexShrink: 0, maxWidth: '100%' }}>{text}</Typography>
+        </Tooltip>
+        {running ? <RunBar run={null} progress={progress} label={text} separator={NOTE_SEPARATOR.trim()} /> : <Box sx={{ flex: 1 }} />}
+        {floating ? null : (
+          <Tooltip title={toggle}>
+            <IconButton size='small' aria-label={toggle} aria-expanded={open} onClick={() => setOpen(v => !v)} sx={{ p: 0.25, flexShrink: 0 }}>
+              <i className={open ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'} />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Box>
+      {floating ? null : (
+        <Collapse in={open} unmountOnExit>
+          <Box role='list' sx={{ mt: 0.5 }}>{polled.map(clusterLine)}</Box>
+        </Collapse>
+      )}
+    </Alert>
+  )
+
+  return (
+    <>
+      {line(false)}
+      {floatHost ? createPortal(line(true), floatHost) : null}
+    </>
+  )
+}
+
 type Props = {
   connectionId: string
   runs: TrackedRun[]
   onFinished: (runId: string) => void
   onRemove: (runId: string) => void
+  /** The name of a cluster of the group, for the lines of an action followed on several clusters. */
+  clusterName?: (id: string) => string
+  /** The clusters of the policy never applied (link inactive), from the policy already read. */
+  inactiveClusters?: ReadonlySet<string>
 }
 
 /** The gap between the page header and the strip when it floats under it. */
@@ -181,13 +299,14 @@ const STRIP_SX = { display: 'flex', flexDirection: 'column', gap: 1 } as const
  * a copy of the strip floats under the page header: a run started from a zone far down stays in view. The copy
  * is drawn at the root of the document, where nothing of the page can clip or shift it.
  */
-function Strip({ connectionId, runs, onFinished, onRemove }: Props) {
+function Strip({ connectionId, runs, onFinished, onRemove, clusterName, inactiveClusters }: Props) {
   const { place, floating } = useFloating(runs.length)
   const [floatHost, setFloatHost] = useState<HTMLElement | null>(null)
   return (
     <Box ref={place} data-testid='microseg-run-strip' sx={{ ...STRIP_SX, mt: 2 }}>
-      {runs.map(run => (
-        <RunLine key={run.runId} connectionId={connectionId} run={run} onFinished={onFinished} onRemove={onRemove} floatHost={floating ? floatHost : null} />
+      {runs.map(run => (isGroupRun(run)
+        ? <GroupRunLine key={run.runId} connectionId={connectionId} run={run} onFinished={onFinished} onRemove={onRemove} floatHost={floating ? floatHost : null} clusterName={clusterName} inactiveClusters={inactiveClusters} />
+        : <RunLine key={run.runId} connectionId={connectionId} run={run} onFinished={onFinished} onRemove={onRemove} floatHost={floating ? floatHost : null} />
       ))}
       {floating ? (
         <Portal>

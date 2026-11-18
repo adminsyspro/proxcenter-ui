@@ -5,13 +5,19 @@ import {
   UNZONED_ID, bareIp, guestNodeId, moreNodeId, pveNodeId, zoneNodeId, type FlowFilters, type MapEdgeData, type ZoneGraph,
 } from './zoneGraph'
 import { byText } from './zoneLayout'
-import { byGuestName, guestKey, type PolicyGuest, type ZoneMember } from './zoneModel'
+import { mapKey } from './mapClusters'
+import { byGuestName, guestId, memberId, type PolicyGuest, type ZoneMember } from './zoneModel'
 
 /** The most guests the target picker lists for one search: typing narrows it. */
 export const MAX_OPTIONS = 50
 
 /** A running guest the map can be focused on, with the zone it belongs to (null: in no zone). */
 export type TargetGuest = {
+  /** The guest across the clusters of a shared policy (`guestId`): the pick and the option keys use it. */
+  id: string
+  /** The cluster of the guest. */
+  connectionId: string
+  /** The key of the guest's node on the canvases of the map (`mapKey`): type and VMID, its cluster first on a shared policy. */
   key: string
   vmid: number
   name: string
@@ -22,26 +28,29 @@ export type TargetGuest = {
   zoneId: string | null
 }
 
-/** The zone of each guest: the one it is tagged with, else the one it is queued for. */
+/** The zone of each guest (by `guestId`): the one it is tagged with, else the one it is queued for. */
 function zoneOfGuests(membersByZone: ReadonlyMap<string, ZoneMember[]>): Map<string, string> {
   const tagged = new Map<string, string>()
   const queued = new Map<string, string>()
   for (const [zoneId, members] of membersByZone) {
     for (const m of members) {
       const into = m.pending ? queued : tagged
-      const key = guestKey(m.ref)
+      const key = memberId(m)
       if (!into.has(key)) into.set(key, zoneId)
     }
   }
   return new Map([...queued, ...tagged])
 }
 
-/** The running guests of the connection, by name, each with its zone. Pure. */
-export function targetCandidates(guests: PolicyGuest[], membersByZone: ReadonlyMap<string, ZoneMember[]>): TargetGuest[] {
+/** The running guests, by name, each with its zone (a member of its own cluster only); `shared`: the map draws a shared policy. Pure. */
+export function targetCandidates(guests: PolicyGuest[], membersByZone: ReadonlyMap<string, ZoneMember[]>, shared = false): TargetGuest[] {
   const zoneOf = zoneOfGuests(membersByZone)
   return guests
     .filter(g => g.status === 'running')
-    .map(g => ({ key: guestKey(g), vmid: g.vmid, name: g.name, type: g.type, node: g.node, status: g.status, ips: g.ips ?? [], zoneId: zoneOf.get(guestKey(g)) ?? null }))
+    .map(g => ({
+      id: guestId(g), connectionId: g.connectionId, key: mapKey(g, shared),
+      vmid: g.vmid, name: g.name, type: g.type, node: g.node, status: g.status, ips: g.ips ?? [], zoneId: zoneOf.get(guestId(g)) ?? null,
+    }))
     .sort(byGuestName)
 }
 
@@ -113,13 +122,14 @@ export function targetPeers(guests: PolicyGuest[]): Map<string, string> {
 
 /**
  * The node of the guest on a canvas: its glyph, else the "+N" of its circle, else the circle (or box) of its zone; on
- * the node view, its glyph in the circle of its Proxmox node, else the "+N" of that circle, else the circle.
+ * the node view, its glyph in the circle of its Proxmox node (of its own cluster on a shared policy), else the "+N"
+ * of that circle, else the circle.
  */
 export function targetNodeId(graph: ZoneGraph, t: TargetGuest): string | null {
   const ids = new Set(graph.nodes.map(n => n.id))
   const group = t.zoneId ?? UNZONED_ID
-  const pve = pveNodeId(t.node)
-  const tries = [guestNodeId(group, t.key), moreNodeId(group), t.zoneId ? zoneNodeId(t.zoneId) : null, guestNodeId(pve, t.key), moreNodeId(pve), pve]
+  const onNode = (pve: string) => [guestNodeId(pve, t.key), moreNodeId(pve), pve]
+  const tries = [guestNodeId(group, t.key), moreNodeId(group), t.zoneId ? zoneNodeId(t.zoneId) : null, ...onNode(pveNodeId(t.node)), ...onNode(pveNodeId(t.node, t.connectionId))]
   return tries.find(id => !!id && ids.has(id)) ?? null
 }
 

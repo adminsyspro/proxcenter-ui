@@ -24,7 +24,7 @@ import { uncoveredSeriesOf, type UncoveredSeries } from './useZoneUncovered'
 import { MicrosegActionsSlot, SlotActions, WriteTip, useMicrosegWrite } from './microsegAccess'
 
 type Props = Pick<ZoneRowProps, 'onEdit' | 'onDelete' | 'onSetState' | 'onSetEgress' | 'onAssign' | 'onRemoveMember' | 'removeBusy' | 'onAddFlow' | 'onEditFlow' | 'onDeleteFlow'>
-  & Pick<ZoneCardProps, 'onOpenDrifts'> & {
+  & Pick<ZoneCardProps, 'onOpenDrifts' | 'membersNote'> & {
   connectionId: string
   zones: MicrosegZone[]
   flows: MicrosegFlow[]
@@ -89,7 +89,7 @@ export function cardColumns(width: number | undefined): number {
  * (struck through until the next apply), ten per page, "+" right of the title for a new zone. An opened card shows
  * its members and flows full width below its row. The drifts are read once (the engine's last full run, no Proxmox call).
  */
-export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests, guestsStatus, pendingMembers, diff, onAdd, onOpenDrifts, uncovered = 'failed', readyAfterHours, work, ...handlers }: Props) {
+export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests, guestsStatus, pendingMembers, diff, onAdd, onOpenDrifts, uncovered = 'failed', readyAfterHours, work, membersNote, ...handlers }: Props) {
   const t = useTranslations('microsegPilot.policy')
   const inSlot = useContext(MicrosegActionsSlot) !== null
   const { canWrite } = useMicrosegWrite()
@@ -119,7 +119,8 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
 
   const card = (item: Item) => {
     if (item.removed) return <RemovedZoneCard key={`removed-${item.zone.id}`} zone={item.zone} />
-    const signals = zoneDriftSignals(item.zone, item.members, drifts?.computed ? drifts.drifts : null, zones, ignored)
+    // The drifts are those of this connection: they concern its members only.
+    const signals = zoneDriftSignals(item.zone, item.members, drifts?.computed ? drifts.drifts : null, zones, ignored, connectionId)
     return (
       <ZoneCard
         key={item.zone.id}
@@ -135,6 +136,7 @@ export default function ZoneList({ connectionId, zones, flows, tagPrefix, guests
         drifts={signals?.count ?? null}
         onOpenDrifts={onOpenDrifts}
         egressReady={egressReady(item.zone)}
+        membersNote={membersNote}
         uncovered={uncovered === 'failed' ? null : {
           series: uncovered ? uncoveredSeriesOf(uncovered, item.zone.name, diff?.renamedZones.get(item.zone.id)) : null,
           outSeries: uncovered ? uncoveredSeriesOf(uncovered, item.zone.name, diff?.renamedZones.get(item.zone.id), 'out') : null,

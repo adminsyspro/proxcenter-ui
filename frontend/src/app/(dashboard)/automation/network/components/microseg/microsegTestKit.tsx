@@ -8,6 +8,7 @@ import { SWRConfig } from 'swr'
 import type { ReactElement } from 'react'
 
 import { renderWithProviders } from '@/__tests__/setup/renderWithProviders'
+import RBACContext, { type RBACContextValue } from '@/contexts/RBACContext'
 import { forgetSharedReads } from '@/lib/microseg/api'
 
 import { forgetHeldEvents } from '../usePostureEvents'
@@ -34,7 +35,7 @@ export const flow = (id: string): MicrosegFlow => ({
 })
 /** An exception of zone "zw": app-01 (200) may reach web-1 (100) on PostgreSQL. */
 export const exception = (id: string, over: Partial<MicrosegException> = {}): MicrosegException => ({
-  id, policy_id: 'p1', zone_id: 'zw', sources: [{ type: 'qemu', vmid: 200, name: 'app-01' }], destinations: [{ type: 'qemu', vmid: 100, name: 'web-1' }],
+  id, policy_id: 'p1', connection_id: 'c1', zone_id: 'zw', sources: [{ type: 'qemu', vmid: 200, name: 'app-01' }], destinations: [{ type: 'qemu', vmid: 100, name: 'web-1' }],
   services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'me', ...over,
 })
 
@@ -43,6 +44,7 @@ export const policy = (over: Partial<MicrosegPolicy> = {}): MicrosegPolicy => ({
     id: 'p1', connection_id: 'c1', tag_prefix: 'zone-', version: 3, settings: {} as never, emergency_stop: false,
     created_at: '2026-11-01T10:00:00Z', updated_at: '2026-11-01T10:00:00Z', updated_by: 'me',
   },
+  clusters: [{ connection_id: 'c1', active: true, stop_cluster_disabled: false, policy_id: 'p1', created_at: '2026-11-01T10:00:00Z', activated_at: null }],
   zones: [], flows: [], exceptions: [], pending_members: [], last_revision: null, version: 3, pending_changes: false, ...over,
 })
 
@@ -91,8 +93,20 @@ export function resetMocks() {
   }
 }
 
+/**
+ * The rights of the tab's user: every right, loaded. A shared policy is writable only once the rights are loaded (fail
+ * closed), a single cluster also while they load: both are writable here. A test of the rights wraps its own provider.
+ */
+const ALL_RIGHTS: RBACContextValue = {
+  permissions: [], roles: [], isAdmin: false, scopeTypes: [], hiddenWidgets: [], loading: false,
+  hasPermission: () => true, hasAnyPermission: () => true, hasAllPermissions: () => true, hasPermissionOn: () => true,
+  refresh: () => undefined,
+}
+
 export function renderTab(ui: ReactElement = <MicrosegTab connectionId="c1" />) {
   return renderWithProviders(
-    <SWRConfig value={{ revalidateOnMount: true, dedupingInterval: 0, errorRetryCount: 0, refreshInterval: 0 }}>{ui}</SWRConfig>,
+    <RBACContext.Provider value={ALL_RIGHTS}>
+      <SWRConfig value={{ revalidateOnMount: true, dedupingInterval: 0, errorRetryCount: 0, refreshInterval: 0 }}>{ui}</SWRConfig>
+    </RBACContext.Provider>,
   )
 }

@@ -1,12 +1,15 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { MicrosegApiError, microsegApi, microsegErrorKeyOf } from '@/lib/microseg/api'
 import type { PreflightCheck, PreflightStatus } from '@/lib/microseg/types'
+import { clustersToRead, useMergedClusters, type ClusterRead } from '@/lib/microseg/useMerged'
 
+import ClusterChip from './ClusterChip'
+import { shownClusterName } from './ClusterRunRow'
 import { ONE_LINE_SX } from './dialogParts'
 import { heldByStop, opensWizard, parseRate, preflightMessage, raisesLogRate } from './preflightModel'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
@@ -18,7 +21,9 @@ const STATUS_ICON: Record<PreflightStatus, { icon: string; color: string }> = {
   fail: { icon: 'ri-close-circle-fill', color: 'error.main' },
 }
 
-function CheckRow({ check, onOpenWizard, onResume, rateLimit }: { check: PreflightCheck; onOpenWizard?: () => void; onResume?: () => void; rateLimit?: RateLimitFix }) {
+type ChipOf = { id: string; name: string }
+
+function CheckRow({ check, onOpenWizard, onResume, rateLimit, cluster }: { check: PreflightCheck; onOpenWizard?: () => void; onResume?: () => void; rateLimit?: RateLimitFix; cluster?: ChipOf }) {
   const t = useTranslations('microsegPilot.preflight')
   const tStop = useTranslations('microsegPilot.stop')
   const { title, detail, more = [] } = preflightMessage(check)
@@ -39,6 +44,7 @@ function CheckRow({ check, onOpenWizard, onResume, rateLimit }: { check: Preflig
   return (
     <Box role='listitem' aria-label={`${name}: ${t(`status.${check.status}`)}`} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minHeight: 48, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>
       <Box component='i' className={icon.icon} sx={{ color: icon.color, fontSize: 20, flexShrink: 0 }} />
+      {cluster && <ClusterChip connectionId={cluster.id} name={cluster.name} compact />}
       <TruncatedText text={name} fontWeight={600} sx={{ flex: '0 0 auto', width: 170 }} />
       <TruncatedText text={planned ? plannedText : message} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
       {raisable && <RaiseLogRate onRaise={rateLimit!.onRaise!} />}
@@ -89,9 +95,38 @@ function RaiseLogRate({ onRaise }: { onRaise: () => Promise<void> }) {
   )
 }
 
+/**
+ * The pre-flight checks of one cluster, read once per `round` (an opening, a retry, the wizard done): nothing is cached.
+ * Nothing is read without a cluster or a round. The answer is tagged with the round it belongs to, so a new one never
+ * shows the previous answer.
+ */
+function usePreflightRead(connId: string | null, round: string | null): ClusterRead<PreflightCheck[]> {
+  const key = connId && round ? `${connId}:${round}` : null
+  const [state, setState] = useState<{ key: string | null; checks: PreflightCheck[] | null; error: unknown }>({ key: null, checks: null, error: null })
+  useEffect(() => {
+    if (!key || !connId) return
+    let cancelled = false
+    microsegApi(connId).getPreflight().then(
+      checks => { if (!cancelled) setState({ key, checks, error: null }) },
+      (error: unknown) => { if (!cancelled) setState({ key, checks: null, error }) },
+    )
+    return () => { cancelled = true }
+  }, [key, connId])
+  const current = state.key === key
+  return { data: current ? state.checks ?? undefined : undefined, error: current ? state.error ?? undefined : undefined, loading: !!key && !current }
+}
+
 type Props = {
   open: boolean
   connectionId: string
+  /** The clusters sharing the policy: each one's checks are read and listed with its chip; the connection alone when absent. */
+  clusterIds?: string[]
+  /**
+   * The group's anchor, undefined while the group is read: with `clusterIds`, nothing is read before the group is known,
+   * so the tab's cluster never moves to another read slot and runs its checks (Proxmox calls) twice.
+   */
+  anchor?: string
+  clusterName?: (id: string) => string
   onClose: () => void
   /** Changes when the cluster may have changed under the panel (the wizard ran): the checks are read again. */
   refreshKey?: number
@@ -103,38 +138,51 @@ type Props = {
   rateLimit?: RateLimitFix
 }
 
-/** The pre-flight checks of a connection, one line each. The cluster is read on every opening: nothing is cached. */
-export default function PreflightPanel({ open, connectionId, onClose, refreshKey = 0, onOpenWizard, onResume, rateLimit }: Props) {
+/**
+ * The pre-flight checks of a connection, one line each; on a shared policy those of every cluster, each line with its
+ * cluster's chip, a cluster that cannot be read on a line of its own. The clusters are read on every opening: nothing
+ * is cached.
+ */
+export default function PreflightPanel({ open, connectionId, clusterIds, anchor, clusterName, onClose, refreshKey = 0, onOpenWizard, onResume, rateLimit }: Props) {
   const t = useTranslations('microsegPilot.preflight')
   const tAll = useTranslations()
   const [attempt, setAttempt] = useState(0)
-  // The answer is tagged with the request it belongs to, so a new opening, round or retry never shows the previous one.
-  const key = open ? `${connectionId}:${refreshKey}:${attempt}` : null
-  const [state, setState] = useState<{ key: string | null; checks: PreflightCheck[] | null; error: unknown }>({ key: null, checks: null, error: null })
-
-  useEffect(() => {
-    if (!key) return
-    let cancelled = false
-    microsegApi(connectionId).getPreflight().then(
-      checks => { if (!cancelled) setState({ key, checks, error: null }) },
-      (error: unknown) => { if (!cancelled) setState({ key, checks: null, error }) },
-    )
-    return () => { cancelled = true }
-  }, [key, connectionId])
-
-  const current = state.key === key
-  const checks = current ? state.checks : null
-  const error = current ? state.error : null
+  const ids = useMemo(() => clustersToRead(connectionId, { anchor, clusterIds }), [connectionId, anchor, clusterIds])
+  const shared = ids.length > 1
+  const round = open ? `${refreshKey}:${attempt}` : null
+  const useClusterChecks = (id: string | null) => usePreflightRead(id, round)
+  const reads = useMergedClusters(ids, useClusterChecks)
 
   const retry = useCallback(() => setAttempt(n => n + 1), [])
 
-  let failure: string | null = null
-  if (error) {
+  const failureOf = (error: unknown): string | null => {
+    if (!error) return null
     const code = error instanceof MicrosegApiError ? error.code : ''
-    if (code === 'BUSY') failure = t('busy')
-    else if (code === 'NOT_FOUND') failure = t('noClient')
-    else failure = tAll(microsegErrorKeyOf(error))
+    if (code === 'BUSY') return t('busy')
+    if (code === 'NOT_FOUND') return t('noClient')
+    return tAll(microsegErrorKeyOf(error))
   }
+
+  // One cluster: the checks and the failure of its read, as they always were shown.
+  const checks = shared ? null : reads.byCluster[connectionId] ?? null
+  const failure = shared ? null : failureOf(reads.errors[connectionId])
+  const chipOf = (id: string): ChipOf => ({ id, name: shownClusterName(id, connectionId, clusterName, tAll('microsegPilot.plan.cluster.other')) })
+  // The deployment wizard writes to the tab's connection: its fix is offered on that cluster's lines only.
+  const sharedRows = shared ? ids.flatMap(id => {
+    const failed = failureOf(reads.errors[id])
+    if (failed) {
+      return [(
+        <Box key={`${id}:failed`} role='listitem' aria-label={failed} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minHeight: 48, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>
+          <Box component='i' className={STATUS_ICON.warn.icon} sx={{ color: STATUS_ICON.warn.color, fontSize: 20, flexShrink: 0 }} />
+          <ClusterChip connectionId={id} name={chipOf(id).name} compact />
+          <TruncatedText text={failed} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
+        </Box>
+      )]
+    }
+    return (reads.byCluster[id] ?? []).map(check => (
+      <CheckRow key={`${id}:${check.id}`} check={check} cluster={chipOf(id)} onOpenWizard={id === connectionId ? onOpenWizard : undefined} onResume={onResume} rateLimit={rateLimit} />
+    ))
+  }) : []
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth='md' fullWidth aria-labelledby='microseg-preflight-title'>
@@ -145,7 +193,8 @@ export default function PreflightPanel({ open, connectionId, onClose, refreshKey
             {failure}
           </Alert>
         )}
-        {!failure && !checks && (
+        {shared && sharedRows.length > 0 && <Box role='list'>{sharedRows}</Box>}
+        {((!shared && !failure && !checks) || (shared && reads.loading)) && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1 }}>
             <CircularProgress size={18} />
             <Typography color='text.secondary' noWrap>{t('checking')}</Typography>
@@ -158,7 +207,7 @@ export default function PreflightPanel({ open, connectionId, onClose, refreshKey
         )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        {!failure && <Button onClick={retry} disabled={!checks}>{t('runAgain')}</Button>}
+        {!failure && <Button onClick={retry} disabled={shared ? reads.loading : !checks}>{t('runAgain')}</Button>}
         <Button onClick={onClose} variant='contained'>{tAll('common.close')}</Button>
       </DialogActions>
     </Dialog>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { countPendingChanges, diffCount, policyDiff } from './pendingChanges'
-import type { MicrosegException, MicrosegFlow, MicrosegRevision, MicrosegZone, PendingMember } from './types'
+import { clusterGuestId, countPendingChanges, diffCount, pendingByGuest, policyDiff, rowCluster, withRowClusters } from './pendingChanges'
+import type { MicrosegException, MicrosegFlow, MicrosegPolicy, MicrosegRevision, MicrosegZone, PendingMember } from './types'
 
 const zone = (id: string, over: Partial<MicrosegZone> = {}): MicrosegZone => ({
   id, policy_id: 'p', name: id, label: '', color: '#fff', enforcement: 'guest', vnet_id: '', state: 'disabled',
@@ -12,10 +12,10 @@ const flow = (id: string, over: Partial<MicrosegFlow> = {}): MicrosegFlow => ({
   comment: '', origin: 'manual', created_by: 'me', ...over,
 })
 const exception = (id: string, over: Partial<MicrosegException> = {}): MicrosegException => ({
-  id, policy_id: 'p', zone_id: 'a', sources: [{ type: 'qemu', vmid: 101, name: 'app-01' }], destinations: [{ type: 'qemu', vmid: 201, name: 'db-01' }],
+  id, policy_id: 'p', connection_id: 'c1', zone_id: 'a', sources: [{ type: 'qemu', vmid: 101, name: 'app-01' }], destinations: [{ type: 'qemu', vmid: 201, name: 'db-01' }],
   services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'me', ...over,
 })
-const member = (vmid: number): PendingMember => ({ id: `m${vmid}`, policy_id: 'p', node: 'pve1', type: 'qemu', vmid, zone_id: 'a' })
+const member = (vmid: number): PendingMember => ({ id: `m${vmid}`, policy_id: 'p', connection_id: 'c1', node: 'pve1', type: 'qemu', vmid, zone_id: 'a' })
 const revision = (zones: MicrosegZone[], flows: MicrosegFlow[], tag_prefix = 'zone-'): MicrosegRevision => ({
   id: 'r1', version: 3, author: 'me', created_at: '2026-11-02T10:00:00Z', snapshot: { tag_prefix, zones, flows },
 })
@@ -159,5 +159,52 @@ describe('exceptions', () => {
     expect(countPendingChanges(draft([exception('e1'), exception('e2')]), null)).toBe(4)
     const bare: MicrosegRevision = { id: 'r1', version: 3, author: 'me', created_at: '2026-11-02T10:00:00Z' }
     expect(countPendingChanges(draft([exception('e1')]), bare)).toBe(0)
+  })
+})
+
+describe('pendingByGuest', () => {
+  const row = (connection_id: string, vmid: number, zone_id: string): PendingMember =>
+    ({ id: `${connection_id}-${vmid}`, policy_id: 'p', connection_id, node: 'pve9', type: 'lxc', vmid, zone_id })
+
+  it('keys a pending member by its cluster, type and VMID: a row of conn-2 marks only that cluster\'s guest', () => {
+    const byGuest = pendingByGuest([row('conn-2', 100, 'zd')])
+    expect(byGuest.get(clusterGuestId('conn-2', 'lxc', 100))?.zone_id).toBe('zd')
+    expect(byGuest.has(clusterGuestId('conn-1', 'lxc', 100))).toBe(false)
+  })
+
+  it('keeps the rows of two clusters for the same type and VMID apart, whatever their node', () => {
+    const byGuest = pendingByGuest([row('conn-1', 100, 'zw'), row('conn-2', 100, 'zd')])
+    expect(byGuest.size).toBe(2)
+    expect(byGuest.get('conn-1/lxc/100')?.zone_id).toBe('zw')
+    expect(byGuest.get('conn-2/lxc/100')?.zone_id).toBe('zd')
+  })
+})
+
+describe('withRowClusters', () => {
+  const legacy = (over: Record<string, unknown>) => ({ id: 'm', policy_id: 'p', node: 'pve1', type: 'qemu', vmid: 100, zone_id: 'a', ...over }) as unknown as PendingMember
+  const read = (rows: PendingMember[], exceptions: MicrosegException[], own?: string) =>
+    ({ policy: { connection_id: own }, pending_members: rows, exceptions } as unknown as MicrosegPolicy)
+
+  it('fills an empty or missing connection_id of the pending members and exceptions with the policy\'s own connection', () => {
+    const out = withRowClusters(read([legacy({ connection_id: '' }), legacy({}), legacy({ connection_id: 'c2' })], [exception('e1', { connection_id: '' })], 'c1'), 'url')
+    expect(out.pending_members.map(p => p.connection_id)).toEqual(['c1', 'c1', 'c2'])
+    expect(out.exceptions.map(e => e.connection_id)).toEqual(['c1'])
+  })
+
+  it('falls back on the URL connection when the answer names none', () => {
+    const out = withRowClusters(read([legacy({})], [{ ...exception('e1'), connection_id: undefined } as unknown as MicrosegException]), 'url')
+    expect(out.pending_members[0].connection_id).toBe('url')
+    expect(out.exceptions[0].connection_id).toBe('url')
+  })
+
+  it('takes a row without a cluster (older data) as one of the cluster it was read through, the one rule of every list', () => {
+    expect(rowCluster({ connection_id: '' }, 'c1')).toBe('c1')
+    expect(rowCluster({}, 'c1')).toBe('c1')
+    expect(rowCluster({ connection_id: 'c2' }, 'c1')).toBe('c2')
+  })
+
+  it('hands back the same object when every row has its cluster', () => {
+    const policy = read([member(1)], [exception('e1')], 'c1')
+    expect(withRowClusters(policy, 'c1')).toBe(policy)
   })
 })

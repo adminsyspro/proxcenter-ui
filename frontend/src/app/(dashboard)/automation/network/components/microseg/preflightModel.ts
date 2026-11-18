@@ -90,6 +90,10 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] & { more?: 
     case 'cluster_firewall':
       if (heldByStop(check)) return { key: 'checks.cluster_firewall.heldByStop' }
       return { key: check.status === 'pass' ? 'checks.cluster_firewall.pass' : 'checks.cluster_firewall.off' }
+    case 'firewall_service':
+      if (check.status === 'pass') return { key: 'checks.firewall_service.pass' }
+      if (check.status === 'warn') return { key: 'checks.firewall_service.unreadable', values: { nodes: strings(detail.unreadable).join(', ') } }
+      return { key: 'checks.firewall_service.stopped', values: { nodes: strings(detail.nodes).join(', ') } }
     case 'socle_rules': {
       if (check.status === 'pass') return { key: detail.node_firewalls === 'off' ? 'checks.socle_rules.nodesOff' : 'checks.socle_rules.pass' }
       return socleMessage(detail)
@@ -136,6 +140,17 @@ export function socleRefusalLines(detail: Record<string, unknown> | undefined): 
   return lines
 }
 
+/** "... on connection <id>: ...": the cluster a SOCLE_MISSING refusal of a shared policy names. */
+const SOCLE_CLUSTER_RE = /\bon connection ([^\s:]+)/
+
+/**
+ * The connection a refused lift names when the policy has several clusters, null otherwise. The text itself is never
+ * shown: the caller names the cluster as the user knows it, or in general words when it is outside their scope.
+ */
+export function socleRefusalCluster(message: string | null | undefined): string | null {
+  return SOCLE_CLUSTER_RE.exec(message ?? '')?.[1] ?? null
+}
+
 export type RateUnit = 'second' | 'minute' | 'hour' | 'day'
 
 const RATE_RE = /^\s*(\d+)\s*\/\s*(second|minute|hour|day)\s*$/
@@ -146,7 +161,7 @@ export function parseRate(raw: string | undefined): { count: number; unit: RateU
   return m ? { count: Number(m[1]), unit: m[2] as RateUnit } : null
 }
 
-const KNOWN_IDS = new Set(['cluster_firewall', 'socle_rules', 'log_ratelimit', 'self_in_zone', 'egress_subnets'])
+const KNOWN_IDS = new Set(['cluster_firewall', 'firewall_service', 'socle_rules', 'log_ratelimit', 'self_in_zone', 'egress_subnets'])
 
 export function preflightMessage(check: PreflightCheck): PreflightMessage {
   const found = detailOf(check)
@@ -159,6 +174,38 @@ export function preflightMessage(check: PreflightCheck): PreflightMessage {
 export function heldByStop(check: PreflightCheck): boolean {
   return check.id === 'cluster_firewall' && check.status !== 'pass'
     && check.detail?.held_by_stop === true
+}
+
+/** What the checks of a cluster say about whether its firewall filters at all (the two findings the plan and the association show). */
+export type FirewallFindings = {
+  /** The cluster firewall is off and the emergency stop does not explain it: nothing is filtered on this cluster. */
+  off: boolean
+  /** The nodes where the firewall service is stopped (nothing is filtered on them). */
+  serviceNodes: string[]
+}
+
+/** Both findings of a cluster's checks; none for checks that could not be read (nothing is claimed then). */
+export function firewallFindings(checks: readonly PreflightCheck[] | undefined): FirewallFindings {
+  const clusterFirewall = checks?.find(c => c.id === 'cluster_firewall')
+  const service = checks?.find(c => c.id === 'firewall_service')
+  return {
+    off: !!clusterFirewall && clusterFirewall.status === 'fail' && !heldByStop(clusterFirewall) && !text(clusterFirewall.detail?.error),
+    serviceNodes: service?.status === 'fail' && !text(service.detail?.error) ? strings(service.detail?.nodes) : [],
+  }
+}
+
+/** "... on connection a,b: ...": the connections a refused apply names, when the answer carries no `connections` list. */
+const FIREWALL_OFF_RE = /\bon connections? ([^\s:]+)/
+
+/** The clusters whose firewall is off, from a CLUSTER_FIREWALL_OFF refusal: its `connections`, else the IDs of its text. */
+export function firewallOffClusters(connections: readonly string[] | undefined, message: string | undefined): string[] {
+  if (connections && connections.length > 0) return [...connections]
+  return (FIREWALL_OFF_RE.exec(message ?? '')?.[1] ?? '').split(',').filter(Boolean)
+}
+
+/** A failed apply run of a cluster whose firewall was switched off meanwhile: its error starts with this text. */
+export function isFirewallOffRunError(error: string | undefined | null): boolean {
+  return /^cluster firewall disabled/i.test(error ?? '')
 }
 
 /** Both fixes the orchestrator names are done by the deployment wizard (it enables the cluster firewall last). */

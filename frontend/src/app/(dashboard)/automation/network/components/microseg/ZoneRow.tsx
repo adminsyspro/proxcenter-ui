@@ -10,8 +10,8 @@ import type { GuestRef, MicrosegFlow, MicrosegZone, ZoneState } from '@/lib/micr
 import DiffChip from './DiffChip'
 import FlowSummary from './FlowSummary'
 import PolicyPager, { usePaged } from './PolicyPager'
-import { flowsOfZone, type ZoneMember } from './zoneModel'
-import { WriteTip, useMicrosegWrite } from './microsegAccess'
+import { flowsOfZone, memberId, type ZoneMember } from './zoneModel'
+import { WriteTip, useMicrosegClusterWrite, useMicrosegWrite } from './microsegAccess'
 import { STATE_VISUAL } from './ZoneStateChip'
 import TruncatedText from './TruncatedText'
 
@@ -32,7 +32,8 @@ export type ZoneRowProps = {
   /** Blocks or reopens the outbound of the zone; without it the zone only shows its outbound state. */
   onSetEgress?: (zone: MicrosegZone, action: 'block' | 'reopen') => void
   onAssign: (zone: MicrosegZone) => void
-  onRemoveMember: (ref: GuestRef) => void
+  /** Takes a member out of its zone, through its own cluster (`connectionId`). */
+  onRemoveMember: (ref: GuestRef, connectionId: string) => void
   /** A member removal is in flight: the remove buttons wait. */
   removeBusy?: boolean
   /** How the zone differs from the applied revision, and each flow; null while the revision is read. */
@@ -107,7 +108,8 @@ export function ZoneStateMenu({ zone, anchor, onClose, onPick }: { zone: Microse
 
 function MemberLine({ member, busy, onRemove }: { member: ZoneMember; busy: boolean; onRemove: () => void }) {
   const t = useTranslations('microsegPilot.policy.zone')
-  const { canWrite } = useMicrosegWrite()
+  // A member is written through its own cluster: the right on that cluster is enough.
+  const canWrite = useMicrosegClusterWrite().canWriteOn(member.connectionId)
   const { guest, ref } = member
   const name = guest?.name ?? `${ref.type}/${ref.vmid}`
   const where = `${ref.vmid} · ${ref.node}`
@@ -120,7 +122,7 @@ function MemberLine({ member, busy, onRemove }: { member: ZoneMember; busy: bool
       <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{where}</Typography>
       {member.pending && <Chip size='small' color='warning' variant='outlined' label={t('memberPending')} sx={{ flexShrink: 0 }} />}
       <MemberChangeChip member={member} />
-      <WriteTip title={t('removeMember')}>
+      <WriteTip allowed={canWrite} title={t('removeMember')}>
         <IconButton size='small' aria-label={t('removeMember')} disabled={!canWrite || busy || member.change?.kind === 'removal'} onClick={onRemove} sx={{ flexShrink: 0 }}>
           <i className='ri-close-line' />
         </IconButton>
@@ -160,7 +162,8 @@ type DetailsProps = Pick<ZoneRowProps, 'zone' | 'members' | 'membersKnown' | 'fl
 /** Two columns side by side: the members on the left, the incoming and outgoing flows on the right (stacked when narrow). */
 export function ZoneDetails({ zone, members, membersKnown, flows, zonesById, onAssign, onRemoveMember, removeBusy, ...flowProps }: DetailsProps) {
   const t = useTranslations('microsegPilot.policy.zone')
-  const { canWrite } = useMicrosegWrite()
+  // Assigning writes the members of each guest's cluster: the right on one cluster of the policy opens it.
+  const { canWriteSome: canAssign } = useMicrosegClusterWrite()
   const paged = usePaged(members)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
 
@@ -169,13 +172,13 @@ export function ZoneDetails({ zone, members, membersKnown, flows, zonesById, onA
       <Box component='section' sx={{ minWidth: 0 }} aria-label={t('membersTitle')}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant='caption' color='text.secondary' sx={{ display: 'block', flex: 1 }}>{t('membersTitle')}</Typography>
-          <WriteTip>
-            <Button size='small' startIcon={<i className='ri-add-circle-line' />} disabled={!canWrite} onClick={() => onAssign(zone)}>{t('assign')}</Button>
+          <WriteTip allowed={canAssign}>
+            <Button size='small' startIcon={<i className='ri-add-circle-line' />} disabled={!canAssign} onClick={() => onAssign(zone)}>{t('assign')}</Button>
           </WriteTip>
         </Box>
         {membersKnown && members.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noMembers')}</Typography>}
         {!membersKnown && <Typography variant='body2' color='text.disabled'>{t('membersUnknown')}</Typography>}
-        {paged.rows.map(m => <MemberLine key={`${m.ref.node}/${m.ref.type}/${m.ref.vmid}`} member={m} busy={!!removeBusy} onRemove={() => onRemoveMember(m.ref)} />)}
+        {paged.rows.map(m => <MemberLine key={memberId(m)} member={m} busy={!!removeBusy} onRemove={() => onRemoveMember(m.ref, m.connectionId)} />)}
         <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
       </Box>
       <Box component='section' sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }} aria-label={t('flowsTitle')}>

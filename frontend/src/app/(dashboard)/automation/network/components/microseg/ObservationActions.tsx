@@ -5,15 +5,16 @@ import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { serviceTitle } from '@/lib/network/serviceNames'
+import { rowCluster } from '@/lib/microseg/pendingChanges'
 import { isAggregateDst, type MicrosegPolicy, type MicrosegSuggestion, type SuggestionAction, type SuggestionKind } from '@/lib/microseg/types'
 
-import ExceptionDialog from './ExceptionDialog'
-import { exceptionCovered, exceptionFromSuggestion, type ExceptionDraft } from './exceptionModel'
+import ExceptionDialog, { useExceptionScope } from './ExceptionDialog'
+import { exceptionCovered, exceptionFromSuggestion, ofCluster, type ExceptionDraft } from './exceptionModel'
 import { AggregateHint, ObservedKindGlyph, outboundZoneAcceptTip, usePrefixChoice } from './observationParts'
-import { MicrosegActionsSlot, WriteTip, useMicrosegWrite } from './microsegAccess'
+import { MicrosegActionsSlot, WriteTip, useMicrosegClusterWrite, useMicrosegWrite } from './microsegAccess'
 import type { TrackedRun } from './microsegTabTypes'
+import { useGroupGuests } from './useGroupGuests'
 import { useZoneEdits } from './useZoneEdits'
-import { useZoneGuests } from './useZoneGuests'
 import { zoneMembers, type ZoneMember } from './zoneModel'
 
 const ACTION_SX = { minWidth: 0, px: 1, py: 0, lineHeight: 1.6, whiteSpace: 'nowrap' } as const
@@ -58,6 +59,8 @@ const exceptionTip = (t: Translate, variant: 'icons' | 'buttons', tip: string) =
 export function FlowActions({ suggestion: s, source, destination, busy, onResolve, variant = 'icons', exception }: FlowActionsProps) {
   const t = useTranslations('microsegPilot.observation')
   const { canWrite } = useMicrosegWrite()
+  // The exception is written on the cluster that saw the flow (its own right); accept and dismiss write the policy.
+  const canException = useMicrosegClusterWrite().canWriteOn(s.connection_id ?? '')
   const service = serviceTitle(s.proto, s.dport)
   const outbound = s.direction === 'out'
   const prefix = usePrefixChoice(s.dst_ip, onResolve)
@@ -94,13 +97,13 @@ export function FlowActions({ suggestion: s, source, destination, busy, onResolv
         )
       })}
       {exception && (
-        <WriteTip title={exceptionTip(t, variant, t('exceptionOnlyTip', { from: exception.source, to: exception.destination, service }))}>
+        <WriteTip allowed={canException} title={exceptionTip(t, variant, t('exceptionOnlyTip', { from: exception.source, to: exception.destination, service }))}>
           {variant === 'icons' ? (
-            <IconButton size='small' color='primary' aria-label={t('exceptionOnly')} disabled={!canWrite || busy} onClick={exception.open}>
+            <IconButton size='small' color='primary' aria-label={t('exceptionOnly')} disabled={!canException || busy} onClick={exception.open}>
               <i className='ri-door-open-line' />
             </IconButton>
           ) : (
-            <Button size='small' variant='outlined' disabled={!canWrite || busy} onClick={exception.open} sx={ACTION_SX}>{t('exceptionOnly')}</Button>
+            <Button size='small' variant='outlined' disabled={!canException || busy} onClick={exception.open} sx={ACTION_SX}>{t('exceptionOnly')}</Button>
           )}
         </WriteTip>
       )}
@@ -117,10 +120,13 @@ export type FlowException = { zoneId: string; draft: ExceptionDraft; members: Zo
  * destination zone. Null when the flow is not between two known guests (`exceptionFromSuggestion`), or when an
  * exception of the zone allows it already (`exceptionCovered`): the action is then not offered. Read from the
  * inventory the tab already holds, no request of its own; the members of a destination zone are worked out once for
- * all the flows that reach it.
+ * all the flows that reach it. On a shared policy a flow is matched among the guests, members and exceptions of the
+ * cluster that saw it, and the exception is written on that cluster.
  */
-export function useFlowExceptions(connectionId: string, policy: MicrosegPolicy): (suggestion: MicrosegSuggestion) => FlowException | null {
-  const { guests } = useZoneGuests(connectionId)
+export function useFlowExceptions(connectionId: string, policy: MicrosegPolicy, clusterName?: (id: string) => string): (suggestion: MicrosegSuggestion) => FlowException | null {
+  const { clusters, guestIds } = useExceptionScope(policy, connectionId, clusterName)
+  const { guests } = useGroupGuests(guestIds)
+  const shared = !!clusters
 
   return useMemo(() => {
     const zones = new Map(policy.zones.map(z => [z.id, z]))
@@ -138,13 +144,16 @@ export function useFlowExceptions(connectionId: string, policy: MicrosegPolicy):
 
     return (suggestion: MicrosegSuggestion) => {
       if (suggestion.status !== 'pending') return null
-      const members = membersOf(suggestion.dst_zone_id)
-      const draft = members && exceptionFromSuggestion(suggestion, guests, members)
-      if (!members || !draft || exceptionCovered(draft, suggestion.dst_zone_id, policy.exceptions)) return null
+      const cluster = shared ? rowCluster(suggestion, connectionId) : undefined
+      const all = membersOf(suggestion.dst_zone_id)
+      const members = all && ofCluster(all, cluster)
+      const draft = members && exceptionFromSuggestion(suggestion, ofCluster(guests, cluster), members)
+      const exceptions = cluster ? policy.exceptions.filter(e => (e.connection_id || connectionId) === cluster) : policy.exceptions
+      if (!members || !draft || exceptionCovered(draft, suggestion.dst_zone_id, exceptions)) return null
 
-      return { zoneId: suggestion.dst_zone_id, draft, members }
+      return { zoneId: suggestion.dst_zone_id, draft: cluster ? { ...draft, connectionId: cluster } : draft, members }
     }
-  }, [policy, guests])
+  }, [policy, guests, shared, connectionId])
 }
 
 type FlowExceptionDialogProps = {
@@ -156,22 +165,30 @@ type FlowExceptionDialogProps = {
   /** After the exception is written (the draft is read again by then). */
   onSaved: () => void
   onClose: () => void
+  /** Names a cluster of a shared policy as the user sees it. */
+  clusterName?: (id: string) => string
 }
 
 /**
  * The exception dialog opened on an observed flow: its two guests and its service are picked already, and the save
- * writes the exception into the destination zone like the zone panel does (`saveException`). The suggestion is left
- * as it is: once the exception is applied the engine stops reporting the flow.
+ * writes the exception into the destination zone like the zone panel does (`saveException`), on the cluster that saw
+ * the flow. The suggestion is left as it is: once the exception is applied the engine stops reporting the flow.
  */
-export function FlowExceptionDialog({ connectionId, policy, reloadPolicy, startRun, exception, onSaved, onClose }: Readonly<FlowExceptionDialogProps>) {
-  const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun })
-  const { guests } = useZoneGuests(connectionId)
+export function FlowExceptionDialog({ connectionId, policy, reloadPolicy, startRun, exception, onSaved, onClose, clusterName }: Readonly<FlowExceptionDialogProps>) {
+  const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, clusterName })
+  const { clusters, guestIds } = useExceptionScope(policy, connectionId, clusterName)
+  const { guests } = useGroupGuests(guestIds)
+  // Every member of the zone: the dialog keeps those of the cluster it shows.
+  const members = useMemo(() => {
+    const zone = policy.zones.find(z => z.id === exception.zoneId)
+    return clusters && zone ? zoneMembers(zone, policy.policy.tag_prefix, guests, policy.pending_members, policy.zones) : exception.members
+  }, [clusters, policy, guests, exception])
   const save = async (draft: ExceptionDraft) => {
     await edits.saveException(exception.zoneId, draft)
     onSaved()
   }
 
-  return <ExceptionDialog open exception={exception.draft} guests={guests} members={exception.members} onSave={save} onClose={onClose} />
+  return <ExceptionDialog open exception={exception.draft} guests={guests} members={members} clusters={clusters} onSave={save} onClose={onClose} />
 }
 
 type BulkBarProps = {

@@ -121,6 +121,19 @@ describe('pending bar text', () => {
     expect(screen.getByText('Not applied yet: zone db added, 1 exception added, 1 guest to db.')).toBeTruthy()
   })
 
+  const link = (connection_id: string, active: boolean) => ({ connection_id, active, stop_cluster_disabled: false, policy_id: 'p1', created_at: '2026-11-01T10:00:00Z', activated_at: null })
+  const joining = { ...policy, clusters: [link('c1', true), link('c2', false)] } as MicrosegPolicy
+
+  it('counts a cluster associated and not applied yet as a pending change, by its name', () => {
+    renderWithProviders(<PendingChangesBar connectionId='c1' policy={joining} clusterName={id => (id === 'c2' ? 'PVE-DR' : 'PVE-PROD')} />)
+    expect(screen.getByText('Not applied yet: zone db added, 1 guest to db, cluster PVE-DR will be added.')).toBeTruthy()
+  })
+
+  it('counts the clusters to add without naming one the user cannot see', () => {
+    renderWithProviders(<PendingChangesBar connectionId='c1' policy={joining} clusterName={id => id} />)
+    expect(screen.getByText('Not applied yet: zone db added, 1 guest to db, 1 cluster will be added.')).toBeTruthy()
+  })
+
   const applying = { applying: true, zones: new Set<string>() }
 
   it('says the changes are being applied while a run writes them, with nothing to click', () => {

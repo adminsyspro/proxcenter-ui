@@ -9,7 +9,7 @@ import { flowService } from './FlowSummary'
 import { outboundFlowStatus, type OutboundFlowStatus } from './outboundStatus'
 import { placeEdges, type EdgeEnds, type Obstacle, type PlacedEdge } from './zoneGraphEdges'
 import type { Point } from './edgeGeometry'
-import { guestKey } from './zoneModel'
+import { guestId, guestKey } from './zoneModel'
 import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, byText, circleRadius, foldColumns, layerZones, memberSlots, orderLayers, slotPositions } from './zoneLayout'
 
 /** Size of the External and Outside boxes. */
@@ -25,10 +25,16 @@ export const UNZONED_ID = 'unzoned'
 export const zoneNodeId = (zoneId: string) => `zone:${zoneId}`
 export const guestNodeId = (groupId: string, key: string) => `guest:${groupId}:${key}`
 export const moreNodeId = (groupId: string) => `more:${groupId}`
-/** The circle of a Proxmox node on the node view; its guests carry it as their group. */
-export const pveNodeId = (node: string) => `pve:${node}`
+/**
+ * The circle of a Proxmox node on the node view; its guests carry it as their group. On a shared policy the node is
+ * named in its cluster: two clusters may each have a "pve1".
+ */
+export const pveNodeId = (node: string, cluster?: string) => (cluster ? `pve:${cluster}/${node}` : `pve:${node}`)
 export const isPveGroup = (id: string) => id.startsWith('pve:')
-export const pveNodeName = (id: string) => id.slice(4)
+/** The node name of a node circle (a node name holds no "/"). */
+export const pveNodeName = (id: string) => id.slice(id.lastIndexOf('/') + 1 || 4)
+/** The group of the nodes of one cluster on the node view of a shared policy. */
+export const pveClusterId = (cluster: string) => `pvecluster:${cluster}`
 
 /**
  * One green for every allowed flow (the zone colour stays on its circle) and, dashed, for the exceptions between guests;
@@ -36,8 +42,12 @@ export const pveNodeName = (id: string) => id.slice(4)
  */
 export const EDGE_COLORS = { allowed: '#2e7d32', exception: '#2e7d32', blocked: '#1565c0', unprotected: '#e53935', outside: '#9e9e9e' } as const
 
+/** A cluster of a shared policy as the map names it (general words for one outside the user's scope). */
+export type MapCluster = { id: string; name: string }
+
 /** A guest drawn on the map. */
 export type MapMember = {
+  /** The guest: type/VMID on a policy of one cluster, its cluster, type and VMID (`guestId`) on a shared one. */
   key: string
   name: string
   vmid: number
@@ -47,6 +57,8 @@ export type MapMember = {
   ips: string[]
   /** Queued for the zone, not tagged yet. */
   pending: boolean
+  /** On a shared policy, the cluster of the guest; absent on a policy of one cluster. */
+  cluster?: MapCluster
 }
 
 export type ZoneNodeData = {
@@ -93,10 +105,17 @@ export type PveNodeData = {
   inside: number; insideByKind: { unprotected: number; blocked: number }; radius: number
   /** The status of the node ("online"...) when the page knows it: its icon then carries the status dot. */
   status?: string
+  /** On a shared policy, the cluster of the node. */
+  cluster?: MapCluster
 }
-/** A Proxmox node of the connection and the guests it holds, running or not, in a zone or not. */
-export type PveNodeInfo = { node: string; guests: number; status?: string }
-export type MapNodeData = ZoneNodeData | UnzonedNodeData | GuestNodeData | MoreNodeData | BoundaryNodeData | IpNodeData | PveNodeData
+/**
+ * A Proxmox node of the connection and the guests it holds, running or not, in a zone or not; `cluster`, on a shared
+ * policy, the connection it belongs to.
+ */
+export type PveNodeInfo = { node: string; guests: number; status?: string; cluster?: string }
+/** On the node view of a shared policy, the frame around the nodes of one cluster, headed by its glyph and name. */
+export type PveClusterData = { kind: 'pveCluster'; cluster: MapCluster; width: number; height: number }
+export type MapNodeData = ZoneNodeData | UnzonedNodeData | GuestNodeData | MoreNodeData | BoundaryNodeData | IpNodeData | PveNodeData | PveClusterData
 
 /** `exception`: what the exceptions of a zone allow from guest to guest, beside the flows of the zones. */
 export type MapEdgeKind = 'allowed' | 'exception' | 'unprotected' | 'blocked' | 'outside'
@@ -167,7 +186,16 @@ export type MapInput = {
    * nodes of the guests it knows and counts those.
    */
   pveNodes?: readonly PveNodeInfo[] | null
+  /**
+   * The clusters of a shared policy whose guests the map draws (present, with one cluster or more, as soon as the
+   * policy is shared): the guest keys then carry the cluster, the exceptions are matched in their own cluster and the
+   * node view groups the nodes per cluster, in this order. Absent on a policy of one cluster.
+   */
+  clusters?: readonly MapCluster[] | null
 }
+
+/** The map draws a shared policy (see MapInput.clusters). */
+export const isSharedMap = (input: Pick<MapInput, 'clusters'>) => !!input.clusters
 
 export type ZoneGraph = { nodes: Node[]; edges: Edge[] }
 
@@ -382,20 +410,29 @@ function addObservedPairs(pairs: Map<string, Pair>, suggestions: MicrosegSuggest
   }
 }
 
-/** Where each member of a group is drawn, by guest ("qemu/101"): its node, or the "+N" node when it is not drawn. */
+/** Where each member of a group is drawn, by its key ("qemu/101"): its node, or the "+N" node when it is not drawn. */
 export function memberBook(group: Group): Map<string, string> {
   const book = new Map<string, string>()
   const shownKeys = new Set(group.shown.map(m => m.key))
   const groupId = groupKey(group)
-  for (const m of group.all) book.set(guestKey(m), shownKeys.has(m.key) ? guestNodeId(groupId, m.key) : moreNodeId(groupId))
+  for (const m of group.all) book.set(m.key, shownKeys.has(m.key) ? guestNodeId(groupId, m.key) : moreNodeId(groupId))
   return book
 }
 
 /**
  * One source and one destination of an exception that compiles to rules. `srcZone` is the zone of the source, or
- * UNZONED_ID for a running guest in no zone.
+ * UNZONED_ID for a running guest in no zone; `sourceKey` and `destinationKey` are their keys on the map (MapMember.key).
  */
-export type ExceptionLink = { exception: MicrosegException; source: GuestRefLite; destination: GuestRefLite; srcZone: string }
+export type ExceptionLink = {
+  exception: MicrosegException; source: GuestRefLite; destination: GuestRefLite; srcZone: string; sourceKey: string; destinationKey: string
+}
+
+/**
+ * The map key of a guest an exception names: on a shared policy the guests of an exception are those of its own cluster
+ * (`connection_id`), so the same VMID on another cluster is not one of them.
+ */
+export const exceptionGuestKey = (exception: Pick<MicrosegException, 'connection_id'>, ref: GuestRefLite, shared: boolean) =>
+  (shared ? guestId({ connectionId: exception.connection_id, type: ref.type, vmid: ref.vmid }) : guestKey(ref))
 
 /**
  * What the exceptions allow, guest to guest, as the engine compiles them: nothing for a zone that is gone or neither
@@ -404,22 +441,25 @@ export type ExceptionLink = { exception: MicrosegException; source: GuestRefLite
  */
 export function exceptionLinks(
   exceptions: MapInput['exceptions'], known: ReadonlyMap<string, MicrosegZone>, members: MapInput['members'], unzoned: MapInput['unzoned'],
+  shared = false,
 ): ExceptionLink[] {
   if (!exceptions?.length || !members) return []
   const zoneOf = new Map<string, string>()
-  for (const m of unzoned ?? []) zoneOf.set(guestKey(m), UNZONED_ID)
+  for (const m of unzoned ?? []) zoneOf.set(m.key, UNZONED_ID)
   // A guest two zones hold (a change of zone that is queued) is of the first by name, on every rendering.
-  for (const id of [...known.keys()].reverse()) for (const m of members.get(id) ?? []) zoneOf.set(guestKey(m), id)
+  for (const id of [...known.keys()].reverse()) for (const m of members.get(id) ?? []) zoneOf.set(m.key, id)
   const links: ExceptionLink[] = []
   for (const exception of [...exceptions].sort((a, b) => byText(a.id, b.id))) {
     const state = known.get(exception.zone_id)?.state
     if (state !== 'observe' && state !== 'enforce') continue
-    const inZone = new Set((members.get(exception.zone_id) ?? []).map(guestKey))
+    const inZone = new Set((members.get(exception.zone_id) ?? []).map(m => m.key))
     for (const destination of exception.destinations) {
-      if (!inZone.has(guestKey(destination))) continue
+      const destinationKey = exceptionGuestKey(exception, destination, shared)
+      if (!inZone.has(destinationKey)) continue
       for (const source of exception.sources) {
-        const srcZone = zoneOf.get(guestKey(source))
-        if (srcZone) links.push({ exception, source, destination, srcZone })
+        const sourceKey = exceptionGuestKey(exception, source, shared)
+        const srcZone = zoneOf.get(sourceKey)
+        if (srcZone) links.push({ exception, source, destination, srcZone, sourceKey, destinationKey })
       }
     }
   }
@@ -621,14 +661,14 @@ function toEdge(p: Pair, place: PlacedEdge, endShapes: Map<string, EdgeEnds>, un
  * to guest, resolved from their addresses (the circle when the address is no drawn guest's). Circles on a grid:
  * longest-path layer as the column, barycenter order as the row. Pure and deterministic.
  */
-export function buildZoneGraph({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null }: MapInput): ZoneGraph {
+export function buildZoneGraph({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null, clusters = null }: MapInput): ZoneGraph {
   const { sorted, known, columns } = zoneColumns(zones, flows)
   const { groups, books } = buildGroups(sorted, members, unzoned)
 
   // Edges, by their ends.
   const pairs = new Map<string, Pair>()
   addAllowedPairs(pairs, flows, known)
-  addExceptionZonePairs(pairs, exceptionLinks(exceptions, known, members, unzoned))
+  addExceptionZonePairs(pairs, exceptionLinks(exceptions, known, members, unzoned, isSharedMap({ clusters })))
   addObservedPairs(pairs, suggestions, known, books)
   const ordered = [...pairs.values()].sort(comparePairs)
 

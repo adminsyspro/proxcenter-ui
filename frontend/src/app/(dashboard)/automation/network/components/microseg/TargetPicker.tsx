@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import type { MicrosegZone } from '@/lib/microseg/types'
 
+import ClusterChip from './ClusterChip'
 import { MAX_OPTIONS, filterTargets, matchesTarget, type TargetGuest } from './targetModel'
 
 type Props = {
@@ -18,10 +19,14 @@ type Props = {
   onShowPanel: () => void
   /** The guest's pending observed flows, said in the chip (absent: the name alone). */
   observedCount?: number
+  /** Names a cluster; given only when the policy is shared: each option then shows its cluster chip after its glyph. */
+  clusterName?: (id: string) => string
 }
 
 const optionLabel = (o: TargetGuest) => o.name
-const sameGuest = (a: TargetGuest, b: TargetGuest) => a.key === b.key
+// Two clusters can hold a guest of the same type and VMID (and name): an option is its guestId.
+const optionKey = (o: TargetGuest) => o.id
+const sameGuest = (a: TargetGuest, b: TargetGuest) => a.id === b.id
 
 /** The note under the options when the search matches more guests than the list shows (null: none). */
 const HintContext = createContext<string | null>(null)
@@ -56,7 +61,7 @@ function ZoneOf({ zone, none }: { zone: MicrosegZone | undefined; none: string }
  * (glyph, name, VMID, zone). The pick focuses the map on that guest until it is cleared; the "Targeting" chip
  * beside it reminds the lock, shows the guest panel again on a click, and clears the target with its cross.
  */
-export default function TargetPicker({ candidates, zonesById, target, onTarget, onShowPanel, observedCount }: Props) {
+export default function TargetPicker({ candidates, zonesById, target, onTarget, onShowPanel, observedCount, clusterName }: Props) {
   const t = useTranslations('microsegPilot.overview.target')
   const zoneName = (c: TargetGuest) => (c.zoneId ? zonesById.get(c.zoneId)?.name : undefined) ?? t('noZone')
   // The search filters from the first key typed; the name of the guest picked (shown in the field) filters nothing.
@@ -77,6 +82,7 @@ export default function TargetPicker({ candidates, zonesById, target, onTarget, 
           onInputChange={(_e, next) => setQuery(next)}
           filterOptions={options => filterTargets(options, filter)}
           getOptionLabel={optionLabel}
+          getOptionKey={optionKey}
           isOptionEqualToValue={sameGuest}
           slots={{ paper: HintPaper }}
           noOptionsText={t('noOptions')}
@@ -94,6 +100,7 @@ export default function TargetPicker({ candidates, zonesById, target, onTarget, 
                 sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, whiteSpace: 'nowrap' }}
               >
                 <StatusIcon type='vm' vmType={o.type} status={o.status} />
+                {clusterName && <ClusterChip connectionId={o.connectionId} name={clusterName(o.connectionId)} compact />}
                 <Typography noWrap sx={{ flex: '0 1 auto', minWidth: 0 }}>{o.name}</Typography>
                 <Typography noWrap variant='caption' color='text.secondary' sx={{ flexShrink: 0 }}>{o.vmid}</Typography>
                 <Box sx={{ flex: 1 }} />

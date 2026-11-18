@@ -158,7 +158,8 @@ function guestBorder(pending: boolean, selected: boolean): string {
 }
 
 /**
- * A guest inside its circle: its glyph (type and status), its name under it, the details in a tooltip; a ring when
+ * A guest inside its circle: its glyph (type and status), its name under it, the details in a tooltip (its cluster too,
+ * on a shared policy); a ring when
  * targeted. On the node view its glyph is circled in the colour of its zone, which the tooltip names, and a guest
  * that cannot be targeted (`inert`: it is not running) is no button.
  */
@@ -172,7 +173,9 @@ function GuestNodeComponent({ id, data, selected }: NodeProps) {
   const details = (
     <Box>
       <Typography variant='caption' fontWeight={600} sx={{ display: 'block' }}>{m.name}</Typography>
-      <Typography variant='caption' sx={{ display: 'block' }}>{t('guestWhere', { vmid: m.vmid, node: m.node })}</Typography>
+      <Typography variant='caption' sx={{ display: 'block' }}>
+        {m.cluster ? t('guestWhereCluster', { vmid: m.vmid, node: m.node, cluster: m.cluster.name }) : t('guestWhere', { vmid: m.vmid, node: m.node })}
+      </Typography>
       <Typography variant='caption' sx={{ display: 'block' }}>{m.ips.length ? t('guestIps', { ips: m.ips.join(', ') }) : t('guestNoIp')}</Typography>
       {d.zone !== undefined && <Typography variant='caption' sx={{ display: 'block' }}>{d.zone === null ? t('guestNoZone') : t('guestZone', { zone: d.zone })}</Typography>}
       {m.pending && <Typography variant='caption' sx={{ display: 'block' }}>{t('guestPending')}</Typography>}
@@ -183,7 +186,7 @@ function GuestNodeComponent({ id, data, selected }: NodeProps) {
       <Box
         role={d.inert ? 'img' : 'button'}
         tabIndex={d.inert ? undefined : 0}
-        aria-label={t('guestAria', { name: m.name, vmid: m.vmid })}
+        aria-label={m.cluster ? t('guestAriaCluster', { name: m.name, vmid: m.vmid, cluster: m.cluster.name }) : t('guestAria', { name: m.name, vmid: m.vmid })}
         aria-pressed={d.inert ? undefined : !!selected}
         onKeyDown={d.inert ? undefined : onKeys(() => selectGuest(id))}
         onFocus={d.inert ? undefined : () => setFocus(id)}

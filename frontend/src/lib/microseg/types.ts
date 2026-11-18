@@ -105,6 +105,8 @@ export type ExceptionService = { proto: string; dport: string }
 export type MicrosegException = {
   id: string
   policy_id: string
+  /** The cluster the exception belongs to. */
+  connection_id: string
   zone_id: string
   sources: GuestRefLite[]
   destinations: GuestRefLite[]
@@ -116,6 +118,7 @@ export type MicrosegException = {
 export type PendingMember = {
   id: string
   policy_id: string
+  connection_id: string
   node: string
   type: GuestType
   vmid: number
@@ -128,6 +131,7 @@ export type SuggestionStatus = 'pending' | 'accepted' | 'dismissed'
 export type MicrosegSuggestion = {
   id: string
   policy_id: string
+  connection_id: string
   kind: SuggestionKind
   /** Absent: 'in'. Outbound: `src_*` is the emitting zone, `dst_*` the destination. */
   direction?: FlowDirection
@@ -173,9 +177,21 @@ export type MicrosegRevision = {
   snapshot?: MicrosegSnapshot
 }
 
+/** One cluster (connection) linked to the policy. */
+export type MicrosegCluster = {
+  connection_id: string
+  active: boolean
+  stop_cluster_disabled: boolean
+  policy_id: string
+  created_at: string
+  activated_at: string | null
+}
+
 /** GET /policy. */
 export type MicrosegPolicy = {
   policy: MicrosegPolicyRecord
+  /** Every cluster linked to the policy (one for a policy that is not shared). */
+  clusters: MicrosegCluster[]
   zones: MicrosegZone[]
   flows: MicrosegFlow[]
   /** Always a list on the browser side: the client reads an older orchestrator, which does not send it, as none. */
@@ -216,8 +232,8 @@ export type PlanStep = StepRef
 export type MicrosegRunResult = {
   guests: number
   members: number
-  /** "check" on the full run a manual check asked for (POST /check); absent on a scheduled run. */
-  trigger?: string
+  /** "check" on the full run a manual check asked for (POST /check), "peer" on a run a linked cluster asked for; absent on a scheduled run. */
+  trigger?: 'check' | 'peer' | (string & {})
   steps: number
   done?: StepRef[]
   failed?: StepRef[]
@@ -259,12 +275,22 @@ export type MicrosegRunResult = {
  */
 export type MicrosegRunProgress = { phase: 'waiting' | 'reading' | 'writing' | (string & {}); done: number; total: number }
 
+/** Why a cluster of a group has no run to follow. */
+export type GroupRunError = 'no_client' | 'engine_stopped' | 'internal' | 'stopped' | (string & {})
+
+/** The run started on one cluster of the group, or the reason it did not start. */
+export type GroupRun = { connection_id: string; run_id?: string; error?: GroupRunError }
+
+/** The answer of a lifecycle route (202): `runs` is absent on an orchestrator that does not know shared policies. */
+export type RunStarted = { run_id: string; runs?: GroupRun[] }
+
 export type RunKind = 'light' | 'ips' | 'full' | 'log' | 'targeted' | 'plan' | 'apply' | 'remove'
 export type RunStatus = 'running' | 'done' | 'failed'
 
 export type MicrosegRun = {
   id: string
   policy_id: string
+  connection_id: string
   kind: RunKind | (string & {})
   status: RunStatus
   started_at: string
@@ -273,12 +299,14 @@ export type MicrosegRun = {
   writes: number
   /** On GET /runs/{id}; GET /runs (list) carries it for the engine loops only (light, ips, full, log, targeted). */
   result?: MicrosegRunResult | null
+  /** GET /runs: the revision an application or a restore recorded; absent while it runs, or when it recorded none. */
+  revision_id?: string
   error: string
 }
 
 export type DriftKind =
   | 'unzoned_running' | 'nic_firewall_off' | 'foreign_accept' | 'ipset_out_of_sync'
-  | 'member_without_ip' | 'ambiguous_zone' | 'object_collision' | (string & {})
+  | 'member_without_ip' | 'ambiguous_zone' | 'object_collision' | 'peer_unreadable' | 'stop_lift_held' | 'cluster_firewall_off' | 'firewall_service_stopped' | (string & {})
 
 export type MicrosegDrift = {
   kind: DriftKind
@@ -327,6 +355,11 @@ export type MicrosegStatus = {
     last_log: string | null
     /** The log reading per node (absent on an orchestrator without it). */
     log_nodes?: MicrosegLogNode[]
+    /**
+     * Since when (ISO) the engine's passes cannot reach the PVE API of this cluster; absent while it is reachable, before
+     * a pass failed, or on an older orchestrator. Cleared by the next pass that reaches it (about a minute).
+     */
+    unreachable_since?: string
   }
   /** Null until the first full run after an orchestrator restart or a leader change: nothing is measured yet. */
   coverage: MicrosegCoverage | null

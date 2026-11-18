@@ -5,7 +5,7 @@ import type { MicrosegRun, MicrosegRunResult } from '@/lib/microseg/types'
 import { checkRows, findCheckCandidate, findCompanions, isCheckRun, stepLog, type CheckCompanions } from './checkModel'
 
 const run = (id: string, kind: string, startedAt: string, over: Partial<MicrosegRun> = {}): MicrosegRun => ({
-  id, policy_id: 'p1', kind, status: 'done', started_at: startedAt, duration_ms: 1000, api_calls: 0, writes: 0, error: '', ...over,
+  id, policy_id: 'p1', connection_id: 'c1', kind, status: 'done', started_at: startedAt, duration_ms: 1000, api_calls: 0, writes: 0, error: '', ...over,
 })
 const result = (over: Partial<MicrosegRunResult> = {}) => ({ guests: 0, members: 0, steps: 0, drifts: 0, ...over }) as MicrosegRunResult
 

@@ -162,7 +162,7 @@ describe('zone list', () => {
     setup({
       zones: [web()],
       vms: [vm(100, 'web-1', ['zone-web']), vm(200, 'web-ct', ['zone-web'], { type: 'lxc', status: 'stopped' }), vm(300, 'elsewhere', ['zone-db'])],
-      pending_members: [{ id: 'p1', policy_id: 'p1', node: 'pve1', type: 'qemu', vmid: 400, zone_id: 'zw' }],
+      pending_members: [{ id: 'p1', policy_id: 'p1', connection_id: 'c1', node: 'pve1', type: 'qemu', vmid: 400, zone_id: 'zw' }],
     })
     const card = await screen.findByRole('listitem', { name: 'web' })
     fireEvent.click(await within(card).findByRole('button', { name: 'Show details of web' }))

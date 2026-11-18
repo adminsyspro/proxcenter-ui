@@ -24,7 +24,7 @@ const NAMES: MapNames = {
 }
 
 const seen = (id: string, over: Partial<MicrosegSuggestion> = {}): MicrosegSuggestion => ({
-  id, policy_id: 'p1', kind: 'would_block', src_key: 'k', src_ip: '10.0.0.1', src_zone_id: 'zw', dst_ip: '10.0.0.2', dst_zone_id: 'zd',
+  id, policy_id: 'p1', connection_id: 'c1', kind: 'would_block', src_key: 'k', src_ip: '10.0.0.1', src_zone_id: 'zw', dst_ip: '10.0.0.2', dst_zone_id: 'zd',
   proto: 'tcp', dport: '22', hits: 14, first_seen: '2026-11-02T10:00:00Z', last_seen: '2026-11-02T11:00:00Z', status: 'pending', ...over,
 })
 

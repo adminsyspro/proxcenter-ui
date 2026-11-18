@@ -513,7 +513,7 @@ describe('members', () => {
     setup({ vms: tagged })
     const panel = await openPanel()
     const line = await within(panel).findByRole('listitem', { name: 'web-1' })
-    draftAfter({ pending_members: [{ id: 'm1', policy_id: 'p1', node: 'pve1', type: 'qemu', vmid: 100, zone_id: '' }] })
+    draftAfter({ pending_members: [{ id: 'm1', policy_id: 'p1', connection_id: 'c1', node: 'pve1', type: 'qemu', vmid: 100, zone_id: '' }] })
     fireEvent.click(button(line, 'Remove from zone'))
 
     await waitFor(() => expect(calls('POST /members')).toHaveLength(1))
@@ -534,7 +534,7 @@ describe('members', () => {
 
   it('says why keeping a member failed on a version conflict and reads the draft again', async () => {
     mock.routes['GET /revisions?limit=1'] = () => reply(200, { revisions: [revisionWithSnapshot([web(), db()], [])] })
-    setup({ vms: tagged, pending_members: [{ id: 'm1', policy_id: 'p1', node: 'pve1', type: 'qemu', vmid: 100, zone_id: '' }], pending_changes: true })
+    setup({ vms: tagged, pending_members: [{ id: 'm1', policy_id: 'p1', connection_id: 'c1', node: 'pve1', type: 'qemu', vmid: 100, zone_id: '' }], pending_changes: true })
     mock.routes['POST /members'] = () => reply(409, { code: 'VERSION_CONFLICT', error: 'stale' })
     const line = await within(await openPanel()).findByRole('listitem', { name: 'web-1' })
     const before = calls('GET /policy').length

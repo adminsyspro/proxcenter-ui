@@ -2,14 +2,15 @@ import { useCallback, useMemo } from 'react'
 
 import type { MicrosegEvent, MicrosegZone } from '@/lib/microseg/types'
 
+import { mergeClusterEvents, mergeHistories, pendingClusters } from './dashboardAggregate'
 import { isZoneGrouping, type GroupBy, type PostureGuest } from './dashboardPosture'
 import { loggedEnds, onPair, postureHistory, postureTimeline, type TimelineRange, type TimelineSeries, type TimelineVerdict, type TrafficPair } from './postureTimeline'
 import { useNow } from './microseg/useNow'
-import { usePostureEvents } from './usePostureEvents'
-import { usePostureHistory } from './usePostureHistory'
+import { usePolicyEvents, usePolicyHistory } from './usePolicyReads'
 
 const NO_HISTORY = { step: 0, from: '', to: '', buckets: [] }
 const NO_GUESTS: readonly PostureGuest[] = []
+const NO_IDS: string[] = []
 
 /** Why the chart cannot follow the range: a grouping that needs guest-level events, or no history served. */
 export type RangeLock = 'grouping' | 'unavailable' | null
@@ -21,6 +22,11 @@ export type RangeLock = 'grouping' | 'unavailable' | null
  * one zone's flows: grouped by source zone, those it received (the history filtered on it, the ring asked with
  * `zone=`); grouped by destination zone, those it emitted (filtered here on the source zone); `keep` keeps some events
  * of the ring (a guest). No Proxmox call. `build` gives the same chart for another verdict (the panel's summary).
+ *
+ * `clusters` (the Dashboard of a shared policy): the history or the ring of each of them, read through its own relay
+ * and merged; `shown` draws some of them only (the strip's filter) out of what was read, without another read. The
+ * ring is the source when the history of every cluster failed. `missing`: the clusters whose read failed. `pending`: a
+ * drawn cluster's read has not answered yet, so the merged chart would be a partial sum (never drawn as the total).
  */
 export function useTrafficTimeline(o: {
   connection: string | null
@@ -35,12 +41,20 @@ export function useTrafficTimeline(o: {
   /** One pair of zones instead of a zone: grouped by source, what the receiver logged; by destination, what the emitter logged. */
   pair?: TrafficPair | null
   keep?: ((e: MicrosegEvent) => boolean) | null
+  /** The clusters of a shared policy, the connection first: each one read, merged. Absent: the connection alone. */
+  clusters?: readonly string[]
+  /** The clusters drawn among `clusters` (absent: all of them). */
+  shown?: readonly string[]
 }) {
   const { connection, zones, slices, groupBy, verdict, range, guests = NO_GUESTS, addresses = false, zone = null, keep = null } = o
+  const ids = o.clusters ?? (connection ? [connection] : NO_IDS)
+  const drawn = o.shown ?? ids
+  const tagged = !!o.clusters && o.clusters.length > 1
   const historyWanted = isZoneGrouping(groupBy) && !keep
-  const history = usePostureHistory(historyWanted ? connection : null, range)
+  const histories = usePolicyHistory(historyWanted ? ids : NO_IDS, range)
   // The ring (orchestrator memory) is read only when it is the source: no events read for a history that answered.
-  const memory = !historyWanted || !!history.error
+  // On a shared policy it is the source once the history of every cluster failed (an orchestrator without the route).
+  const memory = !historyWanted || (ids.length > 0 && ids.every(id => id in histories.errors))
   // One zone, inbound (by source): the ring filters on the zone that logged them (`zone=`). Outbound (by destination):
   // the ring has no source zone filter, so it is read whole and the source zone is kept here.
   const outbound = groupBy === 'dstzone'
@@ -49,7 +63,20 @@ export function useTrafficTimeline(o: {
   // A pair: the ring asked with the zone that logged its flows (the receiver inbound, the emitter outbound).
   let ringZone = zone && !outbound ? zone.name : undefined
   if (emitter !== null && receiver !== null) ringZone = (outbound ? emitter : receiver) || undefined
-  const ring = usePostureEvents(memory ? connection : null, ringZone)
+  const rings = usePolicyEvents(memory ? ids : NO_IDS, ringZone)
+  const drawnKey = drawn.join('|')
+  const history = useMemo(() => ({
+    history: mergeHistories(drawnKey.split('|').map(id => histories.byCluster[id])),
+    range: histories.range,
+  }), [histories, drawnKey])
+  const ring = useMemo(() => {
+    const keys = drawnKey.split('|')
+    const events = mergeClusterEvents(keys.map(id => ({ cluster: id, events: rings.byCluster[id] })), tagged)
+    const failed = keys.map(id => rings.errors[id]).filter(e => e != null)
+    return { events, error: failed.length === keys.length ? failed[0] : undefined }
+  }, [rings, drawnKey, tagged])
+  const pending = tagged && pendingClusters(drawn, memory ? rings : histories).length > 0
+  const missing = useMemo(() => Object.keys(memory ? rings.errors : histories.errors), [memory, rings.errors, histories.errors])
   const zoneName = zone?.name.toLowerCase() ?? null
   const pair = useMemo<TrafficPair | null>(() => (emitter === null || receiver === null ? null : { emitter, receiver }), [emitter, receiver])
   const kept = useMemo(() => {
@@ -70,5 +97,5 @@ export function useTrafficTimeline(o: {
   let rangeLock: RangeLock = null
   if (!isZoneGrouping(groupBy)) rangeLock = 'grouping'
   else if (memory) rangeLock = 'unavailable'
-  return { timeline, build, answer, rangeLock, now }
+  return { timeline, build, answer, rangeLock, now, missing, pending }
 }

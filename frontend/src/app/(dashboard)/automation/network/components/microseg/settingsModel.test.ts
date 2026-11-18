@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import type { MicrosegSettings } from '@/lib/microseg/types'
 
 import {
-  SETTING_BOUNDS, buildRateLimit, changedUpdate, formFromSettings, parseRateLimit, selfIpsFallback, validateSettingsForm, type SettingNumberKey,
+  SETTING_BOUNDS, associateBlock, buildRateLimit, changedUpdate, formFromSettings, parseRateLimit, selfIpsFallback, validateSettingsForm, type SettingNumberKey,
 } from './settingsModel'
 
 const base: MicrosegSettings = {
@@ -180,5 +180,21 @@ describe('what an empty addresses field stands for', () => {
     expect(selfIpsFallback(['10.0.0.5'], 'settings')).toBeNull()
     expect(selfIpsFallback([], 'detected')).toBeNull()
     expect(selfIpsFallback(undefined, undefined)).toBeNull()
+  })
+})
+
+describe('adding a cluster', () => {
+  it('is blocked at the maximum the backend gives', () => {
+    expect(associateBlock(8, 8, 3)).toBe('max')
+    expect(associateBlock(2, 2, 3)).toBe('max')
+  })
+
+  it('is blocked without a cluster to propose', () => {
+    expect(associateBlock(1, 8, 0)).toBe('none')
+  })
+
+  it('is open below the maximum, and when the maximum is unknown', () => {
+    expect(associateBlock(1, 8, 2)).toBeNull()
+    expect(associateBlock(9, undefined, 2)).toBeNull()
   })
 })

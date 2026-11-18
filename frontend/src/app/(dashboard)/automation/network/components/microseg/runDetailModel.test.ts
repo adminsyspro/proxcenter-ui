@@ -6,7 +6,7 @@ import { hasStepOutcome, runDetailRows, runHasDetails, runSummaryParts } from '.
 
 const base: MicrosegRunResult = { guests: 0, members: 0, steps: 0, drifts: 0 }
 const run = (kind: string, result: Partial<MicrosegRunResult> | null = {}): MicrosegRun => ({
-  id: 'r1', policy_id: 'p1', kind, status: 'done', started_at: '2026-11-04T10:00:00Z', duration_ms: 10, api_calls: 4, writes: 0, error: '',
+  id: 'r1', policy_id: 'p1', connection_id: 'c1', kind, status: 'done', started_at: '2026-11-04T10:00:00Z', duration_ms: 10, api_calls: 4, writes: 0, error: '',
   result: result ? { ...base, ...result } : null,
 })
 const keys = (r: MicrosegRun) => runDetailRows(r).map(row => row.key)
@@ -41,6 +41,8 @@ describe('runDetailRows', () => {
       { key: 'unread', count: 1, warn: true }, { key: 'ambiguous', count: 1, warn: true }, { key: 'steps', count: 0 },
     ])
     expect(runDetailRows(run('full', {}))[0]).toEqual({ key: 'trigger', label: 'triggerSchedule' })
+    // A pass another cluster of a shared policy asked for: said as such, not as a scheduled one.
+    expect(runDetailRows(run('full', { trigger: 'peer' }))[0]).toEqual({ key: 'trigger', label: 'triggerPeer' })
     expect(runDetailRows(run('full', {}))[3]).toEqual({ key: 'drifts', count: 0, warn: false })
   })
 

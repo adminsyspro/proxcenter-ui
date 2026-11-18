@@ -11,11 +11,11 @@ import { useTranslations } from 'next-intl'
 
 import { EdgeClickContext, FlowEdge } from './FlowEdge'
 import { IpNode, ZoneBoxNode } from './MapBoxNodes'
-import { PveNode } from './PveNode'
+import { PveCluster, PveNode } from './PveNode'
 import { BoundaryNode, GuestNode, MapActionsContext, MoreNode, UnzonedNode, ZoneNode, type MapActions } from './ZoneNode'
 import { UNZONED_ID, isPveGroup, type MapNodeData } from './zoneGraph'
 
-const nodeTypes = { zone: ZoneNode, zoneBox: ZoneBoxNode, unzoned: UnzonedNode, guest: GuestNode, more: MoreNode, boundary: BoundaryNode, ip: IpNode, pveNode: PveNode }
+const nodeTypes = { zone: ZoneNode, zoneBox: ZoneBoxNode, unzoned: UnzonedNode, guest: GuestNode, more: MoreNode, boundary: BoundaryNode, ip: IpNode, pveNode: PveNode, pveCluster: PveCluster }
 const edgeTypes = { flow: FlowEdge }
 
 /** What the fit-to-view follows: the top-level nodes (circles and boxes) and their size, which grows with the guests. */
@@ -158,6 +158,8 @@ function Canvas({ nodes, edges, onSelectZone, onEnterZone, onSelectGuest, onSele
 
   const minimapColor = useCallback((node: Node) => {
     const d = node.data as unknown as MapNodeData
+    // The frame of a cluster would hide its nodes on the mini-map.
+    if (d.kind === 'pveCluster') return 'transparent'
     if (d.kind === 'zone') return d.zone.color || theme.palette.text.disabled
     return d.kind === 'guest' || d.kind === 'more' ? theme.palette.text.secondary : theme.palette.text.disabled
   }, [theme])

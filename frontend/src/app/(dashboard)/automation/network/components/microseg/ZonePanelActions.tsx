@@ -8,17 +8,17 @@ import { zoneEgress, type MicrosegException, type MicrosegFlow, type MicrosegZon
 
 import { useDialogAction } from './dialogParts'
 import DiscardDraft from './DiscardDraft'
-import ExceptionDialog from './ExceptionDialog'
-import { exceptionDraft, exceptionsOfZone, zoneDeleteBody, type ExceptionDraft } from './exceptionModel'
+import ExceptionDialog, { clusterGuestsRead, exceptionEditable, useExceptionScope } from './ExceptionDialog'
+import { exceptionDraft, exceptionsOfZone, ofCluster, zoneDeleteBody, type ExceptionDraft } from './exceptionModel'
 import { ExceptionLine } from './ExceptionLine'
 import FlowDialog, { type FlowSaveValues } from './FlowDialog'
 import FlowSummary from './FlowSummary'
 import { PagedList } from './PolicyPager'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
-import { WriteTip, useMicrosegWrite } from './microsegAccess'
+import { WriteTip, useMicrosegClusterWrite, useMicrosegWrite } from './microsegAccess'
 import { usePendingChanges } from './usePendingChanges'
+import { useGroupGuests } from './useGroupGuests'
 import type { ExceptionCreated, ZoneEdits } from './useZoneEdits'
-import { useZoneGuests } from './useZoneGuests'
 import { zoneGateOf } from './zoneGate'
 import ZoneDialog from './ZoneDialog'
 import ZoneEgressDialog from './ZoneEgressDialog'
@@ -28,17 +28,22 @@ import ZoneStateDialog from './ZoneStateDialog'
 import type { ZoneFormValues } from './zoneForm'
 import type { ZoneMember } from './zoneModel'
 
-/** A compact write control: an icon with its tooltip, disabled (with the read-only hint) without the right. */
-function WriteIcon({ label, icon, disabled = false, onClick, ...aria }: {
+/**
+ * A compact write control: an icon with its tooltip, disabled (with the reason) without the right: the policy write of
+ * the tab, or `allowed` for a write of one cluster's own data.
+ */
+function WriteIcon({ label, icon, disabled = false, allowed, onClick, ...aria }: {
   label: string
   icon: string
   disabled?: boolean
+  allowed?: boolean
   onClick: (e: MouseEvent<HTMLElement>) => void
   'aria-haspopup'?: 'menu'
 }) {
-  const { canWrite } = useMicrosegWrite()
+  const write = useMicrosegWrite()
+  const canWrite = allowed ?? write.canWrite
   return (
-    <WriteTip title={label}>
+    <WriteTip allowed={allowed} title={label}>
       <IconButton size='small' aria-label={label} disabled={!canWrite || disabled} onClick={onClick} {...aria}>
         <i className={icon} />
       </IconButton>
@@ -147,6 +152,8 @@ export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted, spread = f
     }
   }
   const egress = zoneEgress(zone)
+  // Assigning writes the members of each guest's cluster: the right on one cluster of the policy opens it.
+  const { canWriteSome: canAssign } = useMicrosegClusterWrite()
 
   return (
     // `spread`: the icons are laid out by the row they sit in (spread over its width), not grouped.
@@ -156,9 +163,9 @@ export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted, spread = f
       {egress === 'enforce' && <WriteIcon label={t('egressReopen')} icon='ri-lock-unlock-line' onClick={() => egressChange.ask(zone, 'reopen')} />}
       <WriteIcon label={t('changeState')} icon='ri-toggle-line' aria-haspopup='menu' onClick={e => setAnchor(e.currentTarget)} />
       <WriteIcon label={t('delete')} icon='ri-delete-bin-line' onClick={() => { removal.reset(); setOpen({ kind: 'delete' }) }} />
-      <WriteIcon label={t('assign')} icon='ri-add-circle-line' onClick={onAssign} />
+      <WriteIcon label={t('assign')} icon='ri-add-circle-line' allowed={canAssign} onClick={onAssign} />
       <ZoneStateMenu zone={zone} anchor={anchor} onClose={() => setAnchor(null)} onPick={state => setOpen({ kind: 'state', state })} />
-      {open?.kind === 'edit' && <ZoneDialog zone={zone} connectionId={edits.connectionId} readyAfterHours={edits.readyAfterHours} onSave={save} flows={edits.flows} policy={edits.policy} onClose={close} gate={zoneGateOf(edits, close)} />}
+      {open?.kind === 'edit' && <ZoneDialog zone={zone} connectionId={edits.connectionId} readyAfterHours={edits.readyAfterHours} onSave={save} flows={edits.flows} policy={edits.policy} clusterName={edits.clusterName} onClose={close} gate={zoneGateOf(edits, close)} />}
       {open?.kind === 'state' && <ZoneStateConfirm zone={zone} state={open.state} edits={edits} onClose={close} />}
       {egressChange.dialog}
       <MicrosegConfirmDialog
@@ -178,14 +185,15 @@ export function ZoneHeaderActions({ zone, edits, onAssign, onDeleted, spread = f
 
 /**
  * Takes a member out of the zone (queued: the next apply removes the tag), or cancels a removal already queued by
- * clearing that pending change (the draft loses it, nothing is queued instead).
+ * clearing that pending change (the draft loses it, nothing is queued instead). Both go through the member's cluster.
  */
 export function MemberAction({ member, zoneId, edits }: { member: ZoneMember; zoneId: string; edits: ZoneEdits }) {
   const t = useTranslations('microsegPilot.overview.zonePanel')
+  const allowed = useMicrosegClusterWrite().canWriteOn(member.connectionId)
   if (member.change?.kind === 'removal') {
-    return <WriteIcon label={t('keepMember')} icon='ri-arrow-go-back-line' disabled={edits.memberBusy} onClick={() => edits.keepMember(member.ref)} />
+    return <WriteIcon label={t('keepMember')} icon='ri-arrow-go-back-line' disabled={edits.memberBusy} allowed={allowed} onClick={() => edits.keepMember(member.ref, member.connectionId)} />
   }
-  return <WriteIcon label={t('removeMember')} icon='ri-close-line' disabled={edits.memberBusy} onClick={() => edits.changeMember(member.ref, '')} />
+  return <WriteIcon label={t('removeMember')} icon='ri-close-line' disabled={edits.memberBusy} allowed={allowed} onClick={() => edits.changeMember(member.ref, '', member.connectionId)} />
 }
 
 /** Edit and delete of a flow line of the panel. */
@@ -231,15 +239,20 @@ export function FlowsList({ flows, zonesById, editor, size, unapplied = null }: 
   )
 }
 
-export function NewFlowButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return <WriteIcon label={label} icon='ri-add-line' onClick={onClick} />
+/** An add icon: a flow (the policy write of the tab), or with `allowed` a write of one cluster's own data (an exception). */
+export function NewFlowButton({ label, allowed, onClick }: { label: string; allowed?: boolean; onClick: () => void }) {
+  return <WriteIcon label={label} icon='ri-add-line' allowed={allowed} onClick={onClick} />
 }
 
-/** The add action of a sub-tab of the expand dialog: a small outlined button, icon and label, disabled without the write right. */
-export function ExpandAddButton({ label, onClick }: { label: string; onClick: () => void }) {
-  const { canWrite } = useMicrosegWrite()
+/**
+ * The add action of a sub-tab of the expand dialog: a small outlined button, icon and label, disabled without the write
+ * right (the policy write of the tab, or `allowed` for members and exceptions, written on one cluster).
+ */
+export function ExpandAddButton({ label, allowed, onClick }: { label: string; allowed?: boolean; onClick: () => void }) {
+  const write = useMicrosegWrite()
+  const canWrite = allowed ?? write.canWrite
   return (
-    <WriteTip>
+    <WriteTip allowed={allowed}>
       <Button size='small' variant='outlined' disabled={!canWrite} onClick={onClick} startIcon={<i className='ri-add-line' />} sx={{ height: 30, flexShrink: 0, whiteSpace: 'nowrap' }}>{label}</Button>
     </WriteTip>
   )
@@ -299,6 +312,8 @@ export function useFlowEditor(edits: ZoneEdits): FlowEditor {
 type ExceptionEditor = {
   /** How many exceptions the zone has. */
   count: number
+  /** The user may write an exception on at least one cluster (each is written on its own cluster). */
+  canCreate: boolean
   /** Opens the exception dialog empty. */
   create: () => void
   /** The exceptions of the zone, `size` a page. */
@@ -314,15 +329,22 @@ type ExceptionEditor = {
  * As the flows do, the list shows what the draft changes over the last applied revision, once that revision is read:
  * an exception added or changed carries the draft mark, and one removed from the draft, still enforced until the next
  * apply, stays listed struck, after the others.
+ * On a shared policy each exception belongs to one cluster: its line shows that cluster, its guests are matched among
+ * that cluster's guests, it is written through that cluster, and one of a cluster the user cannot see is not editable.
  */
 export function useExceptionEditor(
   edits: ZoneEdits, zone: MicrosegZone, members: ZoneMember[], membersKnown: boolean, only?: ReadonlySet<string>,
 ): ExceptionEditor {
   const t = useTranslations('microsegPilot.policy')
-  const { canWrite } = useMicrosegWrite()
-  const { guests, status } = useZoneGuests(edits.connectionId)
-  // While the guests or the members are not known, a status read from them would be a false warning.
-  const guestsKnown = membersKnown && status === 'ready'
+  // An exception is written on its own cluster: the right on that cluster, not on the whole policy.
+  const { canWriteOn, canWriteSome } = useMicrosegClusterWrite()
+  const scope = useExceptionScope(edits.policy, edits.connectionId, edits.clusterName)
+  const { guests, status, errors } = useGroupGuests(scope.guestIds)
+  // While the guests (of any cluster) or the members are not known, a status read from them would be a false warning.
+  const guestsKnown = membersKnown && status === 'ready' && Object.keys(errors).length === 0
+  const { clusters } = scope
+  /** The cluster of an exception on a shared policy (its guests are among that cluster's), none on one cluster. */
+  const clusterOf = (e: MicrosegException) => (clusters ? e.connection_id || edits.connectionId : undefined)
   // The exception being edited, `null` for a new one; undefined while the dialog is closed.
   const [editing, setEditing] = useState<ExceptionDraft | null | undefined>(undefined)
   const [deleting, setDeleting] = useState<MicrosegException | null>(null)
@@ -349,20 +371,24 @@ export function useExceptionEditor(
       {rows.length === 0 && <Typography variant='body2' color='text.disabled'>{t('exceptions.none')}</Typography>}
       <PagedList items={rows} size={size} render={page => (
         <Box role='list'>
-          {page.map(({ e, mark }) => (
-            <ExceptionLine
-              key={`${mark === 'removed' ? 'removed' : 'draft'}-${e.id}`}
-              mark={mark}
-              exception={exceptionDraft(e)}
-              guests={guests}
-              members={members}
-              zoneState={zone.state}
-              guestsKnown={guestsKnown}
-              disabled={!canWrite}
-              onEdit={() => setEditing(exceptionDraft(e))}
-              onDelete={() => { removal.reset(); setDeleting(e) }}
-            />
-          ))}
+          {page.map(({ e, mark }) => {
+            const cluster = clusterOf(e)
+            return (
+              <ExceptionLine
+                key={`${mark === 'removed' ? 'removed' : 'draft'}-${e.id}`}
+                mark={mark}
+                exception={exceptionDraft(e)}
+                guests={ofCluster(guests, cluster)}
+                members={ofCluster(members, cluster)}
+                cluster={clusters && cluster ? { id: cluster, name: clusters.name(cluster) } : undefined}
+                zoneState={zone.state}
+                guestsKnown={guestsKnown && clusterGuestsRead(clusters, cluster)}
+                disabled={!canWriteOn(cluster ?? '') || !exceptionEditable(clusters, cluster)}
+                onEdit={() => setEditing(exceptionDraft(e))}
+                onDelete={() => { removal.reset(); setDeleting(e) }}
+              />
+            )
+          })}
         </Box>
       )} />
     </>
@@ -370,7 +396,7 @@ export function useExceptionEditor(
 
   const dialogs = (
     <>
-      <ExceptionDialog open={editing !== undefined} exception={editing ?? null} guests={guests} members={members} onSave={save} onClose={() => setEditing(undefined)} />
+      <ExceptionDialog open={editing !== undefined} exception={editing ?? null} guests={guests} members={members} clusters={clusters} onSave={save} onClose={() => setEditing(undefined)} />
       <MicrosegConfirmDialog
         open={deleting !== null}
         title={t('delete.exceptionTitle')}
@@ -385,5 +411,5 @@ export function useExceptionEditor(
     </>
   )
 
-  return { count: exceptions.length, create: () => setEditing(null), list, dialogs }
+  return { count: exceptions.length, canCreate: canWriteSome, create: () => setEditing(null), list, dialogs }
 }

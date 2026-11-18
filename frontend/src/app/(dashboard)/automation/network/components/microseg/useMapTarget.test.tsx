@@ -15,10 +15,10 @@ vi.mock('next/navigation', () => ({
 import { useMapTarget } from './useMapTarget'
 import type { PolicyGuest, ZoneMember } from './zoneModel'
 
-const guest = (vmid: number, name: string, status = 'running'): PolicyGuest => ({ vmid, name, node: 'pve1', type: 'qemu', status, tags: [], ips: [`10.0.0.${vmid % 250}`] })
+const guest = (vmid: number, name: string, status = 'running'): PolicyGuest => ({ connectionId: 'c1', vmid, name, node: 'pve1', type: 'qemu', status, tags: [], ips: [`10.0.0.${vmid % 250}`] })
 const web1 = guest(100, 'web-1')
 const db1 = guest(200, 'db-1')
-const members = new Map<string, ZoneMember[]>([['zd', [{ ref: { node: 'pve1', type: 'qemu', vmid: 200 }, guest: db1, pending: false }]]])
+const members = new Map<string, ZoneMember[]>([['zd', [{ connectionId: 'c1', ref: { node: 'pve1', type: 'qemu', vmid: 200 }, guest: db1, pending: false }]]])
 
 const replaceState = vi.spyOn(window.history, 'replaceState')
 afterEach(() => { window.location.hash = '' })

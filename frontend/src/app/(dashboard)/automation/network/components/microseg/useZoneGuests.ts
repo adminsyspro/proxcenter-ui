@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 import { COVERAGE_POLL_MS, firewallCoverageUrl, type FirewallCoverage } from '@/hooks/useZeroTrust'
@@ -7,7 +7,11 @@ import { zoneGuestsUrl } from '@/lib/microseg/runRefresh'
 import type { PolicyGuest } from './zoneModel'
 
 type VmsResponse = {
-  data?: { vms?: { vmid?: string | number; name?: string; node?: string; type?: string; status?: string; template?: boolean; tags?: string[]; ips?: string[] }[] }
+  data?: {
+    vms?: { vmid?: string | number; name?: string; node?: string; type?: string; status?: string; template?: boolean; tags?: string[]; ips?: string[] }[]
+    /** Some guest is served without fresh config fields, or the guest list read of the cluster failed. */
+    partial?: boolean
+  }
 }
 
 /** The inventory refused the session: it asks vm.view, which a user who only views the nodes does not have. */
@@ -28,7 +32,11 @@ const coveragePoll = (latest?: FirewallCoverage) => (latest?.computing && !lates
  * when it is warm). They carry no address, so observed flows are not put on guests for that user.
  *
  * No connection (null or empty): nothing is read, the list stays empty and loading (the Dashboard reads it only once
- * a grouping by VLAN or node asks for it).
+ * a grouping by VLAN or node asks for it). Each guest carries the connection it was listed from (`connectionId`); a
+ * failed read is in `error`. The guests of every cluster of a shared policy: `useGroupGuests`.
+ *
+ * `unlisted`: the route answered, but listed no guest and says the answer is partial: the guest list of the cluster
+ * could not be read (an unreachable cluster answers so, not with an error). The list is then not that of the cluster.
  */
 export function useZoneGuests(connectionId: string | null) {
   const { data, error, mutate } = useSWRFetch<VmsResponse>(connectionId ? zoneGuestsUrl(connectionId) : null, { revalidateOnFocus: false })
@@ -40,8 +48,10 @@ export function useZoneGuests(connectionId: string | null) {
   const coverageRows = coverage.data?.computing && !coverage.data.guests?.length ? undefined : coverage.data?.guests
 
   const guests = useMemo<PolicyGuest[]>(() => {
+    if (!connectionId) return []
     if (forbidden) {
       return (coverageRows ?? []).map(row => ({
+        connectionId,
         vmid: Number(row.vmid),
         name: row.name || `${row.type}/${row.vmid}`,
         node: row.node,
@@ -54,6 +64,7 @@ export function useZoneGuests(connectionId: string | null) {
     return (data?.data?.vms ?? [])
       .filter(vm => !vm.template && vm.node && vm.vmid !== undefined)
       .map(vm => ({
+        connectionId,
         vmid: Number(vm.vmid),
         name: vm.name || `${vm.type}/${vm.vmid}`,
         node: vm.node as string,
@@ -62,12 +73,16 @@ export function useZoneGuests(connectionId: string | null) {
         tags: Array.isArray(vm.tags) ? vm.tags : [],
         ips: Array.isArray(vm.ips) ? vm.ips.filter(ip => typeof ip === 'string') : [],
       }))
-  }, [data, forbidden, coverageRows])
+  }, [connectionId, data, forbidden, coverageRows])
 
   let status: 'loading' | 'ready' | 'error' = 'loading'
   if (data || (forbidden && coverageRows)) status = 'ready'
   else if ((error && !forbidden) || coverage.error) status = 'error'
 
-  const reload = () => (forbidden ? coverage.mutate() : mutate())
-  return { guests, status, reload }
+  // Stable while the read does not change (SWR's bound mutate is): the group hook keeps one reload across renders.
+  const coverageMutate = coverage.mutate
+  const reload = useCallback(() => (forbidden ? coverageMutate() : mutate()), [forbidden, coverageMutate, mutate])
+  const failure: unknown = forbidden ? coverage.error : error
+  const unlisted = !forbidden && data?.data?.partial === true && (data.data.vms?.length ?? 0) === 0
+  return { guests, status, error: status === 'error' ? failure : undefined, reload, unlisted }
 }

@@ -18,7 +18,7 @@ export const flow = (id: string, over: Partial<MicrosegFlow> = {}): MicrosegFlow
 })
 
 export const seen = (id: string, over: Partial<MicrosegSuggestion> = {}): MicrosegSuggestion => ({
-  id, policy_id: 'p1', kind: 'would_block', src_key: 'k', src_ip: '', src_zone_id: 'zw', dst_ip: '', dst_zone_id: 'zd',
+  id, policy_id: 'p1', connection_id: 'c1', kind: 'would_block', src_key: 'k', src_ip: '', src_zone_id: 'zw', dst_ip: '', dst_zone_id: 'zd',
   proto: 'tcp', dport: '80', hits: 3, first_seen: '2026-11-02T10:00:00Z', last_seen: '2026-11-02T11:00:00Z', status: 'pending', ...over,
 })
 
@@ -65,6 +65,6 @@ export function demoInput(): Required<Pick<MapInput, 'zones' | 'flows' | 'sugges
 
 /** An exception of zone db ("zd"): web-6 (qemu/105) may reach db-3 (qemu/402) on PostgreSQL. */
 export const exception = (id: string, over: Partial<MicrosegException> = {}): MicrosegException => ({
-  id, policy_id: 'p1', zone_id: 'zd', sources: [{ type: 'qemu', vmid: 105, name: 'web-6' }], destinations: [{ type: 'qemu', vmid: 402, name: 'db-3' }],
+  id, policy_id: 'p1', connection_id: 'c1', zone_id: 'zd', sources: [{ type: 'qemu', vmid: 105, name: 'web-6' }], destinations: [{ type: 'qemu', vmid: 402, name: 'db-3' }],
   services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'me', ...over,
 })

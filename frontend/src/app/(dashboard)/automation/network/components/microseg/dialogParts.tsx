@@ -108,14 +108,15 @@ export function useDialogAction() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const run = useCallback(async (action: () => Promise<unknown>): Promise<boolean> => {
+  /** `messageOf` words an error the way this action's context needs it (null: the common wording). */
+  const run = useCallback(async (action: () => Promise<unknown>, messageOf?: (error: unknown) => string | null): Promise<boolean> => {
     setBusy(true)
     setError(null)
     try {
       await action()
       return true
     } catch (e) {
-      setError(writeErrorMessage(t as Translate, e))
+      setError(messageOf?.(e) ?? writeErrorMessage(t as Translate, e))
       return false
     } finally {
       setBusy(false)

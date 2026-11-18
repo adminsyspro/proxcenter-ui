@@ -144,6 +144,16 @@ export function validateSettingsForm(form: SettingsForm, baseline?: SettingsForm
   return problems
 }
 
+/**
+ * Why no cluster can be added to the policy: 'max' when it holds the most clusters the backend allows (unknown
+ * until the backend answers: not a limit then, the backend still refuses), 'none' when no other connection can be
+ * proposed, null when one can be added.
+ */
+export function associateBlock(count: number, max: number | undefined, candidateCount: number): 'max' | 'none' | null {
+  if (max !== undefined && count >= max) return 'max'
+  return candidateCount === 0 ? 'none' : null
+}
+
 type Changes = Pick<PolicyUpdate, 'tag_prefix' | 'settings'>
 
 const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((v, i) => v === b[i])

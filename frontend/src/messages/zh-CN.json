@@ -9643,7 +9643,19 @@
       "postureTrafficByDstZone": "按目的区域的流量",
       "postureCaptionEmitted": "每个区域发出的命中",
       "postureCaptionReceived": "每个区域接收的命中",
-      "postureDirectionBoth": "双向"
+      "postureDirectionBoth": "双向",
+      "clustersStateStop": "紧急停止",
+      "clustersStateUnreachable": "自 {time} 起无法访问",
+      "clustersStateApplied": "已应用",
+      "clustersStateUnknown": "状态未知",
+      "clustersMembers": "成员 {members} 个 · 已保护 {protected} 个",
+      "clustersMembersShort": "{members} · 已保护 {protected} 个",
+      "clustersAll": "所有集群",
+      "clustersCount": "{count, plural, other {# 个集群}}",
+      "clustersDrifts": "{count, plural, =0 {无偏差} other {# 个偏差}}",
+      "clustersFiguresMissing": "数据缺失",
+      "clustersOutOfScope": "不在您的权限范围内",
+      "clustersHiddenTraffic": "{count, plural, other {不包括您权限范围外 # 个集群的流量。}}"
     },
     "rulesOnDemand": {
       "chip": "打开时加载规则",
@@ -12343,7 +12355,8 @@
       "truncated": "更早的行已被丢弃",
       "frozen": "区域和客户机名称为事件发生时的名称",
       "loadOlder": "加载更早的",
-      "empty": "暂无事件：引擎每分钟读取节点日志。"
+      "empty": "暂无事件：引擎每分钟读取节点日志。",
+      "otherCluster": "其他集群"
     }
   },
   "vdcUsageHistory": {
@@ -13433,7 +13446,11 @@
         "running": "运行中"
       },
       "logNode": "{node} · {rate} 行/分钟 · 延迟 {lag}",
-      "logBehind": "日志滞后"
+      "logBehind": "日志滞后",
+      "unreachableSince": "集群 {name} 自 {time} 起无法访问：其规则不会更新，其他集群保留其最后已知的地址。",
+      "unreachableSinceSingle": "此集群自 {time} 起无法访问：其规则不会更新。",
+      "firewallOff": "{name}：集群防火墙已关闭，那里不会过滤任何流量。",
+      "firewallOffSingle": "集群防火墙已关闭，那里不会过滤任何流量。"
     },
     "stop": {
       "button": "紧急停止",
@@ -13453,7 +13470,17 @@
       "clusterFirewallOff": "集群防火墙已禁用",
       "notDeployed": "尚未部署任何内容",
       "socleUncovered": "规则未接受的地址：{ips}",
-      "socleUncoveredNodes": "规则未接受的地址：{ips}（{nodes}）"
+      "socleUncoveredNodes": "规则未接受的地址：{ips}（{nodes}）",
+      "clusterFirewallOffOf": "集群防火墙已关闭：{name}",
+      "clustersStop": "停止该策略的所有集群：{names}",
+      "clustersResume": "恢复该策略的所有集群：{names}",
+      "clustersAndOthers": "{names} 及另外 {count, plural, other {# 个集群}}",
+      "followStop": "停止待处理：每分钟重试",
+      "followResume": "恢复待处理：每分钟重试",
+      "followHeld": "在其节点访问规则检查完成前，防火墙保持关闭",
+      "socleOn": "在 {name} 上被拒绝。",
+      "socleOnOther": "在该策略的另一个集群上被拒绝。",
+      "bodyShared": "该策略的所有区域都将在所有关联集群上转为观察模式。"
     },
     "pending": {
       "noCount": "更改尚未应用。",
@@ -13492,7 +13519,9 @@
       "untilApplied": "在应用计划之前，Proxmox 中不会有任何更改。",
       "applying": "正在应用：{list}",
       "applyingInline": "正在应用：{list}",
-      "applyingNoCount": "正在应用更改"
+      "applyingNoCount": "正在应用更改",
+      "clusterAdded": "将添加集群 {name}",
+      "clustersAdded": "{count, plural, other {将添加 # 个集群}}"
     },
     "firstRun": {
       "title": "设置微分段",
@@ -13528,7 +13557,11 @@
       "CHECK_PENDING": "已有一次检查在排队：引擎会在下一轮运行时启动它。",
       "generic": "出了点问题。请重试。",
       "SOCLE_MISSING": "某个自身防火墙已启用的节点不允许 Web 界面 (8006) 和 SSH (22) 进入，因此未重新启用集群防火墙。请在该节点防火墙中允许它们，或将其关闭，然后恢复。",
-      "NOT_DEPLOYED": "尚未部署任何内容：请先应用计划，紧急停止作用于已部署的策略。"
+      "NOT_DEPLOYED": "尚未部署任何内容：请先应用计划，紧急停止作用于已部署的策略。",
+      "CLUSTER_NOT_EMPTY": "此策略的某个集群不为空：请先移除其区域、流和成员。",
+      "TOO_MANY_CLUSTERS": "此策略的集群数量已达上限。",
+      "CLUSTER_UNREADABLE": "此策略的某个集群目前无法读取。待其可访问后请重试。",
+      "CLUSTER_FIREWALL_OFF": "此策略中某个集群的防火墙已关闭：未应用任何内容。请在 Proxmox 中开启后重新规划。"
     },
     "policy": {
       "zonesTitle": "区域",
@@ -13777,6 +13810,14 @@
           "readingStart": "正在读取 Proxmox",
           "reading": "正在读取 Proxmox，客户机 {done, number} / {total, number}",
           "writing": "正在写入 Proxmox，{done, number} / {total, number}"
+        },
+        "group": {
+          "done": "{label}：已在全部 {total} 个集群上完成",
+          "partial": "{label}：已在 {done}/{total} 个集群上完成",
+          "failed": "{label}：在所有集群上均失败",
+          "showClusters": "显示集群",
+          "hideClusters": "隐藏集群",
+          "partialApplyAgain": "{label}：已在 {total} 个集群中的 {done} 个上完成，请在从未应用的集群可访问后重新应用"
         }
       },
       "assign": {
@@ -13800,7 +13841,9 @@
         "pendingRemoval": "待移除",
         "removalHint": "已排队移除，再次选择可将其保留在此区域。",
         "pendingMove": "正在移动到 {zone}",
-        "moveHint": "已排队移动到 {zone}，再次选择可将其保留在此区域。"
+        "moveHint": "已排队移动到 {zone}，再次选择可将其保留在此区域。",
+        "partial": "仅在 {clusters} 上保存；其他集群未保存：{error}",
+        "partialSome": "仅在部分集群上保存；其余集群未保存：{error}"
       },
       "preflightButton": "预检",
       "state": {
@@ -13918,8 +13961,15 @@
           "missing_guest": "某个源或目标已不在清单中。",
           "waiting_address": "清单尚不知道某个源的地址：在读取到地址之前，其规则可能不放行任何流量。",
           "renamed": "某台虚拟机的名称与记录的不同：它已被重命名，或其 VMID 被重新使用。请确认例外仍指向正确的虚拟机。"
-        }
-      }
+        },
+        "cluster": "集群",
+        "clusterInactive": "{name} 尚未应用：在其上的例外不会保护任何内容。",
+        "noActiveCluster": "该策略尚无已应用的集群：例外不会保护任何内容。"
+      },
+      "guestsUnread": "无法读取 {clusters} 的客户机：它们未列出。",
+      "guestsUnreadSome": "无法读取部分集群的客户机：它们未列出。",
+      "guestsUncounted": "无法读取 {clusters} 的客户机：未计入其中。",
+      "guestsUncountedSome": "无法读取部分集群的客户机：未计入其中。"
     },
     "plan": {
       "title": "微分段计划",
@@ -13961,7 +14011,45 @@
       "notes": "备注：{list}",
       "nothingRecord": "无需写入 Proxmox：应用只会记录该修订。",
       "stopActive": "在紧急停止使集群防火墙保持关闭期间写入；解除停止后生效",
-      "stopActivePlan": "现在应用将在紧急停止使集群防火墙保持关闭期间写入"
+      "stopActivePlan": "现在应用将在紧急停止使集群防火墙保持关闭期间写入",
+      "cluster": {
+        "other": "其他集群",
+        "computing": "计算中",
+        "applyFailed": "失败：集群恢复可达后将被应用。",
+        "error": {
+          "no_client": "无法访问：恢复可达后将自动跟上。",
+          "engine_stopped": "此集群上的引擎已停止。",
+          "stopped": "紧急停止已开启：解除后请重新应用。",
+          "internal": "无法在此集群上启动运行。"
+        },
+        "applied": {
+          "done": "已应用到全部 {total} 个集群",
+          "partial": "已应用到 {done}/{total} 个集群",
+          "failed": "未应用到任何集群",
+          "partialApplyAgain": "已在 {total} 个集群中的 {done} 个上应用：请在从未应用的集群可访问后重新应用。"
+        },
+        "unreadable": "无法读取此运行。",
+        "runFailed": "失败。",
+        "blocked": {
+          "start": "无法在此集群上启动计划：请在应用前重新计算。",
+          "unreadable": "无法读取此集群的计划：请在应用前重新计算。"
+        },
+        "unfollowed": "状态未知：无法跟踪此运行。",
+        "planUnreachable": "无法访问：集群恢复可达后将被应用。",
+        "neverApplied": "此集群从未应用过：请在其可访问后重新应用。",
+        "firewallOff": "集群防火墙已关闭：不会过滤任何流量。请在 Proxmox 中开启后重新规划。",
+        "serviceStopped": "{nodes} 上的防火墙服务已停止：这些节点上不会过滤任何流量。",
+        "firewallOffRun": "集群防火墙已关闭：此处未应用任何内容。请在 Proxmox 中开启后重新规划。"
+      },
+      "applyBlocked": {
+        "failed": "无法应用：某个集群的计划失败。请展开其部分查看原因，然后重新计算。",
+        "stale": "无法应用：该计划来自较早的草稿，请重新计算。",
+        "collisions": "无法应用：某个集群的计划存在需要先解决的冲突。",
+        "noCluster": "无法应用：无法访问任何集群来计算计划。"
+      },
+      "firewallOffBlock": "无法应用：{names} 的集群防火墙已关闭。",
+      "firewallOffRefused": "未应用任何内容：{names} 的集群防火墙已关闭，那里不会过滤任何流量。请在 Proxmox 中开启后重新规划。",
+      "firewallOffRefusedAny": "未应用任何内容：策略中某个集群的防火墙已关闭，那里不会过滤任何流量。请在 Proxmox 中开启后重新规划。"
     },
     "drifts": {
       "asOf": "截至最近一次完整运行，{time}",
@@ -14054,6 +14142,34 @@
         "destinationLocal": "本地网络",
         "verdict": {
           "disabled": "已禁用"
+        },
+        "peer_unreadable": {
+          "title": "无法读取集群 {name}",
+          "titleUnknown": "无法读取一个关联集群",
+          "detail": "无法读取集群 {name}：地址移除已暂停",
+          "detailUnknown": "无法读取一个关联集群：地址移除已暂停",
+          "hint": "请检查 ProxCenter 能否连接此集群：一旦可再次读取，移除将继续。"
+        },
+        "stop_lift_held": {
+          "title": "{name} 的集群防火墙保持关闭",
+          "titleUnknown": "一个关联集群的集群防火墙保持关闭",
+          "detail": "{name} 的集群防火墙保持关闭：重新开启前必须检查节点访问规则",
+          "detailUnknown": "一个关联集群的集群防火墙保持关闭：重新开启前必须检查节点访问规则",
+          "hint": "请运行此集群的预检：节点访问规则就位后，引擎会重新开启其防火墙。"
+        },
+        "heldNote": "在所有关联集群均可读取之前，移除已暂停。",
+        "clusterOther": "其他集群",
+        "cluster_firewall_off": {
+          "title": "{name} 的集群防火墙已关闭",
+          "titleUnknown": "已关联集群的防火墙已关闭",
+          "detail": "{name} 的集群防火墙已关闭：那里不会过滤任何流量",
+          "detailUnknown": "已关联集群的防火墙已关闭：那里不会过滤任何流量",
+          "hint": "可在此行重新开启，或在 Proxmox 中开启（Datacenter > Firewall > Options）。"
+        },
+        "firewall_service_stopped": {
+          "title": "{node} 上的防火墙服务已停止",
+          "detail": "{node} 上的防火墙服务已停止：此节点上不会过滤任何流量",
+          "hint": "请在此节点上启动 pve-firewall 服务。"
         }
       },
       "chip": {
@@ -14071,7 +14187,11 @@
         "known_rule_missing": "缺少已知规则",
         "known_rule_extra": "多余的已知规则",
         "local_set_desync": "本地集合不同步",
-        "egress_no_subnet": "无子网"
+        "egress_no_subnet": "无子网",
+        "peer_unreadable": "集群不可读",
+        "stop_lift_held": "防火墙保持关闭",
+        "cluster_firewall_off": "集群防火墙关闭",
+        "firewall_service_stopped": "服务已停止"
       },
       "zoneFilter": "仅区域 {name}",
       "zoneFilterClear": "显示所有区域",
@@ -14090,7 +14210,11 @@
         "known_rule_extra": "多余的已知地址规则（{count, number}）",
         "local_set_desync": "未同步的本地网络集（{count, number}）",
         "egress_no_subnet": "没有本地子网的出站（{count, number}）",
-        "generic": "{kind}（{count, number}）"
+        "generic": "{kind}（{count, number}）",
+        "peer_unreadable": "无法读取的关联集群 ({count, number})",
+        "stop_lift_held": "保持关闭的集群防火墙 ({count, number})",
+        "cluster_firewall_off": "已关闭的集群防火墙（{count, number}）",
+        "firewall_service_stopped": "防火墙服务已停止的节点（{count, number}）"
       },
       "noneZone": "无",
       "select": "选择 {name}",
@@ -14109,7 +14233,18 @@
       "colDiffers": "差异",
       "colSince": "上次完整检查时发现",
       "colActions": "操作",
-      "colSinceHint": "引擎不提供每个偏差的首次发现时间：这是其上次完整检查的时间。"
+      "colSinceHint": "引擎不提供每个偏差的首次发现时间：这是其上次完整检查的时间。",
+      "enableFirewall": {
+        "button": "重新开启",
+        "title": "重新开启 {name} 的集群防火墙",
+        "titleUnknown": "重新开启集群防火墙",
+        "body": "集群防火墙一旦开启便会重新过滤。",
+        "check": "会先检查节点访问规则（Web 界面 8006、SSH 22）。",
+        "after": "随后一次完整检查会重新对齐该集群的客户机。",
+        "confirm": "重新开启",
+        "stop": "紧急停止期间，将在恢复时重新开启。",
+        "refused": "某个已开启自身防火墙的节点不允许 Web 界面（8006）和 SSH（22）进入，因此集群防火墙保持关闭。请在该节点的防火墙中放行，或将其关闭，然后重试。"
+      }
     },
     "observation": {
       "sampling": "Proxmox 默认每条链每秒最多记录一行日志，因此繁忙的流量可能被少计。",
@@ -14126,7 +14261,9 @@
         "direction": "方向",
         "directionAll": "全部",
         "directionIn": "入站",
-        "directionOut": "出站"
+        "directionOut": "出站",
+        "cluster": "集群",
+        "clusterAll": "所有集群"
       },
       "kind": {
         "would_block": "将被阻止",
@@ -14280,7 +14417,9 @@
         "unzoned": "无区域的客户机（{count, number}）",
         "unzonedHint": "不在任何区域中的运行中客户机。偏差中也列出了它们。",
         "guestAria": "{name}，客户机 {vmid}",
+        "guestAriaCluster": "{name}，客户机 {vmid}，{cluster}",
         "guestWhere": "{node} 上的客户机 {vmid}",
+        "guestWhereCluster": "{cluster} 的 {node} 上的客户机 {vmid}",
         "guestIps": "IP 地址：{ips}",
         "guestNoIp": "没有已知的 IP 地址",
         "guestPending": "已排队加入该区域，随下一个计划应用",
@@ -14366,6 +14505,7 @@
         "logsEmpty": "引擎内存中没有此区域对的事件"
       },
       "partial": "部分显示：仅绘制前 {count, number} 条待处理流量。",
+      "hiddenClusters": "{count, plural, other {不显示您权限范围外 # 个集群的客户机。}}",
       "filters": {
         "title": "流量："
       },
@@ -14417,6 +14557,7 @@
       },
       "pve": {
         "aria": "Proxmox 节点 {name}，{guests}",
+        "ariaCluster": "{cluster} 的 Proxmox 节点 {name}，{guests}",
         "guests": "{count, plural, other {# 个客户机}}",
         "zoneShare": "区域 {zone}：{count, plural, other {# 个客户机}}",
         "unzonedShare": "无区域：{count, plural, other {# 个客户机}}",
@@ -14529,7 +14670,7 @@
       "runAgain": "重新检查",
       "openWizard": "打开部署向导",
       "raiseLogRate": "观察期间提高",
-      "busy": "正在应用，请稍后重试。",
+      "busy": "引擎正在完成此集群上的一次巡检或应用，请稍后重试。",
       "noClient": "此连接没有可用的 Proxmox 客户端。",
       "readFailed": "无法读取 Proxmox：{error}",
       "status": {
@@ -14577,6 +14718,12 @@
           "title": "出站子网",
           "pass": "启用出站控制的区域中，每个成员都有已知子网。",
           "warn": "{count} 个成员没有已知子网（{guests}）：其本地网络仅限于自身 IP。"
+        },
+        "firewall_service": {
+          "title": "防火墙服务",
+          "pass": "所有节点上的防火墙服务都在运行。",
+          "stopped": "{nodes} 上的防火墙服务已停止：这些节点上不会过滤任何流量。",
+          "unreadable": "无法读取 {nodes} 上防火墙服务的状态。"
         }
       },
       "rateUnits": {
@@ -14659,7 +14806,10 @@
         "confirm": "移除",
         "running": "{label}：正在移除微分段...",
         "complete": "{label}：移除完成，区域标签仍保留在客户机上",
-        "incomplete": "{label}：移除未完成，请重新运行"
+        "incomplete": "{label}：移除未完成，请重新运行",
+        "bodyShared": "撤销 ProxCenter 在所选集群上写入 Proxmox 的所有内容；其他集群仅不再识别其客户机。",
+        "leaves": "{name} 将退出共享策略且不保留任何内容；区域标签保留在其客户机上。",
+        "needsEveryCluster": "您需要此策略每个集群的节点管理权限"
       },
       "prefixChange": {
         "warning": "带有旧前缀标签的客户机会在下次应用时离开其区域。",
@@ -14674,6 +14824,37 @@
         "readyAfter": "在没有新的会被阻止的流量的情况下持续该时长后，区域才会显示为就绪；这不是锁定。",
         "writeCap": "超过后引擎会停止并请求确认。",
         "selfIps": "ProxCenter 访问节点时使用的地址。预检会确认这些地址不会被切断。留空则使用自动检测。"
+      },
+      "clusters": {
+        "row": "关联集群",
+        "hint": "共享此策略的集群：区域、流和设置相同，每个集群的客户机都能被其他集群识别。",
+        "pending": "下次应用时生效",
+        "add": "添加集群",
+        "maxReached": "一个策略最多关联 {max} 个集群。",
+        "noCandidate": "没有其他可关联的集群。",
+        "removeLabel": "取消关联 {name}",
+        "target": "集群或节点",
+        "associate": {
+          "title": "关联集群",
+          "cluster": "集群或节点",
+          "nothingWritten": "在下次应用之前，不会向其写入任何内容。",
+          "room": "该策略还可以再关联 {count} 个。",
+          "confirm": "关联",
+          "errors": {
+            "CLUSTER_NOT_EMPTY": "{name} 仍有微分段数据。只有没有任何策略的集群才能关联：请先在该集群上移除微分段，然后删除其区域和规则。",
+            "TOO_MANY_CLUSTERS": "此策略的集群数量已达上限。",
+            "CLUSTER_UNREADABLE": "无法检查该集群。请稍后重试。"
+          },
+          "firewallOffHint": "此集群的防火墙已关闭：可以关联，但在开启之前应用会被拒绝。",
+          "serviceStoppedHint": "{nodes} 上的防火墙服务已停止。"
+        },
+        "dissociate": {
+          "title": "取消关联 {name}？",
+          "impact": "其他集群将不再识别 {name} 的 {leaving} 台客户机，{name} 也将不再识别其他集群的 {staying} 台客户机。",
+          "keepsRules": "{name} 保留其规则，并拥有自己的策略副本。",
+          "typeName": "输入 {name} 以确认",
+          "confirm": "取消关联"
+        }
       }
     },
     "history": {
@@ -14744,6 +14925,7 @@
           },
           "triggerCheck": "立即检查",
           "triggerSchedule": "计划",
+          "triggerPeer": "其他集群已变更",
           "failed": "运行失败。",
           "failedWith": "运行失败：{error}",
           "errors": "错误：{list}"
@@ -14790,7 +14972,12 @@
         "loading": "正在加载历史...",
         "capped": "仅读取最近 {count, number} 个修订和最近 {count, number} 次运行。",
         "actorInferred": "根据运行类型推断",
-        "actorCheck": "通过“立即检查”启动"
+        "actorCheck": "通过“立即检查”启动",
+        "peer": "其他集群已变更",
+        "actorPeer": "因策略中另一集群的地址发生变化，由引擎启动",
+        "clusterRuns": "每个集群的运行",
+        "showClusterRuns": "显示每个集群的运行",
+        "hideClusterRuns": "隐藏每个集群的运行"
       }
     },
     "waitingFirstCheck": "正在等待首次完整检查",
@@ -14882,6 +15069,12 @@
         "title": "检查的内容",
         "ips": "成员的 IP 地址",
         "guests": "重新读取来宾并与策略比较，修复偏差"
+      },
+      "group": {
+        "searching": "引擎已接手：正在查找其运行",
+        "running": "正在检查 {count, number} 个集群",
+        "done": "已在 {total, number} 个集群中的 {done, number} 个上完成检查",
+        "clusters": "已检查的集群"
       }
     },
     "trafficLens": {
@@ -15071,10 +15264,19 @@
       "title": "{count, plural, other {放弃 # 项未应用的更改？}}",
       "titleNoCount": "放弃未应用的更改？",
       "body": "草稿将恢复为上次应用的修订版。",
-      "confirm": "放弃"
+      "confirm": "放弃",
+      "busy": "引擎正在完成此策略某个集群上的工作（计划的巡检或其他操作）。请稍后重试。"
     },
     "gateway": {
       "name": "{zones} 的网关"
+    },
+    "merged": {
+      "unreadList": "无法读取：其行未列出。",
+      "unreadListOther": "无法读取一个关联集群：其行未列出。",
+      "unreachable": "无法连接：其状态未知。",
+      "unreachableOther": "一个关联集群无法连接：其状态未知。",
+      "unreadState": "无法读取：未显示其状态。",
+      "unreadStateOther": "无法读取一个关联集群：未显示其状态。"
     }
   },
   "bulkPower": {

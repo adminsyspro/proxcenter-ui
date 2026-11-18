@@ -206,6 +206,9 @@ export type AuditAction =
   | "microseg.suggestions.resolve"
   | "microseg.confirm_writes"
   | "microseg.check"
+  | "microseg.cluster.associate"
+  | "microseg.cluster.dissociate"
+  | "microseg.cluster_firewall.enable"
   // Firewalling draft published in one call (app/api/v1/firewall/publish)
   | "firewall.publish"
 

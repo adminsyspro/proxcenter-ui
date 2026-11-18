@@ -36,7 +36,7 @@ const rev = (version: number, over: Partial<MicrosegRevision> = {}): MicrosegRev
 })
 
 const runOf = (n: number, over: Partial<MicrosegRun> = {}): MicrosegRun => ({
-  id: `run-${n}`, policy_id: 'p1', kind: 'apply', status: 'done', started_at: '2026-11-02T10:00:00Z', duration_ms: 1500,
+  id: `run-${n}`, policy_id: 'p1', connection_id: 'c1', kind: 'apply', status: 'done', started_at: '2026-11-02T10:00:00Z', duration_ms: 1500,
   api_calls: 12, writes: 4, error: '', ...over,
 })
 

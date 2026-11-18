@@ -5,7 +5,7 @@ import { Button } from '@mui/material'
 import { useTranslations } from 'next-intl'
 import { useSWRConfig } from 'swr'
 
-import { microsegApi, microsegBaseUrl } from '@/lib/microseg/api'
+import { MicrosegApiError, microsegApi, microsegBaseUrl } from '@/lib/microseg/api'
 import type { MicrosegPolicy } from '@/lib/microseg/types'
 
 import { isVersionConflict, useDialogAction } from './dialogParts'
@@ -26,7 +26,9 @@ type Props = {
  * "Discard changes" of the pending micro-segmentation changes (R66): the draft goes back to the last applied revision
  * (empty without one), after a themed confirmation stating the count. The answer is the new draft: it replaces the
  * policy at once and the status is read again (the pending changes are then gone). A draft changed meanwhile
- * (VERSION_CONFLICT) is read again and the dialog says so, the user discards again if still wanted.
+ * (VERSION_CONFLICT) is read again and the dialog says so, the user discards again if still wanted. A BUSY here is most
+ * often the engine finishing a scheduled pass (the discard waits a few seconds for it), not an application: its own
+ * wording says so.
  */
 export default function DiscardDraft({ connectionId, policy, count, onDiscarded, variant = 'text' }: Props) {
   const t = useTranslations('microsegPilot.discard')
@@ -49,7 +51,7 @@ export default function DiscardDraft({ connectionId, policy, count, onDiscarded,
         throw e
       }
       await mutate(`${base}/status`)
-    })
+    }, e => (e instanceof MicrosegApiError && e.code === 'BUSY' ? t('busy') : null))
     if (!ok) return
     setOpen(false)
     onDiscarded?.()

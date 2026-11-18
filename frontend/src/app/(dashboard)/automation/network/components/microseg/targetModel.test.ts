@@ -13,11 +13,11 @@ import { ALL_FLOWS, buildZoneGraph } from './zoneGraph'
 import type { PolicyGuest, ZoneMember } from './zoneModel'
 
 const guest = (vmid: number, name: string, ips: string[] = [], over: Partial<PolicyGuest> = {}): PolicyGuest => ({
-  vmid, name, node: 'pve1', type: 'qemu', status: 'running', tags: [], ips, ...over,
+  connectionId: 'c1', vmid, name, node: 'pve1', type: 'qemu', status: 'running', tags: [], ips, ...over,
 })
-const memberOf = (g: PolicyGuest, pending = false): ZoneMember => ({ ref: { node: g.node, type: g.type, vmid: g.vmid }, guest: g, pending })
+const memberOf = (g: PolicyGuest, pending = false): ZoneMember => ({ connectionId: g.connectionId, ref: { node: g.node, type: g.type, vmid: g.vmid }, guest: g, pending })
 const target = (over: Partial<TargetGuest> = {}): TargetGuest => ({
-  key: 'qemu/100', vmid: 100, name: 'web-1', type: 'qemu', node: 'pve1', status: 'running', ips: ['10.0.1.1'], zoneId: 'zw', ...over,
+  id: 'c1/qemu/100', connectionId: 'c1', key: 'qemu/100', vmid: 100, name: 'web-1', type: 'qemu', node: 'pve1', status: 'running', ips: ['10.0.1.1'], zoneId: 'zw', ...over,
 })
 
 describe('the guests a VM target can pick', () => {

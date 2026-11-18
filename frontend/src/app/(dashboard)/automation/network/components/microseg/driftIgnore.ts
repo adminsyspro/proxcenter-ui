@@ -39,3 +39,44 @@ export function useIgnoredDrifts(connectionId: string) {
   const restore = useCallback((key: string) => update(keys => keys.delete(key)), [update])
   return { ignored, ignore, ignoreAll, restore }
 }
+
+/** A drift to ignore or show again: the cluster it was read from and its `driftKey`. */
+export type IgnoredDrift = { connectionId: string; key: string }
+
+/**
+ * The drifts ignored on every cluster of a policy, each one stored under its OWN cluster with the plain `driftKey`,
+ * the key a policy of one cluster always used: the lists depend neither on the cluster the page was opened from nor on
+ * which cluster is the anchor, and a list kept before an association goes on hiding its drifts afterwards. Kept in the
+ * browser (a convenience, not shared); held in memory too, so an ignore lasts the session when the storage is blocked.
+ */
+export function useIgnoredClusterDrifts(clusterIds: readonly string[]) {
+  const idsKey = clusterIds.join('\n')
+  const [state, setState] = useState<{ key: string; byCluster: ReadonlyMap<string, ReadonlySet<string>> }>(
+    () => ({ key: idsKey, byCluster: new Map((idsKey ? idsKey.split('\n') : []).map(id => [id, read(id)])) }),
+  )
+  let byCluster = state.byCluster
+  if (state.key !== idsKey) {
+    // Another group: a cluster already known keeps its list (its session ignores included), a new one is read.
+    byCluster = new Map((idsKey ? idsKey.split('\n') : []).map(id => [id, state.byCluster.get(id) ?? read(id)]))
+    setState({ key: idsKey, byCluster })
+  }
+
+  const isIgnored = useCallback((connectionId: string, key: string) => !!byCluster.get(connectionId)?.has(key), [byCluster])
+  const change = useCallback((items: readonly IgnoredDrift[], add: boolean) => {
+    setState(prev => {
+      const next = new Map(prev.byCluster)
+      for (const item of items) {
+        const keys = new Set(next.get(item.connectionId) ?? read(item.connectionId))
+        if (add) keys.add(item.key)
+        else keys.delete(item.key)
+        next.set(item.connectionId, keys)
+      }
+      for (const connectionId of new Set(items.map(i => i.connectionId))) write(connectionId, next.get(connectionId) as Set<string>)
+      return { key: prev.key, byCluster: next }
+    })
+  }, [])
+  /** One or several at once (the bulk bar): one write per cluster. */
+  const ignore = useCallback((items: readonly IgnoredDrift[]) => change(items, true), [change])
+  const restore = useCallback((item: IgnoredDrift) => change([item], false), [change])
+  return { isIgnored, ignore, restore }
+}

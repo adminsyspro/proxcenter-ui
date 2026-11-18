@@ -32,6 +32,27 @@ function open(onOpenWizard: (() => void) | null = vi.fn(), onClose = vi.fn()) {
   return { onOpenWizard, onClose }
 }
 
+describe('the firewall service check', () => {
+  it('has its row after the cluster firewall: running, stopped on nodes, or unreadable on nodes', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [
+        { id: 'cluster_firewall', status: 'pass' },
+        { id: 'firewall_service', status: 'fail', detail: { nodes: ['pve1', 'pve2'] } },
+        { id: 'firewall_service', status: 'warn', detail: { unreadable: ['pve3'] } },
+        { id: 'firewall_service', status: 'pass' },
+      ],
+    })
+    open()
+    const stopped = await screen.findByRole('listitem', { name: 'Firewall service: failed' })
+    expect(within(stopped).getByText('The firewall service is stopped on pve1, pve2: nothing is filtered on these nodes.')).toBeTruthy()
+    const unreadable = screen.getByRole('listitem', { name: 'Firewall service: warning' })
+    expect(within(unreadable).getByText('The state of the firewall service could not be read on pve3.')).toBeTruthy()
+    const running = screen.getByRole('listitem', { name: 'Firewall service: passed' })
+    expect(within(running).getByText('The firewall service is running on every node.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /wizard/i })).toBeNull()
+  })
+})
+
 describe('checks', () => {
   it('shows one line per check with its verdict and its values', async () => {
     mock.routes['GET /preflight'] = () => reply(200, { checks: CHECKS })
@@ -224,20 +245,20 @@ describe('errors', () => {
     expect(row.querySelector('.MuiTypography-caption')?.textContent).toBeTruthy()
   })
 
-  it('tells an apply is running on 409 BUSY and checks again on request', async () => {
+  it('tells the engine is busy on the cluster (a pass or an apply) on 409 BUSY and checks again on request', async () => {
     let busy = true
     mock.routes['GET /preflight'] = () => (busy
       ? reply(409, { code: 'BUSY', error: 'busy' })
       : reply(200, { checks: [{ id: 'socle_rules', status: 'pass' }] }))
     open()
 
-    expect(await screen.findByText('An apply is running, retry in a moment.')).toBeTruthy()
+    expect(await screen.findByText('The engine is finishing a pass or an apply on this cluster, retry in a moment.')).toBeTruthy()
     expect(screen.queryByRole('listitem')).toBeNull()
 
     busy = false
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByRole('listitem', { name: 'Management access: passed' })).toBeTruthy()
-    expect(screen.queryByText('An apply is running, retry in a moment.')).toBeNull()
+    expect(screen.queryByText('The engine is finishing a pass or an apply on this cluster, retry in a moment.')).toBeNull()
     expect(calls('GET /preflight')).toHaveLength(2)
   })
 

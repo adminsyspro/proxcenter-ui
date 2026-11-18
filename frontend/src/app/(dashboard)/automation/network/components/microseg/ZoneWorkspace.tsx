@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { Box, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -18,6 +19,10 @@ export type ZoneWorkContext = {
   reloadPolicy: () => Promise<unknown>
   /** The guest name of each address the inventory knows, to name the destination of an outbound row. */
   peers?: ReadonlyMap<string, string>
+  /** Names a cluster; given only when the policy is shared (each member line shows its cluster chip). */
+  clusterName?: (id: string) => string
+  /** One line above the members when some cluster's guests could not be read: the list is not complete. */
+  membersNote?: ReactNode
 }
 
 /** The pending observed flows of the zone read for its details, as many as the map reads in all. */
@@ -51,6 +56,8 @@ export default function ZoneWorkspace({ zone, members, membersKnown, flows, zone
     partialLimit: (data?.length ?? 0) >= WORKSPACE_SUGGESTIONS_LIMIT ? WORKSPACE_SUGGESTIONS_LIMIT : null,
     peers: work.peers,
     memberErrors: false,
+    clusterName: work.clusterName,
+    membersNote: work.membersNote,
   })
   return (
     <Box

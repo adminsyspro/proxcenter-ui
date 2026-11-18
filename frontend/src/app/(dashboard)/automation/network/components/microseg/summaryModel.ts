@@ -16,13 +16,44 @@ export function formatWhen(format: ReturnType<typeof useFormatter>, iso: string)
 }
 
 /**
- * The emergency stop switched the cluster firewall off: the engine says so, or, while it cannot read the firewall
- * ('unknown' or absent), the policy remembers that the stop did it.
+ * The emergency stop switched the cluster firewall off: the stop is in force, or the policy remembers that the stop
+ * turned it off (`stop_cluster_disabled`), and the engine says it is off, or, while it cannot read the firewall
+ * ('unknown' or absent), the policy alone says so. A firewall that is off with no stop explaining it is `firewallOffByHand`.
  */
-export function clusterFirewallOff(status: Pick<MicrosegStatus, 'engine'> | undefined, policy: Pick<MicrosegPolicy, 'policy'> | undefined): boolean {
+export function clusterFirewallOff(status: Pick<MicrosegStatus, 'engine' | 'emergency_stop'> | undefined, policy: Pick<MicrosegPolicy, 'policy'> | undefined): boolean {
   const state = status?.engine.cluster_firewall
-  if (state === 'disabled') return true
-  return state !== 'enabled' && !!policy?.policy.stop_cluster_disabled
+  const stopDisabled = !!policy?.policy.stop_cluster_disabled
+  if (state === 'disabled') return !!status?.emergency_stop || stopDisabled
+  return state !== 'enabled' && stopDisabled
+}
+
+/**
+ * The cluster firewall is off and the emergency stop does not explain it (someone switched it off in Proxmox): nothing is
+ * filtered on that cluster. `stopDisabled` is the link's `stop_cluster_disabled`.
+ */
+export function firewallOffByHand(status: Pick<MicrosegStatus, 'engine' | 'emergency_stop'> | undefined, stopDisabled: boolean): boolean {
+  return status?.engine.cluster_firewall === 'disabled' && !status.emergency_stop && !stopDisabled
+}
+
+/**
+ * Where one cluster of a shared policy stands after the emergency stop was set (`on`) or lifted, from its own status:
+ * null once it followed (or while its status is unknown: its unread line says so). After a stop, a cluster whose
+ * firewall is still on is pending (the engine retries it every minute). After a lift, a cluster whose firewall the stop
+ * turned off (`stopDisabled`, the link's flag) and that is still off is pending, or `held` when the engine said it keeps
+ * it off on purpose (the rules that keep its nodes reachable could not be checked: the `stop_lift_held` drift).
+ */
+export function stopFollowState(
+  on: boolean,
+  status: Pick<MicrosegStatus, 'emergency_stop' | 'engine'> | undefined,
+  stopDisabled: boolean,
+  held: boolean,
+): 'pending' | 'held' | null {
+  if (!status) return null
+  const firewall = status.engine.cluster_firewall
+  if (on) return status.emergency_stop && firewall !== 'enabled' ? null : 'pending'
+  const stillOff = stopDisabled && firewall !== 'enabled'
+  if (!status.emergency_stop && !stillOff) return null
+  return held && !status.emergency_stop ? 'held' : 'pending'
 }
 
 /**

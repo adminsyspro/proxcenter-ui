@@ -48,7 +48,7 @@ import {
   type TelemetryHealth,
   type TelemetryState,
 } from '@/lib/sflow/telemetryState'
-import { MicrosegWriteContext, useCanManageMicroseg } from '@/app/(dashboard)/automation/network/components/microseg/microsegAccess'
+import { MicrosegAccessProvider, useMicrosegAccess } from '@/app/(dashboard)/automation/network/components/microseg/microsegAccess'
 
 import GroupBySelector from './GroupBySelector'
 import { MicrosegPairStatus, ZoneEndpointCell, usePairActions } from './MicrosegPairStatus'
@@ -203,14 +203,18 @@ export default function FlowsTab() {
   // Micro-segmentation lens (UA35): the pairs read through the zones of one connection.
   const [groupBy, setGroupBy] = useGroupBy()
   const lensConnection = useLensConnection()
-  const lensRead = useTrafficLens(lensConnection.connectionId)
+  const lensRead = useTrafficLens(lensConnection.connectionId, lensConnection.connections)
   const lens = groupBy === 'zone' ? lensRead.lens : null
   // In Zone mode the reply direction of a pair is folded into it (the firewall is stateful): one row per connection.
   const lensRows = useMemo(() => (lens ? lens.rows(topPairs) : null), [lens, topPairs])
   // Zone stays the choice while the zones load (or cannot be used): the page shows the VM grouping meanwhile.
   const shownGroupBy = lens || groupBy !== 'zone' ? groupBy : 'vm'
   const pairActions = usePairActions(lensRead)
-  const canWriteMicroseg = useCanManageMicroseg(lensConnection.connectionId ?? '')
+  // The pair actions write the policy (accept, new flow): on a shared one, the right on every cluster of the draft the
+  // lens already read (no request of its own).
+  const lensClusters = lensRead.lens?.policy.clusters
+  const lensClusterIds = useMemo(() => (lensClusters ?? []).map(c => c.connection_id), [lensClusters])
+  const microsegAccess = useMicrosegAccess(lensConnection.connectionId ?? '', lensClusterIds)
 
   // Sparkline data for top talkers (keyed by vmid)
   const [sparklineData, setSparklineData] = useState<Map<number, { time: number; total: number }[]>>(new Map())
@@ -985,7 +989,7 @@ export default function FlowsTab() {
                 {topPairs.length === 0 ? (
                   <FlowPanelEmptyState totalFlows={status?.total_flows ?? 0} activeVMs={status?.active_vms ?? 0} />
                 ) : (
-                  <MicrosegWriteContext.Provider value={canWriteMicroseg}>
+                  <MicrosegAccessProvider value={microsegAccess}>
                   <TableContainer sx={{ maxHeight: 400 }}>
                     <Table size="small" stickyHeader>
                       <TableHead>
@@ -1036,7 +1040,7 @@ export default function FlowsTab() {
                       </TableBody>
                     </Table>
                   </TableContainer>
-                  </MicrosegWriteContext.Provider>
+                  </MicrosegAccessProvider>
                 )}
                 {lens && pairActions.dialog}
               </CardContent>

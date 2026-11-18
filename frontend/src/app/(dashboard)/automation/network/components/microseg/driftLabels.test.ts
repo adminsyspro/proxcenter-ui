@@ -10,7 +10,8 @@ import fr from '@/messages/fr.json'
 import ko from '@/messages/ko.json'
 import zhCN from '@/messages/zh-CN.json'
 
-import { DRIFT_KINDS, driftKey, driftLabel } from './driftLabels'
+import { CLUSTER_DRIFT_KINDS, DRIFT_KINDS, canIgnoreDrift, clusterDriftSubject, driftKey, driftLabel } from './driftLabels'
+import { KIND_CHIP } from './DriftRow'
 
 const locales: Record<string, any> = { en, fr, de, es, ko, 'zh-CN': zhCN }
 
@@ -186,5 +187,111 @@ describe('a disabled outbound rule', () => {
     expect(driftLabel(drift, translator('en')).detail).toBe('The final outbound rule of qemu/101 is disabled instead of DROP.')
     expect(driftLabel(drift, translator('fr')).detail).toContain('désactivée')
     expect(driftLabel(drift, translator('fr')).detail).toContain('DROP')
+  })
+})
+
+describe('drifts of the clusters of a shared policy', () => {
+  const t = translator('en')
+  const names: Record<string, string> = { c1: 'PVE-PROD', c2: 'PVE-DR' }
+  // The lookup of the page gives back the bare ID for a cluster the user cannot see.
+  const clusterName = (id: string) => names[id] ?? id
+  const peer: MicrosegDrift = { kind: 'peer_unreadable', object: 'c2', detail: { name: 'backend-name-of-c2' } }
+  const held: MicrosegDrift = { kind: 'stop_lift_held', object: 'c1', detail: { socle_rules: false } }
+
+  it('says which associated cluster cannot be read, with the name the user knows, and offers no action', () => {
+    const label = driftLabel(peer, t, clusterName)
+    expect(label.detail).toBe('Cluster PVE-DR cannot be read: address removals are on hold')
+    expect(label.title).toContain('PVE-DR')
+    expect(label.fix).toBeNull()
+    expect(label.fixable).toBe(false)
+    expect(canIgnoreDrift(peer)).toBe(false)
+  })
+
+  it('never shows the name the backend sent, nor the ID, for a cluster the user cannot see', () => {
+    const label = driftLabel({ ...peer, object: 'c9' }, t, clusterName)
+    expect(label.detail).toBe('An associated cluster cannot be read: address removals are on hold')
+    expect(`${label.title} ${label.detail} ${label.hint}`).not.toMatch(/backend-name|c9/)
+  })
+
+  it('says the cluster firewall stays off after a lifted stop, as an error without a fix nor an ignore', () => {
+    const label = driftLabel(held, t, clusterName)
+    expect(label.detail).toBe('Cluster firewall of PVE-PROD stays off: the node access rules must be checked before it is turned back on')
+    expect(label.fix).toBeNull()
+    expect(canIgnoreDrift(held)).toBe(false)
+    expect(canIgnoreDrift({ kind: 'unzoned_running' })).toBe(true)
+  })
+
+  it('notes a removal held until every associated cluster can be read, without making it an error', () => {
+    const label = driftLabel({ kind: 'ipset_out_of_sync', object: 'pcz-web', detail: { desired: [], actual: ['10.0.0.1/32'], held: true } }, t)
+    expect(label.note).toBe('Removal on hold until every associated cluster can be read.')
+    expect(label.fix).toBe('plan')
+    expect(driftLabel({ kind: 'local_set_desync', object: 'pcz-_local', detail: { held: true } }, t).note).toBeTruthy()
+    expect(driftLabel(SAMPLES[4], t).note).toBeNull()
+  })
+
+  it('labels both kinds in the 6 locales, with their group header and chip', () => {
+    for (const locale of Object.keys(locales)) {
+      const tl = translator(locale)
+      for (const drift of [peer, held, { ...peer, object: 'c9' }]) {
+        const label = driftLabel(drift, tl, clusterName)
+        for (const text of [label.title, label.detail, label.hint ?? '']) expect(text, `${locale}: ${drift.kind}`).not.toMatch(/microsegPilot|\{|\}|\u2014/)
+        expect(label.hint?.trim(), `${locale}: ${drift.kind} hint`).toBeTruthy()
+      }
+      for (const kind of CLUSTER_DRIFT_KINDS) {
+        expect(locales[locale].microsegPilot.drifts.groups[kind], `${locale}: groups.${kind}`).toContain('{count, number}')
+        expect(locales[locale].microsegPilot.drifts.chip[kind], `${locale}: chip.${kind}`).toBeTruthy()
+        if (locale !== 'en') expect(locales[locale].microsegPilot.drifts.groups[kind]).not.toBe(locales.en.microsegPilot.drifts.groups[kind])
+      }
+    }
+  })
+})
+
+describe('drifts about a firewall that filters nothing', () => {
+  const t = translator('en')
+  const names: Record<string, string> = { c1: 'PVE-PROD' }
+  const clusterName = (id: string) => names[id] ?? id
+  const off: MicrosegDrift = { kind: 'cluster_firewall_off', object: 'c1', detail: { name: 'backend-name' } }
+  const service: MicrosegDrift = { kind: 'firewall_service_stopped', object: 'pve2', detail: { node: 'pve2' } }
+
+  it('names the cluster as the user knows it, in one line, with no fix and no ignore', () => {
+    const label = driftLabel(off, t, clusterName)
+    expect(label.title).toBe('Cluster firewall of PVE-PROD is off')
+    expect(label.detail).toBe('Cluster firewall of PVE-PROD is off: nothing is filtered there')
+    expect(label.fix).toBeNull()
+    expect(canIgnoreDrift(off)).toBe(false)
+    expect(clusterDriftSubject(off, 'Another cluster', clusterName)).toBe('PVE-PROD')
+  })
+
+  it('names a cluster outside the scope in general words, never by ID nor by the name the backend sent', () => {
+    const label = driftLabel({ ...off, object: 'c9' }, t, clusterName)
+    expect(label.detail).toBe('The cluster firewall of an associated cluster is off: nothing is filtered there')
+    expect(`${label.title} ${label.detail} ${label.hint}`).not.toMatch(/backend-name|c9/)
+  })
+
+  it('names the node whose firewall service is stopped', () => {
+    const label = driftLabel(service, t, clusterName)
+    expect(label.title).toBe('Firewall service stopped on pve2')
+    expect(label.detail).toBe('The firewall service is stopped on pve2: nothing is filtered on this node')
+    expect(label.fix).toBeNull()
+    expect(canIgnoreDrift(service)).toBe(false)
+    expect(clusterDriftSubject(service, 'Another cluster', clusterName)).toBe('pve2')
+  })
+
+  it('is as severe as the most severe existing kind', () => {
+    expect(KIND_CHIP.cluster_firewall_off.color).toBe('error')
+    expect(KIND_CHIP.firewall_service_stopped.color).toBe('error')
+    expect(CLUSTER_DRIFT_KINDS).toContain('cluster_firewall_off')
+    expect(CLUSTER_DRIFT_KINDS).toContain('firewall_service_stopped')
+  })
+
+  it('is labelled in the 6 locales without a placeholder left', () => {
+    for (const locale of Object.keys(locales)) {
+      const tl = translator(locale)
+      for (const drift of [off, service, { ...off, object: 'c9' }]) {
+        const label = driftLabel(drift, tl, clusterName)
+        for (const text of [label.title, label.detail, label.hint ?? '']) expect(text, `${locale}: ${drift.kind}`).not.toMatch(/microsegPilot|\{|\}|\u2014/)
+        expect(label.hint?.trim(), `${locale}: ${drift.kind} hint`).toBeTruthy()
+      }
+    }
   })
 })

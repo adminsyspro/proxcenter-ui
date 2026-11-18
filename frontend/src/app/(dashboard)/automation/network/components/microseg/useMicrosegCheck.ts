@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { MicrosegApiError, microsegApi } from '@/lib/microseg/api'
-import type { MicrosegRun, MicrosegStatus } from '@/lib/microseg/types'
+import type { GroupRun, MicrosegRun, MicrosegStatus } from '@/lib/microseg/types'
 import { FATAL_CODES, useMicrosegRun } from '@/lib/microseg/useMicroseg'
 
 import { CHECK_RUNS_LIMIT, findCheckCandidate, findCompanions, isCheckRun, type CheckCompanions, type CheckCutoff } from './checkModel'
+import { useGroupRunPoll } from './useGroupRunPoll'
 
 /** While the check is queued the shared status is read every 5 s (from the engine's memory: no Proxmox call). */
 export const CHECK_STATUS_POLL_MS = 5000
@@ -217,3 +218,158 @@ export function useMicrosegCheck({ connectionId, status, statusError, reloadStat
 }
 
 export type MicrosegCheck = ReturnType<typeof useMicrosegCheck>
+
+/** Where the check of one cluster of a shared policy stands, until its run is found. */
+export type ClusterCheck = {
+  connection_id: string
+  /** `sending` the request, `queued` in the engine's queue, `searching` its run, `found` it, `failed` to ask or to find it. */
+  phase: 'sending' | 'queued' | 'searching' | 'found' | 'failed'
+  runId?: string
+  /** Why it failed: an error of the request or of the reads, or `lost` (the run was not found in time). */
+  error?: unknown
+  /** The last read of its status or its runs failed (still retried, as `pollError` of one cluster); null once one works. */
+  pollError?: unknown
+}
+
+type GroupOptions = {
+  /** The active clusters of the policy (a link not applied yet answers 404 to a check: it is not asked). */
+  activeIds: readonly string[]
+  /** Every cluster has its run, or failed: follow them as one group run in the strip. */
+  onTracked: (runs: GroupRun[]) => void
+  /** Every run has ended: refresh what they may have changed. */
+  onDone: () => void
+}
+
+/** Waits `ms`, then for the tab to be shown (nothing is read while it is hidden); resolves false once cancelled. */
+function pause(ms: number, cancelled: () => boolean): Promise<boolean> {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      if (cancelled()) return resolve(false)
+      if (typeof document === 'undefined' || !document.hidden) return resolve(true)
+      const onVisible = () => {
+        if (document.hidden) return
+        document.removeEventListener('visibilitychange', onVisible)
+        resolve(!cancelled())
+      }
+      document.addEventListener('visibilitychange', onVisible)
+    }, ms)
+  })
+}
+
+/**
+ * Finds the run of a check asked on one cluster: reads its status every 5 s while the check is queued (the engine's
+ * memory, no Proxmox call), then its runs list every 2 s, one read in flight, until the run is found or a minute has
+ * passed. Resolves with the run ID, or throws (`lost` past the minute).
+ */
+async function findClusterCheck(
+  connId: string, cutoff: CheckCutoff, cancelled: () => boolean,
+  onPhase: (phase: ClusterCheck['phase']) => void, reportPollError: (error: unknown) => void,
+): Promise<string | null> {
+  const api = microsegApi(connId)
+  // Told only when it changes: a read that keeps working redraws nothing.
+  let shown: unknown = null
+  const onPollError = (error: unknown) => {
+    if (error === shown) return
+    shown = error
+    reportPollError(error)
+  }
+  // Queued: the run does not exist yet. No time limit here, as for one cluster: the engine takes it at its next pass.
+  for (;;) {
+    if (cancelled()) return null
+    let status: MicrosegStatus | null = null
+    try {
+      status = await api.getStatus()
+      onPollError(null)
+    } catch (e) {
+      if (isFatal(e)) throw e
+      onPollError(e)
+    }
+    if (status && status.engine.check_pending !== true) break
+    if (!(await pause(CHECK_STATUS_POLL_MS, cancelled))) return null
+  }
+  onPhase('searching')
+  const exclude = new Set(cutoff.exclude)
+  const begun = Date.now()
+  for (;;) {
+    if (cancelled()) return null
+    try {
+      const candidate = findCheckCandidate((await api.listRuns({ limit: CHECK_RUNS_LIMIT })).runs, { since: cutoff.since, exclude })
+      if (candidate) {
+        const detail = await api.getRun(candidate.id)
+        if (isCheckRun(detail)) return detail.id
+        exclude.add(detail.id)
+      }
+      onPollError(null)
+    } catch (e) {
+      if (isFatal(e)) throw e
+      onPollError(e)
+    }
+    if (Date.now() - begun > CHECK_FIND_TIMEOUT_MS) throw new Error('lost')
+    if (!(await pause(CHECK_FIND_POLL_MS, cancelled))) return null
+  }
+}
+
+/** The request of a check on one cluster: the cutoff its run is looked for after (a 409 means one is queued already). */
+async function askCheck(connId: string): Promise<CheckCutoff> {
+  try {
+    const queued = await microsegApi(connId).checkNow()
+    return { since: queued.requested_at, exclude: new Set() }
+  } catch (e) {
+    if (!(e instanceof MicrosegApiError && e.code === 'CHECK_PENDING')) throw e
+    return { since: null, exclude: await fullRunsNow(connId) }
+  }
+}
+
+/**
+ * "Check now" on a shared policy: a check is queued on every active cluster at once, each through its own relay; the run
+ * of each is looked for on its cluster, then they are followed together as one group run (the strip, and this hook for
+ * the window). A cluster whose check could not be asked or found ends as failed, the others go on.
+ */
+export function useGroupCheck({ activeIds, onTracked, onDone }: GroupOptions) {
+  const [clusters, setClusters] = useState<ClusterCheck[]>([])
+  const [runs, setRuns] = useState<GroupRun[] | null>(null)
+  const session = useRef(0)
+  const callbacks = useRef({ onTracked, onDone })
+  useEffect(() => { callbacks.current = { onTracked, onDone } })
+  // Unmounted: every loop of the current session stops.
+  useEffect(() => () => { session.current += 1 }, [])
+
+  const start = useCallback(async () => {
+    const id = ++session.current
+    const cancelled = () => session.current !== id
+    const ids = [...activeIds]
+    setRuns(null)
+    setClusters(ids.map(connection_id => ({ connection_id, phase: 'sending' })))
+    const update = (connId: string, next: Partial<ClusterCheck>) => {
+      if (!cancelled()) setClusters(prev => prev.map(c => (c.connection_id === connId ? { ...c, ...next } : c)))
+    }
+    const outcomes = await Promise.all(ids.map(async (connId): Promise<GroupRun> => {
+      try {
+        const cutoff = await askCheck(connId)
+        update(connId, { phase: 'queued' })
+        const runId = await findClusterCheck(connId, cutoff, cancelled, phase => update(connId, { phase }), pollError => update(connId, { pollError }))
+        if (!runId) return { connection_id: connId, error: 'internal' }
+        update(connId, { phase: 'found', runId })
+        return { connection_id: connId, run_id: runId }
+      } catch (e) {
+        update(connId, { phase: 'failed', error: e })
+        return { connection_id: connId, error: 'internal' }
+      }
+    }))
+    if (cancelled()) return
+    setRuns(outcomes)
+    if (outcomes.some(r => r.run_id)) callbacks.current.onTracked(outcomes)
+  }, [activeIds])
+
+  const polled = useGroupRunPoll(runs)
+  const done = runs !== null && polled.every(p => p.ended)
+  const doneKey = done && runs ? runs.map(r => r.run_id ?? '').join(',') : ''
+  useEffect(() => {
+    if (doneKey) callbacks.current.onDone()
+  }, [doneKey])
+
+  const started = clusters.length > 0
+  return { clusters, runs, polled, done, active: started && !done, started, start }
+}
+
+export type GroupCheck = ReturnType<typeof useGroupCheck>

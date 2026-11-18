@@ -4,7 +4,7 @@
 // Next relay at /api/v1/firewall/microseg/{connectionId}/<route>.
 
 import type {
-  CheckQueued, EgressState, ExceptionInput, FlowDirection, EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegEventList, MicrosegException,
+  CheckQueued, EgressState, MicrosegCluster, RunStarted, ExceptionInput, FlowDirection, EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegEventList, MicrosegException,
   MicrosegFlow, MicrosegPolicy,
   MicrosegRevision, MicrosegRun, MicrosegStatus, MicrosegSuggestion, MicrosegTraffic, MicrosegZone, PolicyUpdate,
   PreflightCheck, ResolveSuggestionsInput, SuggestionKind, SuggestionStatus, ZoneInput, ZoneState,
@@ -16,14 +16,17 @@ export class MicrosegApiError extends Error {
   readonly serverMessage?: string
   /** What the orchestrator adds to some refusals (SOCLE_MISSING: the failed socle check detail). */
   readonly detail?: Record<string, unknown>
+  /** The connections a refusal names (CLUSTER_FIREWALL_OFF: the clusters whose firewall is off). */
+  readonly connections?: string[]
 
-  constructor(status: number, code: string, serverMessage?: string, detail?: Record<string, unknown>) {
+  constructor(status: number, code: string, serverMessage?: string, detail?: Record<string, unknown>, connections?: string[]) {
     super(serverMessage || code)
     this.name = 'MicrosegApiError'
     this.status = status
     this.code = code
     this.serverMessage = serverMessage
     this.detail = detail
+    this.connections = connections
   }
 }
 
@@ -40,7 +43,7 @@ export const KNOWN_CODES: ReadonlySet<string> = new Set([
   'VERSION_CONFLICT', 'BUSY', 'ZONE_NAME_TAKEN', 'IN_USE', 'CONFLICT', 'INVALID', 'FEATURE_REQUIRED',
   'FORBIDDEN', 'NOT_FOUND', 'UNAUTHORIZED', 'NOT_LEADER', 'MICROSEG_UNAVAILABLE', 'ENGINE_STOPPED',
   'ORCHESTRATOR_ERROR', 'ORCHESTRATOR_TIMEOUT', 'PVE_ERROR', 'NETWORK', 'CHECK_PENDING', 'SOCLE_MISSING',
-  'NOT_DEPLOYED',
+  'NOT_DEPLOYED', 'CLUSTER_FIREWALL_OFF', 'CLUSTER_NOT_EMPTY', 'TOO_MANY_CLUSTERS', 'CLUSTER_UNREADABLE',
 ])
 
 /** i18n key of an error code (the strings live in the microsegPilot catalogue). */
@@ -80,10 +83,12 @@ async function toError(res: Response): Promise<MicrosegApiError> {
   const message = typeof body?.error === 'string' ? body.error : undefined
   if (res.status === 409 && code === 'VERSION_CONFLICT') return new MicrosegConflictError(message)
   const detail = body?.detail && typeof body.detail === 'object' && !Array.isArray(body.detail) ? (body.detail as Record<string, unknown>) : undefined
-  return new MicrosegApiError(res.status, code, message, detail)
+  const connections = Array.isArray(body?.connections) ? (body.connections as unknown[]).filter((c): c is string => typeof c === 'string' && c !== '') : undefined
+  return new MicrosegApiError(res.status, code, message, detail, connections)
 }
 
-export type RunStarted = { run_id: string }
+/** GET and mutations of /clusters. */
+export type MicrosegClusterList = { clusters: MicrosegCluster[]; max: number }
 
 export type PageParams = { limit?: number; offset?: number }
 export type ListRunsParams = PageParams
@@ -109,6 +114,8 @@ export type ListSuggestionsParams = PageParams & {
   service?: string[]
   /** "unknown" keeps the flows whose source is in no zone. */
   source?: 'unknown'
+  /** Keeps the flows of one cluster of a shared policy (the server filters; a cluster outside the policy gives none). */
+  connection?: string
 }
 
 function query(params: Record<string, string | number | string[] | undefined> = {}): string {
@@ -223,6 +230,9 @@ export function microsegApi(connId: string) {
     /** The leader answers 200, a follower 202 (applied by the leader within a minute). */
     emergencyStop: (on: boolean) => call<EmergencyStopResult>('POST', 'emergency-stop', { on }),
 
+    /** Turns the cluster firewall of this cluster back on, after the node access rules check (409 SOCLE_MISSING without them); under an emergency stop nothing is written and the lift turns it on (`at_lift`). */
+    enableClusterFirewall: () => call<{ ok: boolean; cluster_firewall: 'enabled' | 'already_enabled' | 'at_lift' }>('POST', 'cluster-firewall/enable'),
+
     /** Queues a manual check (IP collection, then a full run); 409 CHECK_PENDING while one is queued. */
     checkNow: () => call<CheckQueued>('POST', 'check', {}),
 
@@ -245,6 +255,10 @@ export function microsegApi(connId: string) {
       const body = await call<{ drifts?: MicrosegDrift[] | null; computed?: boolean }>('GET', 'drifts')
       return { drifts: body?.drifts ?? [], computed: body?.computed !== false }
     },
+    /** The clusters linked to the policy and the most a policy takes. */
+    listClusters: (signal?: AbortSignal) => call<MicrosegClusterList>('GET', 'clusters', undefined, signal),
+    associateCluster: (connectionId: string) => call<MicrosegClusterList>('POST', 'clusters', { connection_id: connectionId }),
+    dissociateCluster: (connectionId: string) => call<MicrosegClusterList>('DELETE', `clusters/${id(connectionId)}`),
     getPreflight: async () => (await call<{ checks: PreflightCheck[] }>('GET', 'preflight')).checks,
     getStatus: (signal?: AbortSignal) => call<MicrosegStatus>('GET', 'status', undefined, signal),
     /** The flows seen towards zone guests, newest first, from the orchestrator's memory (no Proxmox call). */

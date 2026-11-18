@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -10,9 +10,9 @@ import { serviceLabel } from '@/lib/network/serviceNames'
 
 import DiffChip from './DiffChip'
 import EgressChip from './EgressChip'
-import { WriteTip, useMicrosegWrite } from './microsegAccess'
+import { WriteTip, useMicrosegClusterWrite, useMicrosegWrite } from './microsegAccess'
 import { endText } from './policyTableModel'
-import { flowsOfZone, type ZoneMember } from './zoneModel'
+import { flowsOfZone, memberId, type ZoneMember } from './zoneModel'
 import { HOVER_ACTIONS, ZoneDetails, ZoneGlyph, ZoneStateMenu, type ZoneRowProps } from './ZoneRow'
 import ZoneSparkline from './ZoneSparkline'
 import ZoneStateChip from './ZoneStateChip'
@@ -34,6 +34,8 @@ export type ZoneCardProps = ZoneRowProps & {
    * The whole value is null when the history cannot be read (an older orchestrator): no sparkline then.
    */
   uncovered?: { series: number[] | null; outSeries?: number[] | null; from: number; stepMs: number } | null
+  /** One line under the member preview when some cluster's guests could not be read: the count is not complete. */
+  membersNote?: ReactNode
 }
 
 /** The zone name keeps at least this width (px) before it is cut; the chips give way first. */
@@ -72,7 +74,7 @@ function MemberPreview({ members, known }: { members: ZoneMember[]; known: boole
           : <i className='ri-question-line' style={{ fontSize: 14, opacity: 0.6 }} />
         return (
           <Chip
-            key={`${m.ref.node}/${m.ref.type}/${m.ref.vmid}`}
+            key={memberId(m)}
             size='small'
             variant='outlined'
             icon={<Box component='span' sx={{ display: 'inline-flex', ml: '6px !important', mr: '-2px !important' }}>{glyph}</Box>}
@@ -113,13 +115,15 @@ function FlowPreview({ zone, flows, zonesById }: { zone: MicrosegZone; flows: Mi
  * and the flows opened full width below the row of cards) and the actions, shown on hover or focus (always on touch).
  */
 export default function ZoneCard(props: ZoneCardProps) {
-  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onSetEgress, onAssign, onAddFlow, drifts, onOpenDrifts, uncovered, egressReady = false } = props
+  const { zone, members, membersKnown, flows, zonesById, diffKind, open, onToggle, onEdit, onDelete, onSetState, onSetEgress, onAssign, onAddFlow, drifts, onOpenDrifts, uncovered, egressReady = false, membersNote } = props
   const t = useTranslations('microsegPilot.policy.zone')
   const ts = useTranslations('microsegPilot.overview.sections')
   // The same words as in the zone panel of the map.
   const tz = useTranslations('microsegPilot.overview.zonePanel')
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const { canWrite } = useMicrosegWrite()
+  // Assigning writes the members of each guest's cluster: the right on one cluster of the policy opens it.
+  const { canWriteSome: canAssign } = useMicrosegClusterWrite()
   // While a run writes the state of this zone, the chip says so and no other state can be asked for.
   const changing = useRunsInProgress().zones.has(zone.id)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
@@ -169,6 +173,7 @@ export default function ZoneCard(props: ZoneCardProps) {
           <Stat name='outgoing' value={outgoing.length} label={t('statOutgoing')} />
         </Box>
         <MemberPreview members={members} known={membersKnown} />
+        {membersKnown && membersNote}
         <FlowPreview zone={zone} flows={flows} zonesById={zonesById} />
         {/* At the bottom of the card: the cards of a row share their height, so the bars line up across the row. */}
         {uncovered && (
@@ -211,8 +216,8 @@ export default function ZoneCard(props: ZoneCardProps) {
           <WriteTip title={t('addFlowInto', { zone: zone.name })}>
             <IconButton size='small' aria-label={t('addFlowInto', { zone: zone.name })} disabled={!canWrite} onClick={() => onAddFlow(zone)}><i className='ri-route-line' /></IconButton>
           </WriteTip>
-          <WriteTip title={t('assign')}>
-            <IconButton size='small' aria-label={t('assign')} disabled={!canWrite} onClick={() => onAssign(zone)}><i className='ri-user-add-line' /></IconButton>
+          <WriteTip allowed={canAssign} title={t('assign')}>
+            <IconButton size='small' aria-label={t('assign')} disabled={!canAssign} onClick={() => onAssign(zone)}><i className='ri-user-add-line' /></IconButton>
           </WriteTip>
           <WriteTip title={t('delete')}>
             <IconButton size='small' aria-label={t('delete')} disabled={!canWrite} onClick={() => onDelete(zone)}><i className='ri-delete-bin-line' /></IconButton>

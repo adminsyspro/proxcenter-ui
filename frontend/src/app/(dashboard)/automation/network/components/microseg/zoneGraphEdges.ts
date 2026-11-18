@@ -1,6 +1,6 @@
 /**
  * The shape of every edge of the zone map and the place of its label: lanes keep the edges between the same two
- * circles (or boxes) side by side, whichever guest or circle they end on,
+ * circles (or boxes) side by side, and the edges between the same two guests too, each still ending on its guest,
  * a bow keeps an edge clear of the circles it does not belong to, and each label goes to the first place along its
  * edge where it covers no circle, no box and no other label.
  */
@@ -20,6 +20,8 @@ export type PlacedEdge = { path: string; points: Point[]; label: { x: number; y:
 
 const GAP = 4
 const LANE_GAP = 26
+/** What a shifted edge keeps between its line and the side of a guest glyph (or of a box) it ends on. */
+const END_MARGIN = 2
 const CLEARANCE = 8
 /** The bows tried for the edges of a pair, as a part of the distance between the two ends: straight first. */
 const BOWS = [0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45, 0.6, -0.6]
@@ -74,22 +76,54 @@ function directionKey(s: EdgeSpec, ends: Map<string, EdgeEnds>): string {
 /** The two ends of an edge in a fixed order, so that both directions of a pair share the key. */
 const endsKey = (s: EdgeSpec) => (s.source < s.target ? `${s.source}|${s.target}` : `${s.target}|${s.source}`)
 
+/** The end is a node of its own (a circle or a box), not a guest or a "+N" drawn inside a circle. */
+const isGroupEnd = (id: string, ends: Map<string, EdgeEnds>) => (ends.get(id)?.group ?? id) === id
+
+/**
+ * How far an edge may be shifted sideways and still start and end on the outline of its two ends: a little less than
+ * the radius of a guest glyph (or half the height of a box), whichever end is the smaller.
+ */
+function endRoom(s: EdgeSpec, ends: Map<string, EdgeEnds>): number {
+  const room = (id: string) => {
+    const shape = ends.get(id)?.shape
+    if (!shape) return 0
+    return Math.max(0, (shape.kind === 'circle' ? shape.r : Math.min(shape.halfW, shape.halfH)) - END_MARGIN)
+  }
+  return Math.min(room(s.source), room(s.target))
+}
+
+/** Spreads the edges of one direction: on its own side when the other direction is drawn too, else around the middle line. */
+function spread(same: EdgeSpec[], reverse: boolean, gap: number, lanes: Map<EdgeSpec, Lane>) {
+  same.forEach((s, k) => {
+    lanes.set(s, {
+      offset: (reverse ? k + 0.5 : k - (same.length - 1) / 2) * gap,
+      at: !reverse && same.length === 1 ? 0.5 : 0.42 + 0.16 * (k % 2),
+    })
+  })
+}
+
 /**
  * Lanes: each direction between two circles (or boxes) on its own side (the offset follows the normal of the edge,
  * which flips with the direction), the edges of one direction spread around the middle line when the other is empty.
+ * An edge with a guest (or a "+N") at an end is spread only with the edges between the same two nodes, and only as
+ * far as keeps both of its ends on their outlines: shifted with every edge between the two circles it would float
+ * beside the guests it links.
  */
 function laneMap(specs: EdgeSpec[], ends: Map<string, EdgeEnds>): Map<EdgeSpec, Lane> {
   const byDirection = groupBy(specs, s => directionKey(s, ends))
   const lanes = new Map<EdgeSpec, Lane>()
   for (const [key, same] of byDirection) {
     const [from, to] = key.split('>')
-    const reverse = byDirection.has(`${to}>${from}`)
-    same.forEach((s, k) => {
-      lanes.set(s, {
-        offset: (reverse ? k + 0.5 : k - (same.length - 1) / 2) * LANE_GAP,
-        at: !reverse && same.length === 1 ? 0.5 : 0.42 + 0.16 * (k % 2),
-      })
-    })
+    spread(same, byDirection.has(`${to}>${from}`), LANE_GAP, lanes)
+  }
+  const onNodes = specs.filter(s => !isGroupEnd(s.source, ends) || !isGroupEnd(s.target, ends))
+  const byEnds = groupBy(onNodes, s => `${s.source}>${s.target}`)
+  for (const [key, same] of byEnds) {
+    const [from, to] = key.split('>')
+    const reverse = byEnds.has(`${to}>${from}`)
+    const widest = reverse ? same.length - 0.5 : (same.length - 1) / 2
+    const room = Math.min(...same.map(s => endRoom(s, ends)))
+    spread(same, reverse, widest > 0 ? Math.min(LANE_GAP, room / widest) : 0, lanes)
   }
   return lanes
 }

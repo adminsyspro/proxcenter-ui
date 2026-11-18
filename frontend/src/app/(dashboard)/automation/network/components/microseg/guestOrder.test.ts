@@ -9,7 +9,7 @@ import { zone } from './microsegTestKit'
 import { targetCandidates } from './targetModel'
 import { byGuestName, type PolicyGuest } from './zoneModel'
 
-const guest = (vmid: number, name: string, over: Partial<PolicyGuest> = {}): PolicyGuest => ({ vmid, name, node: 'pve1', type: 'qemu', status: 'running', tags: [], ...over })
+const guest = (vmid: number, name: string, over: Partial<PolicyGuest> = {}): PolicyGuest => ({ connectionId: 'c1', vmid, name, node: 'pve1', type: 'qemu', status: 'running', tags: [], ...over })
 
 /** The inventory as Proxmox hands it: by VMID. */
 const BY_VMID = [guest(100, 'Debian13'), guest(101, 'debian-test'), guest(102, 'Win2025'), guest(104, 'NginX'), guest(109, 'audb-victim'), guest(113, 'c7-i1000'), guest(7004, 'app-01')]

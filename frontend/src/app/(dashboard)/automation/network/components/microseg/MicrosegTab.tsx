@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import NextLink from 'next/link'
 import { Alert, Box, CircularProgress, IconButton, Link, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
@@ -9,9 +9,11 @@ import { useSWRConfig } from 'swr'
 import { microsegApi, microsegBaseUrl } from '@/lib/microseg/api'
 import { isRunAffectedKey } from '@/lib/microseg/runRefresh'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
+import { isClustersKey, useMicrosegGroup } from '@/lib/microseg/useMicrosegGroup'
 
 import DeploymentWizard from '../DeploymentWizard'
 import CheckNowButton from './CheckNowButton'
+import type { NamedConnection } from './clusterModel'
 import DriftsPanel from './DriftsPanel'
 import FirstRunGuide from './FirstRunGuide'
 import HistoryPanel from './HistoryPanel'
@@ -29,7 +31,7 @@ import { RunsInProgressProvider, useTrackedRuns } from './runsInProgress'
 import { useMicrosegControls } from './useMicrosegControls'
 import { useResumeRuns } from './useResumeRuns'
 import { CHECK_STATUS_POLL_MS } from './useMicrosegCheck'
-import { MicrosegActionsSlot, MicrosegWriteContext, useCanManageMicroseg } from './microsegAccess'
+import { MicrosegAccessProvider, MicrosegActionsSlot, useMicrosegAccess } from './microsegAccess'
 import ZoneMap from './ZoneMap'
 import {
   MICROSEG_SUBTABS, isMicrosegSubTab, type FirewallWizardData, type MicrosegSubTab, type MicrosegSubTabProps, type ObservationFocus,
@@ -79,23 +81,47 @@ type Props = {
   initialObservation?: ObservationFocus | null
   /** The VMID of a `?vm=` link: the Overview targets that guest (the page also opens the Overview for it). */
   targetVm?: string | null
+  /** The PVE connections the user sees: names of the clusters sharing the policy, and those that can join it. */
+  connections?: NamedConnection[]
+  /** The connections already sharing a policy, from the page's groups: never proposed for an association. */
+  groupedConnections?: string[]
+  /** A cluster left the group (who left, who remains): the page keeps its selection on a cluster that remains. */
+  onDissociated?: (left: string, remaining: string[]) => void
 }
 
+const NO_CONNECTIONS: NamedConnection[] = []
+const NOT_GROUPED: string[] = []
+
 /** The Micro-segmentation tab of /automation/network: banner, first run guide and the five sub-tabs. */
-export default function MicrosegTab({ connectionId, connectionName, firewall, initialSubTab, initialObservation = null, targetVm }: Props) {
+export default function MicrosegTab({ connectionId, connectionName, firewall, initialSubTab, initialObservation = null, targetVm, connections = NO_CONNECTIONS, groupedConnections = NOT_GROUPED, onDissociated }: Props) {
   const t = useTranslations('microsegPilot')
   const { data: policy, loading, error, reload } = useMicrosegPolicy(connectionId || null)
+  // The clusters sharing the policy of the selected connection (the connection alone until the backend answers).
+  const group = useMicrosegGroup(connectionId)
+  const clusterName = useMemo(() => {
+    const names = new Map(connections.map(c => [c.id, c.name]))
+    return (id: string) => names.get(id) ?? (id === connectionId && connectionName ? connectionName : id)
+  }, [connections, connectionId, connectionName])
   // While a manual check waits in the queue, the status (shared with the banner and the button) is read faster.
   const [checkQueued, setCheckQueued] = useState(false)
-  const controls = useMicrosegControls(connectionId, checkQueued ? CHECK_STATUS_POLL_MS : undefined)
-  // A read-only user (no node.manage on the connection) sees every write control disabled, with the reason.
-  const canWrite = useCanManageMicroseg(connectionId)
+  // A shared policy reads its draft again after a stop or a lift: the follow-up of the lift reads its links.
+  const controls = useMicrosegControls(connectionId, checkQueued ? CHECK_STATUS_POLL_MS : undefined, clusterName, group.shared ? reload : undefined)
+  // A read-only user (no node.manage on the connection) sees every write control disabled, with the reason. On a shared
+  // policy a write on the whole policy needs the right on every cluster of the draft already read (the content shows
+  // once it is): no request of its own, and nothing writable while the rights load.
+  const linkedIds = useMemo(() => (policy?.clusters ?? []).map(c => c.connection_id), [policy?.clusters])
+  const access = useMicrosegAccess(connectionId, linkedIds)
   // Read once: nothing of the sub-tab shows before the policy has loaded, so this never differs from a server render.
   const [subTab, setSubTab] = useState<MicrosegSubTab>(() => initialSubTab ?? readStoredSubTab() ?? 'overview')
 
+  // The clusters never applied (link inactive), from the policy already read: their lines in the run strip do not
+  // promise a catch-up, they ask to apply again.
+  const policyClusters = policy?.clusters
+  const inactiveClusters = useMemo(() => new Set((policyClusters ?? []).filter(c => !c.active).map(c => c.connection_id)), [policyClusters])
   // The runs live here, not in a sub-tab: switching sub-tab must not lose them.
   const { runs, startRun, endRun, removeRun, inProgress } = useTrackedRuns()
-  useResumeRuns(connectionId, connectionName || connectionId, startRun)
+  // Resumed on every cluster of the group, once the group has answered.
+  useResumeRuns(connectionId, connectionName || connectionId, startRun, { ids: group.ids, loading: group.loading, clusterName })
   // The plan window is opened by the banner, the pending changes bar and the first run guide.
   const [planOpen, setPlanOpen] = useState(false)
   const onOpenPlan = useCallback(() => setPlanOpen(true), [])
@@ -117,14 +143,27 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
 
   // A run changes Proxmox and records what it did: the draft, the status, the runs and revisions, the drifts
   // and the zone members (tags) are read again, so no list or count stays stale until a manual reload.
+  const groupIds = group.ids.join('\n')
   const refreshAfterRun = useCallback(() => {
     void reload()
-    void mutate(isRunAffectedKey(connectionId))
-  }, [reload, mutate, connectionId])
+    // Every cluster of the group: a group action changed each of them.
+    void mutate(isRunAffectedKey(groupIds.split('\n')))
+  }, [reload, mutate, groupIds])
+  // A removal on a shared policy takes its cluster out of the group: every group read is read again (the tab's own
+  // included, which then holds the tab's cluster alone when that one left), with the draft and what the run changed on
+  // the tab's cluster, never the clusters of the group it had (they would be read for a group that no longer is).
+  const groupShared = group.shared
   const runFinished = useCallback((runId: string) => {
+    const finished = runs.find(r => r.runId === runId)
     endRun(runId)
+    if (finished?.kind === 'remove' && groupShared) {
+      void reload()
+      void mutate(isRunAffectedKey(connectionId))
+      void mutate(isClustersKey)
+      return
+    }
     refreshAfterRun()
-  }, [endRun, refreshAfterRun])
+  }, [runs, endRun, refreshAfterRun, groupShared, reload, mutate, connectionId])
   // A check also reads the logs: the suggestions it learnt are read again with the rest.
   const refreshAfterCheck = useCallback(() => {
     refreshAfterRun()
@@ -158,12 +197,14 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
   }
 
   const firstRun = !policy.last_revision && policy.zones.length === 0
+  // Built only past the `!connectionId` return above: an empty anchor never reaches a sub-tab.
   const contentProps: MicrosegSubTabProps = {
     connectionId, policy, reloadPolicy: reload, goToSubTab, onOpenPlan, startRun, onOpenSettings, onOpenPreflight, targetVm, driftsZone, observationZone, observationFocus, pveNodes: firewall?.nodesList, pveNodeStatus: firewall?.nodeStatus,
+    anchor: group.loading ? undefined : group.anchor, clusterIds: group.ids, clusterName,
   }
 
   return (
-    <MicrosegWriteContext.Provider value={canWrite}>
+    <MicrosegAccessProvider value={access}>
     <MicrosegActionsSlot.Provider value={actionsSlot}>
     <RunsInProgressProvider value={inProgress}>
     <Box sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -172,8 +213,9 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
         policy={policy}
         controls={controls}
         onOpenPlan={onOpenPlan}
+        clusterIds={group.loading ? undefined : group.ids}
       />
-      <RunStrip connectionId={connectionId} runs={runs} onFinished={runFinished} onRemove={removeRun} />
+      <RunStrip connectionId={connectionId} runs={runs} onFinished={runFinished} onRemove={removeRun} clusterName={clusterName} inactiveClusters={inactiveClusters} />
       {firstRun && <FirstRunGuide goToSubTab={goToSubTab} onOpenPlan={onOpenPlan} onOpenPreflight={onOpenPreflight} />}
       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
         <Tabs
@@ -197,8 +239,8 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
           ))}
         </Tabs>
         {/* The actions of the row as one group: it wraps whole, to the right, when the row is too narrow. */}
-        <Box data-testid='microseg-actions' sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap', ml: 'auto', minWidth: 0 }}>
-          <Box ref={setActionsSlot} data-testid='microseg-actions-slot' sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }} />
+        <Box data-testid='microseg-actions' sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap', ml: 'auto', minWidth: 0, flex: '1 1 auto' }}>
+          <Box ref={setActionsSlot} data-testid='microseg-actions-slot' sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', flex: '1 1 auto', minWidth: 0, justifyContent: 'flex-end' }} />
           {subTab === 'overview' && (
             <Tooltip describeChild title={t('trafficLens.openFlowsTip')}>
               <Link component={NextLink} href={`/operations/network-flows?groupBy=zone&connection=${encodeURIComponent(connectionId)}`} underline='hover' sx={{ fontSize: 13, flexShrink: 0 }}>
@@ -216,6 +258,8 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
             startRun={startRun}
             onDone={refreshAfterCheck}
             onOpenDrifts={() => goToSubTab('drifts')}
+            activeIds={group.loading ? undefined : group.activeIds}
+            clusterName={clusterName}
           />
           <EmergencyStopButton controls={controls} deployed={!!policy.last_revision} />
           <Tooltip title={t('settings.open')}>
@@ -233,6 +277,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
         reloadPolicy={reload}
         startRun={startRun}
         onClose={() => setPlanOpen(false)}
+        clusterName={clusterName}
       />
       {settingsOpen && (
         <SettingsDialog
@@ -242,6 +287,12 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
           reloadPolicy={reload}
           startRun={startRun}
           onClose={() => setSettingsOpen(false)}
+          connections={connections}
+          groupedElsewhere={groupedConnections}
+          clusterName={clusterName}
+          maxClusters={group.max}
+          onClustersChanged={group.reload}
+          onDissociated={onDissociated}
         />
       )}
       {preflightOpen && (
@@ -250,6 +301,9 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
           connectionId={connectionId}
           refreshKey={preflightRound}
           onClose={() => setPreflightOpen(false)}
+          anchor={group.loading ? undefined : group.anchor}
+          clusterIds={group.ids}
+          clusterName={clusterName}
           onOpenWizard={firewall ? () => setWizardOpen(true) : undefined}
           onResume={() => { setPreflightOpen(false); controls.ask('resume') }}
           rateLimit={{
@@ -277,6 +331,6 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
     </Box>
     </RunsInProgressProvider>
     </MicrosegActionsSlot.Provider>
-    </MicrosegWriteContext.Provider>
+    </MicrosegAccessProvider>
   )
 }

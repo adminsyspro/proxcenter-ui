@@ -5,6 +5,7 @@ import { SWRConfig } from 'swr'
 
 import { forgetSharedReads } from './api'
 import { runRetryDelay, useMicrosegPolicy, useMicrosegRun } from './useMicroseg'
+import { useCachedMicrosegStatus, useMicrosegStatus } from './useMicrosegStatus'
 
 const fetchMock = vi.fn()
 const reply = (status: number, body: unknown) => ({ ok: status < 400, status, text: async () => JSON.stringify(body) })
@@ -202,5 +203,28 @@ describe('useMicrosegPolicy', () => {
     const none = renderHook(() => useMicrosegPolicy(null), { wrapper })
     expect(none.result.current.data).toBeUndefined()
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('useCachedMicrosegStatus', () => {
+  beforeEach(() => {
+    forgetSharedReads()
+    fetchMock.mockReset()
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  it('reads nothing itself, and gives the status another reader of the same cluster got', async () => {
+    fetchMock.mockImplementation(async () => reply(200, { engine: { unreachable_since: '2026-11-17T07:58:00Z' } }))
+    const { result, rerender } = renderHook(({ withReader }) => ({
+      cached: useCachedMicrosegStatus('c2'),
+      reader: useMicrosegStatus(withReader ? 'c2' : null),
+    }), { wrapper, initialProps: { withReader: false } })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(result.current.cached.data).toBeUndefined()
+
+    rerender({ withReader: true })
+    await waitFor(() => expect(result.current.cached.data?.engine.unreachable_since).toBe('2026-11-17T07:58:00Z'))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

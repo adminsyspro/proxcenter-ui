@@ -16,9 +16,13 @@ import {
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
 import { GuestGlyph } from '@/components/ui/glyphs'
-import { useMicrosegEvents } from '@/lib/microseg/useMicrosegEvents'
+import { useMergedClusters } from '@/lib/microseg/useMerged'
+import { useMicrosegEvents, type EventFilters } from '@/lib/microseg/useMicrosegEvents'
 import { serviceLabel, serviceTitle } from '@/lib/network/serviceNames'
 
+import ClusterChip from './microseg/ClusterChip'
+import { shownClusterName } from './microseg/ClusterRunRow'
+import ClusterUnreadLines from './microseg/ClusterUnreadLines'
 import MicrosegErrorAlert from './microseg/MicrosegErrorAlert'
 
 import { EMPTY_CELL_SX, EMPTY_TEXT_SX } from '@/components/firewall/FirewallLogView'
@@ -33,7 +37,45 @@ interface Props {
   guests?: Record<number, LogGuestInfo>
   /** Rendered first on the row of the filters (the log picker of the Logging tab), the row then held on one line. */
   filtersStart?: ReactNode
+  /** The clusters sharing the policy: each one's events are read and merged; the connection alone when absent. */
+  clusterIds?: string[]
+  /** The name of a cluster as the user sees it (the chip of each row of a shared policy). */
+  clusterName?: (id: string) => string
 }
+
+/** An event with the cluster it was read from. */
+export type ClusterEvent = MicrosegEvent & { connection_id: string }
+
+/** What one cluster's events read gives the merge. */
+export type ClusterEvents = { events: MicrosegEvent[]; more: boolean }
+
+/**
+ * The events of every cluster in one list, the newest first. Each cluster pages on its own: a cluster with older events
+ * left unread ends its list at its oldest event read, and no event older than the most recent of those ends is shown,
+ * or the list would show a stretch of time where only the other clusters seem to have seen anything. `more` is true
+ * while one cluster has older events to read.
+ */
+export function mergeClusterEvents(byCluster: Readonly<Record<string, ClusterEvents | undefined>>, ids: readonly string[]): { events: ClusterEvent[]; more: boolean } {
+  let cutoff = -Infinity
+  let more = false
+  const all: ClusterEvent[] = []
+  for (const id of ids) {
+    const list = byCluster[id]
+    if (!list) continue
+    for (const e of list.events) all.push({ ...e, connection_id: id })
+    if (list.more && list.events.length > 0) {
+      more = true
+      cutoff = Math.max(cutoff, Date.parse(list.events.at(-1)!.ts))
+    }
+  }
+  const time = (e: MicrosegEvent) => Date.parse(e.ts)
+  const events = all
+    .filter(e => !(time(e) < cutoff))
+    .sort((a, b) => time(b) - time(a) || a.connection_id.localeCompare(b.connection_id) || b.seq - a.seq)
+  return { events, more }
+}
+
+type EventsRead = ReturnType<typeof useMicrosegEvents>
 
 /** Debounce of the search text before it is sent as `q`. */
 export const SEARCH_DEBOUNCE_MS = 400
@@ -78,7 +120,7 @@ function ZoneChip({ name, color }: { name: string; color?: string }) {
   )
 }
 
-export default function MicrosegEventsView({ connectionId, zones, guests, filtersStart }: Props) {
+export default function MicrosegEventsView({ connectionId, zones, guests, filtersStart, clusterIds, clusterName }: Props) {
   const theme = useTheme()
   const t = useTranslations('firewallLog.microseg')
   const tLog = useTranslations('firewallLog')
@@ -99,10 +141,38 @@ export default function MicrosegEventsView({ connectionId, zones, guests, filter
     return () => clearTimeout(timer)
   }, [search])
 
-  const { events, more, truncated, loading, validating, error, olderError, olderBusy, loadOlder, reload } = useMicrosegEvents(
-    connectionId,
-    { zone, verdict, q: sentSearch },
-  )
+  // The events of each cluster, read through its own relay (its rights) and merged; one cluster reads as it always did.
+  const ids = useMemo(() => (clusterIds && clusterIds.length > 0 ? [...new Set(clusterIds)] : [connectionId]), [clusterIds, connectionId])
+  const shared = ids.length > 1
+  const filters: EventFilters = { zone, verdict, q: sentSearch }
+  const useClusterEvents = (id: string | null) => {
+    const read = useMicrosegEvents(id, filters)
+    return { data: read, error: read.error, loading: read.loading, reload: read.reload }
+  }
+  const reads = useMergedClusters<EventsRead>(ids, useClusterEvents)
+  const one = reads.byCluster[connectionId]
+  const failed = shared ? reads.errors : {}
+  const answered = shared ? ids.filter(id => !(id in reads.errors) && reads.byCluster[id]) : []
+  const mergedEvents = useMemo(() => {
+    if (!shared) return null
+    const usable = Object.fromEntries(ids.filter(id => !(id in reads.errors)).map(id => [id, reads.byCluster[id]]))
+    return mergeClusterEvents(usable, ids)
+  }, [shared, reads, ids])
+  const oneEvents = one?.events
+  const events = useMemo<(MicrosegEvent & { connection_id?: string })[]>(() => (mergedEvents ? mergedEvents.events : oneEvents ?? []), [mergedEvents, oneEvents])
+  const more = mergedEvents ? mergedEvents.more : !!one?.more
+  const truncated = shared ? answered.some(id => reads.byCluster[id]?.truncated) : !!one?.truncated
+  const loading = shared ? reads.loading && events.length === 0 : !!one?.loading
+  const validating = shared ? answered.some(id => reads.byCluster[id]?.validating) : !!one?.validating
+  // On a shared policy a failed cluster says so on its own line; the list fails only when every cluster did.
+  const error = shared ? (answered.length === 0 ? Object.values(reads.errors)[0] : undefined) : one?.error
+  const olderError = shared ? answered.map(id => reads.byCluster[id]?.olderError).find(Boolean) : one?.olderError
+  const olderBusy = shared ? answered.some(id => reads.byCluster[id]?.olderBusy) : !!one?.olderBusy
+  const loadOlder = async () => {
+    if (!shared) return one?.loadOlder()
+    await Promise.all(answered.filter(id => reads.byCluster[id]?.more).map(id => reads.byCluster[id]!.loadOlder()))
+  }
+  const reload = () => (shared ? reads.reload() : one?.reload())
 
   const colours = useMemo(() => new Map(zones.map(z => [z.name, z.color])), [zones])
 
@@ -174,6 +244,12 @@ export default function MicrosegEventsView({ connectionId, zones, guests, filter
         </Tooltip>
       </Box>
 
+      {shared && Object.keys(failed).length > 0 && (
+        <Box sx={{ px: 2 }}>
+          <ClusterUnreadLines errors={failed} tabConnection={connectionId} clusterName={clusterName} />
+        </Box>
+      )}
+
       {!!(error || olderError) && (
         <Box sx={{ px: 2 }}>
           <MicrosegErrorAlert error={error ?? olderError} onRetry={error ? () => { void reload() } : () => { void loadOlder() }} />
@@ -198,11 +274,15 @@ export default function MicrosegEventsView({ connectionId, zones, guests, filter
             {pageRows.map((e, i) => {
               const v = VERDICTS[e.verdict] ?? VERDICTS.would_block
               const port = portOf(e)
-              const guest = guests?.[e.vmid]
+              const cluster = e.connection_id ?? connectionId
+              // The inventory passed is the tab connection's: a guest of another cluster has the same VMIDs.
+              const guest = cluster === connectionId ? guests?.[e.vmid] : undefined
               const guestName = e.guest || guest?.name
+              const chip = shared ? <ClusterChip connectionId={cluster} name={shownClusterName(cluster, connectionId, clusterName, t('otherCluster'))} compact /> : null
+              const rowKey = shared ? `${cluster}|${e.seq}` : e.seq
 
               return (
-                <TableRow key={e.seq ?? `${e.ts}|${e.node}|${e.vmid}|${e.src_ip}|${i}`} hover>
+                <TableRow key={rowKey ?? `${e.ts}|${e.node}|${e.vmid}|${e.src_ip}|${i}`} hover>
                   <TableCell sx={CELL_SX}>
                     <Tooltip title={t(v.tip)}>
                       <Chip size='small' variant='outlined' color={v.color} label={t(v.label)} icon={<i className={v.icon} style={{ fontSize: 14 }} />} sx={{ height: 22, fontSize: 12, fontWeight: 600 }} />
@@ -215,10 +295,13 @@ export default function MicrosegEventsView({ connectionId, zones, guests, filter
                       <Tooltip title={`${e.dst_ip ? `${e.dst_ip} · ` : ''}${t('guestTip', { name: guestName, vmid: String(e.vmid), node: e.node })}`}>
                         <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
                           <GuestGlyph type={e.type ?? guest?.type} status={guest?.status} dotBorder={dotBorder} />
+                          {chip}
                           {guestName}
                           <Typography component='span' variant='caption' sx={{ color: 'text.disabled' }}>#{e.vmid}</Typography>
                         </Box>
                       </Tooltip>
+                    ) : chip ? (
+                      <Box component='span' sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>{chip}{e.dst_ip || '-'}</Box>
                     ) : (e.dst_ip || '-')}
                   </TableCell>
                   <TableCell sx={CELL_SX}>

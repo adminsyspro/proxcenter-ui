@@ -100,8 +100,9 @@ function makeProps() {
 }
 
 async function waitForNodesLoaded() {
-  await screen.findByText('pve2')
-  await screen.findByText('pve3')
+  // A node name can show twice: its row, and the route line once it is picked.
+  await screen.findAllByText('pve2')
+  await screen.findAllByText('pve3')
 }
 
 beforeEach(() => {
@@ -159,7 +160,7 @@ describe('MigrateVmDialog - HA negative affinity conflict (running peer)', () =>
     await waitForNodesLoaded()
     await screen.findByText('HA affinity conflict')
 
-    fireEvent.click(screen.getByText('pve3'))
+    fireEvent.click(screen.getAllByText('pve3').at(-1) as HTMLElement)
 
     await waitFor(() => {
       expect(screen.queryByText('HA affinity conflict')).not.toBeInTheDocument()
@@ -183,6 +184,38 @@ describe('MigrateVmDialog - HA negative affinity with a stopped peer', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /migrate/i })).not.toBeDisabled()
     })
+  })
+})
+
+describe('MigrateVmDialog - live choice (#1392)', () => {
+  it('offers a VM the live switch', async () => {
+    seedHandlers({})
+    renderWithProviders(<MigrateVmDialog {...makeProps()} />)
+    await waitForNodesLoaded()
+
+    const row = screen.getByTestId('migrate-online-local')
+    expect(within(row).getByText('Online migration (no interruption)')).toBeInTheDocument()
+    expect(within(row).getByLabelText('Online migration (no interruption)')).toBeChecked()
+  })
+
+  it('tells a running container it will be restarted, never that it stays up', async () => {
+    seedHandlers({})
+    renderWithProviders(<MigrateVmDialog {...makeProps()} vmType="lxc" />)
+    await waitForNodesLoaded()
+
+    const row = screen.getByTestId('migrate-online-local')
+    expect(within(row).getByText('Restart migration (short interruption)')).toBeInTheDocument()
+    expect(within(row).queryByText('The VM will stay active during migration')).not.toBeInTheDocument()
+  })
+
+  it('shows the switch off for a stopped guest', async () => {
+    seedHandlers({})
+    renderWithProviders(<MigrateVmDialog {...makeProps()} vmStatus="stopped" />)
+    await waitForNodesLoaded()
+
+    const input = within(screen.getByTestId('migrate-online-local')).getByLabelText('Online migration (no interruption)')
+    expect(input).not.toBeChecked()
+    expect(input).toBeDisabled()
   })
 })
 
@@ -466,6 +499,48 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
     const row = (await screen.findByText('VMID')).closest('div') as HTMLElement
     expect(within(row).getByText('100 already used on remote1')).toBeInTheDocument()
     expect(row.textContent).not.toMatch(/VMID\s+VMID/)
+  })
+
+  it('fills the next free target VMID from the row that reports the collision (#1392)', async () => {
+    seedPrereqHandlers({ issues: [vmidCollision] })
+    const checkBodies: any[] = []
+    server.use(
+      http.get(`*/api/v1/connections/${REMOTE_CONN_ID}/cluster/nextid`, () => HttpResponse.json({ data: 101, available: true })),
+      http.post(`${REMOTE_MIGRATE_URL}/check`, async ({ request }) => {
+        const body = await request.json() as any
+        checkBodies.push(body)
+        return HttpResponse.json({ issues: body.targetVmid ? [] : [vmidCollision] })
+      }),
+    )
+    const { props } = await renderPrereqs(/VMID/)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Use next free ID' }))
+
+    // The chosen ID is shown, the preflight re-runs with it and the row clears.
+    await waitFor(() => expect(screen.getByLabelText('Target VM ID (optional)')).toHaveValue(101), { timeout: 10_000 })
+    await waitFor(() => expect(checkBodies.at(-1)?.targetVmid).toBe(101), { timeout: 10_000 })
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Use next free ID' })).not.toBeInTheDocument(), { timeout: 10_000 })
+
+    await submitCrossCluster(props.onCrossClusterMigrate)
+    expect(props.onCrossClusterMigrate.mock.calls[0][0]).toMatchObject({ targetVmid: 101 })
+  })
+
+  it('reports a failed next-ID lookup on its own row and leaves the field empty', async () => {
+    seedPrereqHandlers({ issues: [vmidCollision] })
+    server.use(http.get(`*/api/v1/connections/${REMOTE_CONN_ID}/cluster/nextid`, () =>
+      HttpResponse.json({ error: 'Target unreachable' }, { status: 503 })))
+    await renderPrereqs(/VMID/)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Use next free ID' }))
+
+    expect(await screen.findByText('Target unreachable', {}, { timeout: 10_000 })).toBeInTheDocument()
+  })
+
+  it('offers the live choice as a switch right under the target', async () => {
+    seedPrereqHandlers({ issues: [] })
+    await renderPrereqs(/Prerequisites|All checks/)
+
+    expect(within(screen.getByTestId('migrate-online-cross')).getByLabelText('Live Migration (Online)')).toBeInTheDocument()
   })
 
   it('keeps the route sentence when a check carries no values', async () => {

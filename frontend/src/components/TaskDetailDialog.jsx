@@ -22,6 +22,7 @@ import {
 
 import { useTaskDetail } from '@/hooks/useTaskDetail'
 import { copyToClipboard } from '@/lib/clipboard'
+import { MIGRATION_TASK_TYPES, migrationStages } from '@/lib/tasks/migrationStages'
 
 /* --------------------------------
    Helpers
@@ -54,23 +55,92 @@ function getStatusLabel(status, t) {
   return status
 }
 
-function getLogType(text) {
+export function getLogType(text) {
   const t = text.toLowerCase()
 
   if (t.includes('error') || t.includes('failed')) return 'error'
-  if (t.includes('warning')) return 'warning'
+  if (t.includes('warn')) return 'warning'
+  if (t === 'task ok' || t.includes('successfully') || t.includes('status: completed')) return 'success'
   if (t.includes('%') || t.includes('transferred')) return 'transfer'
 
 return 'info'
 }
 
-function getLogColor(type, theme) {
-  switch (type) {
-    case 'error': return theme?.palette?.error?.light || '#f85149'
-    case 'warning': return theme?.palette?.warning?.light || '#d29922'
-    case 'transfer': return theme?.palette?.primary?.light || '#58a6ff'
-    default: return theme?.palette?.primary?.light || '#c9d1d9'
-  }
+// The log sits on a fixed dark panel in both themes, so its colours are fixed
+// too. Plain lines stay neutral: with every line in the brand colour, an error
+// did not stand out (#1392).
+const LOG_COLORS = {
+  error: '#f85149',
+  warning: '#d29922',
+  success: '#3fb950',
+  transfer: '#58a6ff',
+  info: '#c9d1d9',
+}
+
+export function getLogColor(type) {
+  return LOG_COLORS[type] || LOG_COLORS.info
+}
+
+/** Split the leading PVE timestamp off a log line, so it can be dimmed. */
+export function splitLogTimestamp(text) {
+  const match = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (.*)$/s.exec(text)
+
+  return match ? { time: match[1], message: match[2] } : { time: null, message: text }
+}
+
+/** File name of an exported task log: task type, guest and start time when known. */
+export function taskLogFileName(task) {
+  const fields = typeof task?.id === 'string' && task.id.startsWith('UPID:') ? task.id.split(':') : []
+  const parts = ['task', task?.type || fields[5], fields[6], fields[4]].filter(Boolean)
+
+  return `${parts.join('-').replace(/[^A-Za-z0-9._-]/g, '_')}.log`
+}
+
+const STAGE_TONE = {
+  done: { color: 'success.main', icon: 'ri-checkbox-circle-fill' },
+  active: { color: 'primary.main', icon: 'ri-loader-4-line' },
+  error: { color: 'error.main', icon: 'ri-close-circle-fill' },
+  pending: { color: 'text.disabled', icon: 'ri-checkbox-blank-circle-line' },
+}
+
+/**
+ * Where a migration stands, on one line: done steps ticked, the running one
+ * spinning, the one it failed at in red (#1392). Drawn only when the log was
+ * recognised (see migrationStages).
+ */
+function MigrationStagesBar({ stages, t }) {
+  return (
+    <Box
+      data-testid="migration-stages"
+      sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 3, py: 1.25, borderBottom: '1px solid', borderColor: 'divider' }}
+    >
+      {stages.map((stage, i) => {
+        const tone = STAGE_TONE[stage.state]
+
+        return (
+          <Box key={stage.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: i === 0 ? '0 0 auto' : 1, minWidth: 0 }}>
+            {i > 0 && (
+              <Box sx={{ flex: 1, height: 2, minWidth: 16, borderRadius: 1, bgcolor: stage.state === 'pending' ? 'divider' : tone.color, opacity: stage.state === 'pending' ? 1 : 0.6 }} />
+            )}
+            <Box data-testid={`migration-stage-${stage.id}`} data-state={stage.state} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+              <Box
+                component="i"
+                className={tone.icon}
+                sx={{ fontSize: 16, color: tone.color, animation: stage.state === 'active' ? 'spin 1s linear infinite' : 'none' }}
+              />
+              <Typography
+                variant="body2"
+                noWrap
+                sx={{ fontWeight: stage.state === 'pending' ? 400 : 600, color: stage.state === 'pending' ? 'text.disabled' : 'text.primary' }}
+              >
+                {t(`tasks.detail.stages.${stage.id}`)}
+              </Typography>
+            </Box>
+          </Box>
+        )
+      })}
+    </Box>
+  )
 }
 
 /* --------------------------------
@@ -155,6 +225,22 @@ export default function TaskDetailDialog({ open, task, onClose }) {
     setSnackbar({ open: true, message: ok ? t('common.copied') : t('common.error') })
   }
 
+  // Export the whole log shown as one text file
+  const handleExportLogs = () => {
+    if (!details?.logs?.length) return
+
+    const blob = new Blob([details.logs.map(l => l.t).join('\n') + '\n'], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    link.href = url
+    link.download = taskLogFileName(task)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
   // Stop task
   const handleStopTask = async () => {
     if (!task?.connectionId || !task?.node || !task?.id) return
@@ -186,6 +272,15 @@ export default function TaskDetailDialog({ open, task, onClose }) {
   const isRunning = details?.status === 'running' || (!details && task.status === 'running')
   const progress = details?.progress ?? 0
   const statusColor = getStatusColor(details?.exitstatus || details?.status || task.status)
+
+  // Migration tasks only: the stages are read from the log, null when unknown.
+  const taskType = task.type || (typeof task.id === 'string' ? task.id.split(':')[5] : '')
+  let stageTaskState = 'done'
+  if (isRunning) stageTaskState = 'running'
+  else if (statusColor === 'error') stageTaskState = 'failed'
+  const stages = MIGRATION_TASK_TYPES.has(taskType) && details?.logs?.length
+    ? migrationStages(details.logs.map(l => l.t), stageTaskState)
+    : null
 
 
   return (
@@ -320,6 +415,8 @@ export default function TaskDetailDialog({ open, task, onClose }) {
             </Alert>
           )}
 
+          {stages && <MigrationStagesBar stages={stages} t={t} />}
+
           {/* Progress section — only shown when the task actually carries
               progress data (message, speed, percent > 0). Most PVE tasks
               (vncproxy, qmstart, qmshutdown, etc.) don't emit progress at
@@ -405,6 +502,14 @@ export default function TaskDetailDialog({ open, task, onClose }) {
                 <i className="ri-file-copy-line" style={{ fontSize: 16 }} />
               </IconButton>
             </Tooltip>
+
+            <Tooltip title={t('tasks.detail.exportLogs')}>
+              <span>
+                <IconButton size="small" onClick={handleExportLogs} disabled={!details?.logs?.length} data-testid="task-export-logs">
+                  <i className="ri-download-2-line" style={{ fontSize: 16 }} />
+                </IconButton>
+              </span>
+            </Tooltip>
           </Box>
 
           {/* Logs */}
@@ -449,7 +554,8 @@ export default function TaskDetailDialog({ open, task, onClose }) {
                 )}
                 {filteredLogs.map((log, idx) => {
                   const logType = getLogType(log.t)
-                  const logColor = getLogColor(logType, theme)
+                  const logColor = getLogColor(logType)
+                  const { time, message } = splitLogTimestamp(log.t)
 
                   return (
                     <Box
@@ -483,7 +589,8 @@ export default function TaskDetailDialog({ open, task, onClose }) {
                           wordBreak: 'break-all'
                         }}
                       >
-                        {log.t}
+                        {time && <Box component="span" sx={{ color: 'grey.600', pr: 1 }}>{time}</Box>}
+                        {message}
                       </Typography>
                     </Box>
                   )

@@ -294,6 +294,67 @@ function CheckRow({
   )
 }
 
+/**
+ * The live/offline choice on one line (#1392): it decides whether the service
+ * goes down, so it gets a framed row and a switch instead of a small checkbox
+ * at the bottom of the form.
+ */
+function OnlineMigrationRow({
+  checked,
+  onChange,
+  disabled,
+  label,
+  caption,
+  testId,
+  restart = false,
+}: {
+  /** A running container cannot move live: PVE stops it, moves it and starts it again. */
+  restart?: boolean
+  checked: boolean
+  onChange: (checked: boolean) => void
+  disabled: boolean
+  label: string
+  caption: string
+  testId: string
+}) {
+  const live = checked && !disabled
+  // Green only when the service really stays up; amber for a restart migration.
+  const tone = restart ? 'warning.main' : 'success.main'
+
+  return (
+    <Box
+      data-testid={testId}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        pl: 1.25,
+        pr: 0.5,
+        minHeight: 40,
+        border: 1,
+        borderColor: live ? tone : 'divider',
+        borderRadius: 1.5,
+      }}
+    >
+      <Box component="i" className={restart ? 'ri-restart-line' : 'ri-pulse-line'} sx={{ fontSize: 16, flexShrink: 0, color: live ? tone : 'text.disabled' }} />
+      <Typography variant="body2" fontWeight={600} sx={{ flexShrink: 0 }}>
+        {label}
+      </Typography>
+      <Typography variant="caption" color="text.secondary" noWrap sx={{ flex: 1, minWidth: 0 }}>
+        {caption}
+      </Typography>
+      <Switch
+        size="small"
+        // A stopped guest migrates offline whatever was ticked: never show "on".
+        checked={live}
+        onChange={e => onChange(e.target.checked)}
+        disabled={disabled}
+        slotProps={{ input: { 'aria-label': label } }}
+      />
+    </Box>
+  )
+}
+
 // Tab Panel component
 function TabPanel({ children, value, index, ...other }: { children?: React.ReactNode; value: number; index: number; [key: string]: any }) {
   return (
@@ -970,6 +1031,7 @@ export function MigrateVmDialog({
             targetNode: selectedRemoteNode,
             targetStorage: selectedRemoteStorage,
             targetBridge: selectedRemoteBridge,
+            targetVmid: targetVmid || undefined,
           })
         }
       )
@@ -998,9 +1060,16 @@ export function MigrateVmDialog({
       }, 500) // Debounce
       return () => clearTimeout(timer)
     }
-  }, [activeTab, selectedRemoteConn, selectedRemoteNode, selectedRemoteStorage, selectedRemoteBridge])
+  }, [activeTab, selectedRemoteConn, selectedRemoteNode, selectedRemoteStorage, selectedRemoteBridge, targetVmid])
   
   const isVmRunning = vmStatus === 'running'
+  // A running container cannot move live: PVE restarts it on the target.
+  const isContainer = vmType === 'lxc'
+  const onlineCaption = (liveText: string, stoppedText: string) => {
+    if (!isVmRunning) return stoppedText
+
+    return isContainer ? t('hardware.restartMigrationDesc') : liveText
+  }
 
   // ========== LOCAL MIGRATION: snapshots holding local disks (#1027) ==========
   // Asked once a target is picked (replication to that node lifts the live
@@ -1038,6 +1107,7 @@ export function MigrateVmDialog({
     ? (vmType === 'qemu' && isVmRunning ? snapshotCheck.live : snapshotCheck.offline)
     : []
   const selectedRemoteConnInfo = remoteConnections.find(c => c.id === selectedRemoteConn)
+
 
 
   const selectedRemoteStorageType = remoteStorages.find(s => s.storage === selectedRemoteStorage)?.type
@@ -1295,7 +1365,46 @@ export function MigrateVmDialog({
     </Button>
   )
 
+  // The fix for a VMID already taken on the target sits on the row that reports
+  // it (#1392): one click asks the target for its next free ID, fills the field
+  // and opens the advanced options so the chosen ID stays visible. The preflight
+  // then re-runs on its own with that ID.
+  const [nextVmidBusy, setNextVmidBusy] = useState(false)
+  const handleUseNextFreeVmid = async () => {
+    if (!selectedRemoteConn) return
+    setNextVmidBusy(true)
+    setPrereqError(null)
+    try {
+      const res = await fetch(`/api/v1/connections/${encodeURIComponent(selectedRemoteConn)}/cluster/nextid`)
+      const json = await res.json().catch(() => ({}))
+      const next = Number(json?.data)
+      if (!res.ok || !Number.isInteger(next) || next <= 0) throw new Error(json?.error || `HTTP ${res.status}`)
+      setTargetVmid(next)
+      setShowAdvanced(true)
+    } catch (e: any) {
+      setPrereqError(e?.message || t('common.error'))
+    } finally {
+      setNextVmidBusy(false)
+    }
+  }
+
   const checkAction = (issue: ValidationIssue) => {
+    if (issue.code === 'VMID_EXISTS_ON_TARGET') {
+      return (
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={handleUseNextFreeVmid}
+          disabled={nextVmidBusy || validationLoading}
+          startIcon={nextVmidBusy ? <CircularProgress size={12} /> : undefined}
+          data-testid="ccm-use-next-vmid"
+          sx={{ height: 24, fontSize: '0.7rem', textTransform: 'none', whiteSpace: 'nowrap', minWidth: 'auto', px: 1.25, flexShrink: 0 }}
+        >
+          {t('hardware.crossCluster.useNextFreeVmid')}
+        </Button>
+      )
+    }
+
     const remediation = issue.remediation
     if (!remediation) return null
 
@@ -1702,27 +1811,14 @@ export function MigrateVmDialog({
 
             {nodes.length > 0 && (
               <>
-                <Divider sx={{ my: 1 }} />
-                
-                <FormControlLabel
-                  control={
-                    <Checkbox 
-                      checked={onlineMigration} 
-                      onChange={(e) => setOnlineMigration(e.target.checked)} 
-                      size="small"
-                      disabled={!isVmRunning}
-                    />
-                  }
-                  label={
-                    <Box>
-                      <Typography variant="body2">{t('hardware.onlineMigration')}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {isVmRunning
-                          ? t('hardware.vmWillStayActive')
-                          : t('hardware.onlineOnlyFeature')}
-                      </Typography>
-                    </Box>
-                  }
+                <OnlineMigrationRow
+                  testId="migrate-online-local"
+                  checked={onlineMigration}
+                  onChange={setOnlineMigration}
+                  disabled={!isVmRunning}
+                  restart={isContainer}
+                  label={isContainer ? t('hardware.restartMigration') : t('hardware.onlineMigration')}
+                  caption={onlineCaption(t('hardware.vmWillStayActive'), t('hardware.onlineOnlyFeature'))}
                 />
               </>
             )}
@@ -1976,6 +2072,19 @@ export function MigrateVmDialog({
               </Box>
             )}
             
+            {/* Live or offline, right under the target it applies to. */}
+            {selectedRemoteNode && (
+              <OnlineMigrationRow
+                testId="migrate-online-cross"
+                checked={onlineMigration}
+                onChange={setOnlineMigration}
+                disabled={!isVmRunning}
+                restart={isContainer}
+                label={isContainer ? t('hardware.restartMigration') : t('hardware.crossCluster.liveMigration')}
+                caption={onlineCaption(t('hardware.crossCluster.liveMigrationDesc'), t('hardware.crossCluster.vmStopped'))}
+              />
+            )}
+
             {/* Checks, one compact row each. Errors first. Source-side
                 prerequisites show before any target is picked. */}
             {(orderedIssues.length > 0 || prereqError || (selectedRemoteNode && selectedRemoteStorage && selectedRemoteBridge)) && (
@@ -2161,33 +2270,6 @@ export function MigrateVmDialog({
               </>
             )}
             
-            {/* Online migration option */}
-            {selectedRemoteNode && (
-              <>
-                <Divider />
-                
-                <FormControlLabel
-                  control={
-                    <Checkbox 
-                      checked={onlineMigration} 
-                      onChange={(e) => setOnlineMigration(e.target.checked)} 
-                      size="small"
-                      disabled={!isVmRunning}
-                    />
-                  }
-                  label={
-                    <Box>
-                      <Typography variant="body2">{t('hardware.crossCluster.liveMigration')}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {isVmRunning
-                          ? t('hardware.crossCluster.liveMigrationDesc')
-                          : t('hardware.crossCluster.vmStopped')}
-                      </Typography>
-                    </Box>
-                  }
-                />
-              </>
-            )}
           </Stack>
         </TabPanel>
         <Dialog open={snapshotConfirmOpen} onClose={() => !prereqBusy && setSnapshotConfirmOpen(false)} maxWidth="xs" fullWidth aria-labelledby="ccm-snapshot-confirm-title">

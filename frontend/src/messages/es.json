@@ -9710,7 +9710,9 @@
     "doneFirewallNotEnabled": "Firewall de clúster no habilitado (se necesita activación manual)",
     "doneClose": "Cerrar",
     "next": "Siguiente",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "trafficCut": "Activar ahora el cortafuegos del clúster cortaría el tráfico entre los nodos. Apague los cortafuegos de los nodos (enable: 0), o añada reglas de clúster que lo acepten, y vuelva a abrir este asistente.",
+    "trafficReading": "Comprobando el tráfico entre los nodos…"
   },
   "firewall": {
     "type": "Tipo",
@@ -13476,7 +13478,7 @@
       "infoObjects": "Los objetos de microsegmentación se conservan; Reanudar reactiva el cortafuegos de clúster y vuelve a aplicar la política",
       "infoUse": "Úselo cuando la segmentación bloquee algo que no debería",
       "resumeInfoReenable": "Reactiva el cortafuegos de clúster y después vuelve a aplicar la última revisión",
-      "resumeInfoSocle": "Se rechaza si un nodo con su cortafuegos activo no deja entrar la interfaz web (8006) y SSH (22): permítalos en el cortafuegos de ese nodo, o desactívelo, antes",
+      "resumeInfoSocle": "Se rechaza si los cortafuegos de los nodos cortan su acceso o su tráfico.",
       "clusterFirewallOff": "Cortafuegos de clúster desactivado",
       "notDeployed": "Nada desplegado",
       "socleUncovered": "Direcciones que las reglas no aceptan: {ips}",
@@ -13490,7 +13492,8 @@
       "followHeld": "Cortafuegos apagado hasta que se verifiquen las reglas de acceso a sus nodos",
       "socleOn": "Rechazado en {name}.",
       "socleOnOther": "Rechazado en otro clúster de la política.",
-      "bodyShared": "Todas las zonas de la política pasan a observación en todos los clústeres asociados."
+      "bodyShared": "Todas las zonas de la política pasan a observación en todos los clústeres asociados.",
+      "trafficRefused": "No reactivado: los cortafuegos de los nodos cortarían el tráfico entre los nodos."
     },
     "pending": {
       "noCount": "Cambios aún sin aplicar.",
@@ -14249,11 +14252,12 @@
         "title": "Reactivar el cortafuegos del clúster {name}",
         "titleUnknown": "Reactivar el cortafuegos del clúster",
         "body": "El cortafuegos del clúster vuelve a filtrar en cuanto se activa.",
-        "check": "Se comprueban antes las reglas de acceso a los nodos (8006, SSH 22).",
+        "check": "Comprobado primero: acceso a los nodos (8006, 22) y tráfico entre los nodos.",
         "after": "Después, una comprobación completa realinea los invitados.",
         "confirm": "Reactivar",
         "stop": "Bajo una parada de emergencia, se reactiva al reanudar.",
-        "refused": "Un nodo con su propio cortafuegos activo no deja entrar la interfaz web (8006) ni SSH (22), por lo que el cortafuegos del clúster sigue apagado. Permítalos en el cortafuegos de ese nodo, o apáguelo, y vuelva a intentarlo."
+        "refused": "Un nodo con su propio cortafuegos activo no deja entrar la interfaz web (8006) ni SSH (22), por lo que el cortafuegos del clúster sigue apagado. Permítalos en el cortafuegos de ese nodo, o apáguelo, y vuelva a intentarlo.",
+        "refusedTraffic": "Sigue apagado: los cortafuegos de los nodos cortarían el tráfico entre los nodos."
       }
     },
     "observation": {
@@ -14734,6 +14738,33 @@
           "pass": "El servicio de cortafuegos se está ejecutando en todos los nodos.",
           "stopped": "El servicio de cortafuegos está detenido en {nodes}: en esos nodos no se filtra nada.",
           "unreadable": "No se pudo leer el estado del servicio de cortafuegos en {nodes}."
+        },
+        "node_traffic": {
+          "title": "Tráfico entre los nodos",
+          "pass": "Nada de lo que los nodos intercambian entre sí se cortaría.",
+          "nodesOff": "Los cortafuegos de los nodos están apagados, así que nada puede cortarse.",
+          "policyAccept": "La política de entrada del clúster acepta lo que los nodos intercambian.",
+          "cut": {
+            "ceph_public": "Ceph (red pública {network}, TCP {ports}) se cortaría en {nodes}.",
+            "ceph_cluster": "Ceph (red de clúster {network}, TCP {ports}) se cortaría en {nodes}.",
+            "migration": "La migración ({network}, TCP {ports}) se cortaría en {nodes}.",
+            "other": "{network} (TCP {ports}) se cortaría en {nodes}."
+          },
+          "doubt": {
+            "ceph_public": "Ceph (red pública {network}, TCP {ports}) no se pudo comprobar en {nodes}.",
+            "ceph_cluster": "Ceph (red de clúster {network}, TCP {ports}) no se pudo comprobar en {nodes}.",
+            "migration": "La migración ({network}, TCP {ports}) no se pudo comprobar en {nodes}.",
+            "other": "{network} (TCP {ports}) no se pudo comprobar en {nodes}."
+          },
+          "fix": "Apague los cortafuegos de los nodos (enable: 0), o añada reglas de clúster que lo acepten, antes de activar el cortafuegos del clúster.",
+          "doubtWhy": "Una regla allí no se puede evaluar (interfaz, macro o nombre): compruébela a mano.",
+          "fixShort": "Apague los cortafuegos de los nodos, o añada reglas de clúster que lo acepten.",
+          "short": {
+            "ceph_public": "Red pública de Ceph {network}: cortada en {nodes}",
+            "ceph_cluster": "Red de clúster de Ceph {network}: cortada en {nodes}",
+            "migration": "Red de migración {network}: cortada en {nodes}",
+            "other": "{network}: cortada en {nodes}"
+          }
         }
       },
       "rateUnits": {

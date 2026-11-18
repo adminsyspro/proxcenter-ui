@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { heldByStop, opensWizard, parseRate, preflightMessage, socleRefusalLines } from './preflightModel'
+import { heldByStop, isTrafficRefusal, opensWizard, parseRate, preflightMessage, socleRefusalLines } from './preflightModel'
 
 describe('parseRate', () => {
   it('splits the rate PVE writes into a count and a unit', () => {
@@ -132,5 +132,51 @@ describe('a SOCLE_MISSING refusal', () => {
   it('says nothing more without a detail', () => {
     expect(socleRefusalLines(undefined)).toEqual([])
     expect(socleRefusalLines({ web: false, ssh: true })).toEqual([])
+  })
+})
+
+describe('the traffic between the nodes', () => {
+  const blocked = [
+    { kind: 'ceph_public', network: '10.250.250.0/24', ports: '3300, 6789, 6800-7300', nodes: ['pve1', 'pve2'] },
+    { kind: 'ceph_cluster', network: '10.251.251.0/24', ports: '6800-7300', nodes: ['pve1'] },
+  ]
+  const unsure = [{ kind: 'migration', network: '10.51.51.0/24', ports: '22', nodes: ['pve3'] }]
+
+  it('says why it passes', () => {
+    expect(preflightMessage({ id: 'node_traffic', status: 'pass' })).toEqual({ title: 'node_traffic', detail: { key: 'checks.node_traffic.pass' } })
+    expect(preflightMessage({ id: 'node_traffic', status: 'pass', detail: { node_firewalls: 'off' } }).detail).toEqual({ key: 'checks.node_traffic.nodesOff' })
+    expect(preflightMessage({ id: 'node_traffic', status: 'pass', detail: { policy_in: 'ACCEPT' } }).detail).toEqual({ key: 'checks.node_traffic.policyAccept' })
+  })
+
+  it('names each network cut with its ports and nodes, then what to do, then what it could not check', () => {
+    const m = preflightMessage({ id: 'node_traffic', status: 'fail', fix: 'node_traffic', detail: { blocked, unsure } })
+    expect(m.detail).toEqual({ key: 'checks.node_traffic.cut.ceph_public', values: { network: '10.250.250.0/24', ports: '3300, 6789, 6800-7300', nodes: 'pve1, pve2' } })
+    expect(m.more).toEqual([
+      { key: 'checks.node_traffic.cut.ceph_cluster', values: { network: '10.251.251.0/24', ports: '6800-7300', nodes: 'pve1' } },
+      { key: 'checks.node_traffic.fix' },
+      { key: 'checks.node_traffic.doubt.migration', values: { network: '10.51.51.0/24', ports: '22', nodes: 'pve3' } },
+      { key: 'checks.node_traffic.doubtWhy' },
+    ])
+  })
+
+  it('only doubts on a warning, and keeps a kind it does not know', () => {
+    const m = preflightMessage({ id: 'node_traffic', status: 'warn', detail: { unsure: [{ kind: 'storage', network: '10.9.0.0/24', ports: '2049', nodes: ['pve1'] }] } })
+    expect(m.detail).toEqual({ key: 'checks.node_traffic.doubt.other', values: { network: '10.9.0.0/24', ports: '2049', nodes: 'pve1' } })
+    expect(m.more).toEqual([{ key: 'checks.node_traffic.doubtWhy' }])
+  })
+
+  it('says a read failure as the other checks do', () => {
+    expect(preflightMessage({ id: 'node_traffic', status: 'fail', detail: { error: 'boom' } }).detail).toEqual({ key: 'readFailed', values: { error: 'boom' } })
+  })
+
+  it('is what a refusal to turn the cluster firewall on names, instead of the socle lines', () => {
+    expect(isTrafficRefusal({ blocked })).toBe(true)
+    expect(isTrafficRefusal({ uncovered: ['10.0.0.1'] })).toBe(false)
+    expect(isTrafficRefusal(undefined)).toBe(false)
+    expect(socleRefusalLines({ blocked, unsure })).toEqual([
+      { key: 'preflight.checks.node_traffic.fixShort' },
+      { key: 'preflight.checks.node_traffic.short.ceph_public', values: { network: '10.250.250.0/24', nodes: 'pve1, pve2' } },
+      { key: 'preflight.checks.node_traffic.short.ceph_cluster', values: { network: '10.251.251.0/24', nodes: 'pve1' } },
+    ])
   })
 })

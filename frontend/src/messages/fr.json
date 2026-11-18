@@ -9710,7 +9710,9 @@
     "doneFirewallNotEnabled": "Pare-feu du cluster non activé (activation manuelle nécessaire)",
     "doneClose": "Fermer",
     "next": "Suivant",
-    "cancel": "Annuler"
+    "cancel": "Annuler",
+    "trafficCut": "Activer le pare-feu du cluster maintenant couperait le trafic entre les nœuds. Coupez le pare-feu des nœuds (enable: 0), ou ajoutez des règles de cluster qui l'acceptent, puis rouvrez cet assistant.",
+    "trafficReading": "Vérification du trafic entre les nœuds…"
   },
   "firewall": {
     "type": "Type",
@@ -13477,7 +13479,7 @@
       "infoObjects": "Les objets de micro-segmentation restent en place ; Reprendre réactive le pare-feu de cluster et réapplique la politique",
       "infoUse": "À utiliser quand la segmentation bloque quelque chose qu'elle ne devrait pas",
       "resumeInfoReenable": "Réactive le pare-feu de cluster, puis réapplique la dernière révision",
-      "resumeInfoSocle": "Refusé si un nœud dont le pare-feu est actif ne laisse pas entrer l'interface web (8006) et SSH (22) : autorisez-les dans le pare-feu de ce nœud, ou désactivez-le, d'abord",
+      "resumeInfoSocle": "Refusé si les pare-feux des nœuds couperaient l'accès aux nœuds ou leur trafic.",
       "clusterFirewallOff": "Pare-feu de cluster désactivé",
       "notDeployed": "Rien de déployé",
       "socleUncovered": "Adresses que les règles n'acceptent pas : {ips}",
@@ -13491,7 +13493,8 @@
       "followHeld": "Pare-feu laissé coupé tant que les règles d'accès à ses nœuds ne sont pas vérifiées",
       "socleOn": "Refusé sur {name}.",
       "socleOnOther": "Refusé sur un autre cluster de la politique.",
-      "bodyShared": "Toutes les zones de la politique passent en observation sur tous les clusters associés."
+      "bodyShared": "Toutes les zones de la politique passent en observation sur tous les clusters associés.",
+      "trafficRefused": "Non réactivé : les pare-feux des nœuds couperaient le trafic entre les nœuds."
     },
     "pending": {
       "noCount": "Changements pas encore appliqués.",
@@ -14250,11 +14253,12 @@
         "title": "Réactiver le pare-feu du cluster {name}",
         "titleUnknown": "Réactiver le pare-feu du cluster",
         "body": "Le pare-feu du cluster filtre de nouveau dès qu'il est réactivé.",
-        "check": "Contrôle préalable : règles d'accès aux nœuds (web 8006, SSH 22).",
+        "check": "Vérifié d'abord : accès aux nœuds (8006, 22) et trafic entre les nœuds.",
         "after": "Une vérification complète réaligne ensuite les invités de ce cluster.",
         "confirm": "Réactiver",
         "stop": "Sous arrêt d'urgence, il est réactivé à la reprise.",
-        "refused": "Un nœud dont le pare-feu est actif ne laisse pas entrer l'interface web (8006) et SSH (22) : le pare-feu du cluster est resté coupé. Autorisez-les dans le pare-feu de ce nœud, ou coupez-le, puis réessayez."
+        "refused": "Un nœud dont le pare-feu est actif ne laisse pas entrer l'interface web (8006) et SSH (22) : le pare-feu du cluster est resté coupé. Autorisez-les dans le pare-feu de ce nœud, ou coupez-le, puis réessayez.",
+        "refusedTraffic": "Resté coupé : les pare-feux des nœuds couperaient le trafic entre les nœuds."
       }
     },
     "observation": {
@@ -14735,6 +14739,33 @@
           "pass": "Le service de pare-feu tourne sur tous les nœuds.",
           "stopped": "Le service de pare-feu est arrêté sur {nodes} : rien n'est filtré sur ces nœuds.",
           "unreadable": "L'état du service de pare-feu n'a pas pu être lu sur {nodes}."
+        },
+        "node_traffic": {
+          "title": "Trafic entre les nœuds",
+          "pass": "Rien de ce que les nœuds échangent entre eux ne serait coupé.",
+          "nodesOff": "Les pare-feux des nœuds sont coupés : rien ne peut être bloqué.",
+          "policyAccept": "La politique d'entrée du cluster accepte ce que les nœuds échangent.",
+          "cut": {
+            "ceph_public": "Ceph (réseau public {network}, TCP {ports}) serait coupé sur {nodes}.",
+            "ceph_cluster": "Ceph (réseau privé {network}, TCP {ports}) serait coupé sur {nodes}.",
+            "migration": "La migration ({network}, TCP {ports}) serait coupée sur {nodes}.",
+            "other": "{network} (TCP {ports}) serait coupé sur {nodes}."
+          },
+          "doubt": {
+            "ceph_public": "Ceph (réseau public {network}, TCP {ports}) n'a pas pu être vérifié sur {nodes}.",
+            "ceph_cluster": "Ceph (réseau privé {network}, TCP {ports}) n'a pas pu être vérifié sur {nodes}.",
+            "migration": "La migration ({network}, TCP {ports}) n'a pas pu être vérifiée sur {nodes}.",
+            "other": "{network} (TCP {ports}) n'a pas pu être vérifié sur {nodes}."
+          },
+          "fix": "Coupez le pare-feu des nœuds (enable: 0), ou ajoutez des règles de cluster qui l'acceptent, avant d'activer le pare-feu du cluster.",
+          "doubtWhy": "Une règle ne peut pas y être évaluée (interface, macro ou nom) : vérifiez-la à la main.",
+          "fixShort": "Coupez le pare-feu des nœuds, ou ajoutez des règles de cluster qui l'acceptent.",
+          "short": {
+            "ceph_public": "Réseau public Ceph {network} : coupé sur {nodes}",
+            "ceph_cluster": "Réseau privé Ceph {network} : coupé sur {nodes}",
+            "migration": "Réseau de migration {network} : coupé sur {nodes}",
+            "other": "{network} : coupé sur {nodes}"
+          }
         }
       },
       "rateUnits": {

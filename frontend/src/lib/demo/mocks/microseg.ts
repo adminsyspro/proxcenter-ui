@@ -222,6 +222,7 @@ const DRIFTS = [
 const CHECKS = [
   { id: 'cluster_firewall', status: 'pass' },
   { id: 'socle_rules', status: 'pass', detail: { web: true, ssh: true } },
+  { id: 'node_traffic', status: 'pass' },
   { id: 'log_ratelimit', status: 'warn', detail: { rate: '1/second' } },
   { id: 'self_in_zone', status: 'pass', detail: { self_ip: '10.20.60.5' } },
 ]

@@ -14,6 +14,9 @@ vi.mock('@/lib/api/firewall', () => ({
   updateClusterOptions: vi.fn(),
 }))
 
+const getPreflight = vi.fn()
+vi.mock('@/lib/microseg/api', () => ({ microsegApi: () => ({ getPreflight }) }))
+
 import * as firewallAPI from '@/lib/api/firewall'
 
 import DeploymentWizard, { nodeFirewallOf } from './DeploymentWizard'
@@ -56,7 +59,11 @@ describe('nodeFirewallOf', () => {
 })
 
 describe('DeploymentWizard', () => {
-  beforeEach(() => Object.values(api).forEach(fn => fn.mockReset()))
+  beforeEach(() => {
+    Object.values(api).forEach(fn => fn.mockReset())
+    getPreflight.mockReset()
+    getPreflight.mockResolvedValue([{ id: 'node_traffic', status: 'pass' }])
+  })
   afterEach(cleanup)
 
   it('has three steps and no step of rules', () => {
@@ -91,6 +98,7 @@ describe('DeploymentWizard', () => {
     const onComplete = vi.fn()
     renderWizard(onComplete)
     await screen.findByTestId('wizard-node-firewalls')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).not.toBeDisabled())
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     fireEvent.click(screen.getByRole('button', { name: 'Activate' }))
 
@@ -103,12 +111,45 @@ describe('DeploymentWizard', () => {
     expect(onComplete).toHaveBeenCalledTimes(1)
   })
 
+  it('refuses to go on when the node firewalls would cut what the nodes exchange, and names it', async () => {
+    nodes()
+    getPreflight.mockResolvedValue([{
+      id: 'node_traffic', status: 'fail', fix: 'node_traffic',
+      detail: { blocked: [
+        { kind: 'ceph_public', network: '10.250.250.0/24', ports: '3300, 6789, 6800-7300', nodes: ['pve2', 'pve3'] },
+        { kind: 'migration', network: '10.51.51.0/24', ports: '22', nodes: ['pve2'] },
+      ] },
+    }])
+    renderWizard()
+    const alert = await screen.findByTestId('wizard-traffic-cut')
+    expect(alert.textContent).toBe('Turning the cluster firewall on now would cut traffic between the nodes. Set the node firewalls to off (enable: 0), or add cluster rules that accept it, then open this wizard again. '
+      + 'Ceph (public network 10.250.250.0/24, TCP 3300, 6789, 6800-7300) would be cut on pve2, pve3. Migration (10.51.51.0/24, TCP 22) would be cut on pve2.')
+    expect(getPreflight).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+    expect(api.updateClusterOptions).not.toHaveBeenCalled()
+  })
+
+  it('goes on as before when the check only doubts, or cannot be read', async () => {
+    nodes()
+    getPreflight.mockResolvedValue([{ id: 'node_traffic', status: 'warn', detail: { unsure: [{ kind: 'ceph_public', network: '10.250.250.0/24', ports: '3300', nodes: ['pve2'] }] } }])
+    const first = renderWizard()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).not.toBeDisabled())
+    expect(screen.queryByTestId('wizard-traffic-cut')).toBeNull()
+    first.unmount()
+
+    getPreflight.mockRejectedValue(new Error('no licence'))
+    renderWizard()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).not.toBeDisabled())
+    expect(screen.queryByTestId('wizard-traffic-cut')).toBeNull()
+  })
+
   it('stays on the activation with an error when the cluster firewall cannot be turned on', async () => {
     nodes()
     api.updateClusterOptions.mockRejectedValue(new Error('boom'))
     const onComplete = vi.fn()
     renderWizard(onComplete)
     await screen.findByTestId('wizard-node-firewalls')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next' })).not.toBeDisabled())
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     fireEvent.click(screen.getByRole('button', { name: 'Activate' }))
 

@@ -1,0 +1,76 @@
+import type { Skin } from '@configs/themeConfig'
+import type { ThemeComponents } from '../types'
+
+const dialog = (skin: Skin): ThemeComponents => ({
+  MuiDialog: {
+    styleOverrides: {
+      paper: ({ theme }) => ({
+        ...(skin !== 'bordered'
+          ? {
+              boxShadow: 'var(--mui-customShadows-xl)'
+            }
+          : {
+              boxShadow: 'none'
+            }),
+        border: '1px solid',
+        borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',
+        borderRadius: 10,
+        overflow: 'hidden',
+        [theme.breakpoints.down('sm')]: {
+          '&:not(.MuiDialog-paperFullScreen)': {
+            margin: theme.spacing(6)
+          }
+        }
+      })
+    }
+  },
+  MuiDialogTitle: {
+    defaultProps: {
+      variant: 'h5'
+    },
+    styleOverrides: {
+      root: ({ theme }) => ({
+        padding: theme.spacing(3, 5),
+        backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+        borderBottom: '1px solid',
+        borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+        fontSize: '1rem',
+        fontWeight: 700
+      })
+    }
+  },
+  MuiDialogContent: {
+    styleOverrides: {
+      root: ({ theme }) => ({
+        padding: theme.spacing(5),
+        // The actions are a bar of their own, with a top border: they keep
+        // their padding, or the buttons touch that border.
+        '& + .MuiDialogContent-root': {
+          paddingTop: 0
+        }
+      })
+    }
+  },
+  MuiDialogActions: {
+    styleOverrides: {
+      root: ({ theme }) => ({
+        padding: theme.spacing(3, 5),
+        backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+        borderTop: '1px solid',
+        borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+        justifyContent: 'space-between',
+        '& .MuiButtonBase-root:not(:first-of-type)': {
+          marginInlineStart: theme.spacing(4)
+        },
+        '&:where(.dialog-actions-dense)': {
+          padding: theme.spacing(2.5),
+          '& .MuiButton-text': {
+            paddingInline: theme.spacing(2.5)
+          }
+        }
+      })
+    }
+  }
+})
+
+export default dialog

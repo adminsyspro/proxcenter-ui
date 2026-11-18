@@ -6,6 +6,10 @@ import 'server-only'
 
 // Config Imports
 import themeConfig from '@configs/themeConfig'
+import type { ThemeMode } from '@configs/themeConfig'
+
+// Type Imports
+import type { SystemMode } from '@core/theme/types'
 
 // Appearance Imports
 import { getStoredAppearance } from '@/lib/appearance/server'
@@ -46,24 +50,24 @@ export const getEffectiveSettings = async (): Promise<StoredSettings> => {
   return stored ? { ...settingsCookie, ...stored } : settingsCookie
 }
 
-export const getMode = async (): Promise<string> => {
+const isThemeMode = (value: unknown): value is ThemeMode => value === 'system' || value === 'light' || value === 'dark'
+
+export const getMode = async (): Promise<ThemeMode> => {
   const settings = await getEffectiveSettings()
 
   // Get mode from stored settings or fallback to theme config
-  const _mode = (typeof settings.mode === 'string' && settings.mode) || themeConfig.mode
-
-  return _mode
+  return isThemeMode(settings.mode) ? settings.mode : themeConfig.mode
 }
 
-export const getSystemMode = async (): Promise<string> => {
+export const getSystemMode = async (): Promise<SystemMode> => {
   const cookieStore = await cookies()
   const mode = await getMode()
-  const colorPrefCookie = cookieStore.get('colorPref')?.value || 'light'
+  const colorPref: SystemMode = cookieStore.get('colorPref')?.value === 'dark' ? 'dark' : 'light'
 
-  return (mode === 'system' ? colorPrefCookie : mode) || 'light'
+  return mode === 'system' ? colorPref : mode
 }
 
-export const getServerMode = async (): Promise<string> => {
+export const getServerMode = async (): Promise<SystemMode> => {
   const mode = await getMode()
   const systemMode = await getSystemMode()
 

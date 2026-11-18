@@ -36,7 +36,7 @@ export function policyScope(
   const ids = [...new Set((links ?? []).map(l => l.connection_id))]
   if (ids.length < 2) return { shared: false, readIds: [connection], hidden: 0 }
   const seen = new Set(connections.map(c => c.id))
-  const others = ids.filter(id => id !== connection && seen.has(id)).sort()
+  const others = ids.filter(id => id !== connection && seen.has(id)).sort((a, b) => a.localeCompare(b))
   const hidden = ids.filter(id => id !== connection && !seen.has(id)).length
   return { shared: true, readIds: [connection, ...others], hidden }
 }

@@ -77,7 +77,7 @@ export function useConnectionKind(id: string): ConnectionKind | undefined {
  */
 export function useConnectionKinds(ids: readonly string[], own = false): Record<string, ConnectionKind> {
   const shared = useContext(ConnectionKindsContext)
-  const key = shared && !own ? '' : [...ids].sort().join(',')
+  const key = shared && !own ? '' : [...ids].sort((a, b) => a.localeCompare(b)).join(',')
   const [kinds, setKinds] = useState<Record<string, ConnectionKind>>({})
   useEffect(() => {
     if (!key) return

@@ -16,7 +16,7 @@ const NONE: Readonly<Record<string, FirewallFindings>> = {}
  * is claimed about it and Apply is not held back.
  */
 export function usePlanPreflights(ids: readonly string[], round: number, enabled: boolean): Readonly<Record<string, FirewallFindings>> {
-  const key = enabled && ids.length > 0 ? `${round}:${[...ids].sort().join(',')}` : null
+  const key = enabled && ids.length > 0 ? `${round}:${[...ids].sort((a, b) => a.localeCompare(b)).join(',')}` : null
   const [read, setRead] = useState<{ key: string | null; byCluster: Readonly<Record<string, FirewallFindings>> }>({ key: null, byCluster: NONE })
   useEffect(() => {
     if (!key) return

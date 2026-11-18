@@ -39,7 +39,7 @@ type Props = {
  */
 export default function ClusterUnreadLines({ errors, tabConnection, clusterName, variant = 'list' }: Props) {
   const t = useTranslations('microsegPilot.merged')
-  const ids = Object.keys(errors).sort()
+  const ids = Object.keys(errors).sort((a, b) => a.localeCompare(b))
   if (ids.length === 0) return null
   return (
     <Box role='list' data-testid='cluster-unread' sx={{ mb: 1, minWidth: 0 }}>

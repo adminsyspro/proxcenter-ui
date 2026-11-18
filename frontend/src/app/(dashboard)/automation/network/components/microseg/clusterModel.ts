@@ -36,7 +36,7 @@ export function candidates(
 
 /** The connections that share a policy with at least one other, from the groups read for the selector. */
 export function sharedConnections(groups: Readonly<Record<string, readonly string[]>>): string[] {
-  return [...new Set(Object.values(groups).filter(ids => ids.length > 1).flat())].sort()
+  return [...new Set(Object.values(groups).filter(ids => ids.length > 1).flat())].sort((a, b) => a.localeCompare(b))
 }
 
 /**
@@ -78,7 +78,7 @@ export function selectorEntries(connections: readonly NamedConnection[], groups:
   for (const c of connections) {
     if (placed.has(c.id)) continue
     const group = groups[c.id] ?? [c.id]
-    const ids = [...new Set([c.id, ...group])].filter(id => known.has(id) && !placed.has(id)).sort()
+    const ids = [...new Set([c.id, ...group])].filter(id => known.has(id) && !placed.has(id)).sort((a, b) => a.localeCompare(b))
     for (const id of ids) placed.add(id)
     entries.push({ value: ids[0], label: ids.length > 1 ? clusterNames(ids, connections) : c.name, ids })
   }
@@ -103,5 +103,5 @@ export function selectionAfterDissociation(
 ): string {
   if (selected !== left) return selected
   const known = new Set(connections.map(c => c.id))
-  return remaining.filter(id => id !== left && known.has(id)).sort()[0] ?? selected
+  return remaining.filter(id => id !== left && known.has(id)).sort((a, b) => a.localeCompare(b))[0] ?? selected
 }

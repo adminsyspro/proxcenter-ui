@@ -59,7 +59,7 @@ export function useExceptionScope(policy: Pick<MicrosegPolicy, 'clusters'> | und
   return useMemo(() => {
     if (!links || links.length < 2) return { guestIds: connectionId ? [connectionId] : [] }
     const nameOf = (id: string) => shownClusterName(id, connectionId, clusterName)
-    const linked = links.map(c => c.connection_id).sort()
+    const linked = links.map(c => c.connection_id).sort((a, b) => a.localeCompare(b))
     const ids = linked.filter(id => !clusterName || nameOf(id) !== null)
     return {
       clusters: {

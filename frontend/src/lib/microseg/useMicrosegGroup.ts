@@ -47,7 +47,7 @@ export function useMicrosegGroup(connId: string, options?: GroupReadOptions) {
   const max = data?.max
   return useMemo(() => {
     const list: MicrosegCluster[] = clusters && clusters.length > 0 ? clusters : []
-    const ids = list.length > 0 ? list.map(c => c.connection_id).sort() : [connId]
+    const ids = list.length > 0 ? list.map(c => c.connection_id).sort((a, b) => a.localeCompare(b)) : [connId]
     const activeIds = list.length > 0 ? ids.filter(id => list.find(c => c.connection_id === id)?.active) : [connId]
     return {
       anchor: ids[0],

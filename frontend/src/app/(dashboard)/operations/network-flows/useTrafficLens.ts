@@ -144,7 +144,7 @@ function remoteClusters(policy: MicrosegPolicy | undefined, connectionId: string
   const linked = policy?.clusters ?? []
   if (linked.length < 2) return NO_IDS
   const seen = new Set(connections.map(c => c.id))
-  return linked.map(c => c.connection_id).filter(id => id !== connectionId && seen.has(id)).sort()
+  return linked.map(c => c.connection_id).filter(id => id !== connectionId && seen.has(id)).sort((a, b) => a.localeCompare(b))
 }
 
 /**

@@ -147,7 +147,7 @@ describe('observation list', () => {
     expect(within(summary).getByText(/Nov 1, 2026, 10:00\sAM/)).toBeTruthy()
     expect(within(summary).getByText(/Nov 2, 2026, 12:00\sPM/)).toBeTruthy()
     expect(within(summary).getByText('Unknown → 10.0.0.9')).toBeTruthy()
-    expect(within(dialog).getByText(/one sample pair of addresses per observed flow/)).toBeTruthy()
+    expect(within(dialog).getByText(/The addresses shown are one pair of the flow: the hits count the whole flow/)).toBeTruthy()
 
     // The bars: web into db with the flow's verdict only (7 + 3), the other verdict and direction left out.
     expect(await within(dialog).findByRole('img', { name: 'Traffic over the last 24 hours: 10 hits' })).toBeTruthy()

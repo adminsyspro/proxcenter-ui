@@ -180,7 +180,7 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
         {observedEmpty && <Empty text={observedEmpty} />}
         <Box role='list'>
           {observedPage.rows.map(row => (
-            <ObservedLine key={row.suggestion.id} row={row} peers={peers} zonesById={zonesById} sharedServices={sharedServices} busy={busy} onResolve={(action, prefixLen) => resolve(row.suggestion.id, action, prefixLen)} />
+            <ObservedLine key={`${row.suggestion.id}:${row.suggestion.src_ip}>${row.suggestion.dst_ip}`} row={row} peers={peers} zonesById={zonesById} sharedServices={sharedServices} busy={busy} onResolve={(action, prefixLen) => resolve(row.suggestion.id, action, prefixLen)} />
           ))}
         </Box>
         <PolicyPager count={observedPage.count} page={observedPage.page} size={observedPage.size} onPage={observedPage.setPage} />

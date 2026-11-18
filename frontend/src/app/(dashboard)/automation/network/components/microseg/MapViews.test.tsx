@@ -248,7 +248,7 @@ describe('the guest view', () => {
     demo({ zones: [web(), db(), { ...web(), id: 'zq', name: 'quiet' }] })
     const picker = await screen.findByRole('combobox', { name: 'Zone in the centre' })
     await waitFor(() => expect(picker.textContent).toBe('db · 12 hits'))
-    expect(screen.getByText('The engine keeps one sample pair of guests per observed flow: the hits count the whole zone pair.')).toBeTruthy()
+    expect(screen.getByText('An observed flow counts a whole zone pair: the map draws its busiest pairs of guests, 20 at most.')).toBeTruthy()
     expect((await node('guest:zd:qemu/200')).getAttribute('data-parent')).toBe('zone:zd')
     expect(await pathOf('unprotected:guest:zw:qemu/100>guest:zd:qemu/200')).toBeTruthy()
     expect(screen.queryByTestId('node-zone:zq')).toBeNull()

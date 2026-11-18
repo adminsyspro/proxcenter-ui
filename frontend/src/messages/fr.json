@@ -14310,7 +14310,7 @@
       "detail": {
         "firstSeen": "Vu pour la première fois {time}",
         "lastSeen": "Vu pour la dernière fois {time}",
-        "sampleNote": "Le moteur ne garde qu'une paire d'adresses d'exemple par flux observé : les occurrences comptent tout le flux, pas seulement cette paire."
+        "sampleNote": "Les adresses affichées sont une paire du flux : les occurrences comptent tout le flux. La carte dessine ses paires les plus actives."
       },
       "resolvedAccept": "{count, plural, one {# flux accepté dans le brouillon} other {# flux acceptés dans le brouillon}}",
       "resolvedDismiss": "{count, plural, one {# flux écarté} other {# flux écartés}}",
@@ -14530,7 +14530,7 @@
         "allowed": "Flux autorisés",
         "acceptAs": "Accepter comme flux {from} → {to} {service}",
         "draft": "Brouillon",
-        "sampleNote": "Le moteur garde une paire d'invités d'exemple par flux observé : les occurrences comptent toute la paire de zones.",
+        "sampleNote": "Un flux observé compte toute une paire de zones : la carte dessine ses paires d'invités les plus actives, 20 au plus.",
         "addresses": "Adresses d'exemple : {from} → {to}",
         "status": "État : {status}"
       },
@@ -14639,7 +14639,7 @@
           "incoming": "Entrant, depuis {peer}",
           "outgoing": "Sortant, vers {peer}",
           "fromZone": "depuis la zone {zone}",
-          "acceptTip": "Accepter comme flux {from} → {to} {service} : le moteur garde une paire d'invités exemple par flux observé, le flux couvre donc toute la paire de zones.",
+          "acceptTip": "Accepter comme flux {from} → {to} {service} : le flux couvre toute la paire de zones, pas seulement ces invités.",
           "partial": "Seuls les {count} premiers flux observés en attente de la carte sont lus : cette liste peut en manquer."
         },
         "more": "Les {shown} premiers invités sur {count} sont affichés : tapez pour affiner",

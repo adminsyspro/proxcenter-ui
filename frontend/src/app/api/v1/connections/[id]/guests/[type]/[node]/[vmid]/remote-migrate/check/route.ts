@@ -96,6 +96,12 @@ async function handler(
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
     }
     const { targetConnectionId, targetNode, targetStorage, targetBridge } = body
+    // The ID the guest will take on the target, when the dialog overrides it.
+    // Anything that is not a plain PVE VMID falls back to the source VMID.
+    const requestedTargetVmid = Number(body.targetVmid)
+    const landingVmid = Number.isInteger(requestedTargetVmid) && requestedTargetVmid >= 100 && requestedTargetVmid <= 999999999
+      ? requestedTargetVmid
+      : Number.parseInt(vmid)
     const vmSid = 'vm:' + safeVmid
 
     if (!targetConnectionId || !targetNode || !targetStorage || !targetBridge) {
@@ -497,13 +503,13 @@ async function handler(
     // 9. Vérifier si le VMID est déjà utilisé sur la cible
     try {
       const targetVms = await pveFetch<any[]>(targetConn, '/cluster/resources?type=vm')
-      const existingVm = targetVms?.find((v: any) => v.vmid === Number.parseInt(vmid))
+      const existingVm = targetVms?.find((v: any) => v.vmid === landingVmid)
       if (existingVm) {
         issues.push({
           type: 'warning',
           code: 'VMID_EXISTS_ON_TARGET',
-          message: `VMID ${vmid} already exists on target cluster`,
-          context: { vmid, node: String(existingVm.node || '') },
+          message: `VMID ${landingVmid} already exists on target cluster`,
+          context: { vmid: String(landingVmid), node: String(existingVm.node || '') },
           details: `Existing VM: ${existingVm.name || 'unnamed'} on ${existingVm.node}. Use a different target VMID.`
         })
       }

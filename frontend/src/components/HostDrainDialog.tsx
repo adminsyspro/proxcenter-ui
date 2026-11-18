@@ -241,14 +241,17 @@ const pct = (ratio: number) => Math.round(ratio * 100)
 
 /**
  * A load before and after: the part both share, then the part the drain adds
- * (solid) or frees (faded). Past the ceiling the bar turns red.
+ * (solid) or frees (faded). Green with room to spare, amber within ten points
+ * of the ceiling, red past it.
  */
 export function LoadBar({ before, after, limit, testId }: Readonly<{ before: number; after: number; limit: number; testId: string }>) {
   const clamp = (v: number) => Math.max(0, Math.min(1, v))
   const base = clamp(Math.min(before, after))
   const delta = clamp(Math.max(before, after)) - base
   const grows = after > before
-  let color = 'primary.main'
+  // Green while there is room, so the amber and red of a node close to or past
+  // its ceiling stand out; the brand colour read as a warning already (#1392).
+  let color = 'success.main'
   if (after > limit) color = 'error.main'
   else if (after > limit - 0.1) color = 'warning.main'
 

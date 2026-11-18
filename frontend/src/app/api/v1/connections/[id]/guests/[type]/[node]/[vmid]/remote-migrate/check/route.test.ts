@@ -301,6 +301,23 @@ describe("POST .../remote-migrate/check — replication pre-flight", () => {
     })
   })
 
+  it("checks the overridden target VMID instead of the source one", async () => {
+    wirePveFetch([], { ha: [] })
+    const base = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation((conn: any, path: string) =>
+      path.includes("/cluster/resources") ? Promise.resolve([{ vmid: 100, node: "pve2" }, { vmid: 250, node: "pve3" }]) : base(conn, path))
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+
+    const free = await (await callRoute(POST, { method: "POST", params: PARAMS, body: { ...BODY, targetVmid: 300 } })).json()
+    expect(free.issues.some((i: any) => i.code === "VMID_EXISTS_ON_TARGET")).toBe(false)
+
+    const taken = await (await callRoute(POST, { method: "POST", params: PARAMS, body: { ...BODY, targetVmid: 250 } })).json()
+    expect(taken.issues.find((i: any) => i.code === "VMID_EXISTS_ON_TARGET")?.context).toEqual({ vmid: "250", node: "pve3" })
+
+    const junk = await (await callRoute(POST, { method: "POST", params: PARAMS, body: { ...BODY, targetVmid: "abc" } })).json()
+    expect(junk.issues.find((i: any) => i.code === "VMID_EXISTS_ON_TARGET")?.context).toEqual({ vmid: "100", node: "pve2" })
+  })
+
   it("names only real snapshots in the irreversible remediation", async () => {
     wirePveFetch([{ name: "current" }, { name: "before-upgrade" }, { name: "backup" }], {})
     const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]

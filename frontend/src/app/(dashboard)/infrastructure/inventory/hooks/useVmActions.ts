@@ -7,6 +7,7 @@ import type { InventorySelection, DetailsPayload } from '../types'
 import type { AllVmItem, HostItem } from '../InventoryTree'
 import { parseVmId, fetchDetails, resolveVmPowerAction } from '../helpers'
 import { crossClusterMigrate } from '@/lib/migration/crossClusterMigrate'
+import { openTaskViewer } from '@/lib/tasks/taskViewer'
 import { bulkPowerMessage, bulkPowerSeverity, readPerNodePreference, runBulkGuestPower, type BulkPowerAction } from '@/lib/inventory/bulkGuestPower'
 import { gpuContingentMessage } from '@/lib/gpu/contingentErrors'
 import {
@@ -226,6 +227,8 @@ export function useVmActions({
     })
 
     if (!upid) toast.success(t('vmActions.migrateSuccess'))
+    // Follow the migration on screen instead of leaving a blank page (#1392).
+    openTaskViewer({ upid, connectionId: guest.connId, description: `${guest.name || `VM ${guest.vmid}`}: ${t('vmActions.migrate')}` })
   }, [toast, t, trackTask, onRefresh])
 
   const handleMigrateVm = useCallback(async (targetNode: string, online: boolean, targetStorage?: string, withLocalDisks?: boolean) => {
@@ -271,6 +274,7 @@ export function useVmActions({
     }
 
     toast.success(t('vmActions.migrateSuccess'))
+    openTaskViewer({ upid, connectionId: connId, description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)` })
 
     if (onSelect) {
       onSelect({ type: 'cluster', id: connId })
@@ -380,6 +384,7 @@ export function useVmActions({
     }
 
     toast.success(t('vmActions.migrateSuccess'))
+    openTaskViewer({ upid, connectionId: connId, description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)` })
     setTableMigrateVm(null)
   }, [tableMigrateVm, onRefresh, toast, t, trackTask])
 

@@ -34,6 +34,7 @@ import { MigrateVmDialog, CrossClusterMigrateParams } from '@/components/Migrate
 import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { crossClusterMigrate } from '@/lib/migration/crossClusterMigrate'
+import { openTaskViewer } from '@/lib/tasks/taskViewer'
 import { startTrackedMigration } from '@/lib/migration/guestMigrateClient'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
 import HostDrainDialog from '@/components/HostDrainDialog'
@@ -877,19 +878,22 @@ export default function TreeDialogs(props: TreeDialogsProps) {
           onMigrate={async (targetNode, online, targetStorage, withLocalDisks) => {
             // Migration intra-cluster
             // #926: followed to its end, which toasts the outcome with the reason.
-            await startTrackedMigration(
+            const description = `${migrateTarget.name || `VM ${migrateTarget.vmid}`}: ${t('vmActions.migrate')}`
+            const upid = await startTrackedMigration(
               trackTask,
               migrateTarget,
               { target: targetNode, online, targetstorage: targetStorage, 'with-local-disks': withLocalDisks },
-              { description: `${migrateTarget.name || `VM ${migrateTarget.vmid}`}: ${t('vmActions.migrate')}`, onDone: () => setReloadTick(x => x + 1) },
+              { description, onDone: () => setReloadTick(x => x + 1) },
             )
+            openTaskViewer({ upid, connectionId: migrateTarget.connId, description })
             setMigrateDialogOpen(false)
             setMigrateTarget(null)
             setReloadTick(x => x + 1)
           }}
           onCrossClusterMigrate={async (params: CrossClusterMigrateParams) => {
             const { connId, node, type, vmid } = migrateTarget
-            await crossClusterMigrate({ connId, node, type, vmid }, params)
+            const { upid } = await crossClusterMigrate({ connId, node, type, vmid }, params)
+            openTaskViewer({ upid, connectionId: connId, description: `${migrateTarget.name || `VM ${vmid}`}: ${t('vmActions.migrate')} (cross-cluster)` })
             setMigrateDialogOpen(false)
             setMigrateTarget(null)
             setReloadTick(x => x + 1)

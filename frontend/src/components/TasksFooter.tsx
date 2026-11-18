@@ -33,6 +33,7 @@ import { useJobs } from '@/hooks/useJobs'
 import { useRefreshInterval } from '@/hooks/useRefreshInterval'
 import { useLicense } from '@/contexts/LicenseContext'
 import { type MergedPCTask } from '@/lib/tasks/mergeSharedTasks'
+import { OPEN_TASK_VIEWER_EVENT, type TaskViewerRequest } from '@/lib/tasks/taskViewer'
 import { migrationStepText } from '@/lib/tasks/activeMigrations'
 import { mergeTaskbarRows } from '@/lib/tasks/orchestratorTaskRows'
 import { formatTaskDuration } from '@/lib/tasks/archive'
@@ -602,6 +603,37 @@ export default function TasksFooter({
       localStorage.setItem('tasksFooterHidden', String(hidden))
     }
   }, [hidden, isHydrated])
+
+  // A dialog that just started a task asks for its viewer (#1392): the task is
+  // shown as running straight away, the viewer then polls its real state.
+  useEffect(() => {
+    const onOpenTask = (e: Event) => {
+      const req = (e as CustomEvent<TaskViewerRequest>).detail
+      if (!req?.upid) return
+      setSelectedTask({
+        id: req.upid,
+        upid: req.upid,
+        type: req.type,
+        status: 'running',
+        startTime: new Date().toISOString(),
+        endTime: null,
+        duration: '',
+        durationSec: null,
+        node: req.node,
+        user: req.user,
+        description: req.description,
+        entity: req.entity,
+        entityName: null,
+        connectionId: req.connectionId,
+        connectionName: '',
+      })
+      setDialogOpen(true)
+    }
+
+    window.addEventListener(OPEN_TASK_VIEWER_EVENT, onOpenTask)
+
+    return () => window.removeEventListener(OPEN_TASK_VIEWER_EVENT, onOpenTask)
+  }, [])
 
   // Handlers
   const handleToggleExpand = () => {

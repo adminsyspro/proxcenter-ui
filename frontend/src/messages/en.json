@@ -14309,7 +14309,7 @@
       "detail": {
         "firstSeen": "First seen {time}",
         "lastSeen": "Last seen {time}",
-        "sampleNote": "The engine keeps one sample pair of addresses per observed flow: the hits count the whole flow, not only this pair."
+        "sampleNote": "The addresses shown are one pair of the flow: the hits count the whole flow. The map draws its busiest pairs."
       },
       "resolvedAccept": "{count, plural, one {# flow accepted into the draft} other {# flows accepted into the draft}}",
       "resolvedDismiss": "{count, plural, one {# flow dismissed} other {# flows dismissed}}",
@@ -14529,7 +14529,7 @@
         "allowed": "Allowed flows",
         "acceptAs": "Accept as flow {from} → {to} {service}",
         "draft": "Draft",
-        "sampleNote": "The engine keeps one sample pair of guests per observed flow: the hits count the whole zone pair.",
+        "sampleNote": "An observed flow counts a whole zone pair: the map draws its busiest pairs of guests, 20 at most.",
         "addresses": "Sample addresses: {from} → {to}",
         "status": "Status: {status}"
       },
@@ -14638,7 +14638,7 @@
           "incoming": "Incoming, from {peer}",
           "outgoing": "Outgoing, to {peer}",
           "fromZone": "from zone {zone}",
-          "acceptTip": "Accept as flow {from} → {to} {service}: the engine keeps one sample pair of guests per observed flow, so the flow covers the whole zone pair.",
+          "acceptTip": "Accept as flow {from} → {to} {service}: the flow covers the whole zone pair, not only these guests.",
           "partial": "Only the first {count} pending observed flows of the map are read: this list may miss some."
         },
         "more": "Showing the first {shown} of {count} guests: type to narrow",

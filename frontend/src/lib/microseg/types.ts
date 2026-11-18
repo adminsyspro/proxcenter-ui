@@ -149,6 +149,11 @@ export type MicrosegSuggestion = {
   first_seen: string
   last_seen: string
   status: SuggestionStatus
+  /**
+   * The hits by source and destination address, the busiest first (at most 20): a suggestion counts every flow between
+   * two zones. Absent on a row recorded before it: `src_ip` and `dst_ip` then hold one sample pair.
+   */
+  pairs?: Array<{ src_ip: string; dst_ip: string; hits: number }>
 }
 
 /** The aggregate outbound row: "many destinations". */

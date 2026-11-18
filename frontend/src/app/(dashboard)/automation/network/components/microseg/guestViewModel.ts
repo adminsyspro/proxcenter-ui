@@ -5,7 +5,7 @@ import { flowService } from './FlowSummary'
 import { gatewayZones } from './gatewayNames'
 import type { Point } from './edgeGeometry'
 import {
-  BOX_SHAPE, EXTERNAL_ID, NODE_H, NODE_W, OUTSIDE_ID, UNZONED_ID, addAllowedPairs, addPair, addressBook, bareIp, cellCenters,
+  BOX_SHAPE, EXTERNAL_ID, NODE_H, NODE_W, OUTSIDE_ID, UNZONED_ID, addAllowedPairs, addPair, addressBook, bareIp, byGuestPair, cellCenters,
   comparePairs, exceptionLinks, groupOf, isSharedMap, memberBook, outsideEgressOf, placeBoundary, placeGroup, placePairs, zoneNodeId,
   type AddressBooks, type Cell, type ExceptionLink, type Group, type IpNodeData, type MapEdgeKind, type MapInput, type MapMember, type Pair,
   type Placement, type ZoneGraph, type ZoneNodeData,
@@ -282,7 +282,7 @@ function buildAround({ zones, flows, suggestions, members = null, unzoned = null
     centre: zone,
     known,
     flows: flows.filter(f => touches(f.src_zone_id, f.dst_zone_id)).sort((a, b) => byText(a.id, b.id)),
-    seen: pending(suggestions, known).filter(s => touches(s.src_zone_id, s.dst_zone_id)).sort((a, b) => byText(a.id, b.id)),
+    seen: byGuestPair(pending(suggestions, known).filter(s => touches(s.src_zone_id, s.dst_zone_id)).sort((a, b) => byText(a.id, b.id))),
     links,
     named: namedGuests(zone, links),
   }

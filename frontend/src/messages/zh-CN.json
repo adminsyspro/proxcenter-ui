@@ -14309,7 +14309,7 @@
       "detail": {
         "firstSeen": "首次出现 {time}",
         "lastSeen": "最后出现 {time}",
-        "sampleNote": "引擎对每个观察到的流只保留一对示例地址：命中数统计的是整个流，而不只是这一对。"
+        "sampleNote": "显示的地址是该流量的一对：命中数统计整个流量。地图会绘制其最活跃的地址对。"
       },
       "resolvedAccept": "{count, plural, other {已将 # 条流量接受到草稿}}",
       "resolvedDismiss": "{count, plural, other {已忽略 # 条流量}}",
@@ -14529,7 +14529,7 @@
         "allowed": "允许的流量",
         "acceptAs": "接受为流量 {from} → {to} {service}",
         "draft": "草稿",
-        "sampleNote": "引擎为每个观察到的流量只保留一对示例客户机：命中次数统计整个区域对。",
+        "sampleNote": "观察到的流量统计整个区域对：地图绘制其最活跃的访客对，最多 20 个。",
         "addresses": "示例地址：{from} → {to}",
         "status": "状态：{status}"
       },
@@ -14638,7 +14638,7 @@
           "incoming": "入站，来自 {peer}",
           "outgoing": "出站，前往 {peer}",
           "fromZone": "来自区域 {zone}",
-          "acceptTip": "接受为流量 {from} → {to} {service}：引擎为每条观测流量只保留一对示例客户机，因此该流量覆盖整个区域对。",
+          "acceptTip": "接受为流量 {from} → {to} {service}：该流量覆盖整个区域对，而不仅是这些访客。",
           "partial": "地图只读取前 {count} 条待处理的观测流量：此列表可能有遗漏。"
         },
         "more": "显示 {count} 台客户机中的前 {shown} 台：输入以缩小范围",

@@ -10,7 +10,7 @@ import type { MicrosegException, MicrosegFlow, MicrosegSuggestion, MicrosegZone 
 
 import { crossesBox, crossesCircle, rectAround, rectHitsCircle, rectsOverlap, type Rect } from './edgeGeometry'
 import {
-  ALL_FLOWS, EDGE_COLORS, NODE_H, NODE_W, bareIp, buildZoneGraph, filterEdges, focusSets, groupServices,
+  ALL_FLOWS, EDGE_COLORS, NODE_H, NODE_W, bareIp, buildZoneGraph, byGuestPair, filterEdges, focusSets, groupServices,
   type GuestNodeData, type MapEdgeData, type MapMember, type MoreNodeData, type ZoneNodeData,
 } from './zoneGraph'
 import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, MIN_R } from './zoneLayout'
@@ -537,5 +537,47 @@ describe('the exceptions between two zones', () => {
     const { edges } = graph([exception('x1')])
     expect(filterEdges(edges, { ...ALL_FLOWS, allowed: false })).toEqual([])
     expect(filterEdges(edges, { ...ALL_FLOWS, unprotected: false, blocked: false })).toHaveLength(1)
+  })
+})
+
+describe('an observed flow drawn guest to guest', () => {
+  const a = member(101, 'manu', ['10.0.4.1'])
+  const b = member(102, 'manu-2', ['10.0.4.2'])
+  const c = member(103, 'manu-3', ['10.0.4.3'])
+  const members = new Map([['zd', [a, b, c]]])
+  const ends = (e: Edge) => `${e.source.split(':').pop()} > ${e.target.split(':').pop()}`
+  const observed = (suggestions: MicrosegSuggestion[]) => buildZoneGraph({ zones: [db], flows: [], suggestions, members })
+    .edges.filter(e => data(e).kind !== 'allowed').map(e => `${ends(e)} = ${data(e).observed.map(o => `${o.id}:${o.hits}`).join(',')}`).sort((x, y) => x.localeCompare(y))
+
+  it('splits the hits of a suggestion between the pairs of addresses it holds', () => {
+    const s = seen('s1', { kind: 'blocked', proto: 'icmp', dport: '', src_zone_id: 'zd', src_ip: '10.0.4.1', dst_ip: '10.0.4.2', hits: 10, pairs: [{ src_ip: '10.0.4.1', dst_ip: '10.0.4.2', hits: 6 }, { src_ip: '10.0.4.3', dst_ip: '10.0.4.2', hits: 4 }] })
+    expect(byGuestPair([s]).map(p => [p.id, p.src_ip, p.dst_ip, p.hits])).toEqual([['s1', '10.0.4.1', '10.0.4.2', 6], ['s1', '10.0.4.3', '10.0.4.2', 4]])
+    expect(observed([s])).toEqual(['qemu/101 > qemu/102 = s1:6', 'qemu/103 > qemu/102 = s1:4'])
+  })
+
+  it('keeps on the sample pair the hits no pair holds: a row from before the pairs that gained some', () => {
+    const s = seen('s1', { src_zone_id: 'zd', src_ip: '10.0.4.1', dst_ip: '10.0.4.2', hits: 100, pairs: [{ src_ip: '10.0.4.3', dst_ip: '10.0.4.2', hits: 4 }] })
+    expect(observed([s])).toEqual(['qemu/101 > qemu/102 = s1:96', 'qemu/103 > qemu/102 = s1:4'])
+    const both = { ...s, pairs: [{ src_ip: '10.0.4.1', dst_ip: '10.0.4.2', hits: 10 }, { src_ip: '10.0.4.3', dst_ip: '10.0.4.2', hits: 4 }] }
+    expect(observed([both])).toEqual(['qemu/101 > qemu/102 = s1:96', 'qemu/103 > qemu/102 = s1:4'])
+  })
+
+  it('draws a suggestion without pairs as before, on its sample pair', () => {
+    const s = seen('s1', { src_zone_id: 'zd', src_ip: '10.0.4.1', dst_ip: '10.0.4.2', hits: 7 })
+    expect(byGuestPair([s])).toEqual([s])
+    expect(byGuestPair([{ ...s, pairs: [] }])).toHaveLength(1)
+    // A value that is no list of pairs is left out, never thrown on.
+    const odd = [null, { src_ip: '10.0.4.3' }, { src_ip: '10.0.4.3', dst_ip: '10.0.4.2', hits: -2 }] as unknown as MicrosegSuggestion['pairs']
+    expect(byGuestPair([{ ...s, pairs: odd }])).toEqual([{ ...s, pairs: odd }])
+    expect(byGuestPair([{ ...s, pairs: 'x' as unknown as MicrosegSuggestion['pairs'] }])).toHaveLength(1)
+    expect(observed([s])).toEqual(['qemu/101 > qemu/102 = s1:7'])
+  })
+
+  it('keeps one line on an edge for two pairs that end on the same nodes', () => {
+    // Neither source is a known guest: both pairs start from the circle of the zone.
+    const s = seen('s1', { src_zone_id: 'zw', src_ip: '10.0.1.1', dst_zone_id: 'zd', dst_ip: '10.0.4.2', hits: 9, pairs: [{ src_ip: '10.0.1.1', dst_ip: '10.0.4.2', hits: 5 }, { src_ip: '10.0.1.2', dst_ip: '10.0.4.2', hits: 4 }] })
+    const edges = buildZoneGraph({ zones: [web, db], flows: [], suggestions: [s], members }).edges.filter(e => data(e).kind !== 'allowed')
+    expect(edges).toHaveLength(1)
+    expect(data(edges[0]).observed.map(o => [o.id, o.hits])).toEqual([['s1', 9]])
   })
 })

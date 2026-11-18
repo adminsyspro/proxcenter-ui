@@ -2,7 +2,7 @@ import type { MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import { cellView, type MatrixModel } from './matrixModel'
 import {
-  UNZONED_ID, bareIp, guestNodeId, moreNodeId, pveNodeId, zoneNodeId, type FlowFilters, type MapEdgeData, type ZoneGraph,
+  UNZONED_ID, bareIp, byGuestPair, guestNodeId, moreNodeId, pveNodeId, zoneNodeId, type FlowFilters, type MapEdgeData, type ZoneGraph,
 } from './zoneGraph'
 import { byText } from './zoneLayout'
 import { mapKey } from './mapClusters'
@@ -101,7 +101,8 @@ export function targetSuggestions(suggestions: MicrosegSuggestion[], t: TargetGu
   // or when it leaves the guest's zone, whichever member the sample address belongs to.
   const ofZone = (s: MicrosegSuggestion) => !!t.zoneId && emittingZone(s) === t.zoneId
   const emits = (s: MicrosegSuggestion) => own(s.src_ip) || ofZone(s)
-  return suggestions
+  // Pair by pair: a flow between two zones holds the hits of each pair of addresses, and the guest is an end of some.
+  return byGuestPair(suggestions)
     .filter(s => s.status === 'pending' && (emits(s) || own(s.dst_ip)))
     .map((s): TargetFlow => {
       if (emits(s)) return { suggestion: s, direction: 'out', peerIp: s.dst_ip, ...(!own(s.src_ip) ? { fromZone: emittingZone(s) } : {}) }

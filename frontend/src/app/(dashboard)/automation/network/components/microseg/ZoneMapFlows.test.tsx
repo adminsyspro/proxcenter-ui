@@ -223,7 +223,7 @@ describe('panel of an edge', () => {
     observed()
     const panel = await open()
     expect(within(panel).getByText('Example: web-1 → db-1')).toBeTruthy()
-    expect(within(panel).getByText('The engine keeps one sample pair of guests per observed flow: the hits count the whole zone pair.')).toBeTruthy()
+    expect(within(panel).getByText('An observed flow counts a whole zone pair: the map draws its busiest pairs of guests, 20 at most.')).toBeTruthy()
     const row = within(panel).getByRole('listitem', { name: 'web to db' })
     expect(within(row).getByText('web → db')).toBeTruthy()
     expect(within(row).getByText('HTTP')).toBeTruthy()

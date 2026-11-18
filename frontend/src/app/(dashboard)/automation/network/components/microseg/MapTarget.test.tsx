@@ -236,7 +236,7 @@ describe('the guest panel', () => {
     const row = within(await panel('Guest web-1')).getByRole('listitem', { name: 'Outgoing, to db-1' })
     const accept = within(row).getByRole('button', { name: 'Accept as flow web → db HTTP (tcp/80)' })
     fireEvent.mouseOver(accept)
-    expect(await screen.findByText(/the engine keeps one sample pair of guests per observed flow, so the flow covers the whole zone pair/)).toBeTruthy()
+    expect(await screen.findByText(/the flow covers the whole zone pair, not only these guests/)).toBeTruthy()
     fireEvent.click(accept)
     await waitFor(() => expect(calls('POST /suggestions/resolve')).toHaveLength(1))
     expect(body(calls('POST /suggestions/resolve')[0][1])).toEqual({ version: 3, ids: ['s1'], action: 'accept' })

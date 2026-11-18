@@ -26,6 +26,18 @@ describe('the guests a VM target can pick', () => {
   const lost = guest(300, 'lost', ['10.9.0.1'])
   const stopped = guest(400, 'old', [], { status: 'stopped' })
 
+  it('lists the flows of a guest pair by pair: only the pairs it is an end of, each with its own hits', () => {
+    // One flow web → db counts three pairs; db-1 (10.0.4.1) is the destination of two of them.
+    const s = seen('s1', { src_zone_id: 'zw', src_ip: '10.0.1.2', dst_zone_id: 'zd', dst_ip: '10.0.4.1', hits: 12, pairs: [
+      { src_ip: '10.0.1.2', dst_ip: '10.0.4.1', hits: 6 }, { src_ip: '10.0.1.1', dst_ip: '10.0.4.1', hits: 4 }, { src_ip: '10.0.1.3', dst_ip: '10.0.4.2', hits: 2 },
+    ] })
+    const db = targetSuggestions([s], target({ ips: ['10.0.4.1'], zoneId: 'zd', key: 'qemu/200', vmid: 200 }))
+    expect(db.map(f => [f.direction, f.peerIp, f.suggestion.hits, f.suggestion.id])).toEqual([['in', '10.0.1.2', 6, 's1'], ['in', '10.0.1.1', 4, 's1']])
+    // web-1 (10.0.1.1) sends one of them, and is not given the pair of its neighbour.
+    const web = targetSuggestions([s], target())
+    expect(web.map(f => [f.direction, f.peerIp, f.suggestion.hits])).toEqual([['out', '10.0.4.1', 4]])
+  })
+
   it('lists the running guests by name with the zone each one belongs to, or none', () => {
     const members = new Map([['zw', [memberOf(web1)]], ['zd', [memberOf(db1)]]])
     const list = targetCandidates([web1, stopped, lost, db1], members)

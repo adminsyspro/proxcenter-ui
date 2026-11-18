@@ -14309,7 +14309,7 @@
       "detail": {
         "firstSeen": "처음 확인 {time}",
         "lastSeen": "마지막 확인 {time}",
-        "sampleNote": "엔진은 관찰된 흐름마다 예시 주소 쌍 하나만 보관합니다. 적중 수는 이 쌍만이 아니라 흐름 전체를 셉니다."
+        "sampleNote": "표시된 주소는 흐름의 한 쌍입니다. 횟수는 흐름 전체를 셉니다. 맵은 가장 활발한 쌍들을 그립니다."
       },
       "resolvedAccept": "{count, plural, other {#개 흐름을 초안에 수락했습니다}}",
       "resolvedDismiss": "{count, plural, other {#개 흐름을 무시했습니다}}",
@@ -14529,7 +14529,7 @@
         "allowed": "허용된 흐름",
         "acceptAs": "흐름으로 수락 {from} → {to} {service}",
         "draft": "초안",
-        "sampleNote": "엔진은 관찰된 흐름마다 게스트 예시 쌍 하나만 보관합니다. 횟수는 영역 쌍 전체를 셉니다.",
+        "sampleNote": "관찰된 흐름은 영역 쌍 전체를 셉니다. 맵은 가장 활발한 게스트 쌍을 최대 20개까지 그립니다.",
         "addresses": "예시 주소: {from} → {to}",
         "status": "상태: {status}"
       },
@@ -14638,7 +14638,7 @@
           "incoming": "수신, {peer}에서",
           "outgoing": "송신, {peer}(으)로",
           "fromZone": "{zone} 영역에서",
-          "acceptTip": "{from} → {to} {service} 흐름으로 허용: 엔진은 관찰된 흐름마다 게스트 예시 쌍 하나만 보관하므로 이 흐름은 영역 쌍 전체에 적용됩니다.",
+          "acceptTip": "{from} → {to} {service} 흐름으로 수락: 이 게스트뿐 아니라 영역 쌍 전체에 적용됩니다.",
           "partial": "지도에서 대기 중인 관찰 흐름은 처음 {count}개만 읽습니다. 이 목록에 일부가 빠져 있을 수 있습니다."
         },
         "more": "게스트 {count}개 중 처음 {shown}개만 표시됩니다. 입력하여 범위를 좁히세요",

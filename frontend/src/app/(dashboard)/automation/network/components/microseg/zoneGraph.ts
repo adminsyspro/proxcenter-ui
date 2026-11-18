@@ -350,7 +350,12 @@ export function addPair(
   const pair = pairs.get(key) ?? { kind, source, target, services: new Set<string>(), flows: [], observed: [], exceptions: [] }
   pair.services.add(service)
   if (flow) pair.flows.push(flow)
-  if (seen) pair.observed.push(seen)
+  if (seen) {
+    // Two pairs of one suggestion that end on the same nodes (guests not drawn) are one line of the edge.
+    const at = pair.observed.findIndex(o => o.id === seen.id)
+    if (at < 0) pair.observed.push(seen)
+    else pair.observed[at] = { ...pair.observed[at], hits: pair.observed[at].hits + seen.hits }
+  }
   if (exception && !pair.exceptions.includes(exception)) pair.exceptions.push(exception)
   pairs.set(key, pair)
 }
@@ -397,6 +402,26 @@ function observedSource(s: MicrosegSuggestion, known: ReadonlyMap<string, Micros
   const srcIp = bareIp(s.src_ip || '')
   if (known.has(s.src_zone_id)) return books.get(s.src_zone_id)!.get(srcIp) ?? zoneNodeId(s.src_zone_id)
   return books.get(UNZONED_ID)?.get(srcIp) ?? EXTERNAL_ID
+}
+
+/**
+ * The observed flows as the map draws them, guest to guest: a suggestion counts every flow between two zones and holds
+ * its hits by pair of addresses, so it is drawn once per pair, each with its own hits (and its id, for the panel). The
+ * hits no pair holds (a row from before the pairs, or pairs past the ones kept) stay on its sample pair.
+ */
+export function byGuestPair(suggestions: readonly MicrosegSuggestion[]): MicrosegSuggestion[] {
+  return suggestions.flatMap(s => {
+    // Only what reads as a pair: a value of another shape draws the suggestion as before, on its sample pair.
+    const pairs = (Array.isArray(s.pairs) ? s.pairs : [])
+      .filter(p => !!p && typeof p.src_ip === 'string' && typeof p.dst_ip === 'string' && typeof p.hits === 'number' && p.hits > 0)
+    if (pairs.length === 0) return [s]
+    const rest = s.hits - pairs.reduce((sum, p) => sum + p.hits, 0)
+    const sample = pairs.some(p => p.src_ip === s.src_ip && p.dst_ip === s.dst_ip)
+    return [
+      ...pairs.map(p => ({ ...s, src_ip: p.src_ip, dst_ip: p.dst_ip, hits: p.hits + (rest > 0 && sample && p.src_ip === s.src_ip && p.dst_ip === s.dst_ip ? rest : 0) })),
+      ...(rest > 0 && !sample ? [{ ...s, hits: rest }] : []),
+    ]
+  })
 }
 
 /** The pending observed flows into a known zone, guest to guest. */
@@ -669,7 +694,7 @@ export function buildZoneGraph({ zones, flows, suggestions, members = null, unzo
   const pairs = new Map<string, Pair>()
   addAllowedPairs(pairs, flows, known)
   addExceptionZonePairs(pairs, exceptionLinks(exceptions, known, members, unzoned, isSharedMap({ clusters })))
-  addObservedPairs(pairs, suggestions, known, books)
+  addObservedPairs(pairs, byGuestPair(suggestions), known, books)
   const ordered = [...pairs.values()].sort(comparePairs)
 
   // Grid: longest-path layer as the column, barycenter order as the row; the columns of a map too tall to read are folded.

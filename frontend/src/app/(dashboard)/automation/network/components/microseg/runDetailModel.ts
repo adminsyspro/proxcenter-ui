@@ -9,6 +9,12 @@ export type RunDetailRow =
 
 const positive = (n: number | undefined) => (n ?? 0) > 0
 
+/** What started a full run: "Check now", a pass another cluster of a shared policy asked for, or the schedule. */
+function triggerLabel(trigger: string | undefined): string {
+  if (trigger === 'check') return 'triggerCheck'
+  return trigger === 'peer' ? 'triggerPeer' : 'triggerSchedule'
+}
+
 /**
  * The lines of a run's detail, one per figure, in reading order. An engine run shows what its
  * loop counts (log lines and suggestions for a log read, members with an IP for an IP read,
@@ -40,7 +46,7 @@ export function runDetailRows(run: MicrosegRun): RunDetailRow[] {
       break
     }
     case 'full':
-      add({ key: 'trigger', label: r.trigger === 'check' ? 'triggerCheck' : 'triggerSchedule' })
+      add({ key: 'trigger', label: triggerLabel(r.trigger) })
       add({ key: 'guests', count: r.guests ?? 0 })
       add({ key: 'members', count: r.members ?? 0 })
       add({ key: 'drifts', count: r.drifts ?? 0, warn: positive(r.drifts) })

@@ -12,6 +12,7 @@ import {
   draftOverlap,
   draftRuleCount,
   draftServices,
+  exceptionClusterOptions,
   exceptionCovered,
   exceptionDraft,
   exceptionFromSuggestion,
@@ -24,17 +25,18 @@ import {
   isExceptionService,
   isExceptionServiceText,
   namedGuests,
+  ofCluster,
   servicesToChoices,
   shownExceptionStatus,
 } from './exceptionModel'
 import type { PolicyGuest, ZoneMember } from './zoneModel'
 
 const guest = (vmid: number, name: string, over: Partial<PolicyGuest> = {}): PolicyGuest => ({
-  vmid, name, node: 'pve1', type: 'qemu', status: 'running', tags: [], ips: [`10.0.0.${vmid % 250}`], ...over,
+  connectionId: 'c1', vmid, name, node: 'pve1', type: 'qemu', status: 'running', tags: [], ips: [`10.0.0.${vmid % 250}`], ...over,
 })
 
 const member = (g: PolicyGuest, pending = false): ZoneMember => ({
-  ref: { node: g.node, type: g.type, vmid: g.vmid }, guest: g, pending,
+  connectionId: g.connectionId, ref: { node: g.node, type: g.type, vmid: g.vmid }, guest: g, pending,
 })
 
 const zone = (over: Partial<MicrosegZone> = {}): MicrosegZone => ({
@@ -43,7 +45,7 @@ const zone = (over: Partial<MicrosegZone> = {}): MicrosegZone => ({
 })
 
 const exception = (over: Partial<MicrosegException> = {}): MicrosegException => ({
-  id: 'e1', policy_id: 'p1', zone_id: 'z-db',
+  id: 'e1', policy_id: 'p1', connection_id: 'c1', zone_id: 'z-db',
   sources: [{ type: 'qemu', vmid: 101, name: 'app-01' }, { type: 'qemu', vmid: 102, name: 'app-02' }],
   destinations: [{ type: 'qemu', vmid: 201, name: 'db-01' }],
   services: [{ proto: 'tcp', dport: '5432' }],
@@ -198,7 +200,7 @@ describe('exceptionStatus', () => {
 
   it('misses a guest absent from the inventory, source or destination', () => {
     expect(exceptionStatus(exception(), zone(), members, [app1, db1])).toBe('missing_guest')
-    const gone: ZoneMember = { ref: { node: 'pve1', type: 'qemu', vmid: 201 }, guest: null, pending: true }
+    const gone: ZoneMember = { connectionId: 'c1', ref: { node: 'pve1', type: 'qemu', vmid: 201 }, guest: null, pending: true }
     expect(exceptionStatus(exception(), zone(), [gone], [app1, app2])).toBe('missing_guest')
   })
 
@@ -322,10 +324,10 @@ describe('exceptionFromSuggestion', () => {
   const db = guest(201, 'db-01', { type: 'lxc', ips: ['10.0.2.9'] })
   const other = guest(202, 'db-02', { ips: ['10.0.2.10'] })
   const guests = [app, db, other]
-  const memberOf = (g: PolicyGuest, pending = false): ZoneMember => ({ ref: { node: g.node, type: g.type, vmid: g.vmid }, guest: g, pending })
+  const memberOf = (g: PolicyGuest, pending = false): ZoneMember => ({ connectionId: g.connectionId, ref: { node: g.node, type: g.type, vmid: g.vmid }, guest: g, pending })
   const members = [memberOf(db)]
   const observed = (over: Partial<MicrosegSuggestion> = {}): MicrosegSuggestion => ({
-    id: 's1', policy_id: 'p1', kind: 'would_block', src_key: 'k', src_ip: '10.0.1.5', src_zone_id: 'z-app', dst_ip: '10.0.2.9', dst_zone_id: 'z-db',
+    id: 's1', policy_id: 'p1', connection_id: 'c1', kind: 'would_block', src_key: 'k', src_ip: '10.0.1.5', src_zone_id: 'z-app', dst_ip: '10.0.2.9', dst_zone_id: 'z-db',
     proto: 'tcp', dport: '8443', hits: 3, first_seen: '2026-11-01T10:00:00Z', last_seen: '2026-11-02T10:00:00Z', status: 'pending', ...over,
   })
 
@@ -383,7 +385,7 @@ describe('exceptionFromSuggestion', () => {
 describe('exceptionCovered', () => {
   const draft = { sources: [{ type: 'qemu' as const, vmid: 101, name: 'app-01' }], destinations: [{ type: 'qemu' as const, vmid: 201, name: 'db-01' }], services: ['postgresql'] }
   const stored = (over: Partial<MicrosegException> = {}): MicrosegException => ({
-    id: 'e1', policy_id: 'p1', zone_id: 'z-db', created_by: 'me', comment: '',
+    id: 'e1', policy_id: 'p1', connection_id: 'c1', zone_id: 'z-db', created_by: 'me', comment: '',
     sources: [{ type: 'qemu', vmid: 101, name: 'old-name' }, { type: 'qemu', vmid: 102, name: 'app-02' }],
     destinations: [{ type: 'qemu', vmid: 201, name: 'db-01' }],
     services: [{ proto: 'tcp', dport: '22' }, { proto: 'tcp', dport: '5432' }],
@@ -475,5 +477,38 @@ describe('draftMatches', () => {
     expect(matches('5432')).toBe(true)
     expect(matches('TCP/8443')).toBe(true)
     expect(matches('ssh')).toBe(false)
+  })
+})
+
+describe('exceptions of a policy shared by several clusters', () => {
+  const link = (connection_id: string, active = true) => ({ connection_id, active })
+  const names: Record<string, string> = { c1: 'PVE-PROD', c2: 'PVE-DR', c3: 'LAB' }
+  const nameOf = (id: string) => names[id] ?? null
+
+  it('offers the active clusters the user sees, by name: never one never applied, never one outside the scope', () => {
+    expect(exceptionClusterOptions([link('c1'), link('c2'), link('c3', false), link('c9')], nameOf)).toEqual([
+      { id: 'c2', name: 'PVE-DR' }, { id: 'c1', name: 'PVE-PROD' },
+    ])
+  })
+
+  it('reads a stored exception with its cluster, and gives it back to what reads an exception', () => {
+    const stored = exception({ connection_id: 'c2' })
+    expect(exceptionDraft(stored).connectionId).toBe('c2')
+    expect(draftException(exceptionDraft(stored), 'z-db').connection_id).toBe('c2')
+    // A row without a cluster (an older orchestrator) keeps the draft as it was.
+    expect('connectionId' in exceptionDraft(exception({ connection_id: '' }))).toBe(false)
+  })
+
+  it('keeps the guests or the members of one cluster, every one when no cluster is named', () => {
+    const dr = guest(101, 'app-dr', { connectionId: 'c2' })
+    expect(ofCluster([app1, dr], 'c2')).toEqual([dr])
+    expect(ofCluster([app1, dr], undefined)).toEqual([app1, dr])
+  })
+
+  it('matches the guests of the exception\'s own cluster only, the same VMID on another cluster being someone else', () => {
+    const dr = [guest(101, 'app-dr', { connectionId: 'c2' }), guest(102, 'app-dr2', { connectionId: 'c2' })]
+    const e = exception({ connection_id: 'c2' })
+    // On its own cluster, db-01 (201) is not in the inventory: the guest of c1 with that VMID is another VM.
+    expect(exceptionStatus(e, zone(), ofCluster([member(db1)], 'c2'), ofCluster([...inventory, ...dr], 'c2'))).toBe('no_destination')
   })
 })

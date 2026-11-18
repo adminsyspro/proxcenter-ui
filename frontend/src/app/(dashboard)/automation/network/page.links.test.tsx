@@ -30,8 +30,10 @@ vi.mock('@/contexts/LicenseContext', () => ({ Features: { MICROSEGMENTATION: 'mi
 vi.mock('@/components/guards/EnterpriseGuard', () => ({ default: ({ children }: { children: ReactNode }) => <>{children}</> }))
 vi.mock('@/components/guards/ProviderTenantGuard', () => ({ default: ({ children }: { children: ReactNode }) => <>{children}</> }))
 vi.mock('@/lib/api/firewall', () => ({}))
+const TWO_CONNECTIONS = [{ id: 'a5000', name: 'PVE9-A5000', type: 'pve' }, { id: 'dr', name: 'PVE-DR', type: 'pve' }]
+const pve = vi.hoisted(() => ({ connections: null as null | { id: string; name: string; type: string }[] }))
 vi.mock('@/hooks/useConnections', () => ({
-  usePVEConnections: () => ({ data: { data: [{ id: 'a5000', name: 'PVE9-A5000', type: 'pve' }, { id: 'dr', name: 'PVE-DR', type: 'pve' }] } }),
+  usePVEConnections: () => ({ data: { data: pve.connections ?? TWO_CONNECTIONS } }),
 }))
 // What each data hook was asked for: the connection the page computes.
 const asked = vi.hoisted(() => ({ firewall: [] as (string | null)[] }))
@@ -59,8 +61,12 @@ vi.mock('./components/ObjectsTab', () => ({ default: ({ view }: { view: string }
 vi.mock('./components/rules/SecurityGroupsPanel', () => ({ default: () => <div>groups tab</div> }))
 vi.mock('./components/LoggingTab', () => ({ default: () => <div>logging tab</div> }))
 vi.mock('./components/microseg/MicrosegTab', () => ({
-  default: ({ connectionId, initialSubTab, targetVm }: { connectionId: string; initialSubTab?: string; targetVm?: string | null }) => (
-    <div data-testid='microseg' data-connection={connectionId} data-subtab={initialSubTab ?? ''} data-vm={targetVm ?? ''}>microseg tab</div>
+  default: ({ connectionId, initialSubTab, targetVm, onDissociated }: { connectionId: string; initialSubTab?: string; targetVm?: string | null; onDissociated?: (left: string, remaining: string[]) => void }) => (
+    <div data-testid='microseg' data-connection={connectionId} data-subtab={initialSubTab ?? ''} data-vm={targetVm ?? ''}>
+      microseg tab
+      <button type='button' onClick={() => onDissociated?.(connectionId, ['dr', 'a5000'].filter(id => id !== connectionId))}>leave</button>
+      <button type='button' onClick={() => onDissociated?.('gone', [connectionId])}>another leaves</button>
+    </div>
   ),
 }))
 
@@ -74,8 +80,14 @@ const INVENTORY = {
     ],
   },
 }
+// The clusters sharing a policy, as GET clusters answers them for each connection (none set: the read fails).
+const clusterGroups: { ids: string[] | null } = { ids: null }
 const fetchMock = vi.fn(async (url: string) => {
   if (url === '/api/v1/inventory') return new Response(JSON.stringify(INVENTORY), { status: 200 })
+  if (clusterGroups.ids && /^\/api\/v1\/firewall\/microseg\/[^/]+\/clusters$/.test(url)) {
+    const clusters = clusterGroups.ids.map(id => ({ connection_id: id, active: true, stop_cluster_disabled: false, policy_id: 'p', created_at: '', activated_at: null }))
+    return new Response(JSON.stringify({ clusters, max: 8 }), { status: 200 })
+  }
   return new Response('{}', { status: 404 })
 })
 
@@ -101,6 +113,8 @@ beforeEach(() => {
 })
 afterEach(() => {
   cleanup()
+  clusterGroups.ids = null
+  pve.connections = null
   navigation.search = ''
   window.localStorage.clear()
   vi.unstubAllGlobals()
@@ -215,5 +229,93 @@ describe('the remembered connection', () => {
     expect((await screen.findByText('dashboard tab')).dataset.connection).toBe('a5000')
     getItem.mockRestore()
     setItem.mockRestore()
+  })
+})
+
+describe('the selector of Micro-segmentation and of the Dashboard', () => {
+  const clustersReads = () => fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/clusters'))
+
+  it('shows the clusters sharing one policy as one entry, valued with the group anchor', async () => {
+    clusterGroups.ids = ['dr', 'a5000']
+    open('tab=microseg&connection=dr')
+    await waitFor(() => expect(selectedName()).toBe('PVE-DR + PVE9-A5000'))
+    // A long group label is cut with an ellipsis: the whole label stays readable on hover.
+    expect(screen.getByTitle('PVE-DR + PVE9-A5000')).toBeInTheDocument()
+    // The tab stays on the connection of the link; the entry stands for the whole group.
+    expect(screen.getByTestId('microseg').dataset.connection).toBe('dr')
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    expect((await screen.findAllByRole('option')).map(o => o.textContent)).toEqual(['PVE-DR + PVE9-A5000'])
+  })
+
+  it('keeps the plain list on the other tabs, without reading any group', async () => {
+    clusterGroups.ids = ['dr', 'a5000']
+    open('tab=firewalling&connection=dr')
+    expect(await screen.findByText('rules tab')).toBeInTheDocument()
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    expect((await screen.findAllByRole('option')).map(o => o.textContent)).toEqual(['PVE9-A5000', 'PVE-DR'])
+    expect(clustersReads()).toHaveLength(0)
+  })
+
+  it('offers the entry of a shared policy on the Dashboard too, and keeps it selected from one of the two tabs to the other', async () => {
+    clusterGroups.ids = ['dr', 'a5000']
+    open('tab=dashboard&connection=dr')
+    await waitFor(() => expect(selectedName()).toBe('PVE-DR + PVE9-A5000'))
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    expect((await screen.findAllByRole('option')).map(o => o.textContent)).toEqual(['PVE-DR + PVE9-A5000'])
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+    // The entry stands for the group: the Dashboard stays on the connection of the link and shows the whole policy.
+    expect(screen.getByText('dashboard tab').dataset.connection).toBe('dr')
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Micro-segmentation' }))
+    expect((await screen.findByTestId('microseg')).dataset.connection).toBe('dr')
+    expect(selectedName()).toBe('PVE-DR + PVE9-A5000')
+    fireEvent.click(screen.getByRole('tab', { name: 'Dashboard' }))
+    expect(await screen.findByText('dashboard tab')).toBeInTheDocument()
+    expect(selectedName()).toBe('PVE-DR + PVE9-A5000')
+    // Each connection's group was read once for both tabs.
+    expect(clustersReads()).toHaveLength(2)
+
+    // Firewalling stays per connection.
+    fireEvent.click(screen.getByRole('tab', { name: 'Firewalling' }))
+    expect(await screen.findByText('rules tab')).toBeInTheDocument()
+    expect(selectedName()).toBe('PVE-DR')
+  })
+
+  it('moves to the cluster that remains when the connection the page is on is dissociated', async () => {
+    clusterGroups.ids = ['dr', 'a5000']
+    open('tab=microseg&connection=dr')
+    await waitFor(() => expect(selectedName()).toBe('PVE-DR + PVE9-A5000'))
+    clusterGroups.ids = ['a5000']
+    fireEvent.click(screen.getByRole('button', { name: 'leave' }))
+    await waitFor(() => expect(screen.getByTestId('microseg').dataset.connection).toBe('a5000'))
+    expect(window.localStorage.getItem('network.connection')).toBe('a5000')
+  })
+
+  it('stays on the group when another cluster leaves', async () => {
+    clusterGroups.ids = ['dr', 'a5000']
+    open('tab=microseg&connection=a5000')
+    await waitFor(() => expect(selectedName()).toBe('PVE-DR + PVE9-A5000'))
+    fireEvent.click(screen.getByRole('button', { name: 'another leaves' }))
+    expect(screen.getByTestId('microseg').dataset.connection).toBe('a5000')
+    expect(selectedName()).toBe('PVE-DR + PVE9-A5000')
+  })
+
+  it('keeps one entry per connection when the groups cannot be read', async () => {
+    open('tab=microseg&connection=dr')
+    await waitFor(() => expect(clustersReads().length).toBeGreaterThanOrEqual(2))
+    expect(selectedName()).toBe('PVE-DR')
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    expect((await screen.findAllByRole('option')).map(o => o.textContent)).toEqual(['PVE9-A5000', 'PVE-DR'])
+  })
+})
+
+describe('the selector of Micro-segmentation with one connection', () => {
+  it('reads no group of its own', async () => {
+    pve.connections = [{ id: 'a5000', name: 'PVE9-A5000', type: 'pve' }]
+    clusterGroups.ids = ['a5000']
+    open('tab=microseg')
+    expect(await screen.findByTestId('microseg')).toBeInTheDocument()
+    expect(selectedName()).toBe('PVE9-A5000')
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/clusters'))).toHaveLength(0)
   })
 })

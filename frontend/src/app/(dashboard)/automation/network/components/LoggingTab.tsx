@@ -15,6 +15,7 @@ import { Autocomplete, Box, InputAdornment, TextField, Tooltip, Typography, useT
 import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 import FirewallLogView from '@/components/firewall/FirewallLogView'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
+import { useMicrosegGroup } from '@/lib/microseg/useMicrosegGroup'
 
 import MicrosegEventsView from './MicrosegEventsView'
 
@@ -26,6 +27,8 @@ interface Props {
   nodesList: string[]
   securityGroups: SecurityGroup[]
   firewallMode: FirewallMode
+  /** The PVE connections the user sees: the names of the clusters sharing a micro-segmentation policy. */
+  connections?: { id: string; name: string }[]
 }
 
 interface Guest extends LogGuestInfo {
@@ -81,7 +84,7 @@ function useInventory(connectionId: string) {
   return { guests, nodeStatus, loading }
 }
 
-export default function LoggingTab({ selectedConnection, nodesList, securityGroups, firewallMode }: Props) {
+export default function LoggingTab({ selectedConnection, nodesList, securityGroups, firewallMode, connections }: Props) {
   const theme = useTheme()
   const t = useTranslations()
   const dark = theme.palette.mode === 'dark'
@@ -89,6 +92,12 @@ export default function LoggingTab({ selectedConnection, nodesList, securityGrou
 
   const { guests, nodeStatus, loading } = useInventory(selectedConnection)
   const [target, setTarget] = useState<Target | null>(null)
+  // The clusters sharing the micro-segmentation policy, read once that source is picked (nothing read before).
+  const group = useMicrosegGroup(target?.kind === 'microseg' ? selectedConnection : '')
+  const clusterName = useMemo(() => {
+    const names = new Map((connections ?? []).map(c => [c.id, c.name]))
+    return (id: string) => names.get(id) ?? id
+  }, [connections])
 
   // The source is offered once a revision of the policy has been applied: before that the engine has nothing to watch.
   const { data: policy, error: policyError } = useMicrosegPolicy(selectedConnection)
@@ -201,6 +210,8 @@ export default function LoggingTab({ selectedConnection, nodesList, securityGrou
           zones={zones}
           guests={guestsByVmid}
           filtersStart={picker}
+          clusterIds={group.loading ? undefined : group.ids}
+          clusterName={clusterName}
         />
       ) : target ? (
         <FirewallLogView

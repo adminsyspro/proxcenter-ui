@@ -7,9 +7,15 @@ import { useTranslations } from 'next-intl'
 import type { ListSuggestionsParams } from '@/lib/microseg/api'
 import type { MicrosegFlow, SuggestionAction } from '@/lib/microseg/types'
 import { useLastRevisionSnapshot } from '@/lib/microseg/useLastRevision'
+import { useMergedClusters } from '@/lib/microseg/useMerged'
 import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
+import { useCachedMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 
 import AssignGuestsDialog from './AssignGuestsDialog'
+import { shownClusterName } from './ClusterRunRow'
+import { useConnectionNodes } from './ConnectionGlyph'
+import { GroupGuestsUnread } from './GroupGuestsUnread'
+import { mapGuests, mapPveNodes, type ClusterNodeList, type ClusterOf } from './mapClusters'
 import EdgePanel from './EdgePanel'
 import GuestViewBar from './GuestViewBar'
 import { defaultCentre } from './guestViewModel'
@@ -20,8 +26,8 @@ import { applyInsideFilters } from './nodeViewModel'
 import { pairEndOf } from './pairModel'
 import { buildMatrix, matrixEdge, type MatrixEnd } from './matrixModel'
 import type { MicrosegSubTabProps } from './microsegTabTypes'
+import { useGroupGuests, withUnreachable } from './useGroupGuests'
 import { useZoneEdits } from './useZoneEdits'
-import { useZoneGuests } from './useZoneGuests'
 import ZoneCanvas from './ZoneCanvas'
 import ZoneMatrix from './ZoneMatrix'
 import ZoneSankey from './ZoneSankey'
@@ -31,9 +37,9 @@ import { targetFocus, targetRing, targetSankey, targetSuggestions, type TargetGu
 import { useMapTarget } from './useMapTarget'
 import {
   EXTERNAL_ID, OUTSIDE_ID, UNZONED_ID, filterEdges, focusSets, isPveGroup, pveNodeName, zoneNodeId,
-  type MapEdgeData, type MapInput, type MapMember, type MapNodeData, type PanelEdgeData,
+  type MapCluster, type MapEdgeData, type MapInput, type MapNodeData, type PanelEdgeData,
 } from './zoneGraph'
-import { guestKey, zoneMembers, type PolicyGuest, type ZoneMember } from './zoneModel'
+import { zoneMembers } from './zoneModel'
 import ZonePanel from './ZonePanel'
 
 /** The whole map reads the pending observed flows (unprotected and blocked) once; the API caps a page at 200. */
@@ -58,17 +64,7 @@ function selectedNodeOf(selectedZone: { id: string } | null, selection: Selectio
   return selection?.kind === 'guest' ? selection.id : null
 }
 
-const toMapMember = (m: ZoneMember): MapMember => ({
-  key: guestKey(m.ref),
-  name: m.guest?.name ?? `${m.ref.type}/${m.ref.vmid}`,
-  vmid: m.ref.vmid,
-  node: m.ref.node,
-  type: m.ref.type,
-  status: m.guest?.status ?? 'unknown',
-  ips: m.guest?.ips ?? [],
-  pending: m.pending,
-})
-const guestToMember = (g: PolicyGuest): MapMember => ({ key: guestKey(g), name: g.name, vmid: g.vmid, node: g.node, type: g.type, status: g.status, ips: g.ips ?? [], pending: false })
+const clusterNames = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 
 const sameFlow = (a: MicrosegFlow, b: MicrosegFlow) => a.src_zone_id === b.src_zone_id && a.src_cidr === b.src_cidr
   && a.dst_zone_id === b.dst_zone_id && a.dst_cidr === b.dst_cidr && a.proto === b.proto && a.dport === b.dport
@@ -85,12 +81,36 @@ const sameFlow = (a: MicrosegFlow, b: MicrosegFlow) => a.src_zone_id === b.src_z
  * to light it and its flows; click a zone for its panel, an edge (or a cell) for its flows. A double click on a zone
  * (or the button of its panel) enters it: the canvas shows the zone alone, its guests spread out with what they
  * exchange with each other and with the rest, until "Back to the map" or another rendering is picked. Nothing polls
- * beyond the shared hooks (one inventory read, one suggestions read).
+ * beyond the shared hooks (one inventory read per cluster, one suggestions read).
+ *
+ * A policy shared by several clusters draws the guests of every cluster the user sees (the inventory reads the other
+ * screens of the tab already make, same keys): each guest keyed by its cluster, type and VMID, its cluster said in its
+ * tooltip and on its line of the zone panel, the node view grouped per cluster. A cluster whose guests cannot be read is
+ * said in one line, the others are drawn; one outside the user's scope is never read and is counted in general words.
  */
-export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan, targetVm, pveNodes: nodeNames, pveNodeStatus }: MicrosegSubTabProps) {
+export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan, targetVm, pveNodes: nodeNames, pveNodeStatus, clusterIds, clusterName }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.overview')
   const tObs = useTranslations('microsegPilot.observation')
-  const { guests, status: guestsStatus } = useZoneGuests(connectionId)
+  const other = useTranslations('microsegPilot.plan.cluster')('other')
+  // The clusters sharing the policy (the connection alone until the group is known), and those the map reads: the
+  // ones the user sees, the tab's first (its read keeps the slot it had before the group was known).
+  const groupIds = useMemo(() => clusterIds ?? [connectionId], [clusterIds, connectionId])
+  const shared = groupIds.length > 1
+  const readIds = useMemo(
+    () => (shared ? [connectionId, ...groupIds.filter(id => id !== connectionId && shownClusterName(id, connectionId, clusterName) !== null)] : groupIds),
+    [shared, groupIds, connectionId, clusterName],
+  )
+  const hiddenClusters = groupIds.length - readIds.length
+  const { guests, status: guestsStatus, errors: readErrors } = useGroupGuests(readIds)
+  // The statuses the banner reads, from its cache (no request of their own): a cluster it says unreachable that lists
+  // no guest is one whose guests are missing.
+  const { byCluster: statuses } = useMergedClusters(shared ? readIds : [], useCachedMicrosegStatus)
+  const guestErrors = useMemo(() => (shared ? withUnreachable(readErrors, guests, statuses) : readErrors), [shared, readErrors, guests, statuses])
+  // The name of a cluster on the map: general words for one outside the user's scope, never its ID.
+  const memberCluster = useMemo(() => (shared ? (id: string) => shownClusterName(id, connectionId, clusterName, other) : undefined), [shared, connectionId, clusterName, other])
+  const clusterOf = useMemo<ClusterOf>(() => (memberCluster ? (id: string): MapCluster => ({ id, name: memberCluster(id) }) : null), [memberCluster])
+  // The node lists the page read for its connections (no request of their own): the other clusters' nodes and states.
+  const connectionNodes = useConnectionNodes()
   const suggestions = useMicrosegSuggestions(connectionId, PENDING_OBSERVED)
   const { revision } = useLastRevisionSnapshot(connectionId, policy.pending_changes ? policy.last_revision?.id : null)
   const [selection, setSelection] = useState<Selection | null>(null)
@@ -101,7 +121,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const [assigning, setAssigning] = useState(false)
   const [resolved, setResolved] = useState<SuggestionAction | null>(null)
   const [filters, setFilters] = useFlowFilters()
-  const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
+  const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan, clusterName })
   const [view, setView] = useMapView()
   const [centre, setCentre] = useState<string | null>(null)
   // The zone that was entered (a double click on it): the canvas shows its inside until the way back, without
@@ -118,7 +138,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const zonesById = useMemo(() => new Map(zones.map(z => [z.id, z])), [zones])
   const insideZone = inside ? zonesById.get(inside) ?? null : null
   const shown: ShownView = insideZone ? 'inside' : view
-  const mapTarget = useMapTarget(guests, membersByZone, targetVm)
+  const mapTarget = useMapTarget(guests, membersByZone, targetVm, shared)
   const { target } = mapTarget
 
   // The flows of the draft that the last applied revision does not have (null: not known yet, nothing marked).
@@ -131,16 +151,28 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     return new Set(flows.filter(f => !before.has(f.id) || !sameFlow(before.get(f.id)!, f)).map(f => f.id))
   }, [policy.pending_changes, policy.last_revision, revision, flows])
 
+  // The clusters of a shared policy, the tab's first, then by name: the node view groups their nodes in this order.
+  const clusters = useMemo(() => (clusterOf
+    ? readIds.map(clusterOf).sort((a, b) => Number(b.id === connectionId) - Number(a.id === connectionId) || clusterNames.compare(a.name, b.name) || a.id.localeCompare(b.id))
+    : null), [clusterOf, readIds, connectionId])
   const input = useMemo<MapInput>(() => {
-    const members = membersKnown ? new Map([...membersByZone].map(([id, list]) => [id, list.map(toMapMember)])) : null
-    const zoned = new Set([...membersByZone.values()].flatMap(list => list.map(m => guestKey(m.ref))))
-    const unzoned = membersKnown ? guests.filter(g => g.status === 'running' && !zoned.has(guestKey(g))).map(guestToMember) : null
-    // The nodes of the node view: those the page knows and those of the guests, each with every guest it holds.
-    const perNode = new Map<string, number>((nodeNames ?? []).map(name => [name, 0]))
-    for (const g of guests) if (g.node) perNode.set(g.node, (perNode.get(g.node) ?? 0) + 1)
-    const pveNodes = membersKnown ? [...perNode].map(([node, count]) => ({ node, guests: count, status: pveNodeStatus?.[node] })) : null
-    return { zones, flows, suggestions: suggestions.data ?? [], members, unzoned, unapplied, exceptions, pveNodes }
-  }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied, exceptions, nodeNames, pveNodeStatus])
+    const drawn = membersKnown ? mapGuests(membersByZone, guests, clusterOf) : null
+    // The nodes of the node view: those the page knows and those of the guests, each with every guest it holds; on a
+    // shared policy per cluster read (the tab's nodes from the page, the others' from the page's node lists).
+    const own: ClusterNodeList = { id: connectionId, nodes: nodeNames, status: pveNodeStatus }
+    const lists: ClusterNodeList[] = clusters
+      ? clusters.filter(c => !(c.id in guestErrors)).map(c => {
+        const read = connectionNodes[c.id]
+        if (c.id === connectionId && nodeNames) return own
+        return { id: c.id, nodes: read?.map(n => n.node), status: Object.fromEntries((read ?? []).flatMap(n => (n.status ? [[n.node, n.status]] : []))) }
+      })
+      : [own]
+    const pveNodes = membersKnown ? mapPveNodes(guests, lists, !!clusters) : null
+    return {
+      zones, flows, suggestions: suggestions.data ?? [], members: drawn?.members ?? null, unzoned: drawn?.unzoned ?? null, unapplied, exceptions, pveNodes,
+      ...(clusters ? { clusters } : {}),
+    }
+  }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied, exceptions, nodeNames, pveNodeStatus, clusterOf, clusters, connectionId, guestErrors, connectionNodes])
   // The zone of the guest view: the one picked, else (or once it is deleted) the one with the most observed traffic.
   const centreId = useMemo(
     () => (centre && zonesById.has(centre) ? centre : defaultCentre(zones, input.suggestions)),
@@ -195,16 +227,21 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const tNode = useTranslations('microsegPilot.overview.node')
   const tEdge = useTranslations('microsegPilot.overview.edge')
   const nameOf = useCallback((nodeId: string) => {
+    // A Proxmox node of a shared policy says its cluster: two clusters may each have a "pve1".
+    const pveName = (id: string) => {
+      const d = graph.nodes.find(n => n.id === id)?.data as unknown as MapNodeData | undefined
+      return d?.kind === 'pveNode' && d.cluster ? `${d.node} (${d.cluster.name})` : pveNodeName(id)
+    }
     if (nodeId === EXTERNAL_ID) return tNode('external')
     if (nodeId === OUTSIDE_ID) return tNode('outside')
     if (nodeId.startsWith('zone:')) return zonesById.get(nodeId.slice(5))?.name ?? nodeId
     if (nodeId.startsWith('ip:')) return nodeId.slice(3)
-    if (isPveGroup(nodeId)) return pveNodeName(nodeId)
+    if (isPveGroup(nodeId)) return pveName(nodeId)
     const node = graph.nodes.find(n => n.id === nodeId)
     const d = node?.data as unknown as MapNodeData | undefined
     if (!d) return nodeId
     const zoneGroupName = (groupId: string) => (groupId === UNZONED_ID ? tNode('unzoned', { count: (graph.nodes.find(n => n.id === UNZONED_ID)?.data as { count?: number } | undefined)?.count ?? 0 }) : zonesById.get(groupId)?.name ?? groupId)
-    const groupName = (groupId: string) => (isPveGroup(groupId) ? pveNodeName(groupId) : zoneGroupName(groupId))
+    const groupName = (groupId: string) => (isPveGroup(groupId) ? pveName(groupId) : zoneGroupName(groupId))
     if (d.kind === 'guest') return `${d.member.name} (${groupName(d.groupId)})`
     if (d.kind === 'more') return `+${d.count} (${groupName(d.groupId)})`
     if (d.kind === 'unzoned') return tNode('unzoned', { count: d.count })
@@ -224,6 +261,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const targetColor = targetRing(target, zonesById)
   const targetFlowCount = useMemo(() => (target ? targetSuggestions(input.suggestions, target).length : 0), [target, input.suggestions])
   const nodes = useMemo(() => graph.nodes.map(n => {
+    // The frame of a cluster on the node view is context: never lit, dimmed or faint.
+    if ((n.data as unknown as MapNodeData).kind === 'pveCluster') return n
     if (lock && n.id === lock.node) return { ...n, selected: n.id === selectedNode, className: 'microseg-target', data: { ...n.data, target: targetColor } }
     const selected = n.id === selectedNode
     const dimmed = (!!lit && !lit.nodes.has(n.id)) || (!!isolated && !isolated.nodes.has(n.id))
@@ -323,6 +362,10 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     )
   }
 
+  // Some cluster's guests could not be read: the members of a zone panel are not all counted.
+  const membersNote = shared && guestsStatus === 'ready' && Object.keys(guestErrors).length > 0
+    ? <GroupGuestsUnread errors={guestErrors} clusterName={clusterName} counted />
+    : null
   // The node view draws guests only: it says so when their list could not be read, or when there is none to draw.
   let nodesNote: 'unavailable' | 'none' | null = null
   if (shown === 'nodes' && guestsStatus === 'error') nodesNote = 'unavailable'
@@ -338,7 +381,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
           <MapToolbar
             view={insideZone ? null : view}
             onView={changeView}
-            lead={<TargetPicker candidates={mapTarget.candidates} zonesById={zonesById} target={target} onTarget={changeTarget} onShowPanel={showTarget} observedCount={targetFlowCount} />}
+            lead={<TargetPicker candidates={mapTarget.candidates} zonesById={zonesById} target={target} onTarget={changeTarget} onShowPanel={showTarget} observedCount={targetFlowCount} clusterName={memberCluster} />}
             filters={filters}
             onFilters={setFilters}
           />
@@ -349,6 +392,14 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
           </Tooltip>
         )}
       </Box>
+      {shared && guestsStatus !== 'loading' && Object.keys(guestErrors).length > 0 && (
+        <Box sx={{ mb: 1, minWidth: 0 }}><GroupGuestsUnread errors={guestErrors} clusterName={clusterName} /></Box>
+      )}
+      {hiddenClusters > 0 && (
+        <Typography noWrap variant='body2' color='text.secondary' data-testid='map-hidden-clusters' sx={{ mb: 1, minWidth: 0 }}>
+          {t('hiddenClusters', { count: hiddenClusters })}
+        </Typography>
+      )}
       {suggestions.error && !suggestions.data && (
         <Alert severity='warning' sx={{ mb: 1 }}>{t('suggestionsError')}</Alert>
       )}
@@ -451,6 +502,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
               onAssign={() => setAssigning(true)}
               onInside={insideZone?.id === selectedZone.id ? undefined : () => enterZone(selectedZone.id)}
               connectionId={connectionId}
+              clusterName={memberCluster}
+              membersNote={membersNote}
               version={policy.version}
               suggestions={input.suggestions}
               reloadPolicy={reloadPolicy}
@@ -463,7 +516,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
           )}
           {targetPanel && target && (
             <TargetPanel
-              key={target.key}
+              key={target.id}
               target={target}
               zonesById={zonesById}
               suggestions={input.suggestions}
@@ -513,6 +566,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
         <AssignGuestsDialog
           open
           connectionId={connectionId}
+          clusterIds={readIds}
+          clusterName={clusterName}
           zone={selectedZone}
           policy={policy}
           reloadPolicy={reloadPolicy}

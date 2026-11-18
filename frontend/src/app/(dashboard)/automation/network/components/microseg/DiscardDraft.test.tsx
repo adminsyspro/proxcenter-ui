@@ -67,6 +67,20 @@ describe('Discard of the pending micro-segmentation changes', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
+  it('on 409 BUSY (the engine finishing a scheduled pass): says so, names no application, keeps the dialog open', async () => {
+    fetchSpy.mockImplementation(async (url: unknown) => (String(url).endsWith('/policy/discard')
+      ? json(409, { code: 'BUSY', error: 'microseg: an application or a removal is already running on this connection' })
+      : json(200, POLICY)))
+    renderBar()
+    fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Discard' }))
+    const line = await within(dialog).findByRole('alert')
+    expect(line).toHaveTextContent('The engine is finishing work on a cluster of this policy (a scheduled pass or another action). Try again in a moment.')
+    expect(line.textContent).not.toMatch(/\bappl|Another operation/i)
+    expect(discardCalls()).toHaveLength(1)
+  })
+
   it('a read-only user sees Discard disabled, with the reason', async () => {
     renderBar(false)
     const button = screen.getByRole('button', { name: 'Discard changes' })

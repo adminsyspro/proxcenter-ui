@@ -4,14 +4,17 @@ import { useMemo, useState } from 'react'
 import { Alert, Box, CircularProgress, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
+import { rowCluster } from '@/lib/microseg/pendingChanges'
 import { isAggregateDst, type MicrosegSuggestion, type MicrosegZone, type SuggestionAction } from '@/lib/microseg/types'
+import { clustersToRead } from '@/lib/microseg/useMerged'
 import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 
+import { shownClusterName } from './ClusterRunRow'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import type { MicrosegSubTabProps, ObservedService } from './microsegTabTypes'
 import { BulkBar, FlowExceptionDialog, ObservationLegend, useFlowExceptions, type FlowException } from './ObservationActions'
 import ObservationFilters, { type ObservationFilterValues } from './ObservationFilters'
-import { decodeCollapsed, destinationKey, encodeCollapsed } from './observationModel'
+import { clusterFilterOptions, decodeCollapsed, destinationKey, encodeCollapsed } from './observationModel'
 import ObservationTable from './ObservationTable'
 import { destinationName, endpoint } from './ObservationRow'
 import ObservedFlowDialog from './ObservedFlowDialog'
@@ -20,7 +23,7 @@ import { useResolveSuggestions } from './observationParts'
 import { PrevNextPager } from './PolicyPager'
 import { useNow } from './useNow'
 import { usePendingChanges } from './usePendingChanges'
-import { useZoneGuests } from './useZoneGuests'
+import { useGroupGuests } from './useGroupGuests'
 import { useStored } from './useStoredChoice'
 import { uncoveredOf, useZoneUncovered } from './useZoneUncovered'
 
@@ -34,8 +37,9 @@ export const OBSERVATION_PAGE_SIZE = 25
  * The guests by address, from the inventory the tab already reads (one request for the whole folder), and the gateways
  * of the zones ("Gateway of web (10.30.0.1)"): a guest keeps its name when it is also a gateway.
  */
-function useAddressNames(connectionId: string, zones: readonly MicrosegZone[]): { guestName: (ip: string) => string | undefined; gatewayName: (ip: string) => string | undefined } {
-  const { guests } = useZoneGuests(connectionId)
+function useAddressNames(clusterIds: readonly string[], zones: readonly MicrosegZone[]): { guestName: (ip: string) => string | undefined; gatewayName: (ip: string) => string | undefined } {
+  // The guests of every cluster of the policy (the connection alone for one cluster: the same single request).
+  const { guests } = useGroupGuests(clusterIds)
   const tg = useTranslations('microsegPilot.gateway')
   const gateways = useMemo(() => gatewayNameMap(zones, names => tg('name', { zones: names })), [zones, tg])
   const byIp = useMemo(() => {
@@ -84,11 +88,25 @@ function FocusBanner({ testId, text, clearText, onClear }: { testId: string; tex
   )
 }
 
-export default function ObservationPanel({ connectionId, policy, reloadPolicy, startRun, onOpenSettings, observationZone = null, observationFocus = null }: MicrosegSubTabProps) {
+export default function ObservationPanel({ connectionId, policy, reloadPolicy, startRun, onOpenSettings, observationZone = null, observationFocus = null, anchor, clusterIds, clusterName }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.observation')
+  const tc = useTranslations('microsegPilot.plan.cluster')
+  // One read of the suggestions returns every cluster's (the backend's); the cluster filter is the server's too.
+  const ids = useMemo(() => clustersToRead(connectionId, { anchor, clusterIds }), [connectionId, anchor, clusterIds])
+  const shared = ids.length > 1
+  const clusterOptions = useMemo(() => clusterFilterOptions(ids, clusterName), [ids, clusterName])
+  const clusterOf = useMemo(() => (shared
+    ? (s: MicrosegSuggestion) => {
+      const id = rowCluster(s, connectionId)
+      return { id, name: shownClusterName(id, connectionId, clusterName, tc('other')) }
+    }
+    : undefined), [shared, connectionId, clusterName, tc])
   // Opened from a Policy zone group: filtered on that zone; from a figure of the Dashboard: on its type of flow. Both
   // stay filters the user can clear.
-  const [filters, setFilters] = useState<ObservationFilterValues>(() => ({ kind: observationFocus?.kind ?? '', status: 'pending', zone: observationZone ?? observationFocus?.zoneId ?? '', direction: '' }))
+  const [filters, setFilters] = useState<ObservationFilterValues>(() => ({
+    kind: observationFocus?.kind ?? '', status: 'pending', zone: observationZone ?? observationFocus?.zoneId ?? '', direction: '',
+    ...(observationFocus?.cluster ? { cluster: observationFocus.cluster } : {}),
+  }))
   // The service a row of the Dashboard opened the list on: not one of the selects, shown in its own line above the table.
   const [service, setService] = useState<ObservedService | null>(() => observationFocus?.service ?? null)
   // The flows whose source is in no zone, opened from the "Unknown source" figures of the Dashboard.
@@ -99,7 +117,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, s
   // The flow opened in its dialog.
   const [detail, setDetail] = useState<MicrosegSuggestion | null>(null)
   // "Allow this flow only": the exception the flow of the dialog would be, then the one being written in its own dialog.
-  const flowExceptionOf = useFlowExceptions(connectionId, policy)
+  const flowExceptionOf = useFlowExceptions(connectionId, policy, clusterName)
   const [exception, setException] = useState<FlowException | null>(null)
   const [exceptionSaved, setExceptionSaved] = useState(false)
 
@@ -112,9 +130,10 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, s
     direction: filters.direction || undefined,
     service: service?.tokens,
     source: unknownSource ? 'unknown' : undefined,
+    connection: shared && filters.cluster ? filters.cluster : undefined,
   })
   const { busy, failure, clearFailure, resolve: resolveIds } = useResolveSuggestions(connectionId, policy.version, reloadPolicy, reload)
-  const { guestName, gatewayName } = useAddressNames(connectionId, policy.zones)
+  const { guestName, gatewayName } = useAddressNames(ids.length > 0 ? ids : [connectionId], policy.zones)
   const zonesById = useMemo(() => new Map(policy.zones.map(z => [z.id, z])), [policy.zones])
   const rows = useMemo(() => (data ?? []).slice(0, OBSERVATION_PAGE_SIZE), [data])
   const hasNext = (data?.length ?? 0) > OBSERVATION_PAGE_SIZE
@@ -217,7 +236,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, s
 
   return (
     <Box sx={{ px: 3, pb: 3 }}>
-      <ObservationFilters values={filters} zones={policy.zones} onChange={changeFilters} />
+      <ObservationFilters values={filters} zones={policy.zones} onChange={changeFilters} clusters={clusterOptions} />
       {filters.zone && <ZoneFilterBanner connectionId={connectionId} policy={policy} zoneId={filters.zone} />}
       {service && <FocusBanner testId='observation-service-filter' text={t('serviceBanner', { service: service.label, ports: service.tokens.join(', ') })} clearText={t('serviceBannerClear')} onClear={clearService} />}
       {unknownSource && <FocusBanner testId='observation-source-filter' text={t('sourceBanner')} clearText={t('sourceBannerClear')} onClear={clearUnknownSource} />}
@@ -270,6 +289,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, s
               nextFlow={hasNext ? data[OBSERVATION_PAGE_SIZE] : undefined}
               collapsed={collapsed}
               onToggleGroup={toggleGroup}
+              clusterOf={clusterOf}
             />
           )}
         </>
@@ -295,6 +315,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, s
           reloadPolicy={reloadPolicy}
           startRun={startRun}
           exception={exception}
+          clusterName={clusterName}
           onSaved={exceptionWritten}
           onClose={() => setException(null)}
         />

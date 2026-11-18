@@ -2,8 +2,9 @@
 // compiles to, what state an exception is in, and how a list names it. Pure functions, no i18n: the callers
 // translate the service ids and the statuses.
 
-import type { ExceptionService, GuestRefLite, MicrosegException, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
+import type { ExceptionService, GuestRefLite, MicrosegCluster, MicrosegException, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
+import type { NamedConnection } from './clusterModel'
 import { parseTypedService } from './zoneForm'
 import { guestKey } from './zoneModel'
 import type { PolicyGuest, ZoneMember } from './zoneModel'
@@ -215,14 +216,16 @@ export function namedGuests(refs: readonly GuestRefLite[], guests: readonly Poli
 
 /**
  * An exception as the dialogs edit it: its guests in the order they were picked, its services as the choices of the
- * dialog (`servicesToChoices`). Without `id` it is not written yet.
+ * dialog (`servicesToChoices`). Without `id` it is not written yet. `connectionId` is the cluster it belongs to (its
+ * guests are guests of that cluster, and it is written through that cluster); absent, it is the tab's.
  */
-export type ExceptionDraft = { id?: string; sources: GuestRefLite[]; destinations: GuestRefLite[]; services: string[]; comment: string }
+export type ExceptionDraft = { id?: string; connectionId?: string; sources: GuestRefLite[]; destinations: GuestRefLite[]; services: string[]; comment: string }
 
-/** The draft of a stored exception: same guests and services, in the stored order. */
+/** The draft of a stored exception: same cluster, guests and services, in the stored order. */
 export function exceptionDraft(e: MicrosegException): ExceptionDraft {
   return {
     id: e.id,
+    ...(e.connection_id ? { connectionId: e.connection_id } : {}),
     sources: e.sources.map(r => ({ ...r })),
     destinations: e.destinations.map(r => ({ ...r })),
     services: servicesToChoices(e.services),
@@ -315,9 +318,32 @@ export function draftChanged(draft: ExceptionDraft, stored: MicrosegException): 
   return JSON.stringify(draftBody(draft)) !== JSON.stringify(draftBody({ sources, destinations, services: servicesToChoices(services), comment }))
 }
 
-/** A draft read as an exception of `zoneId`, for what takes one (`exceptionLabel`, `exceptionStatus`). */
+/** A draft read as an exception of `zoneId`, for what takes one (`exceptionLabel`, `exceptionStatus`). Its `connection_id` is the draft's cluster, empty without one. */
 export function draftException(draft: ExceptionDraft, zoneId: string): MicrosegException {
-  return { id: draft.id ?? '', policy_id: '', zone_id: zoneId, created_by: '', ...draftBody(draft) }
+  return { id: draft.id ?? '', policy_id: '', connection_id: draft.connectionId ?? '', zone_id: zoneId, created_by: '', ...draftBody(draft) }
+}
+
+/**
+ * The guests (or the zone members) of one cluster of a shared policy, for what matches the guests of an exception by
+ * type and VMID: the same VMID on another cluster is another VM. Every one when no cluster is named (one cluster).
+ */
+export function ofCluster<T extends { connectionId: string }>(items: readonly T[], cluster: string | undefined): T[] {
+  return cluster ? items.filter(i => i.connectionId === cluster) : [...items]
+}
+
+const byName = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+/**
+ * The clusters a new exception of a shared policy may be written on: the active ones (an exception on a cluster never
+ * applied protects nothing there) that the user sees (`nameOf` gives null for the others), sorted by name.
+ */
+export function exceptionClusterOptions(clusters: readonly Pick<MicrosegCluster, 'connection_id' | 'active'>[], nameOf: (id: string) => string | null): NamedConnection[] {
+  return clusters
+    .flatMap(c => {
+      const name = c.active ? nameOf(c.connection_id) : null
+      return name === null ? [] : [{ id: c.connection_id, name }]
+    })
+    .sort((a, b) => byName.compare(a.name, b.name) || a.id.localeCompare(b.id))
 }
 
 /** The display name of a listed service that is a product or protocol name, the same in every language; "ping" and "all" are translated by the caller. */

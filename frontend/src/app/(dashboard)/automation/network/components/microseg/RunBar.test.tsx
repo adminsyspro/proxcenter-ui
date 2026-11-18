@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProviders'
 import type { MicrosegRun, MicrosegRunProgress } from '@/lib/microseg/types'
 
-import RunBar from './RunBar'
+import RunBar, { groupProgress } from './RunBar'
 import { run } from './policyTestKit'
 
 const at = (progress: MicrosegRunProgress): MicrosegRun => run('running', { progress } as MicrosegRun['result'])
@@ -60,5 +60,30 @@ describe('run bar', () => {
   it('ignores the progress left on a run that ended', () => {
     show(run('failed', { progress: { phase: 'writing', done: 1, total: 2 } } as MicrosegRun['result']))
     expect(screen.queryByText(/writing to Proxmox/)).toBeNull()
+  })
+})
+
+describe('groupProgress', () => {
+  const at = (phase: string, done: number, total: number) => run('running', { progress: { phase, done, total } } as MicrosegRun['result'])
+
+  it('sums the steps written on every cluster', () => {
+    expect(groupProgress([at('writing', 3, 10), at('writing', 5, 10)])).toEqual({ phase: 'writing', done: 8, total: 20 })
+  })
+
+  it('counts a finished cluster as done while the others write', () => {
+    expect(groupProgress([at('writing', 3, 10), run('done', { guests: 1, members: 1, steps: 4, drifts: 0 })])).toEqual({ phase: 'writing', done: 7, total: 14 })
+  })
+
+  it('shows the furthest phase reached, with the counts of the runs in it', () => {
+    expect(groupProgress([at('reading', 2, 5), at('reading', 1, 4)])).toEqual({ phase: 'reading', done: 3, total: 9 })
+  })
+
+  it('tells nothing while no run tells anything', () => {
+    expect(groupProgress([null, run('running')])).toBeUndefined()
+  })
+
+  it('is indeterminate while a running cluster is behind the furthest phase, never full before every cluster is done', () => {
+    expect(groupProgress([at('writing', 10, 10), at('reading', 2, 5)])).toEqual({ phase: 'writing', done: 0, total: 0 })
+    expect(groupProgress([at('writing', 10, 10), run('running')])).toEqual({ phase: 'writing', done: 0, total: 0 })
   })
 })

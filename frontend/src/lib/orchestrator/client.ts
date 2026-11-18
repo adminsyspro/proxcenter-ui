@@ -32,6 +32,8 @@ export interface OrchestratorRequestOptions {
   timeout?: number
   /** See OrchestratorPathOptions.encodedSlash. */
   encodedSlash?: boolean
+  /** Aborts the call when it fires (the caller's own request being dropped). */
+  signal?: AbortSignal
 }
 
 // The path grammar lives in ./path (no dependency, so a route under test keeps
@@ -84,7 +86,7 @@ export async function orchestratorFetch<T>(
   path: string,
   options: OrchestratorRequestOptions = {}
 ): Promise<T> {
-  const { method = 'GET', body, timeout = 30000 } = options
+  const { method = 'GET', body, timeout = 30000, signal } = options
 
   assertOrchestratorPath(path, { encodedSlash: options.encodedSlash })
   const url = `${orchestratorBaseUrlForPath(path)}/api/v1${path}`
@@ -99,7 +101,7 @@ export async function orchestratorFetch<T>(
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
-      signal: controller.signal,
+      signal: callSignal(controller, signal),
       cache: 'no-store',
     })
 
@@ -117,8 +119,17 @@ export async function orchestratorFetch<T>(
     return (await res.json()) as T
   } catch (error: any) {
     clearTimeout(timeoutId)
-    throw translateFetchFailure(error)
+    throw translateFetchFailure(error, signal)
   }
+}
+
+/**
+ * The signal of one call: its timeout, and the caller's own signal when there is one (the caller's request being
+ * dropped). AbortSignal.any adds no listener to the caller's signal, so a call leaves nothing behind on it once it is
+ * over, and a caller that goes away still aborts the request and the reading of its answer.
+ */
+function callSignal(timeout: AbortController, caller: AbortSignal | undefined): AbortSignal {
+  return caller ? AbortSignal.any([timeout.signal, caller]) : timeout.signal
 }
 
 /**
@@ -126,8 +137,9 @@ export async function orchestratorFetch<T>(
  * unreachable orchestrator (tagged so API routes can avoid noisy logging) or
  * the error itself.
  */
-function translateFetchFailure(error: any): any {
-  if (error.name === 'AbortError') {
+function translateFetchFailure(error: any, caller?: AbortSignal): any {
+  // A dropped caller rejects the fetch with the reason it was aborted with, whatever its shape.
+  if (error?.name === 'AbortError' || caller?.aborted) {
     return new Error('Orchestrator request timeout')
   }
 
@@ -151,6 +163,8 @@ export interface OrchestratorRelayOptions {
   timeout?: number
   /** Aborts the call when it fires (the caller's own request being dropped). */
   signal?: AbortSignal
+  /** Sent with the server headers; never in place of one of them (API key, tenant, actor, content type). */
+  headers?: Record<string, string>
 }
 
 /**
@@ -167,18 +181,14 @@ export async function orchestratorRelay(
 
   assertOrchestratorPath(path)
   const url = `${orchestratorBaseUrlForPath(path)}/api/v1${path}`
-  const headers = await orchestratorRequestHeaders()
+  const headers = { ...options.headers, ...(await orchestratorRequestHeaders()) }
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeout)
-  const onCallerAbort = () => controller.abort()
-
-  if (signal?.aborted) controller.abort()
-  else signal?.addEventListener('abort', onCallerAbort, { once: true })
 
   try {
-    return await fetch(url, { method, headers, body, signal: controller.signal, cache: 'no-store' })
+    return await fetch(url, { method, headers, body, signal: callSignal(controller, signal), cache: 'no-store' })
   } catch (error: any) {
-    throw translateFetchFailure(error)
+    throw translateFetchFailure(error, signal)
   } finally {
     clearTimeout(timeoutId)
   }

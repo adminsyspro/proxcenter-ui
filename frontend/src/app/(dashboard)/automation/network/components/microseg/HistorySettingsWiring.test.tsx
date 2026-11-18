@@ -208,6 +208,73 @@ describe('removal run', () => {
   }, 20_000)
 })
 
+describe('removal run of one cluster of a shared policy', () => {
+  const C2 = '/api/v1/firewall/microseg/c2'
+  const CONNECTIONS = [{ id: 'c1', name: 'PVE-PROD' }, { id: 'c2', name: 'PVE-DR' }]
+  const link = (connection_id: string) => ({ connection_id, active: true, stop_cluster_disabled: false, policy_id: 'p1', created_at: '', activated_at: null })
+  const removed = (id: string) => ({ ...run('done', { guests: 2, members: 2, steps: 4, drifts: 0, complete: true, notes: [] }), id, kind: 'remove' as const })
+
+  /** c1 (the tab) and c2 share the policy until the removal run ends; c2's status cannot be read, which its line says. */
+  function setupShared(leaving: 'c1' | 'c2') {
+    let left = false
+    mock.routes['GET /clusters'] = () => reply(200, { clusters: left ? [link('c1')] : [link('c1'), link('c2')], max: 8 })
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('a')], last_revision: REVISION_HEAD, clusters: left ? [link('c1')] : [link('c1'), link('c2')] }))
+    mock.routes[`GET ${C2}/status`] = () => reply(504, { code: 'ORCHESTRATOR_TIMEOUT', error: 't' })
+    const base = leaving === 'c1' ? '' : C2
+    mock.routes[`POST ${base}/remove`] = () => reply(202, { run_id: 'rm1' })
+    mock.routes[`GET ${base}/runs/rm1`] = () => {
+      left = true
+      return reply(200, removed('rm1'))
+    }
+  }
+
+  async function removeFrom(name: string) {
+    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove…' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Remove micro-segmentation?' })
+    fireEvent.mouseDown(within(confirm).getByRole('combobox', { name: 'Cluster or node' }))
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name }))
+    fireEvent.change(within(confirm).getByRole('textbox'), { target: { value: name } })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Remove' }))
+  }
+
+  it.each([['the tab\'s own cluster', 'c1', 'PVE-PROD'], ['another cluster', 'c2', 'PVE-DR']] as const)('reads the group and the draft again once the removal of %s ended, and stops reading the cluster that left', async (_, leaving, name) => {
+    setupShared(leaving)
+    renderConfigured({ connections: CONNECTIONS })
+    expect(await screen.findByText('Unreachable: its state is unknown.')).toBeTruthy()
+    const groupReads = calls('GET /clusters').length
+    const policyReads = calls('GET /policy').length
+    await removeFrom(name)
+    expect(await screen.findByText(`${name}: removal complete, the zone tags stay on the guests`)).toBeTruthy()
+    await waitFor(() => expect(calls('GET /clusters').length).toBeGreaterThan(groupReads))
+    expect(calls('GET /policy').length).toBeGreaterThan(policyReads)
+    // The group is the tab's cluster alone: nothing of the cluster that left is read or said any more.
+    await waitFor(() => expect(screen.queryByText('Unreachable: its state is unknown.')).toBeNull())
+    const c2Reads = fetchedC2()
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)) })
+    expect(fetchedC2()).toBe(c2Reads)
+  })
+
+  it('reads no group again after the removal of a policy of one cluster', async () => {
+    mock.routes['POST /remove'] = () => reply(202, { run_id: 'rm1' })
+    mock.routes['GET /runs/rm1'] = () => reply(200, removed('rm1'))
+    renderConfigured()
+    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove…' }))
+    const confirm = await screen.findByRole('dialog', { name: 'Remove micro-segmentation?' })
+    await waitFor(() => expect(calls('GET /clusters').length).toBeGreaterThan(0))
+    const groupReads = calls('GET /clusters').length
+    fireEvent.change(within(confirm).getByRole('textbox'), { target: { value: 'prod' } })
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Remove' }))
+    expect(await screen.findByText('prod: removal complete, the zone tags stay on the guests')).toBeTruthy()
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)) })
+    expect(calls('GET /clusters')).toHaveLength(groupReads)
+  })
+})
+
+/** How many requests went to c2. */
+const fetchedC2 = () => (globalThis.fetch as unknown as { mock: { calls: [string][] } }).mock.calls.filter(([u]) => String(u).includes('/microseg/c2/') || String(u).includes('connId=c2')).length
+
 describe('history', () => {
   it('follows a restore in the strip and refreshes the policy at the end', async () => {
     window.localStorage.setItem('microseg.subTab', 'history')

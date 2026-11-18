@@ -12,6 +12,7 @@ import { flowService } from './FlowSummary'
 import { useRunsInProgress } from './runsInProgress'
 import { usePendingChanges } from './usePendingChanges'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
+import { visibleClusterNames } from './useGroupGuests'
 
 type Props = {
   connectionId: string
@@ -20,6 +21,8 @@ type Props = {
   onOpenPlan?: () => void
   /** Names whose changes these are, where other pending changes sit next to them (the Firewalling table). */
   prefix?: string
+  /** The name of a cluster of a shared policy: a cluster associated and not applied yet is named in the bar. */
+  clusterName?: (id: string) => string
 }
 
 const KINDS: DiffKind[] = ['added', 'changed', 'removed']
@@ -95,6 +98,18 @@ export function diffParts(diff: PolicyDiff, t: (key: string, values?: Values) =>
 }
 
 /**
+ * The clusters associated with the policy and not applied yet: the next application adds them. They are named when
+ * the user sees every one of them, else counted.
+ */
+export function clusterParts(policy: Pick<MicrosegPolicy, 'clusters'>, t: (key: string, values?: Values) => string, clusterName?: (id: string) => string): string[] {
+  const inactive = (policy.clusters ?? []).filter(c => !c.active).map(c => c.connection_id)
+  if (inactive.length === 0) return []
+  const names = visibleClusterNames(inactive, clusterName)
+  if (names) return names.map(name => t('microsegPilot.pending.clusterAdded', { name }))
+  return [t('microsegPilot.pending.clustersAdded', { count: inactive.length })]
+}
+
+/**
  * "Not applied yet: zone lt04 changed, 3 flows added · Nothing changes in Proxmox until you apply the plan · Discard ·
  * Review and apply" (UA11, UA58): the bar says the changes wait for the admin, names them, and marks the next step
  * (the plan window, which applies them) as the main button. The server
@@ -102,14 +117,15 @@ export function diffParts(diff: PolicyDiff, t: (key: string, values?: Values) =>
  * (everything is added) or once the last revision's snapshot is loaded. Otherwise the bar says "Unapplied changes".
  * While a run writes them to Proxmox the bar says so and offers neither to discard them nor to plan them again.
  */
-export default function PendingChangesBar({ connectionId, policy, onOpenPlan, prefix }: Props) {
+export default function PendingChangesBar({ connectionId, policy, onOpenPlan, prefix, clusterName }: Props) {
   const t = useTranslations()
   const { pending, count, diff } = usePendingChanges(connectionId, policy)
   const { canWrite } = useMicrosegWrite()
   const { applying } = useRunsInProgress()
 
   if (!pending) return null
-  const parts = diff ? diffParts(diff, t as (key: string, values?: Values) => string, policy) : []
+  const tt = t as (key: string, values?: Values) => string
+  const parts = [...(diff ? diffParts(diff, tt, policy) : []), ...clusterParts(policy, tt, clusterName)]
   const prefixed = (text: string) => (prefix ? t('microsegPilot.pending.prefixed', { prefix, text }) : text)
 
   if (applying) {

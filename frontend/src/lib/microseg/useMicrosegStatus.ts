@@ -27,3 +27,17 @@ export function useMicrosegStatus(connId: string | null | undefined, refreshMs =
   )
   return { data, loading: isLoading, error, reload: () => mutate() }
 }
+
+/** No read of its own: no request on mount, on focus, on reconnect nor on a timer. */
+const CACHE_ONLY = { revalidateOnMount: false, revalidateIfStale: false, revalidateOnFocus: false, revalidateOnReconnect: false, refreshInterval: 0 } as const
+
+/**
+ * The GET /status of a connection as another screen last read it (the banner reads every visible cluster of the tab),
+ * from the SWR cache of the same key: this hook never sends a request, it only follows the answers of that read.
+ */
+export function useCachedMicrosegStatus(connId: string | null | undefined) {
+  const api = useMemo(() => (connId ? microsegApi(connId) : null), [connId])
+  const key = connId ? `${microsegBaseUrl(connId)}/status` : null
+  const { data, error } = useSWR<MicrosegStatus, MicrosegApiError>(key, () => api!.getStatus(), CACHE_ONLY)
+  return { data, error, loading: false }
+}

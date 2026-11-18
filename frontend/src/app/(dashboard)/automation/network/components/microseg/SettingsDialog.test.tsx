@@ -6,11 +6,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, within } from '@testing-library/react'
+import { SWRConfig } from 'swr'
 
 import { screen, fireEvent, renderWithProviders, waitFor } from '@/__tests__/setup/renderWithProviders'
+import RBACContext, { type RBACContextValue } from '@/contexts/RBACContext'
 import type { MicrosegSettings } from '@/lib/microseg/types'
 
-import { calls, mock, policy, reply, resetMocks, zone } from './microsegTestKit'
+import { calls, fetchMock, mock, policy, reply, resetMocks, zone } from './microsegTestKit'
 import { body } from './policyTestKit'
 import SettingsDialog from './SettingsDialog'
 
@@ -467,5 +469,180 @@ describe('removal', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Remove micro-segmentation?' })).toBeNull())
     expect(calls('POST /remove')).toHaveLength(0)
+  })
+})
+
+describe('removal from one cluster of a shared policy', () => {
+  const NAMES: Record<string, string> = { c1: 'PVE-PROD', c2: 'PVE-DR' }
+  const linked = (connection_id: string) => ({ connection_id, active: true, stop_cluster_disabled: false, policy_id: 'p1', created_at: '', activated_at: null })
+  const clusterName = (id: string) => NAMES[id] ?? id
+  const openShared = (clusters = [linked('c1'), linked('c2'), linked('c3')]) => open({}, { policy: { ...policy(), clusters }, clusterName })
+  const dialog = () => screen.getByRole('dialog', { name: 'Remove micro-segmentation?' })
+
+  it('removes the rules from the cluster chosen, typed by its name, through that cluster, and says it leaves the shared policy', async () => {
+    mock.routes['POST /api/v1/firewall/microseg/c2/remove'] = () => reply(202, { run_id: 'run-dr' })
+    const { startRun } = openShared()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove…' }))
+    await screen.findByRole('dialog', { name: 'Remove micro-segmentation?' })
+    // The tab's cluster first; a cluster the user cannot see is not offered.
+    expect(within(dialog()).getByRole('combobox', { name: 'Cluster or node' }).textContent).toBe('PVE-PROD')
+    fireEvent.mouseDown(within(dialog()).getByRole('combobox', { name: 'Cluster or node' }))
+    expect(within(screen.getByRole('listbox')).getAllByRole('option').map(o => o.textContent)).toEqual(['PVE-DR', 'PVE-PROD'])
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'PVE-DR' }))
+    expect(within(dialog()).getByText('PVE-DR leaves the shared policy and keeps none of it; the zone tags stay on its guests.')).toBeTruthy()
+    fireEvent.change(within(dialog()).getByRole('textbox', { name: 'Type PVE-DR to confirm' }), { target: { value: 'PVE-DR' } })
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Remove' }))
+
+    await waitFor(() => expect(startRun).toHaveBeenCalledTimes(1))
+    expect(calls('POST /remove')).toHaveLength(0)
+    expect(startRun.mock.calls[0][0]).toMatchObject({ kind: 'remove', label: 'PVE-DR', runs: [{ connection_id: 'c2', run_id: 'run-dr' }] })
+    expect(dialog().textContent).not.toContain('re-associ')
+  })
+
+  it('keeps the wording of a policy of one cluster', async () => {
+    open()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove…' }))
+    await screen.findByRole('dialog', { name: 'Remove micro-segmentation?' })
+    expect(within(dialog()).queryByRole('combobox', { name: 'Cluster' })).toBeNull()
+    expect(within(dialog()).queryByText(/leaves the shared policy/)).toBeNull()
+    expect(within(dialog()).getByText('The zone tags stay on the guests, and the draft is kept.')).toBeTruthy()
+  })
+})
+
+describe('removal rights on a shared policy', () => {
+  const linked = (connection_id: string) => ({ connection_id, active: true, stop_cluster_disabled: false, policy_id: 'p1', created_at: '', activated_at: null })
+  /** node.manage on c1 alone: the removal goes through every cluster of the policy (the relay checks each). */
+  const managerOfC1: RBACContextValue = {
+    permissions: [], roles: [], isAdmin: false, scopeTypes: [], hiddenWidgets: [], loading: false,
+    hasPermission: () => true, hasAnyPermission: () => true, hasAllPermissions: () => true,
+    hasPermissionOn: (permission: string, type: string, id: string) => permission === 'node.manage' && type === 'connection' && id === 'c1',
+    refresh: () => undefined,
+  }
+  const render = (clusters: ReturnType<typeof linked>[]) => {
+    const handlers = { reloadPolicy: vi.fn(async () => undefined), startRun: vi.fn(), onClose: vi.fn() }
+    renderWithProviders(
+      <RBACContext.Provider value={managerOfC1}>
+        <SettingsDialog connectionId='c1' connectionName='prod-cluster' policy={{ ...policy(), clusters }} {...handlers} />
+      </RBACContext.Provider>,
+    )
+  }
+  const removeButton = () => screen.getByRole('button', { name: 'Remove…' }) as HTMLButtonElement
+
+  it('does not offer the removal to a user who may not manage every cluster of the policy, and says why', () => {
+    render([linked('c1'), linked('c2')])
+    expect(removeButton().disabled).toBe(true)
+    expect(screen.getByLabelText('You need node management rights on every cluster of this policy')).toBeTruthy()
+  })
+
+  it('offers it on a policy of one cluster with the right on that cluster', () => {
+    render([linked('c1')])
+    expect(removeButton().disabled).toBe(false)
+  })
+})
+
+describe('associated clusters', () => {
+  const CONNECTIONS = [{ id: 'c1', name: 'PVE-PROD' }, { id: 'c2', name: 'PVE-DR' }, { id: 'c3', name: 'LAB' }]
+  const linked = (connection_id: string, active = true) =>
+    ({ connection_id, active, stop_cluster_disabled: false, policy_id: 'p1', created_at: '', activated_at: null })
+
+  function openShared(clusters = [linked('c1')]) {
+    const onClustersChanged = vi.fn()
+    const onDissociated = vi.fn()
+    const clusterName = (id: string) => CONNECTIONS.find(c => c.id === id)?.name ?? id
+    const handlers = open({}, { policy: { ...policy(), clusters }, connections: CONNECTIONS, clusterName, maxClusters: 8, onClustersChanged, onDissociated })
+    return { ...handlers, onClustersChanged, onDissociated }
+  }
+
+  it('shows the clusters of the policy, by name, in the General section', () => {
+    openShared([linked('c1'), linked('c2', false)])
+    expect(screen.getByText('Associated clusters')).toBeTruthy()
+    expect(screen.getByText('PVE-PROD')).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'applies at the next application' })).toBeTruthy()
+  })
+
+  it('associates a cluster, then reads the group and the draft again', async () => {
+    mock.routes['POST /clusters'] = () => reply(201, { clusters: [linked('c1'), linked('c3', false)], max: 8 })
+    const { reloadPolicy, onClustersChanged } = openShared()
+    fireEvent.click(screen.getByRole('button', { name: 'Add a cluster' }))
+    const options = within(screen.getByRole('group', { name: 'Clusters or nodes' })).getAllByRole('checkbox').map(o => o.getAttribute('aria-label')).filter(Boolean)
+    expect(options).toEqual(['LAB', 'PVE-DR'])
+    fireEvent.click(screen.getByRole('checkbox', { name: 'LAB' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Associate' }))
+    await waitFor(() => expect(onClustersChanged).toHaveBeenCalledTimes(1))
+    expect(reloadPolicy).toHaveBeenCalled()
+    expect(calls('POST /clusters')).toHaveLength(1)
+  })
+
+  it('proposes no connection that already shares another policy, and names clusters with the tab lookup', () => {
+    open({}, { policy: { ...policy(), clusters: [linked('c1')] }, connections: CONNECTIONS, groupedElsewhere: ['c2'], clusterName: id => `name-${id}` })
+    expect(screen.getByText('name-c1')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Add a cluster' }))
+    expect(within(screen.getByRole('group', { name: 'Clusters or nodes' })).getAllByRole('checkbox').map(o => o.getAttribute('aria-label')).filter(Boolean)).toEqual(['LAB'])
+  })
+
+  it('dissociates a cluster after its name is typed, then reads the group and the draft again', async () => {
+    mock.routes['DELETE /clusters/c2'] = () => reply(200, { clusters: [linked('c1')], max: 8 })
+    const { reloadPolicy, onClustersChanged, onDissociated } = openShared([linked('c1'), linked('c2')])
+    fireEvent.click(screen.getByTestId('associated-clusters').querySelector('.MuiChip-root') as HTMLElement)
+    fireEvent.click(screen.getByLabelText('Dissociate PVE-DR'))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Type PVE-DR to confirm' }), { target: { value: 'PVE-DR' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Dissociate' }))
+    await waitFor(() => expect(onClustersChanged).toHaveBeenCalledTimes(1))
+    // The page is told who left and who remains, to leave the selection on a cluster of the group.
+    expect(onDissociated).toHaveBeenCalledWith('c2', ['c1'])
+    expect(reloadPolicy).toHaveBeenCalled()
+    expect(calls('DELETE /clusters/c2')).toHaveLength(1)
+  })
+
+  it('names a cluster the user cannot see in general words, never by its ID, and offers no dissociation of it', () => {
+    openShared([linked('c1'), linked('c9'), linked('c2')])
+    const dialog = screen.getByRole('dialog', { name: 'Micro-segmentation settings' })
+    expect(within(dialog).getByTestId('associated-clusters').innerHTML).not.toMatch(/\bc9\b/)
+    // The list a chip opens names it in general words, without a remove icon.
+    fireEvent.click(within(dialog).getByTestId('associated-clusters').querySelector('.MuiChip-root') as HTMLElement)
+    const rows = screen.getAllByTestId('associated-cluster-row')
+    expect(rows.map(r => r.textContent)).toEqual(['PVE-PROD', 'Another cluster', 'PVE-DR'])
+    for (const row of rows) expect(row.innerHTML).not.toMatch(/\bc9\b/)
+    expect(screen.queryAllByLabelText(/^Dissociate/).map(e => e.getAttribute('aria-label'))).toEqual(['Dissociate PVE-PROD', 'Dissociate PVE-DR'])
+  })
+
+  describe('impact of a dissociation', () => {
+    const tagged = (vmid: number) => ({ vmid: String(vmid), name: `vm${vmid}`, node: 'pve1', type: 'qemu', status: 'running', tags: ['zone-web'] })
+    const guestReads = () => fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/v1/vms?'))
+
+    function openWithGuests(c2: unknown[] | number) {
+      mock.routes['GET /api/v1/vms?connId=c1'] = () => reply(200, { data: { vms: [tagged(100), tagged(101)] } })
+      mock.routes['GET /api/v1/vms?connId=c2'] = () => (typeof c2 === 'number' ? reply(c2, { error: 'down' }) : reply(200, { data: { vms: c2 } }))
+      const clusterName = (id: string) => CONNECTIONS.find(c => c.id === id)?.name ?? id
+      const shared = { ...policy({ zones: [zone('web')] }), clusters: [linked('c1'), linked('c2')] }
+      // The guest reads run on mount (the test providers turn that off by default).
+      renderWithProviders(
+        <SWRConfig value={{ revalidateOnMount: true, dedupingInterval: 0, errorRetryCount: 0 }}>
+          <SettingsDialog
+            connectionId='c1' connectionName='PVE-PROD' policy={shared} reloadPolicy={vi.fn(async () => undefined)} startRun={vi.fn()} onClose={vi.fn()}
+            connections={CONNECTIONS} clusterName={clusterName} maxClusters={8}
+          />
+        </SWRConfig>,
+      )
+    }
+
+    it('reads the guests of every cluster only once the dissociation is asked, and counts each side', async () => {
+      openWithGuests([tagged(100)])
+      expect(guestReads()).toHaveLength(0)
+      fireEvent.click(screen.getByTestId('associated-clusters').querySelector('.MuiChip-root') as HTMLElement)
+    fireEvent.click(screen.getByLabelText('Dissociate PVE-DR'))
+      expect(await screen.findByText('1 guest of PVE-DR will no longer be recognised by the other clusters, 2 guests the other way.')).toBeTruthy()
+      expect(guestReads().map(([url]) => url).sort()).toEqual(['/api/v1/vms?connId=c1', '/api/v1/vms?connId=c2'])
+    })
+
+    it('shows no count when the guests of one cluster could not be read', async () => {
+      openWithGuests(500)
+      fireEvent.click(screen.getByTestId('associated-clusters').querySelector('.MuiChip-root') as HTMLElement)
+    fireEvent.click(screen.getByLabelText('Dissociate PVE-DR'))
+      expect(await screen.findByText('PVE-DR keeps its rules, with its own copy of the policy.')).toBeTruthy()
+      await waitFor(() => expect(guestReads()).toHaveLength(2))
+      await new Promise(resolve => setTimeout(resolve, 20))
+      expect(screen.queryByText(/will no longer be recognised/)).toBeNull()
+    })
   })
 })

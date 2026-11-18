@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { dequal } from 'dequal'
 
 import { MicrosegApiError, microsegApi, microsegBaseUrl } from './api'
+import { withRowClusters } from './pendingChanges'
 import type { MicrosegPolicy, MicrosegRun } from './types'
 
 export const RUN_POLL_MS = 2000
@@ -28,8 +29,10 @@ export function useMicrosegPolicy(connId: string | null | undefined) {
     () => api!.getPolicy(),
     { compare: dequal, shouldRetryOnError: (e: MicrosegApiError) => !FATAL_CODES.has(e?.code) },
   )
+  // Every consumer sees each pending member and exception with its cluster (legacy rows have none).
+  const policy = useMemo(() => (data && connId ? withRowClusters(data, connId) : data), [data, connId])
   return {
-    data,
+    data: policy,
     loading: isLoading,
     error,
     reload: () => mutate(),

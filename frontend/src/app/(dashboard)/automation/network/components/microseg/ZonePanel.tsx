@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Alert, Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -21,11 +21,13 @@ import { destinationName, endpoint } from './ObservationRow'
 import { useGatewayName } from './useGatewayName'
 import { bareIp } from './zoneGraph'
 import { ExpandAddButton, FlowsList, MemberAction, NewFlowButton, ZoneHeaderActions, useExceptionEditor, useFlowEditor } from './ZonePanelActions'
+import { useMicrosegClusterWrite } from './microsegAccess'
 import type { ZoneEdits } from './useZoneEdits'
 import { useIgnoredDrifts } from './driftIgnore'
 import { OneLine } from './dialogParts'
-import { flowsOfZone, guestKey, type ZoneMember } from './zoneModel'
-import { zoneDriftSignals, zoneSuggestions } from './zonePanelModel'
+import { flowsOfZone, memberId, type ZoneMember } from './zoneModel'
+import { isFirewallOff, zoneDriftSignals, zoneSuggestions } from './zonePanelModel'
+import ClusterChip from './ClusterChip'
 import TruncatedText from './TruncatedText'
 
 const FLOWS_PAGE_SIZE = 5
@@ -57,9 +59,13 @@ type Props = {
   partialLimit?: number | null
   /** The guest name of each address the inventory knows, to name the destination of an outbound row. */
   peers?: ReadonlyMap<string, string>
+  /** Names a cluster; given only when the policy is shared: each member line then shows its cluster chip after its glyph. */
+  clusterName?: (id: string) => string
+  /** One line above the members when some cluster's guests could not be read: the list is not complete. */
+  membersNote?: ReactNode
 }
 
-function MemberLine({ member, zoneId, edits, firewallOff }: { member: ZoneMember; zoneId: string; edits: ZoneEdits; firewallOff: boolean }) {
+function MemberLine({ member, zoneId, edits, firewallOff, cluster }: { member: ZoneMember; zoneId: string; edits: ZoneEdits; firewallOff: boolean; cluster?: string }) {
   const t = useTranslations('microsegPilot.overview.panel')
   const tsec = useTranslations('microsegPilot.overview.sections')
   const { guest, ref } = member
@@ -73,6 +79,7 @@ function MemberLine({ member, zoneId, edits, firewallOff }: { member: ZoneMember
           </Tooltip>
         )
         : <i className='ri-question-line' style={{ opacity: 0.6 }} />}
+      {cluster !== undefined && <ClusterChip connectionId={member.connectionId} name={cluster} compact />}
       {firewallOff && (
         <Tooltip title={tsec('memberFirewallOff')}>
           <i className='ri-shield-flash-line' data-testid='member-firewall-off' style={{ color: 'var(--mui-palette-error-main)', flexShrink: 0 }} aria-label={tsec('memberFirewallOff')} />
@@ -124,7 +131,7 @@ type WorkProps = Omit<Props, 'onClose'> & {
  */
 export function useZoneWork({
   zone, members, membersKnown, flows, zonesById, edits, onAssign,
-  connectionId, version, suggestions, reloadPolicy, reloadSuggestions, onResolved, partialLimit = null, peers, memberErrors = true,
+  connectionId, version, suggestions, reloadPolicy, reloadSuggestions, onResolved, partialLimit = null, peers, memberErrors = true, clusterName, membersNote,
 }: WorkProps) {
   const t = useTranslations('microsegPilot.overview.panel')
   const tz = useTranslations('microsegPilot.overview.zonePanel')
@@ -132,6 +139,8 @@ export function useZoneWork({
   const ts = useTranslations('microsegPilot.policy.zone')
   const tt = useTranslations('microsegPilot.overview.target.panel')
   const te = useTranslations('microsegPilot.policy.exceptions')
+  // Members are written on each guest's cluster: the right on one cluster of the policy opens the assignment.
+  const { canWriteSome: canAssign } = useMicrosegClusterWrite()
   const editor = useFlowEditor(edits)
   const exceptions = useExceptionEditor(edits, zone, members, membersKnown)
   const { incoming, outgoing } = flowsOfZone(zone.id, flows)
@@ -144,9 +153,10 @@ export function useZoneWork({
   const traffic = useSelectionTraffic(connectionId, zones, { kind: 'zone', zone }, trafficSection[0] || sourcesSection[0])
   const { data: drifts } = useMicrosegDrifts(connectionId, { once: true })
   const { ignored } = useIgnoredDrifts(connectionId)
+  // The drifts are those of this connection: they concern its members only.
   const signals = useMemo(
-    () => zoneDriftSignals(zone, members, drifts?.computed ? drifts.drifts : null, zones, ignored),
-    [zone, members, drifts, zones, ignored],
+    () => zoneDriftSignals(zone, members, drifts?.computed ? drifts.drifts : null, zones, ignored, connectionId),
+    [zone, members, drifts, zones, ignored, connectionId],
   )
   const pending = useMemo(() => zoneSuggestions(suggestions, zone.id), [suggestions, zone.id])
   const { busy, failure, clearFailure, resolve } = useResolveSuggestions(connectionId, version, reloadPolicy, reloadSuggestions)
@@ -193,17 +203,27 @@ export function useZoneWork({
     <>
       {memberErrors && edits.memberError != null && <MicrosegErrorAlert error={edits.memberError} onClose={edits.clearMemberError} />}
       {!membersKnown && <Typography variant='body2' color='text.disabled'>{t('membersUnknown')}</Typography>}
+      {membersKnown && membersNote}
       {membersKnown && members.length === 0 && <Typography variant='body2' color='text.disabled'>{t('noMembers')}</Typography>}
       <PagedList items={members} size={size} render={rows => (
         <Box role='list'>
-          {rows.map(m => <MemberLine key={`${m.ref.type}/${m.ref.vmid}`} member={m} zoneId={zone.id} edits={edits} firewallOff={!!signals?.firewallOff.has(guestKey(m.ref))} />)}
+          {rows.map(m => (
+            <MemberLine
+              key={memberId(m)}
+              member={m}
+              zoneId={zone.id}
+              edits={edits}
+              firewallOff={isFirewallOff(signals, m)}
+              cluster={clusterName?.(m.connectionId)}
+            />
+          ))}
         </Box>
       )} />
     </>
   )
   const newIncoming = <NewFlowButton label={tz('newIncoming')} onClick={() => editor.create({ dst_zone_id: zone.id })} />
   const newOutgoing = <NewFlowButton label={tz('newOutgoing')} onClick={() => editor.create({ src_zone_id: zone.id })} />
-  const newException = <NewFlowButton label={te('add')} onClick={exceptions.create} />
+  const newException = <NewFlowButton label={te('add')} allowed={exceptions.canCreate} onClick={exceptions.create} />
   const exceptionsBody = (size = FLOWS_PAGE_SIZE) => exceptions.list(size)
   const incomingBody = (size = FLOWS_PAGE_SIZE) => <FlowsList flows={incoming} zonesById={zonesById} editor={editor} size={size} />
   const outgoingBody = (size = FLOWS_PAGE_SIZE) => <FlowsList flows={outgoing} zonesById={zonesById} editor={editor} size={size} />
@@ -221,8 +241,8 @@ export function useZoneWork({
   // The same bodies in the dialog, one sub-tab each, the count in the label and the add button above the flows.
   const dataTabs: DataTab[] = [
     { id: 'suggestions', label: withCount(tz('subSuggestions'), pending.length), content: suggestionsBody },
-    { id: 'members', label: withCount(tz('subMembers'), membersKnown ? members.length : null), action: <ExpandAddButton label={tz('addMembers')} onClick={onAssign} />, content: membersBody },
-    { id: 'exceptions', label: withCount(te('title'), exceptions.count), action: <ExpandAddButton label={te('add')} onClick={exceptions.create} />, content: exceptionsBody },
+    { id: 'members', label: withCount(tz('subMembers'), membersKnown ? members.length : null), action: <ExpandAddButton label={tz('addMembers')} allowed={canAssign} onClick={onAssign} />, content: membersBody },
+    { id: 'exceptions', label: withCount(te('title'), exceptions.count), action: <ExpandAddButton label={te('add')} allowed={exceptions.canCreate} onClick={exceptions.create} />, content: exceptionsBody },
     { id: 'incoming', label: withCount(tz('subIncoming'), incoming.length), action: <ExpandAddButton label={tz('addFlow')} onClick={() => editor.create({ dst_zone_id: zone.id })} />, content: incomingBody },
     { id: 'outgoing', label: withCount(tz('subOutgoing'), outgoing.length), action: <ExpandAddButton label={tz('addFlow')} onClick={() => editor.create({ src_zone_id: zone.id })} />, content: outgoingBody },
   ]

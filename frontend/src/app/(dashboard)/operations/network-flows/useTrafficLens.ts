@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { Features, useLicense } from '@/contexts/LicenseContext'
 import { usePVEConnections } from '@/hooks/useConnections'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
+import { useGroupGuests } from '@/app/(dashboard)/automation/network/components/microseg/useGroupGuests'
 import { zoneGuestsUrl } from '@/lib/microseg/runRefresh'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
@@ -133,12 +134,27 @@ function lensState(licensed: boolean, connectionId: string | null, reads: { poli
   return reads.ready ? 'ready' : 'loading'
 }
 
+const NO_IDS: string[] = []
+
+/**
+ * The other clusters of a shared policy whose guests the user may read (those of `connections`, the connections the
+ * user sees): none for a policy of one cluster.
+ */
+function remoteClusters(policy: MicrosegPolicy | undefined, connectionId: string | null, connections: readonly LensConnection[]): string[] {
+  const linked = policy?.clusters ?? []
+  if (linked.length < 2) return NO_IDS
+  const seen = new Set(connections.map(c => c.id))
+  return linked.map(c => c.connection_id).filter(id => id !== connectionId && seen.has(id)).sort()
+}
+
 /**
  * The micro-segmentation of a connection as the Network flows page reads it: the draft (zones and flows), its pending
  * suggestions and the guests with their tags and addresses. The suggestions and the guests are only read once a
  * policy has been applied. No Proxmox call of its own: the guest list is the inventory route the zone map reads too.
+ * On a policy shared by several clusters the suggestions are every cluster's (one read), and the guests of the other
+ * clusters the user sees (`connections`) are read once each, so an address of a member there resolves to its zone.
  */
-export function useTrafficLens(connectionId: string | null): TrafficLensRead {
+export function useTrafficLens(connectionId: string | null, connections: readonly LensConnection[] = []): TrafficLensRead {
   const t = useTranslations('microsegPilot.trafficLens')
   const { hasFeature } = useLicense()
   const licensed = hasFeature(Features.MICROSEGMENTATION)
@@ -149,11 +165,15 @@ export function useTrafficLens(connectionId: string | null): TrafficLensRead {
   const deployed = !!policy?.last_revision
   const suggestionsRead = useMicrosegSuggestions(deployed ? conn : null, SUGGESTION_PARAMS)
   const guestsRead = useSWRFetch<VmsResponse>(deployed && conn ? zoneGuestsUrl(conn) : null, { revalidateOnFocus: false })
+  const remoteIds = useMemo(() => (deployed ? remoteClusters(policy, conn, connections) : NO_IDS), [deployed, policy, conn, connections])
+  // A cluster whose guests cannot be read only leaves its addresses unknown: it never fails the lens.
+  const remote = useGroupGuests(remoteIds)
+  const remoteSettled = remoteIds.length === 0 || !remote.loading
 
   const state = lensState(licensed, conn, {
     policy,
     policyError: policyRead.error,
-    ready: !!suggestionsRead.data && !!guestsRead.data,
+    ready: !!suggestionsRead.data && !!guestsRead.data && remoteSettled,
     failed: !!suggestionsRead.error || !!guestsRead.error,
   })
 
@@ -161,7 +181,7 @@ export function useTrafficLens(connectionId: string | null): TrafficLensRead {
     if (state !== 'ready' || !policy || !conn) return null
     const zonesById = new Map(policy.zones.map(z => [z.id, z]))
     const suggestions = suggestionsRead.data ?? []
-    const resolve = buildResolver(policy.zones, policy.policy.tag_prefix, lensGuests(guestsRead.data))
+    const resolve = buildResolver(policy.zones, policy.policy.tag_prefix, lensGuests(guestsRead.data), remoteIds.length > 0 ? remote.guests : [])
     const labelOf = (key: string) => {
       if (key === UNZONED_KEY) return t('unzoned')
       if (key === EXTERNAL_KEY) return t('unknownExternal')
@@ -179,7 +199,7 @@ export function useTrafficLens(connectionId: string | null): TrafficLensRead {
       verdictOf: (pair: LensPair & Partial<ReplyMarks>) => pairVerdict(pair, resolve, policy.flows, suggestions),
       rows: <T extends LensPair>(pairs: T[]) => canonicalRows(pairs, p => pairVerdict(p, resolve, policy.flows, suggestions).status === 'allowed'),
     }
-  }, [state, policy, conn, suggestionsRead.data, guestsRead.data, t])
+  }, [state, policy, conn, suggestionsRead.data, guestsRead.data, remoteIds, remote.guests, t])
 
   return { state, lens, reloadPolicy: policyRead.reload, reloadSuggestions: suggestionsRead.reload }
 }

@@ -4,11 +4,12 @@ import { useMemo } from 'react'
 import { Box, Chip, Link, Skeleton, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography, alpha, darken, lighten, useTheme } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
-import type { MicrosegZone, SuggestionKind } from '@/lib/microseg/types'
+import type { MicrosegSuggestion, MicrosegZone, SuggestionKind } from '@/lib/microseg/types'
 
 import PostureCard from './PostureCard'
 import type { BlockPhase } from './dashboardModel'
-import type { Conversation, ConversationPart } from './dashboardConversations'
+import type { Conversation, ConversationPart, RemotePeer } from './dashboardConversations'
+import ClusterChip from './microseg/ClusterChip'
 import { gatewayNameMap, namedAddress } from './microseg/gatewayNames'
 import type { ObservationFocus } from './microseg/microsegTabTypes'
 import { destinationName, endpoint } from './microseg/ObservationRow'
@@ -47,14 +48,33 @@ function useEndNames(zones: readonly MicrosegZone[], guestName: (ip: string) => 
     const named = (ip: string) => gatewayName(ip) ?? guestName(ip)
     return {
       zones: byId,
-      source: (c: Conversation) => {
-        const s = c.sample
+      // `bare`: an address two other clusters carry, never named after one of their guests.
+      source: (s: MicrosegSuggestion, bare = false) => {
         const zoneId = s.src_zone_id || (s.direction === 'out' ? s.src_key : '')
-        return zoneId ? endpoint(zoneId, s.src_ip, byId, t) : (named(s.src_ip) ?? endpoint('', s.src_ip, byId, t))
+        const name = bare ? gatewayName : named
+        return zoneId ? endpoint(zoneId, s.src_ip, byId, t) : (name(s.src_ip) ?? endpoint('', s.src_ip, byId, t))
       },
-      destination: (c: Conversation) => destinationName(c.sample, byId, ip => named(ip), t),
+      destination: (s: MicrosegSuggestion, bare = false) => destinationName(s, byId, ip => (bare ? gatewayName(ip) : named(ip)), t),
     }
   }, [zones, guestName, t, tg])
+}
+
+/** The flow a row is named from: the zone of a guest of another cluster put on its end when the engine left it in none. */
+function namedSample(c: Conversation): MicrosegSuggestion {
+  const peer = c.peer
+  if (!peer?.zoneId) return c.sample
+  return peer.end === 'src'
+    ? (c.sample.src_zone_id ? c.sample : { ...c.sample, src_zone_id: peer.zoneId })
+    : (c.sample.dst_zone_id ? c.sample : { ...c.sample, dst_zone_id: peer.zoneId })
+}
+
+/** The cluster of the end of a row that is a guest of another cluster (a shared policy), after its name. */
+function PeerCluster({ cluster }: { cluster: { id: string; name: string } }) {
+  return (
+    <Box component='span' data-testid='conversation-peer-cluster' sx={{ display: 'inline-flex', flexShrink: 0, minWidth: 0 }}>
+      <ClusterChip connectionId={cluster.id} name={cluster.name} compact />
+    </Box>
+  )
 }
 
 /**
@@ -62,13 +82,15 @@ function useEndNames(zones: readonly MicrosegZone[], guestName: (ip: string) => 
  * one way, with their services, flows, hits and types. A row opens the Observation list on the zone it enters (or
  * leaves when outbound); under the table, how many pairs it leaves out and a link to every observed flow.
  */
-export default function TopConversations({ phase, rows, total, zones, guestName, onOpen, onOpenAll }: {
+export default function TopConversations({ phase, rows, total, zones, guestName, peerCluster, onOpen, onOpenAll }: {
   phase: BlockPhase
   rows: Conversation[]
   total: number
   zones: readonly MicrosegZone[]
   /** The guest that carries an address, once the guest list is read. */
   guestName: (ip: string) => string | undefined
+  /** The chip of the cluster of a row's end on another cluster (a shared policy); its ID and the name the user sees. */
+  peerCluster?: (cluster: RemotePeer['cluster']) => { id: string; name: string }
   onOpen?: (focus: ObservationFocus) => void
   onOpenAll?: () => void
 }) {
@@ -103,11 +125,15 @@ export default function TopConversations({ phase, rows, total, zones, guestName,
           </TableHead>
           <TableBody>
             {rows.map(c => {
-              const source = names.source(c)
-              const destination = names.destination(c)
-              const zone = names.zones.get(c.sample.src_zone_id || c.sample.src_key)
+              const sample = namedSample(c)
+              const bare = !!c.peer && c.peer.cluster === null && !c.peer.zoneId
+              const source = names.source(sample, bare && c.peer?.end === 'src')
+              const destination = names.destination(sample, bare && c.peer?.end === 'dst')
+              const zone = names.zones.get(sample.src_zone_id || sample.src_key)
               const out = c.direction === 'out'
               const services = c.services.join(', ')
+              const remote = c.peer && peerCluster ? peerCluster(c.peer.cluster) : null
+              const sourceChip = remote && c.peer?.end === 'src' ? remote : null
               return (
                 <TableRow
                   key={c.key}
@@ -121,12 +147,20 @@ export default function TopConversations({ phase, rows, total, zones, guestName,
                       <Tooltip title={t(out ? 'postureDirectionOut' : 'postureDirectionIn')}>
                         <Box component='i' className={out ? 'ri-logout-circle-r-line' : 'ri-login-circle-line'} aria-label={t(out ? 'postureDirectionOut' : 'postureDirectionIn')} data-testid={`conversation-way-${c.direction}`} sx={{ fontSize: 16, color: 'text.secondary', flexShrink: 0 }} />
                       </Tooltip>
-                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: zone?.color || (c.sample.src_zone_id ? 'text.disabled' : 'error.main') }} />
-                      <Tooltip title={source}><Typography variant='body2' sx={{ fontWeight: 600, ...ONE_LINE }} data-testid='conversation-source'>{source}</Typography></Tooltip>
+                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: zone?.color || (sample.src_zone_id ? 'text.disabled' : 'error.main') }} />
+                      <Tooltip title={source}><Typography variant='body2' sx={{ fontWeight: 600, ...ONE_LINE, ...(sourceChip ? { minWidth: 0 } : {}) }} data-testid='conversation-source'>{source}</Typography></Tooltip>
+                      {sourceChip && <PeerCluster cluster={sourceChip} />}
                     </Box>
                   </TableCell>
                   <TableCell>
-                    <Tooltip title={destination}><Typography variant='body2' sx={ONE_LINE} data-testid='conversation-destination'>{destination}</Typography></Tooltip>
+                    {remote && c.peer?.end === 'dst' ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                        <Tooltip title={destination}><Typography variant='body2' sx={{ minWidth: 0, ...ONE_LINE }} data-testid='conversation-destination'>{destination}</Typography></Tooltip>
+                        <PeerCluster cluster={remote} />
+                      </Box>
+                    ) : (
+                      <Tooltip title={destination}><Typography variant='body2' sx={ONE_LINE} data-testid='conversation-destination'>{destination}</Typography></Tooltip>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Tooltip title={services}><Typography variant='body2' color='text.secondary' sx={ONE_LINE} data-testid='conversation-services'>{services}</Typography></Tooltip>

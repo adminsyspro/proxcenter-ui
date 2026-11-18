@@ -327,3 +327,29 @@ describe('outbound filtering', () => {
     expect(lastCall().url).not.toContain('direction')
   })
 })
+
+describe('microsegApi clusters', () => {
+  const answer = { clusters: [{ connection_id: 'c1', active: true, stop_cluster_disabled: false }], max: 8 }
+
+  it('lists the clusters of the policy', async () => {
+    fetchMock.mockResolvedValue(reply(200, answer))
+    expect(await microsegApi('c1').listClusters()).toEqual(answer)
+    expect(lastCall()).toMatchObject({ url: '/api/v1/firewall/microseg/c1/clusters', method: 'GET' })
+  })
+
+  it('associates a cluster with exactly its connection id', async () => {
+    fetchMock.mockResolvedValue(reply(201, answer))
+    expect(await microsegApi('c1').associateCluster('c2')).toEqual(answer)
+    expect(lastCall()).toEqual({ url: '/api/v1/firewall/microseg/c1/clusters', method: 'POST', body: { connection_id: 'c2' } })
+  })
+
+  it('dissociates a cluster', async () => {
+    fetchMock.mockResolvedValue(reply(200, answer))
+    await microsegApi('c1').dissociateCluster('c 2')
+    expect(lastCall()).toMatchObject({ url: '/api/v1/firewall/microseg/c1/clusters/c%202', method: 'DELETE' })
+  })
+
+  it.each(['CLUSTER_NOT_EMPTY', 'TOO_MANY_CLUSTERS', 'CLUSTER_UNREADABLE'])('has a message for %s', (code) => {
+    expect(microsegErrorKey(code)).toBe(`microsegPilot.errors.${code}`)
+  })
+})

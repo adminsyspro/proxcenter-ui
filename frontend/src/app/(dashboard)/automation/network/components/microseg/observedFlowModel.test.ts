@@ -33,7 +33,7 @@ describe('flowTrafficSeries', () => {
 
 describe('eventOfFlow', () => {
   const s: MicrosegSuggestion = {
-    id: 's', policy_id: 'p', kind: 'would_block', src_key: 'k', src_ip: '', src_zone_id: 'zw', dst_ip: '10.0.0.9', dst_zone_id: 'zd',
+    id: 's', policy_id: 'p', connection_id: 'c1', kind: 'would_block', src_key: 'k', src_ip: '', src_zone_id: 'zw', dst_ip: '10.0.0.9', dst_zone_id: 'zd',
     proto: 'tcp', dport: '443', hits: 1, first_seen: '', last_seen: '', status: 'pending',
   }
   const e = (over: Partial<MicrosegEvent> = {}): MicrosegEvent => ({
@@ -71,7 +71,7 @@ describe('outbound flows', () => {
   })
 
   const s: MicrosegSuggestion = {
-    id: 's', policy_id: 'p', kind: 'would_block', direction: 'out', src_key: 'zw', src_ip: '10.0.0.5', src_zone_id: 'zw', dst_key: '203.0.113.10', dst_ip: '203.0.113.10', dst_zone_id: '',
+    id: 's', policy_id: 'p', connection_id: 'c1', kind: 'would_block', direction: 'out', src_key: 'zw', src_ip: '10.0.0.5', src_zone_id: 'zw', dst_key: '203.0.113.10', dst_ip: '203.0.113.10', dst_zone_id: '',
     proto: 'tcp', dport: '443', hits: 1, first_seen: '', last_seen: '', status: 'pending',
   }
   const e = (over: Partial<MicrosegEvent> = {}): MicrosegEvent => ({

@@ -321,7 +321,7 @@ describe('the pre-flight panel during a stop', () => {
 describe('a plan or an apply written during a stop', () => {
   const LINE = 'Written while the emergency stop holds the cluster firewall off; takes effect when the stop is lifted'
   const run = (result: object): MicrosegRun => ({
-    id: 'run1', policy_id: 'p1', kind: 'apply', status: 'done', started_at: '2026-11-03T10:00:00Z', duration_ms: 10, api_calls: 1, writes: 1, error: '',
+    id: 'run1', policy_id: 'p1', connection_id: 'c1', kind: 'apply', status: 'done', started_at: '2026-11-03T10:00:00Z', duration_ms: 10, api_calls: 1, writes: 1, error: '',
     result: { guests: 1, members: 1, steps: 1, drifts: 0, ...result } as never,
   })
 

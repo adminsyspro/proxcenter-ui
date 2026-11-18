@@ -14,7 +14,7 @@ import RunStrip from '../microseg/RunStrip'
 import ZoneStateChip from '../microseg/ZoneStateChip'
 import { ZoneStateMenu } from '../microseg/ZoneRow'
 import { ZoneStateConfirm, useFlowEditor } from '../microseg/ZonePanelActions'
-import { WriteTip, useMicrosegWrite } from '../microseg/microsegAccess'
+import { MicrosegAccessProvider, WriteTip, useAccessHint, useMicrosegAccess, useMicrosegWrite, type MicrosegAccess } from '../microseg/microsegAccess'
 import { RunsInProgressProvider, useTrackedRuns } from '../microseg/runsInProgress'
 import { useZoneEdits } from '../microseg/useZoneEdits'
 import { Badge, RuleRow, SectionAddButton, type RuleRowProps } from './DfwTableParts'
@@ -32,9 +32,24 @@ type ZoneToolsValue = {
   editFlow: (flow: MicrosegFlow) => void
   removeFlow: (flow: MicrosegFlow) => void
   openStateMenu: (zone: MicrosegZone, anchor: HTMLElement) => void
+  /** The write access of the micro-segmentation policy (on a shared one, the right on every cluster). */
+  access: MicrosegAccess
 }
 
 const ZoneToolsContext = createContext<ZoneToolsValue | null>(null)
+
+/**
+ * The right of a zone control of the table: the page's (the selected connection), and on a shared policy the right on
+ * every cluster of the policy. Only these controls follow the policy: the Proxmox rules of the table keep the page's.
+ */
+function useZoneToolsWrite(tools: ZoneToolsValue | null): { canWrite: boolean; hint: string } {
+  const page = useMicrosegWrite()
+  const hint = useAccessHint(tools?.access ?? null)
+  return tools && page.canWrite ? { canWrite: tools.access.canWrite, hint } : page
+}
+
+/** No micro-segmentation write: the page refuses its connection. */
+const NO_WRITE: Omit<MicrosegAccess, 'everyCluster'> = { canWrite: false, canWriteOn: () => false, canWriteSome: false }
 
 type Props = {
   connectionId: string
@@ -71,6 +86,12 @@ function ZoneToolsWithPolicy({ connectionId, policy, deployed, reloadPolicy, onR
   const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
   const flows = useFlowEditor(edits)
   const { create, edit, remove } = flows
+  // The clusters of the draft already read: no request of its own.
+  const linkedIds = useMemo(() => (policy.clusters ?? []).map(c => c.connection_id), [policy.clusters])
+  const policyAccess = useMicrosegAccess(connectionId, linkedIds)
+  // The page's right on its connection first (read-only stays read-only), then the policy's.
+  const pageCanWrite = useMicrosegWrite().canWrite
+  const access = useMemo<MicrosegAccess>(() => (pageCanWrite ? policyAccess : { ...NO_WRITE, everyCluster: false }), [pageCanWrite, policyAccess])
 
   const value = useMemo<ZoneToolsValue>(() => ({
     zoneOf: name => draftZoneOf(name, policy, deployed),
@@ -80,20 +101,26 @@ function ZoneToolsWithPolicy({ connectionId, policy, deployed, reloadPolicy, onR
     editFlow: edit,
     removeFlow: remove,
     openStateMenu: (zone, anchor) => setStateMenu({ zone, anchor }),
-  }), [policy, deployed, create, edit, remove])
+    access,
+  }), [policy, deployed, create, edit, remove, access])
 
   return (
     <ZoneToolsContext.Provider value={value}>
     <RunsInProgressProvider value={inProgress}>
-      <Box data-testid='dfw-microseg-pending'>
-        <PendingChangesBar connectionId={connectionId} policy={policy} onOpenPlan={onOpenPlan} prefix={t('microsegPrefix')} />
-      </Box>
-      <RunStrip connectionId={connectionId} runs={runs} onFinished={runFinished} onRemove={removeRun} />
+      {/* The micro-segmentation writes around the table follow the policy; the table (children) keeps the page's rights. */}
+      <MicrosegAccessProvider value={access}>
+        <Box data-testid='dfw-microseg-pending'>
+          <PendingChangesBar connectionId={connectionId} policy={policy} onOpenPlan={onOpenPlan} prefix={t('microsegPrefix')} />
+        </Box>
+        <RunStrip connectionId={connectionId} runs={runs} onFinished={runFinished} onRemove={removeRun} />
+      </MicrosegAccessProvider>
       {children}
-      {flows.dialogs}
-      {stateMenu && <ZoneStateMenu zone={stateMenu.zone} anchor={stateMenu.anchor} onClose={() => setStateMenu(null)} onPick={state => setStateChange({ zone: stateMenu.zone, state })} />}
-      {stateChange && <ZoneStateConfirm zone={stateChange.zone} state={stateChange.state} edits={edits} onClose={() => setStateChange(null)} />}
-      <PlanDialog open={planOpen} connectionId={connectionId} policy={policy} reloadPolicy={reloadPolicy} startRun={startRun} onClose={() => setPlanOpen(false)} />
+      <MicrosegAccessProvider value={access}>
+        {flows.dialogs}
+        {stateMenu && <ZoneStateMenu zone={stateMenu.zone} anchor={stateMenu.anchor} onClose={() => setStateMenu(null)} onPick={state => setStateChange({ zone: stateMenu.zone, state })} />}
+        {stateChange && <ZoneStateConfirm zone={stateChange.zone} state={stateChange.state} edits={edits} onClose={() => setStateChange(null)} />}
+        <PlanDialog open={planOpen} connectionId={connectionId} policy={policy} reloadPolicy={reloadPolicy} startRun={startRun} onClose={() => setPlanOpen(false)} />
+      </MicrosegAccessProvider>
     </RunsInProgressProvider>
     </ZoneToolsContext.Provider>
   )
@@ -103,11 +130,11 @@ function ZoneToolsWithPolicy({ connectionId, policy, deployed, reloadPolicy, onR
 export function ZoneStateControl({ zoneName, fallback }: { zoneName: string; fallback: ReactNode }) {
   const t = useTranslations('microsegPilot.dfw')
   const tools = useContext(ZoneToolsContext)
-  const { canWrite } = useMicrosegWrite()
+  const { canWrite, hint } = useZoneToolsWrite(tools)
   const zone = tools?.zoneOf(zoneName)
   if (!tools || !zone) return <>{fallback}</>
   return (
-    <WriteTip title={t('changeZoneState', { zone: zone.name })}>
+    <WriteTip allowed={canWrite} hint={hint} title={t('changeZoneState', { zone: zone.name })}>
       <ButtonBase disabled={!canWrite} aria-label={t('changeZoneState', { zone: zone.name })} aria-haspopup='menu'
         onClick={e => tools.openStateMenu(zone, e.currentTarget)} sx={{ borderRadius: 4 }}>
         <ZoneStateChip state={zone.state} />
@@ -119,7 +146,7 @@ export function ZoneStateControl({ zoneName, fallback }: { zoneName: string; fal
 /** The Add rule of a zone section: a new flow into the zone. */
 export function ZoneAddFlow({ zoneName, title, open }: { zoneName: string; title: string; open: boolean }) {
   const tools = useContext(ZoneToolsContext)
-  const { canWrite } = useMicrosegWrite()
+  const { canWrite } = useZoneToolsWrite(tools)
   const zone = tools?.zoneOf(zoneName)
   if (!tools || !zone) return null
   return <SectionAddButton title={title} open={open} disabled={!canWrite} onClick={() => tools.addFlow(zone)} />
@@ -147,7 +174,7 @@ function lockTitleOf(match: ZoneRuleMatch, t: ReturnType<typeof useTranslations<
 export function ZoneRuleRow({ zoneName, occurrence, ...row }: RuleRowProps & { zoneName: string; occurrence: number }) {
   const t = useTranslations('microsegPilot.dfw')
   const tools = useContext(ZoneToolsContext)
-  const { canWrite } = useMicrosegWrite()
+  const { canWrite, hint } = useZoneToolsWrite(tools)
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const match = tools?.match(row.rule, zoneName, occurrence) ?? null
   if (!tools || match?.kind !== 'flow') {
@@ -158,7 +185,7 @@ export function ZoneRuleRow({ zoneName, occurrence, ...row }: RuleRowProps & { z
   const menu = (
     <>
       {changed && <Badge label={t('flowChanged')} tone='warning' title={t('flowChangedHint')} />}
-      <WriteTip title={t('ruleMenu')}>
+      <WriteTip allowed={canWrite} hint={hint} title={t('ruleMenu')}>
         <IconButton size='small' aria-label={t('ruleMenu')} aria-haspopup='menu' disabled={!canWrite} onClick={e => setAnchor(e.currentTarget)}>
           <i className='ri-more-2-fill' style={{ fontSize: 14 }} />
         </IconButton>

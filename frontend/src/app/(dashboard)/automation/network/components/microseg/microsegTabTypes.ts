@@ -1,5 +1,5 @@
 import type { ClusterOptions, FirewallMode, FirewallRule } from '@/lib/api/firewall'
-import type { MicrosegPolicy, SuggestionKind } from '@/lib/microseg/types'
+import type { GroupRun, MicrosegPolicy, SuggestionKind } from '@/lib/microseg/types'
 
 export const MICROSEG_SUBTABS = ['overview', 'policy', 'observation', 'drifts', 'history'] as const
 
@@ -14,9 +14,9 @@ export type ObservedService = { label: string; tokens: string[] }
 
 /**
  * What the Observation sub-tab opens filtered on, from a figure of the Dashboard: a type of flow, a service, a zone,
- * or the flows whose source is in no zone.
+ * or the flows whose source is in no zone; `cluster`, on a shared policy, the cluster the Dashboard was showing.
  */
-export type ObservationFocus = { kind?: SuggestionKind; service?: ObservedService; zoneId?: string; source?: 'unknown' }
+export type ObservationFocus = { kind?: SuggestionKind; service?: ObservedService; zoneId?: string; source?: 'unknown'; cluster?: string }
 
 /** A run followed in the strip under the banner, whatever sub-tab is shown. */
 export type TrackedRun = {
@@ -29,6 +29,11 @@ export type TrackedRun = {
   runningText: string
   /** The zone whose state the run changes: its card says so while the run goes on. */
   zoneId?: string
+  /**
+   * The run of each cluster when the action was started on several clusters of a shared policy (or on another cluster
+   * than the tab's), each followed through its own cluster. Absent: `runId` is a run of the tab's connection.
+   */
+  runs?: GroupRun[]
 }
 
 /** What MicrosegTab hands to the content of each sub-tab. */
@@ -59,6 +64,15 @@ export type MicrosegSubTabProps = {
   pveNodes?: string[]
   /** The status of those nodes ("online"...), when the page knows it. */
   pveNodeStatus?: Record<string, string>
+  /**
+   * The smallest connection ID of the group sharing the policy, the same from every cluster of the group: SWR keys
+   * of group-wide reads are built from it. Undefined while the group is still read, so no key is built before.
+   */
+  anchor?: string
+  /** The clusters sharing the policy, sorted; the connection alone for a policy that is not shared. */
+  clusterIds?: string[]
+  /** The name of a cluster of the group, as the user sees it. */
+  clusterName?: (id: string) => string
 }
 
 /** What the deployment wizard (opened from a failed pre-flight check) needs from the firewall page. */

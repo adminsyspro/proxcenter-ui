@@ -26,7 +26,7 @@ describe('zone nodes', () => {
   })
 
   it('counts the members queued for the zone', async () => {
-    setup({ vms: [vm(100, 'web-1', [])], pending_members: [{ id: 'm1', policy_id: 'p1', node: 'pve1', type: 'qemu', vmid: 100, zone_id: 'zw' }] })
+    setup({ vms: [vm(100, 'web-1', [])], pending_members: [{ id: 'm1', policy_id: 'p1', connection_id: 'c1', node: 'pve1', type: 'qemu', vmid: 100, zone_id: 'zw' }] })
     await waitFor(async () => expect(within(await node('zone:zw')).getByText('1 member')).toBeTruthy())
   })
 
@@ -219,7 +219,7 @@ describe('side panel', () => {
     fireEvent.click(await within(dialog).findByRole('checkbox', { name: 'web-1' }))
     mock.routes['GET /policy'] = () => reply(200, policy({
       zones: [web(), db()], last_revision: REVISION_HEAD, pending_changes: true,
-      pending_members: [{ id: 'm1', policy_id: 'p1', node: 'pve1', type: 'qemu', vmid: 100, zone_id: 'zw' }],
+      pending_members: [{ id: 'm1', policy_id: 'p1', connection_id: 'c1', node: 'pve1', type: 'qemu', vmid: 100, zone_id: 'zw' }],
     }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Assign 1 guest' }))
 

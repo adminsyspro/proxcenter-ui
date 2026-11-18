@@ -6,7 +6,7 @@
  * route and never asks a guest config, rules or options itself. No automatic RTL cleanup is configured in this repo.
  */
 import type { ReactNode } from 'react'
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { act, cleanup, render, renderHook, waitFor } from '@testing-library/react'
 import { SWRConfig } from 'swr'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -129,6 +129,38 @@ describe('useVMFirewallCoverage', () => {
     await new Promise(resolve => setTimeout(resolve, 10))
 
     expect(signals.every(s => s.aborted)).toBe(true)
+  })
+
+  it('does not abort a read another mounted consumer of the same key waits on, nor turn its abort into an error', async () => {
+    // Two consumers of one key share one request (SWR dedupes): the first one to go away must not kill it for the other.
+    const signals: AbortSignal[] = []
+    vi.stubGlobal('fetch', vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init?.signal ?? undefined
+      if (signal) signals.push(signal)
+      return new Promise<Response>((resolve, reject) => {
+        const timer = setTimeout(() => resolve(new Response(JSON.stringify(COVERAGE), { status: 200 })), 40)
+        signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('aborted', 'AbortError')) })
+      })
+    }))
+    function Consumer({ name }: Readonly<{ name: string }>) {
+      const { data, error } = useVMFirewallCoverage('conn-1')
+      return <span data-testid={name}>{error ? `error ${error.name}` : (data ? 'data' : 'none')}</span>
+    }
+    const tree = (first: boolean) => (
+      <SWRConfig value={{ provider: () => new Map() }}>
+        {first && <Consumer name='first' />}
+        <Consumer name='second' />
+      </SWRConfig>
+    )
+
+    const view = render(tree(true))
+    await waitFor(() => expect(signals).toHaveLength(1))
+    view.rerender(tree(false))
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(signals[0].aborted).toBe(false)
+    await waitFor(() => expect(view.getByTestId('second').textContent).toBe('data'))
+    expect(signals).toHaveLength(1)
   })
 
   it('surfaces a server error', async () => {

@@ -3,29 +3,33 @@
  * zone dialog that carries them: what they hand to the save chain of `useZoneEdits`.
  */
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react'
+import { NextIntlClientProvider } from 'next-intl'
 import { SWRConfig } from 'swr'
 
 import { renderWithProviders } from '@/__tests__/setup/renderWithProviders'
 import type { MicrosegException } from '@/lib/microseg/types'
+import enMessages from '@/messages/en.json'
 
-import ExceptionDialog from './ExceptionDialog'
+import ExceptionDialog, { type ExceptionClusters } from './ExceptionDialog'
 import type { ExceptionDraft } from './exceptionModel'
 import ExceptionsTableDialog from './ExceptionsTableDialog'
 import { GUESTS_ROUTE, calls, mock, policy, reply, zone } from './microsegTestKit'
-import { installFreshMocks, vm } from './policyTestKit'
+import { body, installFreshMocks, vm } from './policyTestKit'
+import { useZoneEdits } from './useZoneEdits'
 import ZoneDialog from './ZoneDialog'
+import { useExceptionEditor } from './ZonePanelActions'
 import type { ZoneFormValues } from './zoneForm'
 import type { PolicyGuest, ZoneMember } from './zoneModel'
 
 installFreshMocks()
 
 const guest = (vmid: number, name: string, over: Partial<PolicyGuest> = {}): PolicyGuest => ({
-  vmid, name, node: 'pve1', type: 'qemu', status: 'running', tags: [], ips: [`10.0.0.${vmid % 250}`], ...over,
+  connectionId: 'c1', vmid, name, node: 'pve1', type: 'qemu', status: 'running', tags: [], ips: [`10.0.0.${vmid % 250}`], ...over,
 })
-const member = (g: PolicyGuest, pending = false): ZoneMember => ({ ref: { node: g.node, type: g.type, vmid: g.vmid }, guest: g, pending })
+const member = (g: PolicyGuest, pending = false): ZoneMember => ({ connectionId: g.connectionId, ref: { node: g.node, type: g.type, vmid: g.vmid }, guest: g, pending })
 const refOf = (g: PolicyGuest) => ({ type: g.type, vmid: g.vmid, name: g.name })
 
 const app1 = guest(101, 'app-01')
@@ -453,7 +457,7 @@ describe('ExceptionsTableDialog', () => {
 describe('ZoneDialog exceptions', () => {
   const dbZone = zone('zd', { name: 'db', state: 'observe' })
   const stored = (id: string, over: Partial<MicrosegException> = {}): MicrosegException => ({
-    id, policy_id: 'p1', zone_id: 'zd', sources: [refOf(app1)], destinations: [refOf(db1)], services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'me', ...over,
+    id, policy_id: 'p1', connection_id: 'c1', zone_id: 'zd', sources: [refOf(app1)], destinations: [refOf(db1)], services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'me', ...over,
   })
   const draft = policy({ zones: [dbZone], exceptions: [stored('e1'), stored('e2', { sources: [refOf(app2)] }), stored('e9', { zone_id: 'other' })] })
 
@@ -662,5 +666,304 @@ describe('ZoneDialog exceptions', () => {
     await waitFor(() => expect((within(dialog).getByRole('button', { name: 'Manage' }) as HTMLButtonElement).disabled).toBe(true))
     release()
     await waitFor(() => expect((within(dialog).getByRole('button', { name: 'Manage' }) as HTMLButtonElement).disabled).toBe(false))
+  })
+})
+
+describe('exceptions of a policy shared by two clusters', () => {
+  const NAMES: Record<string, string> = { c1: 'PVE-PROD', c2: 'PVE-DR' }
+  const name = (id: string) => NAMES[id] ?? 'Another cluster'
+  const both: ExceptionClusters = { options: [{ id: 'c2', name: 'PVE-DR' }, { id: 'c1', name: 'PVE-PROD' }], preferred: 'c2', name, readIds: ['c1', 'c2'], editIds: ['c1', 'c2'] }
+  // The same VMIDs on both clusters are other VMs.
+  const appDr = guest(101, 'app-dr', { connectionId: 'c2' })
+  const dbDr = guest(201, 'db-dr', { connectionId: 'c2' })
+  const webDr = guest(301, 'web-dr', { connectionId: 'c2' })
+  const everyGuest = [app1, db1, appDr, dbDr, webDr]
+  const everyMember = [member(db1), member(dbDr)]
+  const CLUSTER = 'Cluster'
+
+  function renderShared(exception: ExceptionDraft | null = null, clusters: ExceptionClusters = both) {
+    const onSave = vi.fn((_draft: ExceptionDraft) => undefined)
+    renderWithProviders(<ExceptionDialog open exception={exception} guests={everyGuest} members={everyMember} clusters={clusters} onSave={onSave} onClose={vi.fn()} />)
+    return { onSave }
+  }
+  const options = async (dialog: HTMLElement, label: string) => {
+    const list = await openList(dialog, label)
+    const names = within(list).getAllByRole('option').map(o => o.textContent)
+    await closeList(dialog, label)
+    return names
+  }
+  const chooseCluster = (dialog: HTMLElement, clusterName: string) => {
+    fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: CLUSTER }))
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: clusterName }))
+  }
+
+  it('asks no cluster on a policy of one cluster', async () => {
+    renderDialog()
+    const dialog = await screen.findByRole('dialog', { name: 'New exception' })
+    expect(within(dialog).queryByRole('combobox', { name: CLUSTER })).toBeNull()
+  })
+
+  it('starts on the cluster it was opened from, on the first line, and offers that cluster\'s guests only', async () => {
+    renderShared()
+    const dialog = await screen.findByRole('dialog', { name: 'New exception' })
+    const lines = within(dialog).getAllByRole('combobox')
+    expect(lines[0]).toBe(within(dialog).getByRole('combobox', { name: CLUSTER }))
+    expect(lines[0].textContent).toBe('PVE-DR')
+    expect(await options(dialog, DESTINATIONS)).toEqual(['db-dr201', 'app-dr101', 'web-dr301'])
+    expect(await options(dialog, SOURCES)).toEqual(['app-dr101', 'db-dr201', 'web-dr301'])
+  })
+
+  it('empties both lists when the cluster changes, then offers the guests of the new one', async () => {
+    renderShared()
+    const dialog = await screen.findByRole('dialog', { name: 'New exception' })
+    await pick(dialog, SOURCES, /^app-dr/)
+    await pick(dialog, DESTINATIONS, /^db-dr/)
+    chooseCluster(dialog, 'PVE-PROD')
+    expect(within(dialog).queryByTestId('exception-sources-value')?.textContent ?? '').toBe('')
+    expect(within(dialog).queryByTestId('exception-destinations-value')?.textContent ?? '').toBe('')
+    expect(await options(dialog, DESTINATIONS)).toEqual(['db-01201', 'app-01101'])
+  })
+
+  it('hands the cluster chosen with the exception', async () => {
+    const { onSave } = renderShared()
+    const dialog = await screen.findByRole('dialog', { name: 'New exception' })
+    chooseCluster(dialog, 'PVE-PROD')
+    await pick(dialog, SOURCES, /^app-01/)
+    await pick(dialog, DESTINATIONS, /^db-01/)
+    await pick(dialog, SERVICES, /^SSH/)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    expect(onSave.mock.calls[0][0]).toMatchObject({ connectionId: 'c1', sources: [refOf(app1)], destinations: [refOf(db1)] })
+  })
+
+  it('keeps an existing exception on its cluster, named with the guests of that cluster', async () => {
+    renderShared({ id: 'e1', connectionId: 'c2', sources: [refOf(appDr)], destinations: [refOf(dbDr)], services: ['ssh'], comment: '' })
+    const dialog = await screen.findByRole('dialog', { name: 'Edit exception' })
+    const select = within(dialog).getByRole('combobox', { name: CLUSTER })
+    expect(select.textContent).toBe('PVE-DR')
+    expect(select.getAttribute('aria-disabled')).toBe('true')
+    expect(within(dialog).getByTestId('exception-sources-value').textContent).toBe('app-dr')
+  })
+
+  it('says it when the cluster it was opened from is not applied yet, and starts on an applied one', async () => {
+    renderShared(null, { options: [{ id: 'c1', name: 'PVE-PROD' }], preferred: 'c2', name, readIds: ['c1', 'c2'], editIds: ['c1', 'c2'] })
+    const dialog = await screen.findByRole('dialog', { name: 'New exception' })
+    expect(within(dialog).getByRole('combobox', { name: CLUSTER }).textContent).toBe('PVE-PROD')
+    expect(within(dialog).getByText('PVE-DR is not applied yet: an exception there would protect nothing.')).toBeTruthy()
+  })
+
+  it('shows the cluster of each exception in the table, its guests named from that cluster', () => {
+    const onDr: ExceptionDraft = { id: 'e2', connectionId: 'c2', sources: [refOf(appDr)], destinations: [refOf(dbDr)], services: ['ssh'], comment: '' }
+    const onProd: ExceptionDraft = { id: 'e1', connectionId: 'c1', sources: [refOf(app1)], destinations: [refOf(db1)], services: ['ssh'], comment: '' }
+    renderWithProviders(
+      <ExceptionsTableDialog zoneName='db' zoneColor='' values={[onProd, onDr]} guests={everyGuest} members={everyMember} zoneState='enforce' clusters={both} onChange={vi.fn()} onClose={vi.fn()} />,
+    )
+    const rows = screen.getAllByRole('row').slice(1)
+    expect(rows.map(r => r.getAttribute('aria-label'))).toEqual(['app-01 → db-01 · SSH', 'app-dr → db-dr · SSH'])
+    expect(within(rows[0]).getByText('PVE-PROD')).toBeTruthy()
+    expect(within(rows[1]).getByText('PVE-DR')).toBeTruthy()
+    // Every guest found on its own cluster: no status to say.
+    expect(rows.flatMap(r => [...r.querySelectorAll('.MuiChip-colorWarning')])).toHaveLength(0)
+  })
+
+  it('lists, without a status and without its edit and delete, an exception of a cluster the user cannot see', () => {
+    const far: ExceptionDraft = { id: 'e3', connectionId: 'c3', sources: [{ type: 'qemu', vmid: 101, name: 'far' }], destinations: [refOf(dbDr)], services: ['ssh'], comment: '' }
+    renderWithProviders(
+      <ExceptionsTableDialog zoneName='db' zoneColor='' values={[far]} guests={everyGuest} members={everyMember} zoneState='enforce' clusters={both} onChange={vi.fn()} onClose={vi.fn()} />,
+    )
+    const [row] = screen.getAllByRole('row').slice(1)
+    expect(within(row).getByText('Another cluster')).toBeTruthy()
+    expect(row.querySelectorAll('.MuiChip-colorWarning')).toHaveLength(0)
+    expect((within(row).getByRole('button', { name: 'Edit exception' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((within(row).getByRole('button', { name: 'Delete exception' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('shows no cluster column on a policy of one cluster', () => {
+    renderWithProviders(<ExceptionsTableDialog zoneName='db' zoneColor='' values={[]} guests={guests} members={members} zoneState='enforce' onChange={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.queryByRole('columnheader', { name: CLUSTER })).toBeNull()
+  })
+
+  it('reads the guests of every cluster in the zone dialog: a queued member of the other cluster is offered first', async () => {
+    const dbZone = zone('zd', { name: 'db', state: 'observe' })
+    const links = ['c1', 'c2'].map(connection_id => ({ connection_id, active: true, stop_cluster_disabled: false, policy_id: 'p1', created_at: '', activated_at: null }))
+    mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: [vm(101, 'app-01', []), vm(201, 'db-01', ['zone-db'])] } })
+    mock.routes['GET /api/v1/vms?connId=c2'] = () => reply(200, { data: { vms: [vm(101, 'app-dr', []), vm(202, 'db-dr', [])] } })
+    const p = policy({ zones: [dbZone], clusters: links, pending_members: [{ id: 'pm1', policy_id: 'p1', connection_id: 'c2', node: 'pve1', type: 'qemu', vmid: 202, zone_id: 'zd' }] })
+    renderWithProviders(
+      <SWRConfig value={{ revalidateOnMount: true, dedupingInterval: 0, errorRetryCount: 0 }}>
+        <ZoneDialog zone={dbZone} connectionId='c1' readyAfterHours={24} onSave={vi.fn()} onClose={vi.fn()} policy={p} clusterName={id => NAMES[id] ?? id} />
+      </SWRConfig>,
+    )
+    const zoneDialog = await screen.findByRole('dialog', { name: 'Edit zone' })
+    await waitFor(() => expect(calls('GET /api/v1/vms?connId=c2').length).toBeGreaterThan(0))
+    fireEvent.click(within(zoneDialog).getByRole('button', { name: 'Manage' }))
+    const table = await screen.findByRole('dialog', { name: /^VM exceptions/ })
+    fireEvent.click(within(table).getByRole('button', { name: 'Add an exception' }))
+    const dialog = await screen.findByRole('dialog', { name: 'New exception' })
+    chooseCluster(dialog, 'PVE-DR')
+    const list = await openList(dialog, DESTINATIONS)
+    expect(list.textContent).toMatch(/^Members of the zone.*db-dr202.*Not members yet.*app-dr101/)
+    expect(list.textContent).not.toContain('Not in the inventory')
+  })
+})
+
+describe('the writes of the exceptions of a shared policy', () => {
+  const C2 = '/api/v1/firewall/microseg/c2'
+  const app = { type: 'qemu' as const, vmid: 101, name: 'app-01' }
+  const db = { type: 'qemu' as const, vmid: 201, name: 'db-01' }
+  const onDr = (id: string): MicrosegException => ({
+    id, policy_id: 'p1', connection_id: 'c2', zone_id: 'zw', sources: [app], destinations: [db], services: [{ proto: 'tcp', dport: '22' }], comment: '', created_by: 'me',
+  })
+  const draft = policy({ zones: [zone('zw', { name: 'web', state: 'disabled' })], exceptions: [onDr('e2')] })
+
+  function wrapper({ children }: { children: ReactNode }) {
+    return (
+      <NextIntlClientProvider locale='en' messages={enMessages as Record<string, unknown>}>
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>{children}</SWRConfig>
+      </NextIntlClientProvider>
+    )
+  }
+  const setup = () => renderHook(() => useZoneEdits({ connectionId: 'c1', policy: draft, reloadPolicy: vi.fn(async () => undefined), startRun: vi.fn() }), { wrapper })
+
+  it('writes a new exception through the cluster chosen', async () => {
+    mock.routes[`POST ${C2}/exceptions`] = () => reply(200, { version: 4, exception: {} })
+    const { result } = setup()
+    await act(() => result.current.saveException('zw', { connectionId: 'c2', sources: [app], destinations: [db], services: ['ssh'], comment: '' }))
+    expect(calls('POST /exceptions')).toHaveLength(0)
+    expect(body(calls(`POST ${C2}/exceptions`)[0][1] as RequestInit)).toMatchObject({ version: 3, zone_id: 'zw' })
+  })
+
+  it('updates and deletes an exception through its own cluster', async () => {
+    mock.routes[`PUT ${C2}/exceptions/e2`] = () => reply(200, { version: 4, exception: {} })
+    mock.routes[`DELETE ${C2}/exceptions/e2`] = () => reply(200, { version: 5 })
+    const { result } = setup()
+    await act(() => result.current.saveException('zw', { id: 'e2', connectionId: 'c2', sources: [app], destinations: [db], services: ['https'], comment: '' }))
+    await act(() => result.current.deleteException('e2'))
+    expect(calls('PUT /exceptions/e2')).toHaveLength(0)
+    expect(calls('DELETE /exceptions/e2')).toHaveLength(0)
+    expect(calls(`PUT ${C2}/exceptions/e2`)).toHaveLength(1)
+    expect(calls(`DELETE ${C2}/exceptions/e2`)).toHaveLength(1)
+  })
+
+  it('writes the exceptions of a zone each through its cluster, each with the version the write before returned', async () => {
+    let v = 3
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: ++v, zone: {} })
+    mock.routes[`DELETE ${C2}/exceptions/e2`] = () => reply(200, { version: ++v })
+    mock.routes['POST /exceptions'] = () => reply(200, { version: ++v, exception: {} })
+    mock.routes[`POST ${C2}/exceptions`] = () => reply(200, { version: ++v, exception: {} })
+    const { result } = setup()
+    const values = {
+      name: 'web', label: '', color: '#ef4444', isolate_members: false, state: 'disabled' as const, egress_state: 'off' as const, egress_mode: 'local' as const, gateway: '', gateway_services: [],
+      exceptions: [
+        { connectionId: 'c1', sources: [app], destinations: [db], services: ['ssh'], comment: '' },
+        { connectionId: 'c2', sources: [app], destinations: [db], services: ['https'], comment: '' },
+      ],
+      removed_exceptions: ['e2'],
+    }
+    await act(() => result.current.saveZone(draft.zones[0], values))
+    expect(body(calls(`DELETE ${C2}/exceptions/e2`)[0][1] as RequestInit)).toEqual({ version: 4 })
+    expect(body(calls('POST /exceptions')[0][1] as RequestInit).version).toBe(5)
+    expect(body(calls(`POST ${C2}/exceptions`)[0][1] as RequestInit).version).toBe(6)
+  })
+})
+
+describe('the exceptions of a zone panel on a shared policy', () => {
+  const NAMES: Record<string, string> = { c1: 'PVE-PROD', c2: 'PVE-DR' }
+  const C3_GUESTS = 'GET /api/v1/vms?connId=c3'
+  const web = zone('zw', { name: 'web', state: 'enforce' })
+  const links = ['c1', 'c2', 'c3'].map(connection_id => ({ connection_id, active: true, stop_cluster_disabled: false, policy_id: 'p1', created_at: '', activated_at: null }))
+  const on = (id: string, connection_id: string, sources: { type: 'qemu'; vmid: number; name: string }[]): MicrosegException => ({
+    id, policy_id: 'p1', connection_id, zone_id: 'zw', sources, destinations: [{ type: 'qemu', vmid: 201, name: '' }], services: [{ proto: 'tcp', dport: '22' }], comment: '', created_by: 'me',
+  })
+  const shared = policy({
+    zones: [web], clusters: links,
+    exceptions: [on('e1', 'c1', [{ type: 'qemu', vmid: 101, name: 'app-01' }]), on('e2', 'c2', [{ type: 'qemu', vmid: 101, name: 'app-dr' }]), on('e3', 'c3', [{ type: 'qemu', vmid: 101, name: 'far' }])],
+  })
+  const members: ZoneMember[] = [
+    { connectionId: 'c1', ref: { node: 'pve1', type: 'qemu', vmid: 201 }, guest: null, pending: false },
+    { connectionId: 'c2', ref: { node: 'pve1', type: 'qemu', vmid: 201 }, guest: null, pending: false },
+  ]
+
+  function Panel({ p, clusterName }: { p: typeof shared; clusterName?: (id: string) => string }) {
+    const edits = useZoneEdits({ connectionId: 'c1', policy: p, reloadPolicy: async () => undefined, startRun: () => undefined, clusterName })
+    const editor = useExceptionEditor(edits, web, members, true)
+    return (
+      <>
+        <button type='button' onClick={editor.create}>New</button>
+        {editor.list(10)}
+        {editor.dialogs}
+      </>
+    )
+  }
+  const renderPanel = (p = shared, clusterName: ((id: string) => string) | undefined = id => NAMES[id] ?? id) => {
+    mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: [vm(101, 'app-01', []), vm(201, 'db-01', ['zone-web'])] } })
+    mock.routes['GET /api/v1/vms?connId=c2'] = () => reply(200, { data: { vms: [vm(101, 'app-dr', []), vm(201, 'db-dr', ['zone-web'])] } })
+    renderWithProviders(
+      <SWRConfig value={{ revalidateOnMount: true, dedupingInterval: 0, errorRetryCount: 0 }}>
+        <Panel p={p} clusterName={clusterName} />
+      </SWRConfig>,
+    )
+  }
+  const line = (label: RegExp) => screen.getAllByRole('listitem').find(l => label.test(l.getAttribute('aria-label') ?? ''))!
+
+  it('shows the cluster of each exception after its icon, names its guests from that cluster, and edits none of a cluster the user cannot see', async () => {
+    renderPanel()
+    await waitFor(() => expect(screen.getAllByRole('listitem').map(l => l.getAttribute('aria-label'))).toEqual(['app-01 → db-01 · SSH', 'app-dr → db-dr · SSH', 'far → 201 · SSH']))
+    expect(within(line(/^app-01/)).getByText('PVE-PROD')).toBeTruthy()
+    expect(within(line(/^app-dr/)).getByText('PVE-DR')).toBeTruthy()
+    expect(within(line(/^far/)).getByText('Another cluster')).toBeTruthy()
+    // Its guests are not read: no status is said of it rather than a false one.
+    expect(line(/^far/).querySelectorAll('.MuiChip-colorWarning')).toHaveLength(0)
+    expect((within(line(/^far/)).getByRole('button', { name: 'Edit exception' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((within(line(/^app-dr/)).getByRole('button', { name: 'Edit exception' }) as HTMLButtonElement).disabled).toBe(false)
+    // The guests of a cluster outside the user scope are not read.
+    expect(calls(C3_GUESTS)).toHaveLength(0)
+  })
+
+  it('locks an exception whose cluster left the group, in the panel and in the table of the zone dialog alike', async () => {
+    const gone = policy({ zones: [web], clusters: links.slice(0, 2), exceptions: [on('e1', 'c1', [{ type: 'qemu', vmid: 101, name: 'app-01' }]), on('e9', 'c2b', [{ type: 'qemu', vmid: 101, name: 'left' }])] })
+    renderPanel(gone, id => ({ ...NAMES, c2b: 'PVE-OLD' } as Record<string, string>)[id] ?? id)
+    await waitFor(() => expect(line(/^left/)).toBeTruthy())
+    expect((within(line(/^left/)).getByRole('button', { name: 'Edit exception' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((within(line(/^app-01/)).getByRole('button', { name: 'Edit exception' }) as HTMLButtonElement).disabled).toBe(false)
+    cleanup()
+    const clusters: ExceptionClusters = { options: [{ id: 'c1', name: 'PVE-PROD' }], preferred: 'c1', name: id => NAMES[id] ?? 'Another cluster', readIds: ['c1', 'c2', 'c2b'], editIds: ['c1', 'c2'] }
+    renderWithProviders(
+      <ExceptionsTableDialog zoneName='web' zoneColor='' values={[{ id: 'e9', connectionId: 'c2b', sources: [], destinations: [], services: ['ssh'], comment: '' }]} guests={[]} members={[]} zoneState='enforce' clusters={clusters} onChange={vi.fn()} onClose={vi.fn()} />,
+    )
+    const [row] = screen.getAllByRole('row').slice(1)
+    expect((within(row).getByRole('button', { name: 'Edit exception' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('opens a new exception on the tab\'s cluster, the clusters the user sees offered', async () => {
+    renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'New' }))
+    const dialog = await screen.findByRole('dialog', { name: 'New exception' })
+    expect(within(dialog).getByRole('combobox', { name: 'Cluster' }).textContent).toBe('PVE-PROD')
+    fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Cluster' }))
+    expect(within(screen.getByRole('listbox')).getAllByRole('option').map(o => o.textContent)).toEqual(['PVE-DR', 'PVE-PROD'])
+  })
+
+  it('opens an existing exception on its own cluster and writes it through that cluster', async () => {
+    mock.routes['PUT /api/v1/firewall/microseg/c2/exceptions/e2'] = () => reply(200, { version: 4, exception: {} })
+    renderPanel()
+    await waitFor(() => expect(line(/^app-dr/)).toBeTruthy())
+    fireEvent.click(within(line(/^app-dr/)).getByRole('button', { name: 'Edit exception' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit exception' })
+    expect(within(dialog).getByRole('combobox', { name: 'Cluster' }).textContent).toBe('PVE-DR')
+    await pick(dialog, SERVICES, /^HTTPS/)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(calls('PUT /api/v1/firewall/microseg/c2/exceptions/e2')).toHaveLength(1))
+    expect(calls('PUT /exceptions/e2')).toHaveLength(0)
+  })
+
+  it('shows no chip and asks no cluster on a policy of one cluster', async () => {
+    renderPanel(policy({ zones: [web], exceptions: [on('e1', 'c1', [{ type: 'qemu', vmid: 101, name: 'app-01' }])] }), undefined)
+    await waitFor(() => expect(screen.getAllByRole('listitem').map(l => l.getAttribute('aria-label'))).toEqual(['app-01 → db-01 · SSH']))
+    expect(within(line(/^app-01/)).queryByText('c1')).toBeNull()
+    expect(document.querySelectorAll('[role="listitem"] .MuiChip-root')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'New' }))
+    const dialog = await screen.findByRole('dialog', { name: 'New exception' })
+    expect(within(dialog).queryByRole('combobox', { name: 'Cluster' })).toBeNull()
   })
 })

@@ -52,9 +52,10 @@ export function groupKeyOf(endpoint: LensEndpoint): string {
 /**
  * Resolves an address to its zone: the guest that carries it (from the guest addresses), else the only guest with
  * the VMID the pair was attributed to, then the zone of that guest from its `<tag_prefix><zone name>` tag. A guest
- * with no zone tag is unzoned; an address no guest carries is external.
+ * with no zone tag is unzoned; an address no guest carries is external. `remote`: the guests of the other clusters of
+ * a shared policy, matched on their addresses only (after this cluster's guests; a VMID names a guest of this cluster).
  */
-export function buildResolver(zones: MicrosegZone[], tagPrefix: string, guests: LensGuest[]): Resolver {
+export function buildResolver(zones: MicrosegZone[], tagPrefix: string, guests: LensGuest[], remote: LensGuest[] = []): Resolver {
   // PVE lowercases tags: the prefix and the zone names are compared the same way.
   const zoneByTag = new Map(zones.map(z => [`${tagPrefix}${z.name}`.toLowerCase(), z]))
   const endpointOf = (g: LensGuest): LensEndpoint => {
@@ -71,6 +72,16 @@ export function buildResolver(zones: MicrosegZone[], tagPrefix: string, guests: 
     }
     // Two guests with one VMID (it should not happen in a cluster): the VMID tells nothing.
     byVmid.set(g.vmid, byVmid.has(g.vmid) ? null : endpoint)
+  }
+  // Known limit: the zone of a remote address comes from its guest's tag, the first guest read that carries it. Two
+  // clusters may reuse one private range: an address both carry (this one excepted, it comes first) can then be given
+  // the zone of the wrong cluster's guest. The engine's own zone of a flow (its suggestions) does not have that limit.
+  for (const g of remote) {
+    const endpoint = endpointOf(g)
+    for (const ip of g.ips ?? []) {
+      const key = bareIp(ip)
+      if (key && !byIp.has(key)) byIp.set(key, endpoint)
+    }
   }
   return (ip, vmid) => byIp.get(bareIp(ip)) ?? (vmid ? byVmid.get(vmid) : null) ?? { kind: 'external' }
 }

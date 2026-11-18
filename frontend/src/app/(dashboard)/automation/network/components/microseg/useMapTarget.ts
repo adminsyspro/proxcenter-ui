@@ -9,22 +9,24 @@ import type { PolicyGuest, ZoneMember } from './zoneModel'
  * the map opens, until the admin picks another one or clears it (the parameter then leaves the address, so a reload
  * or a re-render does not target it again). The page hands the VMID of the link (`linkedVm`); without it (the map
  * on its own) the address is read here. The target follows the inventory (a guest that
- * stops or goes away is no longer targeted). Its panel shows while no zone or edge panel is asked for.
+ * stops or goes away is no longer targeted). Its panel shows while no zone or edge panel is asked for. `shared`: the
+ * map draws a shared policy, its guests are keyed by their cluster.
  */
-export function useMapTarget(guests: PolicyGuest[], membersByZone: ReadonlyMap<string, ZoneMember[]>, linkedVm?: string | null) {
+export function useMapTarget(guests: PolicyGuest[], membersByZone: ReadonlyMap<string, ZoneMember[]>, linkedVm?: string | null, shared = false) {
   const params = useSearchParams()
   const pathname = usePathname()
   const linked = (linkedVm === undefined ? params?.get('vm') : linkedVm)?.trim() ?? ''
-  const candidates = useMemo(() => targetCandidates(guests, membersByZone), [guests, membersByZone])
+  const candidates = useMemo(() => targetCandidates(guests, membersByZone, shared), [guests, membersByZone, shared])
   const peers = useMemo(() => targetPeers(guests), [guests])
   // undefined: nothing picked yet, the link (if any) decides; null: cleared.
   const [picked, setPicked] = useState<string | null | undefined>(undefined)
   const [panelOpen, setPanelOpen] = useState(true)
-  const key = picked === undefined ? candidates.find(c => linked !== '' && String(c.vmid) === linked)?.key ?? null : picked
-  const target: TargetGuest | null = useMemo(() => (key ? candidates.find(c => c.key === key) ?? null : null), [key, candidates])
+  // The pick is a guestId: two clusters of a shared policy can hold the same type and VMID.
+  const id = picked === undefined ? candidates.find(c => linked !== '' && String(c.vmid) === linked)?.id ?? null : picked
+  const target: TargetGuest | null = useMemo(() => (id ? candidates.find(c => c.id === id) ?? null : null), [id, candidates])
 
   const pick = useCallback((next: TargetGuest | null) => {
-    setPicked(next?.key ?? null)
+    setPicked(next?.id ?? null)
     setPanelOpen(!!next)
     if (params?.has('vm')) {
       const rest = new URLSearchParams(params.toString())

@@ -127,3 +127,17 @@ export function decodeCollapsed(raw: string | null): string[] {
 }
 
 export const encodeCollapsed = (keys: string[]) => JSON.stringify(keys)
+
+const clusterNames = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+/**
+ * The options of the Cluster filter of a shared policy: the clusters the user sees, by name (one the user cannot see is
+ * not offered: the lookup gives back its bare ID). None for a policy of one cluster: the filter is not shown.
+ */
+export function clusterFilterOptions(ids: readonly string[], clusterName?: (id: string) => string): { value: string; label: string }[] {
+  if (ids.length < 2) return []
+  return ids.flatMap(id => {
+    const name = clusterName?.(id)
+    return name && name !== id ? [{ value: id, label: name }] : []
+  }).sort((a, b) => clusterNames.compare(a.label, b.label) || a.value.localeCompare(b.value))
+}

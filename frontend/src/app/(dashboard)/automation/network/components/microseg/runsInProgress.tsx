@@ -2,6 +2,9 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 
+import { groupRuns } from '@/lib/microseg/groupRuns'
+import type { RunStarted } from '@/lib/microseg/types'
+
 import type { TrackedRun } from './microsegTabTypes'
 
 /** What the page knows of the runs that write Proxmox and have not ended. */
@@ -25,6 +28,24 @@ export const RunsInProgressProvider = RunsInProgressContext.Provider
 /** Idle outside a provider: a component drawn alone shows nothing in progress. */
 export const useRunsInProgress = () => useContext(RunsInProgressContext)
 
+/** The run IDs a tracked line follows: its own and those of every cluster. */
+function runIds(run: TrackedRun): string[] {
+  return [run.runId, ...(run.runs ?? []).flatMap(r => (r.run_id ? [r.run_id] : []))]
+}
+
+/**
+ * What a lifecycle answer gives a tracked run: the run of the tab's connection alone, exactly as before the shared
+ * policies, or the run of each cluster. The line is keyed by the run of the tab's connection, else by the first run
+ * that started.
+ */
+export function startedRuns(started: RunStarted, connectionId: string): Pick<TrackedRun, 'runId' | 'runs'> {
+  const runs = groupRuns(started, connectionId)
+  const only = runs.length === 1 ? runs[0] : null
+  if (only && !only.error && only.connection_id === connectionId && (only.run_id ?? started.run_id) === started.run_id) return { runId: started.run_id }
+  const runId = started.run_id || runs.find(r => r.run_id)?.run_id || runs.map(r => `${r.connection_id}:${r.error ?? ''}`).join(',')
+  return { runId, runs }
+}
+
 export function runsInProgress(runs: readonly TrackedRun[], ended: ReadonlySet<string>): RunsInProgress {
   const writing = runs.filter(r => WRITING_KINDS.has(r.kind) && !ended.has(r.runId))
   if (writing.length === 0) return IDLE
@@ -40,7 +61,9 @@ export function useTrackedRuns() {
   const [ended, setEnded] = useState<ReadonlySet<string>>(NO_ZONE)
 
   const startRun = useCallback((run: TrackedRun) => {
-    setRuns(prev => (prev.some(r => r.runId === run.runId) ? prev : [...prev, run]))
+    // A run already followed (by its own line or as one cluster of a group line) is not followed twice.
+    const ids = new Set(runIds(run))
+    setRuns(prev => (prev.some(r => runIds(r).some(id => ids.has(id))) ? prev : [...prev, run]))
   }, [])
   const endRun = useCallback((runId: string) => {
     setEnded(prev => (prev.has(runId) ? prev : new Set(prev).add(runId)))

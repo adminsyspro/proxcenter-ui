@@ -25,6 +25,15 @@ describe('isRunAffectedKey', () => {
     expect(matches([42])).toBe(false)
   })
 
+  it('accepts a list of connections', () => {
+    const both = isRunAffectedKey(['c1', 'c2'])
+    expect(both('/api/v1/firewall/microseg/c1/status')).toBe(true)
+    expect(both('/api/v1/firewall/microseg/c2/runs/r1')).toBe(true)
+    expect(both('/api/v1/vms?connId=c2')).toBe(true)
+    expect(both('/api/v1/firewall/microseg/c3/status')).toBe(false)
+    expect(isRunAffectedKey([])('/api/v1/firewall/microseg/c1/status')).toBe(false)
+  })
+
   it('builds the inventory read of the zone members', () => {
     expect(zoneGuestsUrl('a/b')).toBe('/api/v1/vms?connId=a%2Fb')
   })

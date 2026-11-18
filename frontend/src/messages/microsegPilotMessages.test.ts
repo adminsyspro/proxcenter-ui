@@ -66,7 +66,10 @@ describe('microsegPilot i18n parity across the 6 served locales', () => {
     // fr shares one more since the count of exceptions on a link of the map ("# exception", "# exceptions"): the same word in both languages.
     // And one more with the count of exceptions of a revision in the history ("{counts}, # exception(s)"), for the same reason.
     // And one more with the "Services" column of the table of the exceptions of a zone: the same word in both languages.
-    const ceilings: Record<string, number> = { fr: 24, de: 16, es: 5, ko: 3, 'zh-CN': 3 }
+    // And one more with the "Cluster" filter of the observed flows of a shared policy: the same word in both languages
+    // (in German too).
+    // And one more with the "Cluster" line of the exception dialog of a shared policy, for the same reason (German too).
+    const ceilings: Record<string, number> = { fr: 26, de: 18, es: 5, ko: 3, 'zh-CN': 3 }
     for (const [locale, ceiling] of Object.entries(ceilings)) {
       const flat = flatten(locales[locale].microsegPilot)
       // The names of the gateway services (DNS, NTP, Ping) are protocol names, the same everywhere.

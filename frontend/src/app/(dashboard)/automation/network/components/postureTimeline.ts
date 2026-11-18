@@ -1,6 +1,7 @@
 import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, OUTSIDE_KEY, UNZONED_KEY, buildResolver, groupKeyOf, zoneKey, type LensPair } from '@/lib/microseg/trafficLens'
 import type { FlowDirection, MicrosegEvent, MicrosegTraffic, MicrosegZone, SuggestionKind } from '@/lib/microseg/types'
 
+import { eventGuestKey, guestVmid, type ClusterEvent } from './dashboardAggregate'
 import { NO_VLAN_KEY, type GroupBy, type PostureGuest, type PostureSlice } from './dashboardPosture'
 import { bareIp } from './microseg/zoneGraph'
 import { byText } from './microseg/zoneLayout'
@@ -85,7 +86,7 @@ export type PostureTimeline = {
 
 /** The group of an event, as the donut groups: its source zone, or the VLAN / node of the guest it reached. */
 function groupOfEvent(
-  e: MicrosegEvent, groupBy: GroupBy, zoneByName: ReadonlyMap<string, MicrosegZone>, guestByKey: ReadonlyMap<string, PostureGuest>, guestIps: ReadonlySet<string> | null,
+  e: ClusterEvent, groupBy: GroupBy, zoneByName: ReadonlyMap<string, MicrosegZone>, guestByKey: ReadonlyMap<string, PostureGuest>, guestIps: ReadonlySet<string> | null,
 ): string {
   // An outbound event is logged by the emitting zone (`zone`) and names the destination in `src_zone`.
   const out = e.direction === 'out'
@@ -99,7 +100,7 @@ function groupOfEvent(
   }
   if (groupBy !== 'zone') {
     // A guest the connection does not list (deleted since, another connection): Unknown, by node as by VLAN.
-    const guest = guestByKey.get(`${e.type}/${e.vmid}`)
+    const guest = guestByKey.get(eventGuestKey(e))
     if (!guest) return EXTERNAL_KEY
     if (groupBy === 'node') return `node:${e.node}`
     return guest.vlans.length ? `vlan:${guest.vlans[0]}` : NO_VLAN_KEY
@@ -118,7 +119,8 @@ function groupOfEvent(
  * order and colours), the other groups in "Other". `verdict` keeps the would-be-blocked or the blocked ones only.
  */
 export function postureTimeline(input: {
-  events: readonly MicrosegEvent[]
+  /** On a shared policy each event carries the cluster it was read from: its guest is looked up there. */
+  events: readonly ClusterEvent[]
   groupBy: GroupBy
   verdict: TimelineVerdict
   zones: readonly MicrosegZone[]
@@ -266,8 +268,8 @@ export function volumeWindow(now: number, range: TimelineRange): { from: number;
   return { from: Math.ceil((to - RANGE_SPEC[range].ms) / step) * step, to }
 }
 
-/** The VMID of a guest key ("qemu/101"). */
-const vmidOf = (g: PostureGuest) => Number(g.key.slice(g.key.indexOf('/') + 1))
+/** The VMID of a guest key ("qemu/101", or "<cluster>|qemu/101" on a shared policy). */
+const vmidOf = guestVmid
 
 /** The VMIDs of the volume chart at most: the busiest ones, so the series read stays bounded. */
 export const MAX_VOLUME_VMIDS = 100

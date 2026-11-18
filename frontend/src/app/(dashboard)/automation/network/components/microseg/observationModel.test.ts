@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { cidrPreview, decodeCollapsed, destinationLabel, encodeCollapsed, groupByDestination, hitsShare, maxHits, prefixBounds } from './observationModel'
+import { cidrPreview, clusterFilterOptions, decodeCollapsed, destinationLabel, encodeCollapsed, groupByDestination, hitsShare, maxHits, prefixBounds } from './observationModel'
 
 const row = (id: string, dst: string, hits: number) => ({ id, dst_zone_id: dst, hits })
 const names: Record<string, string> = { za: 'app', zd: 'db', zw: 'web', '': 'Unknown destination' }
@@ -101,5 +101,18 @@ describe('prefix lengths', () => {
     expect(cidrPreview('203.0.113.10', 32)).toBe('203.0.113.10/32')
     expect(cidrPreview('2001:db8:abcd:12::1', 64)).toBe('2001:db8:abcd:12::/64')
     expect(cidrPreview('2001:db8::1', 128)).toBe('2001:db8::1/128')
+  })
+})
+
+describe('the cluster filter of a shared policy', () => {
+  const names: Record<string, string> = { c1: 'PVE-PROD', c2: 'PVE-DR' }
+  const clusterName = (id: string) => names[id] ?? id
+
+  it('offers the clusters the user sees, by name, and never one the user cannot see', () => {
+    expect(clusterFilterOptions(['c1', 'c2', 'c9'], clusterName)).toEqual([{ value: 'c2', label: 'PVE-DR' }, { value: 'c1', label: 'PVE-PROD' }])
+  })
+
+  it('offers no cluster filter on a policy of one cluster', () => {
+    expect(clusterFilterOptions(['c1'], clusterName)).toEqual([])
   })
 })

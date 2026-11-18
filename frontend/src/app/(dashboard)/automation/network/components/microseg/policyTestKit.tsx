@@ -17,12 +17,12 @@ export const vm = (vmid: number, name: string, tags: string[], over: Record<stri
 })
 
 export const suggestion = (lastSeen: string): MicrosegSuggestion => ({
-  id: 's1', policy_id: 'p1', kind: 'would_block', src_key: 'k', src_ip: '10.0.0.1', src_zone_id: 'zw', dst_ip: '10.0.0.2', dst_zone_id: '',
+  id: 's1', policy_id: 'p1', connection_id: 'c1', kind: 'would_block', src_key: 'k', src_ip: '10.0.0.1', src_zone_id: 'zw', dst_ip: '10.0.0.2', dst_zone_id: '',
   proto: 'tcp', dport: '80', hits: 3, first_seen: lastSeen, last_seen: lastSeen, status: 'pending',
 })
 
 export const run = (status: MicrosegRun['status'], result: MicrosegRun['result'] = null): MicrosegRun => ({
-  id: 'r1', policy_id: 'p1', kind: 'targeted', status, started_at: hoursAgo(0), duration_ms: 10, api_calls: 1, writes: 1, result, error: '',
+  id: 'r1', policy_id: 'p1', connection_id: 'c1', kind: 'targeted', status, started_at: hoursAgo(0), duration_ms: 10, api_calls: 1, writes: 1, result, error: '',
 })
 
 export const body = (init?: RequestInit) => JSON.parse(String(init?.body))

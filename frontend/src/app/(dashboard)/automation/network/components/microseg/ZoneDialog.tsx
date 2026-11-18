@@ -10,11 +10,12 @@ import { useTranslations } from 'next-intl'
 import { zoneEgress, type EgressMode, type EgressState, type MicrosegFlow, type MicrosegPolicy, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
 
 import { DialogErrorLine, FLUSH_TOGGLE_SX, FormRow, isVersionConflict, ONE_LINE_SX, useDialogAction } from './dialogParts'
-import { draftException, exceptionDraft, exceptionsOfZone, exceptionStatus, shownExceptionStatus, type ExceptionDraft } from './exceptionModel'
+import { clusterGuestsRead, useExceptionScope, type ExceptionClusters } from './ExceptionDialog'
+import { draftException, exceptionDraft, exceptionsOfZone, exceptionStatus, ofCluster, shownExceptionStatus, type ExceptionDraft } from './exceptionModel'
 import { EXCEPTION_STATUS_COLOR } from './ExceptionLine'
 import ExceptionsTableDialog from './ExceptionsTableDialog'
+import { useGroupGuests } from './useGroupGuests'
 import { missingGatewayFlows, zoneStateChanges, type ExceptionCreated } from './useZoneEdits'
-import { useZoneGuests } from './useZoneGuests'
 import type { ZoneGate } from './zoneGate'
 import {
   DEFAULT_GATEWAY_SERVICES, GATEWAY_SERVICES, gatewayServicePorts, isGatewayService, typedServiceCandidates, typedServiceText, validateZoneForm, ZONE_COLORS,
@@ -42,6 +43,8 @@ type Props = {
   flows?: MicrosegFlow[]
   /** The draft: the exceptions of the zone, and its members (offered first as the destinations of an exception). Without it the zone shows none. */
   policy?: MicrosegPolicy
+  /** Names a cluster of a shared policy as the user sees it: the clusters an exception may be written on. */
+  clusterName?: (id: string) => string
 }
 
 const HELPER_SX = { ...ONE_LINE_SX, mx: 0 } as const
@@ -295,17 +298,23 @@ function EgressModeRow({ values, disabled, set }: { values: ZoneFormValues; disa
  * The exceptions of the zone on one row: how many it has, a mark when some are not active (the statuses the table
  * says, so none that reads a guest list still unknown), and the button that opens their table.
  */
-function ExceptionsRow({ values, guests, members, zoneState, guestsKnown, disabled, onManage }: {
+function ExceptionsRow({ values, guests, members, zoneState, guestsKnown, clusters, disabled, onManage }: {
   values: ExceptionDraft[]
   guests: PolicyGuest[]
   members: ZoneMember[]
   zoneState: ZoneState
   guestsKnown: boolean
+  clusters?: ExceptionClusters
   disabled: boolean
   onManage: () => void
 }) {
   const t = useTranslations('microsegPilot.policy.exceptions')
-  const issues = values.flatMap(e => shownExceptionStatus(exceptionStatus(draftException(e, ''), { state: zoneState }, members, guests), guestsKnown) ?? [])
+  // Each exception is read against the guests of its own cluster on a shared policy.
+  const issues = values.flatMap(e => {
+    const cluster = clusters ? e.connectionId ?? clusters.preferred : undefined
+    const known = guestsKnown && clusterGuestsRead(clusters, cluster)
+    return shownExceptionStatus(exceptionStatus(draftException(e, ''), { state: zoneState }, ofCluster(members, cluster), ofCluster(guests, cluster)), known) ?? []
+  })
   // Amber as soon as one of them asks for a look, grey when the zone is only not applied.
   const color = issues.some(s => EXCEPTION_STATUS_COLOR[s] === 'warning') ? 'warning' : 'default'
   return (
@@ -332,13 +341,17 @@ function ExceptionsRow({ values, guests, members, zoneState, guestsKnown, disabl
  * one row and edited in their own table dialog; they are written with the zone: the save gets the list and the ids of
  * the stored ones that were removed.
  */
-export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave, onClose, gate, flows = [], policy }: Props) {
+export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave, onClose, gate, flows = [], policy, clusterName }: Props) {
   const t = useTranslations()
   const editing = zone !== null
   const nameId = useId()
   const labelId = useId()
-  // The guests are read only for a dialog that edits exceptions (the list the tab already holds, no new request when warm).
-  const { guests, status: guestsStatus } = useZoneGuests(policy ? connectionId : null)
+  // The guests are read only for a dialog that edits exceptions (the list the tab already holds, no new request when
+  // warm): those of every cluster of a shared policy, so the members queued on any cluster are matched to their guest.
+  const scope = useExceptionScope(policy, connectionId, clusterName)
+  const { guests, status, errors: guestErrors } = useGroupGuests(policy ? scope.guestIds : [])
+  // A cluster whose guests could not be read: no status is said rather than a false one.
+  const guestsStatus = status === 'ready' && Object.keys(guestErrors).length > 0 ? 'error' : status
   const members = useMemo(
     () => (zone && policy ? zoneMembers(zone, policy.policy.tag_prefix, guests, policy.pending_members, policy.zones) : []),
     [zone, policy, guests],
@@ -444,6 +457,7 @@ export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave
             members={members}
             zoneState={values.state}
             guestsKnown={guestsStatus === 'ready'}
+            clusters={scope.clusters}
             disabled={busy}
             onManage={() => setManaging(true)}
           />
@@ -470,6 +484,7 @@ export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave
           members={members}
           zoneState={values.state}
           guestsKnown={guestsStatus === 'ready'}
+          clusters={scope.clusters}
           onChange={next => set('exceptions', next)}
           onClose={() => setManaging(false)}
         />

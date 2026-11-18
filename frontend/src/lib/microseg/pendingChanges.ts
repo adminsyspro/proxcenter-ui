@@ -1,6 +1,45 @@
 // src/lib/microseg/pendingChanges.ts
 
-import type { GuestRefLite, MicrosegException, MicrosegFlow, MicrosegRevision, MicrosegZone, PendingMember } from './types'
+import type { GuestRefLite, MicrosegException, MicrosegFlow, MicrosegPolicy, MicrosegRevision, MicrosegZone, PendingMember } from './types'
+
+/**
+ * The identity of a guest across the clusters of a shared policy: its connection, type and VMID. VMIDs repeat between
+ * clusters, and the node is left out because it changes when a guest migrates.
+ */
+export function clusterGuestId(connectionId: string, type: string, vmid: number): string {
+  return `${connectionId}/${type}/${vmid}`
+}
+
+/** The pending members by guest identity (`connection_id` + type + VMID): a row of one cluster never marks another's guest. */
+export function pendingByGuest(pending: readonly PendingMember[]): Map<string, PendingMember> {
+  return new Map(pending.map(p => [clusterGuestId(p.connection_id, p.type, p.vmid), p]))
+}
+
+/**
+ * The cluster of a row of any list (a pending member, an exception, a run, a suggestion): its own `connection_id`, or,
+ * when it is empty or missing, the cluster it was read through. The backend fills the empty owners of its legacy rows
+ * at start, so only an orchestrator older than shared policies (one cluster per policy) sends such a row.
+ */
+export function rowCluster(row: { connection_id?: string }, readThrough: string): string {
+  return row.connection_id || readThrough
+}
+
+/**
+ * The policy as every screen reads it: each pending member and each exception carries its cluster (rowCluster). A row
+ * without one is the link the policy was read through: the answer's `policy.connection_id`, which the backend sets to
+ * the URL's link, else the URL connection itself. The same object comes back when no row needs it.
+ */
+export function withRowClusters(policy: MicrosegPolicy, urlConnection: string): MicrosegPolicy {
+  const own = policy.policy?.connection_id || urlConnection
+  const members = Array.isArray(policy.pending_members) ? policy.pending_members : []
+  const exceptions = Array.isArray(policy.exceptions) ? policy.exceptions : []
+  if (members.every(p => p.connection_id) && exceptions.every(e => e.connection_id)) return policy
+  return {
+    ...policy,
+    pending_members: members.map(p => ({ ...p, connection_id: rowCluster(p, own) })),
+    exceptions: exceptions.map(e => ({ ...e, connection_id: rowCluster(e, own) })),
+  }
+}
 
 export type MicrosegDraft = {
   zones: MicrosegZone[]

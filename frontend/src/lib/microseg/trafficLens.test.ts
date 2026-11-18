@@ -15,7 +15,7 @@ const flow = (over: Partial<MicrosegFlow> = {}): MicrosegFlow => ({
   comment: '', origin: 'manual', created_by: 'me', ...over,
 })
 const suggestion = (over: Partial<MicrosegSuggestion> = {}): MicrosegSuggestion => ({
-  id: 's1', policy_id: 'p1', kind: 'would_block', src_key: 'k', src_ip: '10.0.0.1', src_zone_id: 'web', dst_ip: '10.0.0.2',
+  id: 's1', policy_id: 'p1', connection_id: 'c1', kind: 'would_block', src_key: 'k', src_ip: '10.0.0.1', src_zone_id: 'web', dst_ip: '10.0.0.2',
   dst_zone_id: 'db', proto: 'tcp', dport: '5432', hits: 3, first_seen: '2026-11-01T10:00:00Z', last_seen: '2026-11-02T10:00:00Z',
   status: 'pending', ...over,
 })
@@ -51,6 +51,22 @@ describe('buildResolver', () => {
   it('compares the canonical form of an address', () => {
     const v6 = buildResolver(ZONES, 'zone-', [{ vmid: 1, name: 'v6', tags: ['zone-db'], ips: ['2001:DB8:0:0::1/64'] }])
     expect(v6('2001:db8::1')).toMatchObject({ kind: 'zone', zone: { id: 'db' } })
+  })
+
+  it('puts an address of another cluster of a shared policy on its zone, by address only, this cluster first', () => {
+    const remote = [
+      { vmid: 201, name: 'db-dr', tags: ['zone-db'], ips: ['10.8.0.5'] },
+      { vmid: 106, name: 'same-vmid', tags: ['zone-db'], ips: [] },
+      { vmid: 202, name: 'clash', tags: ['zone-db'], ips: ['10.0.0.1'] },
+    ]
+    const shared = buildResolver(ZONES, 'zone-', GUESTS, remote)
+
+    expect(shared('10.8.0.5')).toMatchObject({ kind: 'zone', zone: { id: 'db' }, guest: 'db-dr' })
+    // The same address on both clusters: the guest of this cluster.
+    expect(shared('10.0.0.1')).toMatchObject({ kind: 'zone', zone: { id: 'web' }, guest: 'web-01' })
+    // The VMID of a pair names a guest of this cluster: one of another cluster with the same VMID changes nothing.
+    expect(shared('10.9.9.9', 106)).toMatchObject({ kind: 'zone', zone: { id: 'web' }, guest: 'dhcp' })
+    expect(shared('10.9.9.9', 201)).toEqual({ kind: 'external' })
   })
 })
 

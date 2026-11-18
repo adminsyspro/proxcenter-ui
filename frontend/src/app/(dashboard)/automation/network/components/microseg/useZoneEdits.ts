@@ -12,6 +12,7 @@ import { InboundRunFailedError } from './dialogParts'
 import { draftBody, draftChanged, type ExceptionDraft } from './exceptionModel'
 import type { FlowSaveValues } from './FlowDialog'
 import type { TrackedRun } from './microsegTabTypes'
+import { startedRuns } from './runsInProgress'
 import { usePendingChanges } from './usePendingChanges'
 import { gatewayCidr, gatewayServiceFlows, type ZoneFormValues } from './zoneForm'
 
@@ -60,6 +61,8 @@ export type ZoneEditsInput = {
   startRun: (run: TrackedRun) => void
   /** The plan window, offered when a state change is refused for pending changes. */
   onOpenPlan?: () => void
+  /** Names a cluster of a shared policy as the user sees it: the exceptions offer the clusters it names. */
+  clusterName?: (id: string) => string
 }
 
 /**
@@ -68,10 +71,17 @@ export type ZoneEditsInput = {
  * the pending-changes bar follow); on any failure (a VERSION_CONFLICT included) the policy is read again too and the error is rethrown, so the
  * dialog keeps its input and says why. A 400 keeps the server's wording (writeErrorMessage).
  */
-export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan }: ZoneEditsInput) {
+export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan, clusterName }: ZoneEditsInput) {
   const t = useTranslations('microsegPilot.policy')
   const { mutate } = useSWRConfig()
   const api = useMemo(() => microsegApi(connectionId), [connectionId])
+  /**
+   * The URL a write of one cluster goes through: an exception or a member is written through its own cluster (the
+   * backend takes the cluster from the URL and refuses another cluster's row), the tab's connection by default.
+   */
+  const apiOf = (cluster?: string) => (cluster && cluster !== connectionId ? microsegApi(cluster) : api)
+  /** The cluster of a stored exception. */
+  const clusterOf = (exceptionId: string) => policy.exceptions.find(e => e.id === exceptionId)?.connection_id
   const pendingChanges = usePendingChanges(connectionId, policy)
   const [memberBusy, setMemberBusy] = useState(false)
   const [memberError, setMemberError] = useState<unknown>(null)
@@ -101,7 +111,8 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
    * each with the version the write before returned. Then the state changes the dialog asked for, each applied at
    * once with the whole draft: the inbound state with the version the write returned; the outbound state after it,
    * once the inbound run has finished (with the version read again then), or at once when only the outbound changed.
-   * A failed inbound run stops there (InboundRunFailedError): the outbound change is not sent. A zone set disabled
+   * An inbound run that failed (on every cluster of a shared policy) stops there (InboundRunFailedError): the outbound
+   * change is not sent. A zone set disabled
    * gets no outbound call: the backend turns its outbound off.
    * `onExceptionCreated` lets the dialog give its new exceptions their ids, so that a save tried again updates them.
    */
@@ -130,14 +141,15 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
       // The exceptions the dialog removed, then the ones it changed or added, in the order of its list.
       // A save tried again after a later step failed finds its first writes done: an exception already deleted is
       // not deleted again, one already created comes back with its id (`onExceptionCreated`) and is not created twice.
+      // Each one through its own cluster, the version going from one write to the next whatever the cluster (one draft).
       for (const id of values.removed_exceptions) {
         if (!policy.exceptions.some(e => e.id === id)) continue
-        next = (await api.deleteException(id, next)).version
+        next = (await apiOf(clusterOf(id)).deleteException(id, next)).version
       }
       for (const draft of values.exceptions) {
         const stored = draft.id ? policy.exceptions.find(e => e.id === draft.id) : undefined
         if (stored && !draftChanged(draft, stored)) continue
-        const written = await api.saveException({ id: draft.id, version: next, zone_id: zoneId, ...draftBody(draft) })
+        const written = await apiOf(draft.connectionId ?? stored?.connection_id).saveException({ id: draft.id, version: next, zone_id: zoneId, ...draftBody(draft) })
         next = written.version
         if (!draft.id && written.exception?.id) onExceptionCreated?.(draft, written.exception.id)
       }
@@ -146,15 +158,24 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
     const { inbound, outbound } = zoneStateChanges(zone, values)
     if (inbound) {
       const started = await api.setZoneState(zone.id, inbound, next)
-      startRun({ runId: started.run_id, kind: 'zoneState', zoneId: zone.id, label: zone.name, runningText: t(`run.running.${inbound}`, { label: zone.name }) })
+      const tracked = startedRuns(started, connectionId)
+      startRun({ ...tracked, kind: 'zoneState', zoneId: zone.id, label: zone.name, runningText: t(`run.running.${inbound}`, { label: zone.name }) })
       if (!outbound) return
-      const run = await waitForRun(api.getRun, started.run_id)
-      if (run.status === 'failed') throw new InboundRunFailedError(run.error)
+      // The outbound change waits for the inbound one on every cluster: a cluster still busy would refuse it. It is
+      // sent once the inbound change went through on at least one cluster, and stops when it failed everywhere. The
+      // outbound route is policy-wide: its run also starts on the cluster whose inbound run failed. Both states are
+      // stored in the policy and that cluster converges to them at its next pass (about one engine tick once it is
+      // reachable again); until then its firewall can briefly hold an inconsistent mix of the old and new states. The
+      // inbound line of the strip reports the partial outcome.
+      const runs = tracked.runs
+        ? await Promise.all(tracked.runs.flatMap(r => (r.run_id ? [waitForRun(microsegApi(r.connection_id).getRun, r.run_id)] : [])))
+        : [await waitForRun(api.getRun, started.run_id)]
+      if (runs.every(run => run.status === 'failed')) throw new InboundRunFailedError(runs[0]?.error)
       next = (await api.getPolicy()).version
     }
     if (!outbound) return
     const started = await api.setZoneEgressState(zone.id, outbound, next)
-    startRun({ runId: started.run_id, kind: 'zoneState', zoneId: zone.id, label: zone.name, runningText: t(`run.running.${egressRunningKey(zoneEgress(zone), outbound)}`, { label: zone.name }) })
+    startRun({ ...startedRuns(started, connectionId), kind: 'zoneState', zoneId: zone.id, label: zone.name, runningText: t(`run.running.${egressRunningKey(zoneEgress(zone), outbound)}`, { label: zone.name }) })
   })
 
   const deleteZone = (zone: MicrosegZone) => write(() => api.deleteZone(zone.id, version))
@@ -163,22 +184,23 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
 
   const deleteFlow = (flow: MicrosegFlow) => write(() => api.deleteFlow(flow.id, version))
 
-  /** One exception of a zone written alone (the zone panel): created without id, updated with one. */
-  const saveException = (zoneId: string, draft: ExceptionDraft) => write(() => api.saveException({ id: draft.id, version, zone_id: zoneId, ...draftBody(draft) }))
+  /** One exception of a zone written alone (the zone panel): created without id, updated with one, through its cluster. */
+  const saveException = (zoneId: string, draft: ExceptionDraft) => write(() => apiOf(draft.connectionId ?? (draft.id ? clusterOf(draft.id) : undefined))
+    .saveException({ id: draft.id, version, zone_id: zoneId, ...draftBody(draft) }))
 
-  const deleteException = (exceptionId: string) => write(() => api.deleteException(exceptionId, version))
+  const deleteException = (exceptionId: string) => write(() => apiOf(clusterOf(exceptionId)).deleteException(exceptionId, version))
 
   /** Applied at once with the whole draft (UA30): the run is followed in the strip of the tab. */
   const setZoneState = (zone: MicrosegZone, state: ZoneState) => write(async () => {
     const started = await api.setZoneState(zone.id, state, version)
-    startRun({ runId: started.run_id, kind: 'zoneState', zoneId: zone.id, label: zone.name, runningText: t(`run.running.${state}`, { label: zone.name }) })
+    startRun({ ...startedRuns(started, connectionId), kind: 'zoneState', zoneId: zone.id, label: zone.name, runningText: t(`run.running.${state}`, { label: zone.name }) })
   })
 
   /** Applied at once with the whole draft, like the inbound state: the run is followed in the strip of the tab. */
   const setZoneEgressState = (zone: MicrosegZone, state: Exclude<EgressState, 'off'>) => write(async () => {
     const started = await api.setZoneEgressState(zone.id, state, version)
     startRun({
-      runId: started.run_id,
+      ...startedRuns(started, connectionId),
       kind: 'zoneState',
       zoneId: zone.id,
       label: zone.name,
@@ -186,27 +208,32 @@ export function useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onO
     })
   })
 
-  /** One member write at a time; a failure is kept in `memberError`. */
-  const memberWrite = (body: MembersInput) => {
+  /**
+   * One member write at a time; a failure is kept in `memberError`. It goes through the member's cluster: `POST /members`
+   * writes the rows of its URL's cluster only (the connection of the tab when none is given).
+   */
+  const memberWrite = (body: MembersInput, cluster?: string) => {
     if (memberBusy) return
     setMemberError(null)
     setMemberBusy(true)
-    void write(() => api.setMembers(body))
+    void write(() => apiOf(cluster).setMembers(body))
       .catch(setMemberError)
       .finally(() => setMemberBusy(false))
   }
 
   /** Queues a guest for a zone (a draft change, the next apply moves the tag): `zoneId` "" takes it out of every zone. */
-  const changeMember = (ref: GuestRef, zoneId: string) => memberWrite({ version, zone_id: zoneId, guests: [ref] })
+  const changeMember = (ref: GuestRef, zoneId: string, cluster?: string) => memberWrite({ version, zone_id: zoneId, guests: [ref] }, cluster)
 
   /** Forgets the queued removal or move of a guest: it stays in its zone and the draft loses that change. */
-  const keepMember = (ref: GuestRef) => memberWrite({ version, clear: [{ type: ref.type, vmid: ref.vmid }] })
+  const keepMember = (ref: GuestRef, cluster?: string) => memberWrite({ version, clear: [{ type: ref.type, vmid: ref.vmid }] }, cluster)
 
   return {
     /** The flows of the draft: the zone dialog says which flows to the gateway the zone has already. */
     flows: policy.flows,
     connectionId,
     policy,
+    /** Given only by a screen that names the clusters of a shared policy. */
+    clusterName,
     zones: policy.zones,
     readyAfterHours: policy.policy.settings?.ready_after_hours || DEFAULT_READY_AFTER_HOURS,
     pendingChanges,

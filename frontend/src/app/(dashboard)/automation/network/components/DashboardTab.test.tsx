@@ -6,7 +6,7 @@
  * No automatic RTL cleanup in this repo.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, within } from '@testing-library/react'
+import { act, cleanup, within } from '@testing-library/react'
 import { SWRConfig } from 'swr'
 
 import { fireEvent, renderWithProviders, screen, waitFor } from '@/__tests__/setup/renderWithProviders'
@@ -41,12 +41,26 @@ type Stub = {
   status?: Record<string, unknown> | 'pending'
   policy?: Record<string, unknown> | 'pending'
   coverage?: Record<string, unknown> | 'pending' | 'error'
+  /** The coverage of one connection (a cluster of a shared policy), over `coverage`. */
+  coverageBy?: Record<string, Record<string, unknown> | 'error'>
+  /** Holds the coverage of a connection until the promise settles (a slow cluster). */
+  coverageGate?: Record<string, Promise<unknown>>
+  /** Holds the history of a connection until the promise settles. */
+  trafficGate?: Record<string, Promise<unknown>>
+  /** The status of one connection, over `status`. */
+  statusBy?: Record<string, Record<string, unknown>>
   drifts?: Record<string, unknown> | 'pending'
   suggestions?: unknown[] | 'pending' | 'error'
   vms?: unknown[] | 'pending'
+  /** The guest list of one connection (a cluster of a shared policy), over `vms`. */
+  vmsBy?: Record<string, unknown[]>
+  /** Holds the guest list of a connection until the promise settles (a slow cluster). */
+  vmsGate?: Record<string, Promise<unknown>>
   events?: unknown[] | 'pending' | 'error'
   /** The persisted history route; absent = an orchestrator without it (404). */
   traffic?: { buckets: unknown[] } | 'error' | 'pending'
+  /** The history of one connection, over `traffic`. */
+  trafficBy?: Record<string, { buckets: unknown[] } | 'error'>
   pairs?: unknown[]
   sflowSeries?: unknown[] | 'error'
 }
@@ -56,11 +70,15 @@ const pending = () => new Promise<never>(() => {})
 function stubReads(over: Stub = {}) {
   const answer = (body: unknown, status = 200) => ({ ok: status < 400, status, text: async () => JSON.stringify(body), json: async () => body })
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const connOf = (marker: string) => decodeURIComponent(url.split(marker)[1]?.split(/[/?]/)[0] ?? '')
     if (url.includes('/api/v1/firewall/coverage/')) {
+      const own = over.coverageBy?.[connOf('/api/v1/firewall/coverage/')]
       if (over.coverage === 'pending') return pending()
-      if (over.coverage === 'error') return answer({ error: 'HTTP 502' }, 502)
+      const gate = over.coverageGate?.[connOf('/api/v1/firewall/coverage/')]
+      if (gate) await gate
+      if (over.coverage === 'error' || own === 'error') return answer({ error: 'HTTP 502' }, 502)
       const forced = url.includes('refresh=1')
-      return answer({ ...COVERAGE, ...(over.coverage ?? {}), ...(forced ? { enabled: 37, disabled: 25, computedAt: new Date().toISOString() } : {}) })
+      return answer({ ...COVERAGE, ...(over.coverage ?? {}), ...(own ?? {}), ...(forced ? { enabled: 37, disabled: 25, computedAt: new Date().toISOString() } : {}) })
     }
     if (url.endsWith('/status')) {
       if (over.status === 'pending') return pending()
@@ -70,6 +88,7 @@ function stubReads(over: Stub = {}) {
         zones_by_state: { disabled: 1, observe: 2, enforce: 3 },
         emergency_stop: false,
         ...(over.status ?? {}),
+        ...(over.statusBy?.[connOf('/microseg/')] ?? {}),
       })
     }
     if (url.endsWith('/policy')) {
@@ -90,11 +109,14 @@ function stubReads(over: Stub = {}) {
       return answer(over.sflowSeries ?? [])
     }
     if (url.includes('/traffic?')) {
-      if (over.traffic === 'pending') return pending()
-      if (over.traffic === 'error') return answer({ code: 'NOT_LEADER', error: 'not the leader' }, 503)
-      if (!over.traffic) return answer({ code: 'NOT_FOUND', error: 'no' }, 404)
+      const traffic = over.trafficBy?.[connOf('/microseg/')] ?? over.traffic
+      const trafficGate = over.trafficGate?.[connOf('/microseg/')]
+      if (trafficGate) await trafficGate
+      if (traffic === 'pending') return pending()
+      if (traffic === 'error') return answer({ code: 'NOT_LEADER', error: 'not the leader' }, 503)
+      if (!traffic) return answer({ code: 'NOT_FOUND', error: 'no' }, 404)
       const q = new URL(url, 'http://x').searchParams
-      return answer({ step: Number(q.get('step')), from: q.get('from'), to: q.get('to'), ...over.traffic })
+      return answer({ step: Number(q.get('step')), from: q.get('from'), to: q.get('to'), ...traffic })
     }
     if (url.includes('/events?')) {
       if (over.events === 'pending') return pending()
@@ -106,7 +128,10 @@ function stubReads(over: Stub = {}) {
     }
     if (url.startsWith('/api/v1/vms?')) {
       if (over.vms === 'pending') return pending()
-      return answer({ data: { vms: over.vms ?? [] } })
+      const connId = new URL(url, 'http://x').searchParams.get('connId') ?? ''
+      if (over.vmsGate?.[connId]) await over.vmsGate[connId]
+      const own = over.vmsBy?.[connId]
+      return answer({ data: { vms: own ?? over.vms ?? [] } })
     }
     if (url.includes('/suggestions')) {
       if (over.suggestions === 'pending') return pending()
@@ -149,7 +174,7 @@ type Nav = { onNavigateTab?: (tab: number) => void; onNavigateRulesSubTab?: (sub
 
 function renderDashboard(
   clusterOptions: firewallAPIType.ClusterOptions | null,
-  over: Nav & { firewallMode?: firewallAPIType.FirewallMode; selectedConnection?: string; connectionName?: string; loadError?: string | null; reload?: () => void; loading?: boolean; clusterRules?: firewallAPIType.FirewallRule[] } = {},
+  over: Nav & { firewallMode?: firewallAPIType.FirewallMode; selectedConnection?: string; connectionName?: string; loadError?: string | null; reload?: () => void; loading?: boolean; clusterRules?: firewallAPIType.FirewallRule[]; connections?: { id: string; name: string }[] } = {},
 ) {
   // The shared test provider does not read on mount; the page does.
   renderWithProviders(
@@ -164,6 +189,7 @@ function renderDashboard(
       currentOptions={clusterOptions}
       selectedConnection={over.selectedConnection ?? 'conn-1'}
       connectionName={over.connectionName}
+      connections={over.connections}
       totalRules={0}
       totalIPSetEntries={0}
       nodesList={['pve1']}
@@ -746,6 +772,305 @@ describe('DashboardTab: top conversations', () => {
     renderDashboard({ enable: 1 })
 
     expect(await screen.findByTestId('conversations-empty')).toBeInTheDocument()
+  })
+})
+
+describe('DashboardTab: a policy shared by several clusters', () => {
+  const link = (connection_id: string) => ({ connection_id, active: true, stop_cluster_disabled: false, policy_id: 'p1', created_at: '', activated_at: null })
+  const SHARED = { ...POLICY, clusters: [link('conn-1'), link('conn-2')] }
+  const SHARED3 = { ...POLICY, clusters: [link('conn-1'), link('conn-2'), link('conn-3')] }
+  const CONNECTIONS = [{ id: 'conn-1', name: 'PVE-PROD' }, { id: 'conn-2', name: 'PVE-DR' }, { id: 'conn-3', name: 'PVE-LAB3' }]
+  /** web-dr is a member of web on the other cluster. */
+  const DR_VMS = [{ vmid: 101, name: 'web-dr', node: 'pve9', type: 'qemu', status: 'running', tags: ['zone-web'], ips: ['10.8.0.1'] }]
+  /** The coverage rows of PVE-DR: one guest in web, with the same VMID as a guest of PVE-PROD. */
+  const DR_TAGGED = [{ ...row(101, 'running', true), type: 'qemu', node: 'pve9', tags: ['zone-web'], vlans: [10] }]
+  /** Logged on conn-1 (no cluster on the row: older data, read through conn-1): web-dr (conn-2) to db, the engine put its source in web. */
+  const FROM_DR = seen({ src_ip: '10.8.0.1', hits: 500 })
+  /** Logged on PVE-DR: web to db 200 hits, an unknown source 40 hits on SSH to web. */
+  const DR_OBSERVED = [
+    seen({ src_ip: '10.8.0.5', dst_ip: '10.8.0.6', hits: 200, connection_id: 'conn-2' }),
+    seen({ src_key: '198.51.100.7', src_ip: '198.51.100.7', src_zone_id: '', dst_ip: '10.8.0.5', dst_zone_id: 'zweb', dport: '22', hits: 40, connection_id: 'conn-2' }),
+  ]
+  const microsegUrls = () => fetchedUrls().filter(u => u.includes('/microseg/'))
+  const coverageUrls = () => fetchedUrls().filter(u => u.includes('/firewall/coverage/'))
+  const legendOf = (key: string) => within(screen.getByTestId('traffic-legend')).getByTestId(`legend-${key}`)
+  const tile = (name: string) => screen.getAllByTestId('cluster-tile').find(t => t.getAttribute('data-cluster') === name)!
+
+  it('reads the observed flows once for the whole policy, and adds up the figures and the guests of a zone on every cluster', async () => {
+    postureReads({ policy: SHARED, suggestions: [...OBSERVED, ...DR_OBSERVED], coverageBy: { 'conn-2': { guests: DR_TAGGED } } })
+    renderDashboard({ enable: 1 }, { connections: CONNECTIONS.slice(0, 2) })
+
+    await waitFor(() => expect(screen.getByTestId('donut-total').textContent).toBe('690'))
+    expect(legendOf('zone:zweb').textContent).toContain('500')
+    // Two web guests on PVE-PROD and one on PVE-DR, though two of them have the same VMID.
+    expect(within(legendOf('zone:zweb')).getByTestId('legend-zone:zweb-members').textContent).toBe('3 guests')
+    expect(screen.getByTestId('service-PostgreSQL').textContent).toContain('500')
+    expect(screen.getByTestId('tile-would-block-value').textContent).toBe('4 flows')
+
+    // One read of the observed flows for the whole policy, through the selected connection, never per cluster.
+    expect(microsegUrls().filter(u => u.includes('/suggestions'))).toEqual(['/api/v1/firewall/microseg/conn-1/suggestions?status=pending&limit=200'])
+    // The coverage of each cluster, once.
+    await waitFor(() => expect(coverageUrls().sort()).toEqual(['/api/v1/firewall/coverage/conn-1', '/api/v1/firewall/coverage/conn-2']))
+  })
+
+  it('aggregates three clusters: the conversations of one pair add up, and a member of another cluster keeps its cluster chip', async () => {
+    const LAB3 = [
+      seen({ src_ip: '10.9.0.5', dst_ip: '10.9.0.6', hits: 100, connection_id: 'conn-3' }),
+      // Logged on PVE-LAB3, from web-dr of PVE-DR.
+      seen({ src_ip: '10.8.0.1', dst_ip: '10.9.0.6', hits: 70, connection_id: 'conn-3', dport: '5433' }),
+    ]
+    postureReads({ policy: SHARED3, suggestions: [...OBSERVED, ...DR_OBSERVED, ...LAB3], vmsBy: { 'conn-2': DR_VMS } })
+    renderDashboard({ enable: 1 }, { connections: CONNECTIONS })
+
+    await waitFor(() => expect(screen.getAllByTestId('conversation-row')).toHaveLength(5))
+    const rows = screen.getAllByTestId('conversation-row')
+    // web to db on the three clusters: 300 + 200 + 100.
+    expect(rows[0].textContent).toContain('600')
+    expect(within(rows[0]).queryByTestId('conversation-peer-cluster')).toBeNull()
+    const peer = rows.find(r => within(r).queryByTestId('conversation-peer-cluster'))!
+    expect(within(peer).getByTestId('conversation-peer-cluster').textContent).toBe('PVE-DR')
+    expect(peer.textContent).toContain('70')
+    expect(screen.getByTestId('donut-total').textContent).toBe('860')
+    expect(screen.getAllByTestId('cluster-tile').map(t => t.getAttribute('data-cluster'))).toEqual(['PVE-DR', 'PVE-LAB3', 'PVE-PROD'])
+    await waitFor(() => expect(coverageUrls().sort()).toEqual(['conn-1', 'conn-2', 'conn-3'].map(id => `/api/v1/firewall/coverage/${id}`)))
+    // The guests of each cluster, once (the conversations name a member of another cluster).
+    expect(['conn-1', 'conn-2', 'conn-3'].map(id => fetchedUrls().filter(u => u === `/api/v1/vms?connId=${id}`).length)).toEqual([1, 1, 1])
+  })
+
+  it('never shows the guests of a zone as a total while a linked cluster is still read: no count, then the whole', async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>(resolve => { release = resolve })
+    postureReads({ policy: SHARED, suggestions: [...OBSERVED, ...DR_OBSERVED], coverageBy: { 'conn-2': { guests: DR_TAGGED } }, coverageGate: { 'conn-2': gate } })
+    renderDashboard({ enable: 1 }, { connections: CONNECTIONS.slice(0, 2) })
+
+    await waitFor(() => expect(screen.getByTestId('donut-total').textContent).toBe('690'))
+    await waitFor(() => expect(coverageUrls()).toHaveLength(2))
+    // PVE-PROD answered (2 web guests): the sum of what arrived is not the total, the count waits.
+    expect(screen.queryByTestId('legend-zone:zweb-members')).toBeNull()
+    await act(async () => { release() })
+    await waitFor(() => expect(within(legendOf('zone:zweb')).getByTestId('legend-zone:zweb-members').textContent).toBe('3 guests'))
+  })
+
+  it('counts a cluster that failed as read: the guests of the others show, its tile says its figures are missing', async () => {
+    postureReads({ policy: SHARED, suggestions: [...OBSERVED, ...DR_OBSERVED], coverageBy: { 'conn-2': 'error' } })
+    renderDashboard({ enable: 1 }, { connections: CONNECTIONS.slice(0, 2) })
+
+    await waitFor(() => expect(within(legendOf('zone:zweb')).getByTestId('legend-zone:zweb-members').textContent).toBe('2 guests'))
+    expect(tile('PVE-DR').dataset.missing).toBe('true')
+  })
+
+  it('holds the chart of the traffic over time until the history of every linked cluster answered', async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const now = new Date(Math.floor(Date.now() / 300_000) * 300_000).toISOString()
+    const bucket = (hits: number) => ({ buckets: [{ at: now, zone: 'db', src_zone: 'web', verdict: 'would_block', hits }] })
+    postureReads({ policy: SHARED, trafficBy: { 'conn-1': bucket(4), 'conn-2': bucket(6) }, trafficGate: { 'conn-2': gate } })
+    renderDashboard({ enable: 1 }, { connections: CONNECTIONS.slice(0, 2) })
+
+    await screen.findByTestId('timeline-loading')
+    await waitFor(() => expect(fetchedUrls().filter(u => u.includes('/traffic?'))).toHaveLength(2))
+    expect(screen.queryByTestId('timeline-max')).toBeNull()
+    await act(async () => { release() })
+    await waitFor(() => expect(screen.getByTestId('timeline-max').textContent).toBe('10'))
+  })
+
+  it('reads the coverage of two clusters at a time at most', async () => {
+    postureReads({ policy: SHARED3, coverage: 'pending' })
+    renderDashboard({ enable: 1 }, { connections: CONNECTIONS })
+
+    await screen.findByTestId('cluster-strip')
+    await waitFor(() => expect(fetchedUrls().filter(u => u.startsWith('/api/v1/vms?'))).toHaveLength(3))
+    expect(coverageUrls().sort()).toEqual(['/api/v1/firewall/coverage/conn-1', '/api/v1/firewall/coverage/conn-2'])
+  })
+
+  it('filters every block on the cluster of a tile, and back on the whole policy, without reading anything again', async () => {
+    postureReads({
+      policy: SHARED, suggestions: [...OBSERVED, ...DR_OBSERVED], coverageBy: { 'conn-2': { guests: DR_TAGGED } },
+      trafficBy: { 'conn-1': { buckets: [{ at: new Date(Math.floor(Date.now() / 300_000) * 300_000).toISOString(), zone: 'db', src_zone: 'web', verdict: 'would_block', hits: 4 }] }, 'conn-2': { buckets: [{ at: new Date(Math.floor(Date.now() / 300_000) * 300_000).toISOString(), zone: 'db', src_zone: 'web', verdict: 'would_block', hits: 6 }] } },
+    })
+    const onOpenMicroseg = vi.fn()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      renderDashboard({ enable: 1 }, { connections: CONNECTIONS.slice(0, 2), onOpenMicroseg })
+      await waitFor(() => expect(screen.getByTestId('timeline-max').textContent).toBe('10'))
+      await waitFor(() => expect(screen.getByTestId('donut-total').textContent).toBe('690'))
+      await waitFor(() => expect(coverageUrls()).toHaveLength(2))
+      // Past the deduping window of every read: a read asked again now would go out.
+      await act(async () => { vi.advanceTimersByTime(6000) })
+      const reads = vi.mocked(fetch).mock.calls.length
+      expect(screen.getByTestId('cluster-tile-all').dataset.selected).toBe('true')
+
+      fireEvent.click(within(tile('PVE-DR')).getByTestId('cluster-tile-button'))
+      await waitFor(() => expect(screen.getByTestId('donut-total').textContent).toBe('240'))
+      expect(tile('PVE-DR').dataset.selected).toBe('true')
+      expect(getComputedStyle(tile('PVE-PROD')).opacity).toBe('0.55')
+      expect(within(legendOf('zone:zweb')).getByTestId('legend-zone:zweb-members').textContent).toBe('1 guest')
+      expect(screen.getByTestId('timeline-max').textContent).toBe('6')
+      expect(screen.getAllByTestId('conversation-row').map(r => within(r).getByTestId('conversation-source').textContent)).toEqual(['web', '198.51.100.7'])
+      // The Observation opens on that cluster.
+      fireEvent.click(screen.getByTestId('conversations-all'))
+      expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation', { cluster: 'conn-2' })
+
+      // A second click shows the whole policy again; so does "All clusters".
+      fireEvent.click(within(tile('PVE-DR')).getByTestId('cluster-tile-button'))
+      await waitFor(() => expect(screen.getByTestId('donut-total').textContent).toBe('690'))
+      fireEvent.click(within(tile('PVE-PROD')).getByTestId('cluster-tile-button'))
+      await waitFor(() => expect(screen.getByTestId('donut-total').textContent).toBe('450'))
+      expect(screen.getByTestId('timeline-max').textContent).toBe('4')
+      fireEvent.click(within(screen.getByTestId('cluster-tile-all')).getByRole('button'))
+      await waitFor(() => expect(screen.getByTestId('donut-total').textContent).toBe('690'))
+      fireEvent.click(screen.getByTestId('conversations-all'))
+      expect(onOpenMicroseg).toHaveBeenLastCalledWith('observation')
+
+      // Not one request more: the filter keeps what was read.
+      expect(vi.mocked(fetch).mock.calls.length).toBe(reads)
+      expect(coverageUrls()).toHaveLength(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows the other clusters when one cannot be read, and says on its tile that its figures are missing', async () => {
+    const now = new Date(Math.floor(Date.now() / 300_000) * 300_000).toISOString()
+    postureReads({
+      policy: SHARED, suggestions: [...OBSERVED, ...DR_OBSERVED], coverageBy: { 'conn-2': 'error' },
+      trafficBy: { 'conn-1': { buckets: [{ at: now, zone: 'db', src_zone: 'web', verdict: 'would_block', hits: 4 }] }, 'conn-2': 'error' },
+    })
+    renderDashboard({ enable: 1 }, { connections: CONNECTIONS.slice(0, 2) })
+
+    await waitFor(() => expect(tile('PVE-DR').dataset.missing).toBe('true'))
+    expect(within(tile('PVE-DR')).getByTestId('cluster-tile-detail').textContent).toContain('Figures missing')
+    expect(tile('PVE-PROD').dataset.missing).toBe('false')
+    // The rest of the policy is drawn: its history, its flows.
+    await waitFor(() => expect(screen.getByTestId('timeline-max').textContent).toBe('4'))
+    expect(screen.getByTestId('donut-total').textContent).toBe('690')
+  })
+
+  it('names a cluster outside the user\'s scope in general words, never reads it, and leaves its traffic out in one line', async () => {
+    const HIDDEN = seen({ src_ip: '10.7.0.9', hits: 900, connection_id: 'conn-2' })
+    postureReads({ policy: SHARED, suggestions: [HIDDEN, ...OBSERVED.map(o => ({ ...o, connection_id: 'conn-1' }))] })
+    renderDashboard({ enable: 1 }, { connections: [CONNECTIONS[0]] })
+
+    await waitFor(() => expect(screen.getByTestId('donut-total').textContent).toBe('450'))
+    expect(screen.getAllByTestId('cluster-tile').map(t => t.getAttribute('data-cluster'))).toEqual(['Another cluster', 'PVE-PROD'])
+    expect(within(tile('Another cluster')).queryByTestId('cluster-tile-button')).toBeNull()
+    expect(within(tile('Another cluster')).getByTestId('cluster-tile-detail').textContent).toBe('Outside your scope')
+    expect(screen.getByTestId('cluster-strip-hidden').textContent).toBe('The traffic of 1 cluster outside your scope is not included.')
+    expect(document.body.textContent).not.toContain('conn-2')
+    expect(fetchedUrls().some(u => u.includes('conn-2'))).toBe(false)
+  })
+
+  it('says another cluster, never an ID, for a member of a cluster the user cannot see', async () => {
+    postureReads({ policy: SHARED, suggestions: [seen({ src_ip: '10.7.0.4', hits: 500 }), ...OBSERVED], vmsBy: { 'conn-1': VMS } })
+    renderDashboard({ enable: 1 }, { connections: [CONNECTIONS[0]] })
+
+    await waitFor(() => expect(screen.getAllByTestId('conversation-row')).toHaveLength(4))
+    const first = screen.getAllByTestId('conversation-row')[0]
+    expect(within(first).getByTestId('conversation-source').textContent).toBe('web')
+    expect(within(first).getByTestId('conversation-peer-cluster').textContent).toBe('Another cluster')
+    expect(document.body.textContent).not.toContain('conn-2')
+    expect(fetchedUrls().some(u => u === '/api/v1/vms?connId=conn-2')).toBe(false)
+    expect(fetchedUrls().filter(u => u === '/api/v1/vms?connId=conn-1')).toHaveLength(1)
+  })
+
+  it('shows one tile per cluster with its state, members and drifts, and opens the Drifts sub-tab from a count', async () => {
+    postureReads({
+      policy: SHARED, suggestions: OBSERVED, statusBy: { 'conn-2': { emergency_stop: true } },
+      drifts: { drifts: [{ kind: 'unzoned_running', guest: { type: 'lxc', vmid: 300 } }], computed: true },
+    })
+    const onOpenMicroseg = vi.fn()
+    renderDashboard({ enable: 1 }, { connections: CONNECTIONS.slice(0, 2), connectionName: 'PVE-PROD', onOpenMicroseg })
+
+    await waitFor(() => expect(screen.getAllByTestId('cluster-tile-detail').map(c => c.textContent)).toEqual([
+      'Emergency stop · 33 members · 6 protected', 'Applied · 33 members · 6 protected',
+    ]))
+    expect(screen.getAllByTestId('cluster-tile').map(t => t.getAttribute('data-cluster'))).toEqual(['PVE-DR', 'PVE-PROD'])
+    // No table and no caption any more.
+    expect(screen.queryByTestId('dashboard-clusters')).toBeNull()
+    expect(document.body.textContent).not.toContain('The figures below are those of')
+    fireEvent.click(within(tile('PVE-DR')).getByTestId('cluster-tile-drifts'))
+    expect(onOpenMicroseg).toHaveBeenCalledWith('drifts')
+    // The drift count opens the Drifts sub-tab, it does not filter.
+    expect(tile('PVE-DR').dataset.selected).toBe('false')
+    const reads = microsegUrls().filter(u => /\/(status|drifts)$/.test(u)).sort()
+    expect(reads).toEqual(['conn-1', 'conn-2'].flatMap(id => [`/api/v1/firewall/microseg/${id}/drifts`, `/api/v1/firewall/microseg/${id}/status`]))
+  })
+
+  it('names the zone and the cluster of a member of the other cluster on a flow its own cluster logged', async () => {
+    postureReads({ policy: SHARED, suggestions: [FROM_DR, ...OBSERVED], vmsBy: { 'conn-2': DR_VMS } })
+    renderDashboard({ enable: 1 }, { connections: CONNECTIONS.slice(0, 2) })
+
+    await waitFor(() => expect(screen.getAllByTestId('conversation-row')).toHaveLength(4))
+    const first = screen.getAllByTestId('conversation-row')[0]
+    expect(within(first).getByTestId('conversation-source').textContent).toBe('web')
+    expect(within(first).getByTestId('conversation-peer-cluster').textContent).toBe('PVE-DR')
+    // The flows of web on this cluster stay on their own row, with no chip.
+    const local = screen.getAllByTestId('conversation-row')[1]
+    expect(within(local).getByTestId('conversation-source').textContent).toBe('web')
+    expect(within(local).queryByTestId('conversation-peer-cluster')).toBeNull()
+  })
+
+  it('does not wait more than 3 s for a slow cluster: the rows show, then name the cluster once its guests come', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      let open: (v?: unknown) => void = () => undefined
+      const gate = new Promise(resolve => { open = resolve })
+      postureReads({ policy: SHARED, suggestions: [FROM_DR, ...OBSERVED], vmsBy: { 'conn-2': DR_VMS }, vmsGate: { 'conn-2': gate } })
+      renderDashboard({ enable: 1 }, { connections: CONNECTIONS.slice(0, 2) })
+
+      await screen.findByTestId('traffic-legend')
+      expect(screen.getByTestId('conversations-loading')).toBeInTheDocument()
+      await act(async () => { vi.advanceTimersByTime(3100) })
+      // Shown without the other cluster: web-dr's flows are with web's.
+      await waitFor(() => expect(screen.getAllByTestId('conversation-row')).toHaveLength(3))
+      expect(screen.queryByTestId('conversation-peer-cluster')).toBeNull()
+
+      await act(async () => { open() })
+      await waitFor(() => expect(screen.getAllByTestId('conversation-row')).toHaveLength(4))
+      expect(within(screen.getAllByTestId('conversation-row')[0]).getByTestId('conversation-peer-cluster').textContent).toBe('PVE-DR')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('asks for the observed flows of one cluster without waiting for the policy', async () => {
+    postureReads({ policy: 'pending' })
+    renderDashboard({ enable: 1 }, { connections: CONNECTIONS })
+
+    await waitFor(() => expect(microsegUrls()).toContain('/api/v1/firewall/microseg/conn-1/suggestions?status=pending&limit=200'))
+  })
+
+  it('issues exactly the reads of a policy that is not shared', async () => {
+    postureReads({ policy: { ...POLICY, clusters: [link('conn-1')] }, vmsBy: { 'conn-2': DR_VMS } })
+    renderDashboard({ enable: 1 }, { connections: CONNECTIONS })
+    await waitFor(() => expect(screen.getAllByTestId('conversation-row')).toHaveLength(3))
+
+    expect(microsegUrls().filter(u => !u.includes('/events?') && !u.includes('/traffic?'))).toEqual([
+      '/api/v1/firewall/microseg/conn-1/policy',
+      '/api/v1/firewall/microseg/conn-1/suggestions?status=pending&limit=200',
+    ])
+    expect(fetchedUrls().some(u => u.startsWith('/api/v1/vms?'))).toBe(false)
+    expect(screen.queryByTestId('conversation-peer-cluster')).toBeNull()
+  })
+
+  it('keeps a policy of one cluster as it was: no strip, the same blocks, exactly the same requests', async () => {
+    postureReads({ policy: { ...POLICY, clusters: [link('conn-1')] }, traffic: { buckets: [] } })
+    renderDashboard({ enable: 1 }, { connections: CONNECTIONS, connectionName: 'PVE-PROD' })
+    await waitFor(() => expect(screen.getAllByTestId('conversation-row')).toHaveLength(3))
+    await waitFor(() => expect(fetchedUrls().some(u => u.includes('/traffic?'))).toBe(true))
+
+    expect(screen.queryByTestId('cluster-strip')).toBeNull()
+    expect(screen.queryByTestId('dashboard-clusters')).toBeNull()
+    const blocks = [...screen.getByTestId('dashboard').querySelectorAll('[data-testid$="-card"]')].map(b => b.getAttribute('data-testid'))
+    expect(blocks).toEqual(['traffic-card', 'distribution-card', 'services-card', 'conversations-card'])
+    const shown = fetchedUrls().map(u => (u.includes('/traffic?') ? u.slice(0, u.indexOf('?')) : u)).sort()
+    expect(shown).toEqual([
+      '/api/v1/firewall/coverage/conn-1',
+      '/api/v1/firewall/microseg/conn-1/policy',
+      '/api/v1/firewall/microseg/conn-1/suggestions?status=pending&limit=200',
+      '/api/v1/firewall/microseg/conn-1/traffic',
+      '/api/v1/orchestrator/sflow?endpoint=ip-pairs&n=500',
+    ])
   })
 })
 

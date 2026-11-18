@@ -1,28 +1,89 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Autocomplete, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, ListItemText, Stack, TextField, Typography } from '@mui/material'
+import {
+  Autocomplete, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, ListItemText, MenuItem, Select, Stack, TextField, Typography,
+} from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
-import type { GuestRefLite } from '@/lib/microseg/types'
+import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
+import type { GuestRefLite, MicrosegPolicy } from '@/lib/microseg/types'
 
+import type { NamedConnection } from './clusterModel'
+import { shownClusterName } from './ClusterRunRow'
 import { DialogErrorLine, FormRow, ONE_LINE_SX, useDialogAction } from './dialogParts'
 import {
-  draftOverlap, draftRuleCount, EXCEPTION_SERVICE_NAMES, EXCEPTION_SERVICES, exceptionServicePorts, isExceptionService, isExceptionServiceText, MAX_EXCEPTION_RULES,
+  draftOverlap, draftRuleCount, EXCEPTION_SERVICE_NAMES, EXCEPTION_SERVICES, exceptionClusterOptions, exceptionServicePorts, isExceptionService, isExceptionServiceText,
+  MAX_EXCEPTION_RULES,
   type ExceptionDraft,
 } from './exceptionModel'
 import { typedServiceCandidates, typedServiceText } from './zoneForm'
 import { byGuestName, guestKey, type PolicyGuest, type ZoneMember } from './zoneModel'
+import { useMicrosegClusterWrite } from './microsegAccess'
+
+/** The cluster choice of an exception of a shared policy: an exception belongs to one cluster, its guests are guests of that cluster. */
+export type ExceptionClusters = {
+  /** The clusters a new exception may be written on: the active ones the user sees, by name (`exceptionClusterOptions`). */
+  options: NamedConnection[]
+  /** The cluster a new exception starts on (the tab's, or the one of the flow it was opened from), unless it is not an option. */
+  preferred: string
+  /** The name of any cluster as the user may see it ("Another cluster" outside their scope). */
+  name: (id: string) => string
+  /** The clusters whose guests are read: an exception of another one says no status (its guests are unknown). */
+  readIds: string[]
+  /** The clusters of the group the user sees: an exception of another one (outside their scope, or a cluster that left) is locked. */
+  editIds: string[]
+}
+
+/** True when an exception of `cluster` may be edited or deleted: always on one cluster; on a shared policy, on a cluster of the group the user sees. */
+export function exceptionEditable(clusters: ExceptionClusters | undefined, cluster: string | undefined): boolean {
+  return !clusters || !cluster || clusters.editIds.includes(cluster)
+}
+
+/** True when the guests an exception of `cluster` names can be checked: always on one cluster, on a read cluster otherwise. */
+export function clusterGuestsRead(clusters: ExceptionClusters | undefined, cluster: string | undefined): boolean {
+  return !clusters || !cluster || clusters.readIds.includes(cluster)
+}
+
+/**
+ * What the exceptions of a policy need of its clusters: the cluster choice, only when the policy is shared (GET /policy
+ * lists more than one cluster), and the clusters whose guests are read (the tab's alone for one cluster: the request
+ * of today). With a name lookup, a cluster the user cannot see is neither offered nor read.
+ */
+export function useExceptionScope(policy: Pick<MicrosegPolicy, 'clusters'> | undefined, connectionId: string, clusterName?: (id: string) => string): { clusters?: ExceptionClusters; guestIds: string[] } {
+  const other = useTranslations('microsegPilot.plan.cluster')('other')
+  // An exception is written on its own cluster: only a cluster the user may write is offered, or editable.
+  const { canWriteOn } = useMicrosegClusterWrite()
+  const links = policy?.clusters
+  return useMemo(() => {
+    if (!links || links.length < 2) return { guestIds: connectionId ? [connectionId] : [] }
+    const nameOf = (id: string) => shownClusterName(id, connectionId, clusterName)
+    const linked = links.map(c => c.connection_id).sort()
+    const ids = linked.filter(id => !clusterName || nameOf(id) !== null)
+    return {
+      clusters: {
+        options: exceptionClusterOptions(links, nameOf).filter(o => canWriteOn(o.id)),
+        preferred: connectionId,
+        name: (id: string) => shownClusterName(id, connectionId, clusterName, other),
+        readIds: ids,
+        editIds: linked.filter(id => nameOf(id) !== null && canWriteOn(id)),
+      },
+      guestIds: ids,
+    }
+  }, [links, connectionId, clusterName, other, canWriteOn])
+}
 
 type Props = {
   open: boolean
   /** The exception to edit (it has an id), the picks a new one starts with (it has none), or null for an empty one. */
   exception: ExceptionDraft | null
-  /** Every guest of the connection: any of them may be a source or a destination. */
+  /** Every guest of the connection (of every cluster of a shared policy): any of them may be a source or a destination. */
   guests: PolicyGuest[]
   /** The members of the zone, pending ones included: offered first among the destinations. */
   members: ZoneMember[]
+  /** Given only when the policy is shared: the cluster is chosen on the first line, and only its guests are offered. */
+  clusters?: ExceptionClusters
   /** A save that throws keeps the dialog open with its input and shows the error. The caller closes the dialog. */
   onSave: (draft: ExceptionDraft) => void | Promise<void>
   onClose: () => void
@@ -32,6 +93,7 @@ const HELPER_SX = { ...ONE_LINE_SX, mx: 0 } as const
 const ONE_LINE_FIELD_SX = { '& .MuiAutocomplete-inputRoot': { flexWrap: 'nowrap' } } as const
 const VALUE_SX = { ...ONE_LINE_SX, flex: '0 1 auto', maxWidth: '70%', pl: 1 } as const
 const OPTION_TEXT_SX = { display: 'flex', alignItems: 'baseline', gap: 1, m: 0, minWidth: 0 } as const
+const CAPTION_SX = { ...ONE_LINE_SX, display: 'block', mt: 1 } as const
 
 /** The name of a service of an exception: a listed one by its name, a typed one as it is. */
 export function useExceptionServiceName(): (choice: string) => string {
@@ -252,19 +314,68 @@ function ServicePicker({ label, value, helper, error, typedError, disabled, onCh
   )
 }
 
-function ExceptionForm({ exception, guests, members, onSave, onClose }: Omit<Props, 'open'>) {
+/**
+ * Where a dialog of a shared policy starts: an exception being edited on its own cluster, a new one on the cluster it
+ * was opened from when it is an option, else on the first option (`moved`: the picks it came with belong to the other
+ * cluster and are dropped).
+ */
+function startCluster(clusters: ExceptionClusters | undefined, exception: ExceptionDraft | null): { cluster: string; wanted: string; moved: boolean } {
+  if (!clusters) return { cluster: '', wanted: '', moved: false }
+  const wanted = exception?.connectionId ?? clusters.preferred
+  if (exception?.id || clusters.options.some(o => o.id === wanted)) return { cluster: wanted, wanted, moved: false }
+  return { cluster: clusters.options[0]?.id ?? '', wanted, moved: true }
+}
+
+/** The cluster of the exception, on its own line: fixed once the exception exists; the line under it says when the wanted cluster is not applied yet. */
+function ClusterRow({ clusters, value, editing, note, disabled, onChange }: {
+  clusters: ExceptionClusters
+  value: string
+  editing: boolean
+  note: string | null
+  disabled: boolean
+  onChange: (id: string) => void
+}) {
+  const t = useTranslations('microsegPilot.policy.exceptions')
+  // An exception being edited stays on its cluster, whatever the options: it is listed even when it is not one.
+  const listed = editing && value && !clusters.options.some(o => o.id === value)
+    ? [...clusters.options, { id: value, name: clusters.name(value) }]
+    : clusters.options
+  return (
+    <FormRow label={t('cluster')} below={note ? <Typography variant='caption' color='text.secondary' title={note} sx={CAPTION_SX}>{note}</Typography> : null}>
+      <Select
+        size='small'
+        fullWidth
+        displayEmpty
+        value={value}
+        disabled={disabled || editing}
+        onChange={e => onChange(e.target.value)}
+        inputProps={{ 'aria-label': t('cluster') }}
+        sx={SMALL_SELECT_SX}
+      >
+        {listed.map(o => <MenuItem key={o.id} value={o.id}>{o.name}</MenuItem>)}
+      </Select>
+    </FormRow>
+  )
+}
+
+function ExceptionForm({ exception, guests, members, clusters, onSave, onClose }: Omit<Props, 'open'>) {
   const t = useTranslations('microsegPilot.policy.exceptions')
   const tc = useTranslations('common')
   const td = useTranslations('microsegPilot.policy.zoneDialog')
   const editing = !!exception?.id
-  const [sources, setSources] = useState<GuestRefLite[]>(exception?.sources ?? [])
-  const [destinations, setDestinations] = useState<GuestRefLite[]>(exception?.destinations ?? [])
+  const [start] = useState(() => startCluster(clusters, exception))
+  const [cluster, setCluster] = useState(start.cluster)
+  const [sources, setSources] = useState<GuestRefLite[]>(start.moved ? [] : exception?.sources ?? [])
+  const [destinations, setDestinations] = useState<GuestRefLite[]>(start.moved ? [] : exception?.destinations ?? [])
   const [services, setServices] = useState<string[]>(exception?.services ?? [])
   const [typedError, setTypedError] = useState(false)
   const { busy, error, run } = useDialogAction()
 
-  const named = useMemo(() => [...(exception?.sources ?? []), ...(exception?.destinations ?? [])], [exception])
-  const options = useMemo(() => guestOptions(guests, members, named), [guests, members, named])
+  // A shared policy: the guests and the members of the chosen cluster only (the same VMID elsewhere is another VM).
+  const shownGuests = useMemo(() => (clusters ? guests.filter(g => g.connectionId === cluster) : guests), [clusters, guests, cluster])
+  const shownMembers = useMemo(() => (clusters ? members.filter(m => m.connectionId === cluster) : members), [clusters, members, cluster])
+  const named = useMemo(() => (start.moved ? [] : [...(exception?.sources ?? []), ...(exception?.destinations ?? [])]), [exception, start.moved])
+  const options = useMemo(() => guestOptions(shownGuests, shownMembers, named), [shownGuests, shownMembers, named])
   const membersFirst = useMemo(() => [...options.filter(o => o.member), ...options.filter(o => !o.member)], [options])
   const byKey = new Map(options.map(o => [o.key, o]))
   // What is written: each guest with its inventory name, the recorded one for a guest the inventory lost.
@@ -273,7 +384,16 @@ function ExceptionForm({ exception, guests, members, onSave, onClose }: Omit<Pro
   const count = draftRuleCount({ sources, destinations, services })
   const tooMany = count > MAX_EXCEPTION_RULES
   const overlap = draftOverlap({ sources, destinations })
-  const incomplete = sources.length === 0 || destinations.length === 0 || services.length === 0
+  const incomplete = sources.length === 0 || destinations.length === 0 || services.length === 0 || (!!clusters && !cluster)
+  let clusterNote: string | null = null
+  if (clusters && start.moved) clusterNote = start.cluster ? t('clusterInactive', { name: clusters.name(start.wanted) }) : t('noActiveCluster')
+  // Another cluster: the picks were guests of the one left, they are dropped.
+  const changeCluster = (id: string) => {
+    if (id === cluster) return
+    setCluster(id)
+    setSources([])
+    setDestinations([])
+  }
   let servicesHelper = td('gatewayServicesHint')
   if (tooMany) servicesHelper = t('tooManyRules', { count, max: MAX_EXCEPTION_RULES })
   else if (count > 0) servicesHelper = t('ruleCount', { count })
@@ -281,6 +401,7 @@ function ExceptionForm({ exception, guests, members, onSave, onClose }: Omit<Pro
   const save = () => run(async () => {
     await onSave({
       ...(exception?.id ? { id: exception.id } : {}),
+      ...(clusters ? { connectionId: cluster } : exception?.connectionId ? { connectionId: exception.connectionId } : {}),
       sources: recorded(sources),
       destinations: recorded(destinations),
       services,
@@ -296,6 +417,7 @@ function ExceptionForm({ exception, guests, members, onSave, onClose }: Omit<Pro
       </DialogTitle>
       <DialogContent sx={{ '&&': { pt: 5 } }}>
         <Stack spacing={4}>
+          {clusters && <ClusterRow clusters={clusters} value={cluster} editing={editing} note={clusterNote} disabled={busy} onChange={changeCluster} />}
           <FormRow label={t('sources')}>
             <GuestPicker
               label={t('sources')}
@@ -350,7 +472,9 @@ function ExceptionForm({ exception, guests, members, onSave, onClose }: Omit<Pro
 /**
  * Create or edit an exception of a zone on three lines: the VMs allowed in (any guest of the connection), the VMs
  * they reach (the members of the zone first; another guest is taken too, the exception then allows nothing until it
- * joins the zone), and the services. A VM is on one side only, and the exception compiles to 50 rules at most.
+ * joins the zone), and the services. A VM is on one side only, and the exception compiles to 50 rules at most. On a
+ * shared policy a first line chooses the cluster (an exception is local to one cluster): changing it empties both
+ * lists of VMs.
  */
 export default function ExceptionDialog({ open, ...form }: Props) {
   // Mounted when it opens: every opening starts from the exception it is given.

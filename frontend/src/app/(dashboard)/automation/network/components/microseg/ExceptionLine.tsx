@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import type { ZoneState } from '@/lib/microseg/types'
 
+import ClusterChip from './ClusterChip'
 import DiffChip from './DiffChip'
 import { useExceptionServiceName } from './ExceptionDialog'
 import { draftException, exceptionLabel, exceptionStatus, shownExceptionStatus, type ExceptionDraft, type ExceptionIssue, type ExceptionStatus } from './exceptionModel'
@@ -61,6 +62,8 @@ type LineProps = {
   /** False while the guest list is loading or failed: only the status that does not read it (the zone not applied) is said. */
   guestsKnown?: boolean
   disabled?: boolean
+  /** The cluster of the exception, given only on a shared policy: its chip follows the icon. */
+  cluster?: { id: string; name: string }
   /**
    * What the draft does to the exception over the last applied revision: `draft` for one it adds or changes (not
    * enforced as shown until the next apply), `removed` for one it no longer has (enforced until the next apply: struck,
@@ -72,10 +75,11 @@ type LineProps = {
 }
 
 /**
- * One exception on one line: the icon of its first source, "app-01 → db-01 · PostgreSQL", its status when it is not
- * active, its draft mark, then its edit and its delete. The delete asks nothing: the caller decides what it does.
+ * One exception on one line: the icon of its first source, its cluster on a shared policy, "app-01 → db-01 ·
+ * PostgreSQL", its status when it is not active, its draft mark, then its edit and its delete. The delete asks
+ * nothing: the caller decides what it does. `guests` and `members` are those of the exception's cluster.
  */
-export function ExceptionLine({ exception, guests, members, zoneState, guestsKnown = true, disabled = false, mark, onEdit, onDelete }: LineProps) {
+export function ExceptionLine({ exception, guests, members, zoneState, guestsKnown = true, disabled = false, cluster, mark, onEdit, onDelete }: LineProps) {
   const t = useTranslations('microsegPilot.policy.exceptions')
   const to = useTranslations('microsegPilot.overview')
   const removed = mark === 'removed'
@@ -88,6 +92,7 @@ export function ExceptionLine({ exception, guests, members, zoneState, guestsKno
   return (
     <Box role='listitem' aria-label={label} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, minHeight: 38 }}>
       <ExceptionGuestIcon guest={guest} />
+      {cluster && <ClusterChip connectionId={cluster.id} name={cluster.name} compact />}
       <TruncatedText text={label} variant='body2' sx={{ flex: '1 1 0', minWidth: 0 }} struck={removed} />
       {removed && <DiffChip kind='removed' />}
       {mark === 'draft' && (

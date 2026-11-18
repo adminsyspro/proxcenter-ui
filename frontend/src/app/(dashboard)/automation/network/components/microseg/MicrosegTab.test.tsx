@@ -176,3 +176,12 @@ describe('actions row', () => {
     await waitFor(() => expect(within(slot).queryByRole('button')).toBeNull())
   })
 })
+
+describe('no connection', () => {
+  it('asks for a connection and reads nothing, the group included', async () => {
+    renderTab(<MicrosegTab connectionId='' />)
+    expect(await screen.findByText('Select a Proxmox connection to manage its micro-segmentation.')).toBeTruthy()
+    expect(calls('GET /api/v1/firewall/microseg//clusters')).toHaveLength(0)
+    expect(calls('GET /api/v1/firewall/microseg//policy')).toHaveLength(0)
+  })
+})

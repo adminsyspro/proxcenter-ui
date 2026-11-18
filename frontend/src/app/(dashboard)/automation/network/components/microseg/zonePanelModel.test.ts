@@ -4,14 +4,15 @@ import type { MicrosegDrift, MicrosegZone } from '@/lib/microseg/types'
 
 import type { ZoneMember } from './zoneModel'
 import { driftKey } from './driftLabels'
-import { zoneDriftSignals, zoneSuggestions } from './zonePanelModel'
+import { isFirewallOff, zoneDriftSignals, zoneSuggestions } from './zonePanelModel'
 import { suggestion } from './policyTestKit'
 
 const zone = (id: string, name: string) => ({ id, name } as MicrosegZone)
 const ZONES = [zone('zd', 'db'), zone('zw', 'web')]
 const member = (vmid: number, status: string | null): ZoneMember => ({
   ref: { node: 'pve1', type: 'qemu', vmid },
-  guest: status === null ? null : { vmid, name: `vm${vmid}`, node: 'pve1', type: 'qemu', status, tags: [] },
+  connectionId: 'c1',
+  guest: status === null ? null : { connectionId: 'c1', vmid, name: `vm${vmid}`, node: 'pve1', type: 'qemu', status, tags: [] },
   pending: false,
 })
 
@@ -29,7 +30,7 @@ describe('zoneDriftSignals', () => {
   it('counts the drifts of the zone or of its members, and tells the members with their NIC firewall off', () => {
     const s = zoneDriftSignals(ZONES[0], members, drifts, ZONES, new Set())!
     expect(s.count).toBe(4)
-    expect([...s.firewallOff]).toEqual(['qemu/1'])
+    expect([...s.firewallOff]).toEqual(['c1/qemu/1'])
   })
 
   it('leaves out the drifts ignored in this browser, as the Drifts sub-tab does', () => {
@@ -42,6 +43,29 @@ describe('zoneDriftSignals', () => {
 
   it('is not known before the engine computed the drifts', () => {
     expect(zoneDriftSignals(ZONES[0], members, null, ZONES, new Set())).toBeNull()
+  })
+})
+
+describe('zoneDriftSignals on a shared policy', () => {
+  const lxc = (connectionId: string): ZoneMember => ({
+    connectionId,
+    ref: { node: 'pve1', type: 'lxc', vmid: 100 },
+    guest: { connectionId, vmid: 100, name: `ct-${connectionId}`, node: 'pve1', type: 'lxc', status: 'running', tags: [] },
+    pending: false,
+  })
+  const members = [lxc('conn-1'), lxc('conn-2')]
+  const drifts: MicrosegDrift[] = [{ kind: 'nic_firewall_off', guest: { node: 'pve1', type: 'lxc', vmid: 100 } }]
+
+  it('matches the drifts of the cluster they were read from to that cluster\'s members only', () => {
+    const s = zoneDriftSignals(ZONES[0], members, drifts, ZONES, new Set(), 'conn-1')!
+    expect(s.count).toBe(1)
+    expect(members.map(m => isFirewallOff(s, m))).toEqual([true, false])
+  })
+
+  it('counts no drift of a member of another cluster with the same type and VMID', () => {
+    const s = zoneDriftSignals(ZONES[0], [lxc('conn-2')], drifts, ZONES, new Set(), 'conn-1')!
+    expect(s.count).toBe(0)
+    expect(isFirewallOff(s, lxc('conn-2'))).toBe(false)
   })
 })
 

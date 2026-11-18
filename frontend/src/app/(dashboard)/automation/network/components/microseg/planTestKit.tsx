@@ -31,7 +31,7 @@ export const planResult = (over: Partial<MicrosegRunResult> = {}): MicrosegRunRe
 })
 
 export const planRun = (over: Partial<MicrosegRunResult> = {}, status: MicrosegRun['status'] = 'done'): MicrosegRun => ({
-  id: 'p1', policy_id: 'p1', kind: 'plan', status, started_at: '2026-11-02T10:00:00Z', duration_ms: 10, api_calls: 3, writes: 0,
+  id: 'p1', policy_id: 'p1', connection_id: 'c1', kind: 'plan', status, started_at: '2026-11-02T10:00:00Z', duration_ms: 10, api_calls: 3, writes: 0,
   result: status === 'running' ? null : planResult(over), error: '',
 })
 

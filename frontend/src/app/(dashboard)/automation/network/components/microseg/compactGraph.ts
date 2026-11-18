@@ -4,7 +4,7 @@ import type { MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 
 import { flowService } from './FlowSummary'
 import {
-  EXTERNAL_ID, NODE_H, NODE_W, OUTSIDE_ID, addAllowedPairs, addExceptionZonePairs, addPair, cellCenters, comparePairs, exceptionLinks, outsideEgressOf, placeBoundary,
+  EXTERNAL_ID, NODE_H, NODE_W, OUTSIDE_ID, addAllowedPairs, addExceptionZonePairs, addPair, cellCenters, comparePairs, exceptionLinks, isSharedMap, outsideEgressOf, placeBoundary,
   placePairs,
   zoneColumns, zoneNodeId, type Cell, type MapEdgeKind, type MapInput, type Pair, type Placement, type ZoneGraph, type ZoneNodeData,
 } from './zoneGraph'
@@ -64,11 +64,11 @@ export function placeBox(out: Placement, zone: MicrosegZone, members: number | n
  * green edge per ordered pair of zones with its ports grouped and the count of the exceptions between them, the observed flows (unprotected, blocked) as their own
  * edges zone to zone, External and Outside boxes when an edge needs them. Pure and deterministic.
  */
-export function buildCompactGraph({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null }: MapInput): ZoneGraph {
+export function buildCompactGraph({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null, clusters = null }: MapInput): ZoneGraph {
   const { known, columns } = zoneColumns(zones, flows)
   const pairs = new Map<string, Pair>()
   addAllowedPairs(pairs, flows, known)
-  addExceptionZonePairs(pairs, exceptionLinks(exceptions, known, members, unzoned))
+  addExceptionZonePairs(pairs, exceptionLinks(exceptions, known, members, unzoned, isSharedMap({ clusters })))
   addObservedZonePairs(pairs, suggestions, known)
   const ordered = [...pairs.values()].sort(comparePairs)
 

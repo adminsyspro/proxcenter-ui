@@ -274,16 +274,16 @@ describe('TrafficByZoneStrip', () => {
   })
 })
 
-function Probe() {
+function Probe({ pair = PAIRS[0] }: { pair?: LensPair }) {
   const [groupBy, setGroupBy] = useGroupBy()
-  const { connectionId, choose } = useLensConnection()
-  const { state, lens } = useTrafficLens(connectionId)
+  const { connectionId, connections, choose } = useLensConnection()
+  const { state, lens } = useTrafficLens(connectionId, connections)
   return (
     <div>
       <span data-testid='group-by'>{groupBy}</span>
       <span data-testid='connection'>{connectionId ?? '-'}</span>
       <span data-testid='state'>{state}</span>
-      <span data-testid='verdict'>{lens ? lens.verdictOf(PAIRS[0]).status : '-'}</span>
+      <span data-testid='verdict'>{lens ? lens.verdictOf(pair).status : '-'}</span>
       <button onClick={() => setGroupBy('ip')}>ip</button>
       <button onClick={() => choose('c1')}>c1</button>
     </div>
@@ -376,6 +376,29 @@ describe('the lens hooks', () => {
     await waitFor(() => expect(screen.getByTestId('connection')).toHaveTextContent('c1'))
     expect(screen.getByTestId('state')).toHaveTextContent('off')
     expect(callsTo(`GET ${BASE}/policy`)).toHaveLength(0)
+  })
+
+  it('reads only the guests of its own cluster for a policy that is not shared', async () => {
+    live()
+    renderLive(<Probe />)
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('ready'))
+    expect(callsTo('GET /api/v1/vms?connId=c1')).toHaveLength(1)
+    expect(callsTo('GET /api/v1/vms?connId=c2')).toHaveLength(0)
+    expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith('/clusters'))).toBe(false)
+  })
+
+  it('puts a pair from a member of another cluster of a shared policy on its zone, reading that cluster\'s guests once', async () => {
+    const link = POLICY.clusters[0]
+    live({ ...POLICY, clusters: [link, { ...link, connection_id: 'c2' }] })
+    routes['GET /api/v1/vms?connId=c2'] = () => reply(200, { data: { vms: [{ vmid: 101, name: 'web-dr', node: 'pve9', type: 'qemu', tags: ['zone-web'], ips: ['10.8.0.1'] }] } })
+    renderLive(<Probe pair={{ src_ip: '10.8.0.1', dst_ip: '10.0.0.2', protocol: 'TCP', dst_port: 5432, bytes: 10, packets: 1 }} />)
+
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('ready'))
+    // web-dr (web, on c2) to db-01 on 5432: the flow web to db allows it, not an unknown source.
+    expect(screen.getByTestId('verdict')).toHaveTextContent('allowed')
+    expect(callsTo('GET /api/v1/vms?connId=c2')).toHaveLength(1)
+    // The suggestions of every cluster: one read, unfiltered.
+    expect(callsTo(`GET ${BASE}/suggestions?status=pending&limit=200`)).toHaveLength(1)
   })
 
   it('says so when a read fails', async () => {

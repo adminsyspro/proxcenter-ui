@@ -9643,7 +9643,19 @@
       "postureTrafficByDstZone": "Traffic by destination zone",
       "postureCaptionEmitted": "hits emitted per zone",
       "postureCaptionReceived": "hits received per zone",
-      "postureDirectionBoth": "Both"
+      "postureDirectionBoth": "Both",
+      "clustersStateStop": "Emergency stop",
+      "clustersStateUnreachable": "Unreachable since {time}",
+      "clustersStateApplied": "Applied",
+      "clustersStateUnknown": "State unknown",
+      "clustersMembers": "{members} members · {protected} protected",
+      "clustersMembersShort": "{members} · {protected} protected",
+      "clustersAll": "All clusters",
+      "clustersCount": "{count, plural, one {# cluster} other {# clusters}}",
+      "clustersDrifts": "{count, plural, =0 {No drift} one {# drift} other {# drifts}}",
+      "clustersFiguresMissing": "Figures missing",
+      "clustersOutOfScope": "Outside your scope",
+      "clustersHiddenTraffic": "{count, plural, one {The traffic of # cluster outside your scope is not included.} other {The traffic of # clusters outside your scope is not included.}}"
     },
     "rulesOnDemand": {
       "chip": "Rules read when opened",
@@ -12343,7 +12355,8 @@
       "truncated": "older lines were dropped",
       "frozen": "zone and guest names as they were when the event was seen",
       "loadOlder": "Load older",
-      "empty": "No event yet: the engine reads the node logs every minute."
+      "empty": "No event yet: the engine reads the node logs every minute.",
+      "otherCluster": "Another cluster"
     }
   },
   "vdcUsageHistory": {
@@ -13433,7 +13446,11 @@
         "running": "Running"
       },
       "logNode": "{node} · {rate} lines/min · {lag} behind",
-      "logBehind": "Log behind"
+      "logBehind": "Log behind",
+      "unreachableSince": "Cluster {name} has been unreachable since {time}: its rules are not updated, the other clusters keep its last known addresses.",
+      "unreachableSinceSingle": "This cluster has been unreachable since {time}: its rules are not updated.",
+      "firewallOff": "{name}: the cluster firewall is off, nothing is filtered there.",
+      "firewallOffSingle": "The cluster firewall is off, nothing is filtered there."
     },
     "stop": {
       "button": "Emergency stop",
@@ -13453,7 +13470,17 @@
       "clusterFirewallOff": "Cluster firewall disabled",
       "notDeployed": "Nothing deployed",
       "socleUncovered": "Addresses the rules do not accept: {ips}",
-      "socleUncoveredNodes": "Addresses the rules do not accept: {ips} (on {nodes})"
+      "socleUncoveredNodes": "Addresses the rules do not accept: {ips} (on {nodes})",
+      "clusterFirewallOffOf": "Cluster firewall off: {name}",
+      "clustersStop": "Stops every cluster of the policy: {names}",
+      "clustersResume": "Resumes every cluster of the policy: {names}",
+      "clustersAndOthers": "{names} and {count, plural, one {# other cluster} other {# other clusters}}",
+      "followStop": "Stop pending: retried every minute",
+      "followResume": "Resume pending: retried every minute",
+      "followHeld": "Firewall kept off until its node access rules are checked",
+      "socleOn": "Refused on {name}.",
+      "socleOnOther": "Refused on another cluster of the policy.",
+      "bodyShared": "Every zone of the policy moves to observation on all the associated clusters."
     },
     "pending": {
       "noCount": "Changes not applied yet.",
@@ -13492,7 +13519,9 @@
       "untilApplied": "Nothing changes in Proxmox until you apply the plan.",
       "applying": "Being applied: {list}",
       "applyingInline": "being applied: {list}",
-      "applyingNoCount": "Changes being applied"
+      "applyingNoCount": "Changes being applied",
+      "clusterAdded": "cluster {name} will be added",
+      "clustersAdded": "{count, plural, one {# cluster will be added} other {# clusters will be added}}"
     },
     "firstRun": {
       "title": "Set up micro-segmentation",
@@ -13528,7 +13557,11 @@
       "CHECK_PENDING": "A check is already queued: the engine starts it at its next pass.",
       "generic": "Something went wrong. Try again.",
       "SOCLE_MISSING": "A node whose own firewall is on does not let the web UI (8006) and SSH (22) in, so the cluster firewall was not re-enabled. Allow them in that node's firewall, or turn it off, then resume.",
-      "NOT_DEPLOYED": "Nothing is deployed yet: apply a plan first, the emergency stop acts on a deployed policy."
+      "NOT_DEPLOYED": "Nothing is deployed yet: apply a plan first, the emergency stop acts on a deployed policy.",
+      "CLUSTER_NOT_EMPTY": "A cluster of this policy is not empty: remove its zones, flows and members first.",
+      "TOO_MANY_CLUSTERS": "This policy already has the maximum number of clusters.",
+      "CLUSTER_UNREADABLE": "A cluster of this policy cannot be read right now. Try again once it is reachable.",
+      "CLUSTER_FIREWALL_OFF": "The cluster firewall is off on a cluster of this policy: nothing was applied. Turn it on in Proxmox, then plan again."
     },
     "policy": {
       "zonesTitle": "Zones",
@@ -13777,6 +13810,14 @@
           "readingStart": "reading Proxmox",
           "reading": "reading Proxmox, {done, number} / {total, number} guests",
           "writing": "writing to Proxmox, {done, number} / {total, number}"
+        },
+        "group": {
+          "done": "{label}: done on all {total} clusters",
+          "partial": "{label}: done on {done} of {total} clusters",
+          "failed": "{label}: failed on every cluster",
+          "showClusters": "Show the clusters",
+          "hideClusters": "Hide the clusters",
+          "partialApplyAgain": "{label}: done on {done} of {total} clusters, apply again once the cluster never applied is reachable"
         }
       },
       "assign": {
@@ -13800,7 +13841,9 @@
         "pendingRemoval": "Pending removal",
         "removalHint": "Queued for removal, select it again to keep it in this zone.",
         "pendingMove": "Moving to {zone}",
-        "moveHint": "Queued to move to {zone}, select it again to keep it in this zone."
+        "moveHint": "Queued to move to {zone}, select it again to keep it in this zone.",
+        "partial": "Saved on {clusters} only; the other clusters were not saved: {error}",
+        "partialSome": "Saved on some clusters only; the others were not saved: {error}"
       },
       "preflightButton": "Pre-flight checks",
       "state": {
@@ -13918,8 +13961,15 @@
           "missing_guest": "A source or a destination is no longer in the inventory.",
           "waiting_address": "The inventory knows no address of a source yet: its rules may let nothing through until one is read.",
           "renamed": "A VM no longer has the name it was recorded with: it was renamed, or its VMID was reused. Check that the exception still names the right VM."
-        }
-      }
+        },
+        "cluster": "Cluster",
+        "clusterInactive": "{name} is not applied yet: an exception there would protect nothing.",
+        "noActiveCluster": "No cluster of the policy is applied yet: an exception would protect nothing."
+      },
+      "guestsUnread": "The guests of {clusters} could not be read: they are not listed.",
+      "guestsUnreadSome": "The guests of some clusters could not be read: they are not listed.",
+      "guestsUncounted": "The guests of {clusters} could not be read: they are not counted.",
+      "guestsUncountedSome": "The guests of some clusters could not be read: they are not counted."
     },
     "plan": {
       "title": "Micro-segmentation plan",
@@ -13961,7 +14011,45 @@
       "notes": "Notes: {list}",
       "nothingRecord": "Nothing to write in Proxmox: applying records the revision.",
       "stopActive": "Written while the emergency stop holds the cluster firewall off; takes effect when the stop is lifted",
-      "stopActivePlan": "An apply now would be written while the emergency stop holds the cluster firewall off"
+      "stopActivePlan": "An apply now would be written while the emergency stop holds the cluster firewall off",
+      "cluster": {
+        "other": "Another cluster",
+        "computing": "Computing",
+        "applyFailed": "Failed: it will be applied when the cluster is reachable again.",
+        "error": {
+          "no_client": "Unreachable: it will catch up once it is reachable again.",
+          "engine_stopped": "The engine is stopped on this cluster.",
+          "stopped": "The emergency stop is on: apply again once it is lifted.",
+          "internal": "The run could not start on this cluster."
+        },
+        "applied": {
+          "done": "Applied on all {total} clusters",
+          "partial": "Applied on {done} of {total} clusters",
+          "failed": "Not applied on any cluster",
+          "partialApplyAgain": "Applied on {done} of {total} clusters: apply again once the cluster never applied is reachable."
+        },
+        "unreadable": "This run cannot be read.",
+        "runFailed": "Failed.",
+        "blocked": {
+          "start": "The plan could not start on this cluster: recompute before applying.",
+          "unreadable": "The plan of this cluster cannot be read: recompute before applying."
+        },
+        "unfollowed": "Status unknown: this run could not be followed.",
+        "planUnreachable": "Unreachable: it will be applied when the cluster is reachable again.",
+        "neverApplied": "This cluster was never applied: apply again once it is reachable.",
+        "firewallOff": "The cluster firewall is off: nothing would be filtered. Turn it on in Proxmox, then plan again.",
+        "serviceStopped": "The firewall service is stopped on {nodes}: nothing is filtered on these nodes.",
+        "firewallOffRun": "The cluster firewall is off: nothing was applied here. Turn it on in Proxmox, then plan again."
+      },
+      "applyBlocked": {
+        "failed": "Apply is unavailable: the plan of a cluster failed. Open its section for the reason, then recompute.",
+        "stale": "Apply is unavailable: recompute the plan, it comes from an older draft.",
+        "collisions": "Apply is unavailable: the plan of a cluster has collisions to resolve first.",
+        "noCluster": "Apply is unavailable: no cluster could be reached to compute the plan."
+      },
+      "firewallOffBlock": "Apply is unavailable: the cluster firewall is off on {names}.",
+      "firewallOffRefused": "Nothing was applied: the cluster firewall is off on {names}, so nothing would be filtered there. Turn it on in Proxmox, then plan again.",
+      "firewallOffRefusedAny": "Nothing was applied: the cluster firewall is off on a cluster of the policy, so nothing would be filtered there. Turn it on in Proxmox, then plan again."
     },
     "drifts": {
       "asOf": "As of the last full run, {time}",
@@ -14054,6 +14142,34 @@
         "destinationLocal": "the local network",
         "verdict": {
           "disabled": "disabled"
+        },
+        "peer_unreadable": {
+          "title": "Cluster {name} cannot be read",
+          "titleUnknown": "An associated cluster cannot be read",
+          "detail": "Cluster {name} cannot be read: address removals are on hold",
+          "detailUnknown": "An associated cluster cannot be read: address removals are on hold",
+          "hint": "Check that ProxCenter reaches this cluster: the removals resume once it can be read again."
+        },
+        "stop_lift_held": {
+          "title": "Cluster firewall of {name} stays off",
+          "titleUnknown": "The cluster firewall of an associated cluster stays off",
+          "detail": "Cluster firewall of {name} stays off: the node access rules must be checked before it is turned back on",
+          "detailUnknown": "The cluster firewall of an associated cluster stays off: the node access rules must be checked before it is turned back on",
+          "hint": "Run the pre-flight checks of this cluster: the engine turns its firewall back on once the node access rules are in place."
+        },
+        "heldNote": "Removal on hold until every associated cluster can be read.",
+        "clusterOther": "Another cluster",
+        "cluster_firewall_off": {
+          "title": "Cluster firewall of {name} is off",
+          "titleUnknown": "The cluster firewall of an associated cluster is off",
+          "detail": "Cluster firewall of {name} is off: nothing is filtered there",
+          "detailUnknown": "The cluster firewall of an associated cluster is off: nothing is filtered there",
+          "hint": "Turn it back on from this row, or in Proxmox (Datacenter > Firewall > Options)."
+        },
+        "firewall_service_stopped": {
+          "title": "Firewall service stopped on {node}",
+          "detail": "The firewall service is stopped on {node}: nothing is filtered on this node",
+          "hint": "Start the pve-firewall service on this node."
         }
       },
       "chip": {
@@ -14071,7 +14187,11 @@
         "known_rule_missing": "Known rule missing",
         "known_rule_extra": "Known rule extra",
         "local_set_desync": "Local set out of sync",
-        "egress_no_subnet": "No subnet"
+        "egress_no_subnet": "No subnet",
+        "peer_unreadable": "Cluster unreadable",
+        "stop_lift_held": "Firewall kept off",
+        "cluster_firewall_off": "Cluster firewall off",
+        "firewall_service_stopped": "Service stopped"
       },
       "zoneFilter": "Zone {name} only",
       "zoneFilterClear": "Show every zone",
@@ -14090,7 +14210,11 @@
         "known_rule_extra": "Known-address rule left over ({count, number})",
         "local_set_desync": "Local network set out of sync ({count, number})",
         "egress_no_subnet": "Outbound without a local subnet ({count, number})",
-        "generic": "{kind} ({count, number})"
+        "generic": "{kind} ({count, number})",
+        "peer_unreadable": "Associated clusters that cannot be read ({count, number})",
+        "stop_lift_held": "Cluster firewalls kept off ({count, number})",
+        "cluster_firewall_off": "Cluster firewalls switched off ({count, number})",
+        "firewall_service_stopped": "Nodes with the firewall service stopped ({count, number})"
       },
       "noneZone": "none",
       "select": "Select {name}",
@@ -14109,7 +14233,18 @@
       "colDiffers": "What differs",
       "colSince": "Seen at last full run",
       "colActions": "Actions",
-      "colSinceHint": "The engine gives no first-seen time per drift: this is when its last full run found them."
+      "colSinceHint": "The engine gives no first-seen time per drift: this is when its last full run found them.",
+      "enableFirewall": {
+        "button": "Turn back on",
+        "title": "Turn the cluster firewall of {name} back on",
+        "titleUnknown": "Turn the cluster firewall back on",
+        "body": "The cluster firewall filters again as soon as it is on.",
+        "check": "Checked first: the node access rules (web UI 8006, SSH 22).",
+        "after": "A full check then realigns the guests of this cluster.",
+        "confirm": "Turn back on",
+        "stop": "Under an emergency stop, it is turned back on at the lift.",
+        "refused": "A node whose own firewall is on does not let the web UI (8006) and SSH (22) in, so the cluster firewall was left off. Allow them in that node's firewall, or turn it off, then try again."
+      }
     },
     "observation": {
       "sampling": "Proxmox logs at most one line per second per chain by default, so busy flows may be under-counted.",
@@ -14126,7 +14261,9 @@
         "direction": "Direction",
         "directionAll": "All",
         "directionIn": "Inbound",
-        "directionOut": "Outbound"
+        "directionOut": "Outbound",
+        "cluster": "Cluster",
+        "clusterAll": "All clusters"
       },
       "kind": {
         "would_block": "Would be blocked",
@@ -14280,7 +14417,9 @@
         "unzoned": "Unzoned guests ({count, number})",
         "unzonedHint": "Running guests in no zone. Drifts lists them too.",
         "guestAria": "{name}, guest {vmid}",
+        "guestAriaCluster": "{name}, guest {vmid}, {cluster}",
         "guestWhere": "Guest {vmid} on {node}",
+        "guestWhereCluster": "Guest {vmid} on {node}, {cluster}",
         "guestIps": "IP addresses: {ips}",
         "guestNoIp": "No IP address known",
         "guestPending": "Queued for the zone, applied with the next plan",
@@ -14366,6 +14505,7 @@
         "logsEmpty": "No event of this pair in the engine's memory"
       },
       "partial": "Partial: only the first {count, number} pending flows are drawn.",
+      "hiddenClusters": "{count, plural, one {The guests of # cluster outside your scope are not shown.} other {The guests of # clusters outside your scope are not shown.}}",
       "filters": {
         "title": "Flows:"
       },
@@ -14417,6 +14557,7 @@
       },
       "pve": {
         "aria": "Proxmox node {name}, {guests}",
+        "ariaCluster": "Proxmox node {name} of {cluster}, {guests}",
         "guests": "{count, plural, one {# guest} other {# guests}}",
         "zoneShare": "Zone {zone}: {count, plural, one {# guest} other {# guests}}",
         "unzonedShare": "No zone: {count, plural, one {# guest} other {# guests}}",
@@ -14529,7 +14670,7 @@
       "runAgain": "Run again",
       "openWizard": "Open the deployment wizard",
       "raiseLogRate": "Raise while observing",
-      "busy": "An apply is running, retry in a moment.",
+      "busy": "The engine is finishing a pass or an apply on this cluster, retry in a moment.",
       "noClient": "No Proxmox client is available for this connection.",
       "readFailed": "Proxmox could not be read: {error}",
       "status": {
@@ -14577,6 +14718,12 @@
           "title": "Outbound subnets",
           "pass": "Every member of a zone with outbound control has a known subnet.",
           "warn": "{count, plural, one {# member has no known subnet} other {# members have no known subnet}} ({guests}): their local network is reduced to their own IPs."
+        },
+        "firewall_service": {
+          "title": "Firewall service",
+          "pass": "The firewall service is running on every node.",
+          "stopped": "The firewall service is stopped on {nodes}: nothing is filtered on these nodes.",
+          "unreadable": "The state of the firewall service could not be read on {nodes}."
         }
       },
       "rateUnits": {
@@ -14659,7 +14806,10 @@
         "confirm": "Remove",
         "running": "{label}: removing micro-segmentation...",
         "complete": "{label}: removal complete, the zone tags stay on the guests",
-        "incomplete": "{label}: removal incomplete, run it again"
+        "incomplete": "{label}: removal incomplete, run it again",
+        "bodyShared": "This undoes everything ProxCenter wrote to Proxmox on the chosen cluster; the other clusters only stop recognising its guests.",
+        "leaves": "{name} leaves the shared policy and keeps none of it; the zone tags stay on its guests.",
+        "needsEveryCluster": "You need node management rights on every cluster of this policy"
       },
       "prefixChange": {
         "warning": "Guests tagged with the old prefix leave their zones at the next apply.",
@@ -14674,6 +14824,37 @@
         "readyAfter": "Time without a new flow that would be blocked before a zone is shown as ready; it is not a lock.",
         "writeCap": "Past it, the engine stops and asks for a confirmation.",
         "selfIps": "Addresses ProxCenter reaches the nodes from. The preflight checks they are not cut off. Leave empty to use the detection."
+      },
+      "clusters": {
+        "row": "Associated clusters",
+        "hint": "The clusters that share this policy: the same zones, flows and settings, and the guests of each are recognised by the others.",
+        "pending": "applies at the next application",
+        "add": "Add a cluster",
+        "maxReached": "A policy takes at most {max} clusters.",
+        "noCandidate": "No other cluster to associate.",
+        "removeLabel": "Dissociate {name}",
+        "target": "Cluster or node",
+        "associate": {
+          "title": "Associate clusters",
+          "cluster": "Clusters or nodes",
+          "nothingWritten": "Nothing is written on them until the next application.",
+          "room": "The policy can take {count, plural, one {# more} other {# more}}.",
+          "confirm": "Associate",
+          "errors": {
+            "CLUSTER_NOT_EMPTY": "{name} still holds micro-segmentation data. Only a cluster without any policy can be associated: remove the micro-segmentation there, then delete its zones and rules.",
+            "TOO_MANY_CLUSTERS": "This policy already has the most clusters it can take.",
+            "CLUSTER_UNREADABLE": "The cluster could not be inspected. Try again later."
+          },
+          "firewallOffHint": "The cluster firewall is off on this cluster: associating is possible, applying will be refused until it is on.",
+          "serviceStoppedHint": "The firewall service is stopped on {nodes}."
+        },
+        "dissociate": {
+          "title": "Dissociate {name}?",
+          "impact": "{leaving, plural, =0 {No guest} one {# guest} other {# guests}} of {name} will no longer be recognised by the other clusters, {staying, plural, =0 {no guest} one {# guest} other {# guests}} the other way.",
+          "keepsRules": "{name} keeps its rules, with its own copy of the policy.",
+          "typeName": "Type {name} to confirm",
+          "confirm": "Dissociate"
+        }
       }
     },
     "history": {
@@ -14744,6 +14925,7 @@
           },
           "triggerCheck": "Check now",
           "triggerSchedule": "Schedule",
+          "triggerPeer": "Another cluster changed",
           "failed": "The run failed.",
           "failedWith": "The run failed: {error}",
           "errors": "Errors: {list}"
@@ -14790,7 +14972,12 @@
         "loading": "Loading the history...",
         "capped": "Only the last {count, number} revisions and the last {count, number} runs are read.",
         "actorInferred": "Deduced from the kind of run",
-        "actorCheck": "Started with Check now"
+        "actorCheck": "Started with Check now",
+        "peer": "Another cluster changed",
+        "actorPeer": "Started by the engine because the addresses of another cluster of the policy changed",
+        "clusterRuns": "The run of each cluster",
+        "showClusterRuns": "Show the run of each cluster",
+        "hideClusterRuns": "Hide the run of each cluster"
       }
     },
     "waitingFirstCheck": "Waiting for the first full check",
@@ -14882,6 +15069,12 @@
         "title": "What the check does",
         "ips": "IP addresses of the members",
         "guests": "Guests read again and compared with the policy, drifts repaired"
+      },
+      "group": {
+        "searching": "Taken by the engine: looking for its run",
+        "running": "Checking {count, plural, one {# cluster} other {# clusters}}",
+        "done": "Checked on {done, number} of {total, number} clusters",
+        "clusters": "Clusters checked"
       }
     },
     "trafficLens": {
@@ -15071,10 +15264,19 @@
       "title": "{count, plural, one {Discard the # unapplied change?} other {Discard the # unapplied changes?}}",
       "titleNoCount": "Discard the unapplied changes?",
       "body": "The draft goes back to the last applied revision.",
-      "confirm": "Discard"
+      "confirm": "Discard",
+      "busy": "The engine is finishing work on a cluster of this policy (a scheduled pass or another action). Try again in a moment."
     },
     "gateway": {
       "name": "Gateway of {zones}"
+    },
+    "merged": {
+      "unreadList": "Cannot be read: its rows are not listed.",
+      "unreadListOther": "An associated cluster cannot be read: its rows are not listed.",
+      "unreachable": "Unreachable: its state is unknown.",
+      "unreachableOther": "An associated cluster is unreachable: its state is unknown.",
+      "unreadState": "Cannot be read: its state is not shown.",
+      "unreadStateOther": "An associated cluster cannot be read: its state is not shown."
     }
   },
   "bulkPower": {

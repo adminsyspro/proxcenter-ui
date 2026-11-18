@@ -83,7 +83,7 @@ describe('matchZoneRule against the applied revision, resolved in the draft', ()
 describe('matchZoneRule: the rules of an exception (+pcz-_vm<source> to +pcz-_vm<destination>)', () => {
   const guest = (vmid: number, name: string) => ({ type: 'qemu' as const, vmid, name })
   const exception = (over: Partial<MicrosegException> = {}): MicrosegException => ({
-    id: 'e1', policy_id: 'p1', zone_id: 'z-db', sources: [guest(101, 'app-01'), guest(103, '')], destinations: [guest(102, 'db-01')],
+    id: 'e1', policy_id: 'p1', connection_id: 'c1', zone_id: 'z-db', sources: [guest(101, 'app-01'), guest(103, '')], destinations: [guest(102, 'db-01')],
     services: [{ proto: 'tcp', dport: '5432' }, { proto: 'any', dport: '' }], comment: '', created_by: 'x', ...over,
   })
   const WITH: PolicyView = { ...APPLIED, exceptions: [exception()] }

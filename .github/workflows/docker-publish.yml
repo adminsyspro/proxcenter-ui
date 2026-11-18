@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag for the images (staging: staging or X.Y.Z-staging)'
+        description: 'Version tag for the images (from main: latest or X.Y.Z-rcN; staging: staging or X.Y.Z-staging)'
         required: false
         default: 'latest'
       staging:
@@ -49,10 +49,13 @@ env:
 
 jobs:
   # ========================================
-  # Staging dispatch guard
+  # Dispatch guard
   # ========================================
-  # Runs the checker from the dispatched ref: a staging build checks out
-  # older sources (frontend_ref) that do not carry this script.
+  # Refuses a manual dispatch that could publish under a release tag: a
+  # staging build with the wrong inputs, or any other dispatch outside main
+  # or with a version that is not a release candidate. Runs the checker from
+  # the dispatched ref: a staging build checks out older sources
+  # (frontend_ref) that do not carry this script.
   dispatch-guard:
     runs-on: ubuntu-latest
     permissions:
@@ -63,7 +66,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check staging inputs
+      - name: Check dispatch inputs
         env:
           GH_EVENT: ${{ github.event_name }}
           GH_REF: ${{ github.ref }}

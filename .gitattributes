@@ -1,0 +1,5 @@
+frontend/public/console/*.bundle.js linguist-generated
+frontend/public/novnc/*.bundle.js linguist-generated
+frontend/public/spice/*.bundle.js linguist-generated
+frontend/public/xterm/*.bundle.js linguist-generated
+frontend/vendor/** linguist-vendored

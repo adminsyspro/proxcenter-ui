@@ -17,7 +17,7 @@
  */
 export type ThemeMode = 'system' | 'light' | 'dark'
 export type Skin = 'default' | 'bordered'
-export type Layout = 'vertical' | 'collapsed' | 'horizontal'
+export type Layout = 'vertical' | 'collapsed' | 'horizontal' | 'hidden'
 export type ContentWidth = 'compact' | 'wide'
 
 export interface ThemeConfig {

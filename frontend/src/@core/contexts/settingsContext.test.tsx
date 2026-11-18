@@ -15,12 +15,16 @@ import primaryColorConfig from '@configs/primaryColorConfig'
 import themeConfig from '@configs/themeConfig'
 
 import { SettingsContext, SettingsProvider } from './settingsContext'
+import type { SettingsProviderProps } from './settingsContext'
 
-type ProviderProps = {
-  canPersistAppearance?: boolean
-  hasStoredAppearance?: boolean
-  initialSettings?: Record<string, unknown>
-  mode?: string
+type ProviderProps = Omit<SettingsProviderProps, 'children'>
+
+function useSettingsContext() {
+  const context = useContext(SettingsContext)
+
+  if (!context) throw new Error('SettingsProvider is missing')
+
+  return context
 }
 
 let cookieValue: Record<string, unknown> | undefined
@@ -30,7 +34,7 @@ function renderSettings(props: ProviderProps = {}) {
     <SettingsProvider {...props}>{children}</SettingsProvider>
   )
 
-  return renderHook(() => useContext(SettingsContext), { wrapper })
+  return renderHook(() => useSettingsContext(), { wrapper })
 }
 
 beforeEach(() => {
@@ -186,7 +190,9 @@ describe('appearance persistence', () => {
   it('does not send a key the settings store does not persist', () => {
     const { result } = renderSettings({ canPersistAppearance: true, hasStoredAppearance: true })
 
-    act(() => result.current.updateSettings({ loginBackground: { type: 'image' } }))
+    act(() =>
+      result.current.updateSettings({ loginBackground: { ...result.current.settings.loginBackground, type: 'image' } })
+    )
     act(() => vi.advanceTimersByTime(600))
 
     expect(saveAppearance).not.toHaveBeenCalled()
@@ -299,7 +305,7 @@ describe('cookie ownership', () => {
     expect(updateSettingsCookie).toHaveBeenCalledWith(
       expect.objectContaining({ primaryColor: '#FFD200', _appearanceOwner: 'me' }),
     )
-    expect(result.current.settings._appearanceOwner).toBeUndefined()
+    expect(result.current.settings).not.toHaveProperty('_appearanceOwner')
 
     act(() => vi.advanceTimersByTime(600))
 

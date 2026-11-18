@@ -78,7 +78,7 @@ export default function SessionsCard() {
     }
   }, [t])
 
-  useEffect(() => { fetchSessions() }, [fetchSessions])
+  useEffect(() => { void fetchSessions() }, [fetchSessions])
 
   // ---- Loading -----------------------------------------------------
   if (loading) {
@@ -105,7 +105,7 @@ export default function SessionsCard() {
       const res = await fetch(`/api/v1/auth/sessions/${target.id}`, { method: 'DELETE' })
       const data = await res.json()
       if (res.ok) {
-        fetchSessions()
+        void fetchSessions()
       } else {
         setActionError(data?.error || t('common.error'))
       }
@@ -125,7 +125,7 @@ export default function SessionsCard() {
       const res = await fetch('/api/v1/auth/sessions', { method: 'DELETE' })
       const data = await res.json()
       if (res.ok) {
-        fetchSessions()
+        void fetchSessions()
       } else {
         setActionError(data?.error || t('common.error'))
       }

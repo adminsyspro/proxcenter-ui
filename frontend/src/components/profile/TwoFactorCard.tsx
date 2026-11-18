@@ -123,7 +123,7 @@ export default function TwoFactorCard() {
     }
   }, [t])
 
-  useEffect(() => { fetchStatus() }, [fetchStatus])
+  useEffect(() => { void fetchStatus() }, [fetchStatus])
 
   // ---- OIDC notice -----------------------------------------------
   if (session?.user?.authProvider === 'oidc') {
@@ -159,7 +159,7 @@ export default function TwoFactorCard() {
 
   const handleWizardDone = () => {
     setWizardOpen(false)
-    fetchStatus()
+    void fetchStatus()
   }
 
   const handleRegen = async (cred: ReauthCredential) => {
@@ -173,7 +173,7 @@ export default function TwoFactorCard() {
       const data = await res.json()
       if (res.ok) {
         setNewCodes(data.data.recoveryCodes)
-        fetchStatus()
+        void fetchStatus()
       } else {
         // surface error inline, not critical enough for a crash
         setStatusError(data?.error || t('common.error'))
@@ -194,7 +194,7 @@ export default function TwoFactorCard() {
       })
       const data = await res.json()
       if (res.ok) {
-        fetchStatus()
+        void fetchStatus()
       } else if (data?.error === 'POLICY_LOCK' || res.status === 409) {
         setPolicyLockError(t('twoFactor.policyLockError'))
       } else {

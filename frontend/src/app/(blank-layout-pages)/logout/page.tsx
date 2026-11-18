@@ -12,7 +12,7 @@ export default function LogoutPage() {
 
   useEffect(() => {
     // Auto logout and redirect to login. Federated so the IdP session goes too.
-    federatedSignOut('/login')
+    void federatedSignOut('/login')
   }, [])
 
   return (

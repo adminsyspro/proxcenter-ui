@@ -71,7 +71,7 @@ export default function TenantSwitcher() {
 
   const handleSelect = (tenantId: string) => {
     if (tenantId !== currentTenant?.id) {
-      switchTenant(tenantId)
+      void switchTenant(tenantId)
     }
     handleClose()
   }

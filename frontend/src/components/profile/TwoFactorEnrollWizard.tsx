@@ -196,7 +196,7 @@ function StepVerifyCode({ enrollData, onNext, onBack, onRestart, forced }: StepV
         value={code}
         onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
         inputProps={{ inputMode: 'numeric', pattern: '\\d{6}', maxLength: 6 }}
-        onKeyDown={e => { if (e.key === 'Enter' && code.length === 6) handleVerify() }}
+        onKeyDown={e => { if (e.key === 'Enter' && code.length === 6) void handleVerify() }}
         autoFocus
       />
 

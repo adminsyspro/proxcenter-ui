@@ -75,11 +75,11 @@ export default function SessionExpiryGuard({ children }: { children: ReactNode }
       }
       // Alive: refetch so the provider leaves "unauthenticated". The timer
       // still runs in case that refetch fails too; the status change clears it.
-      if (verdict === 'alive') updateRef.current?.()
+      if (verdict === 'alive') void updateRef.current?.()
       timer = setTimeout(check, SESSION_RECHECK_MS)
     }
 
-    check()
+    void check()
 
     return () => {
       cancelled = true

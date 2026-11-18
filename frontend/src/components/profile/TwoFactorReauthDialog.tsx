@@ -114,7 +114,7 @@ export default function TwoFactorReauthDialog({
             label={t('twoFactor.reauthPasswordLabel')}
             value={value}
             onChange={e => setValue(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && isValid) handleConfirm() }}
+            onKeyDown={e => { if (e.key === 'Enter' && isValid) void handleConfirm() }}
             autoFocus
           />
         ) : (
@@ -125,7 +125,7 @@ export default function TwoFactorReauthDialog({
             value={value}
             onChange={e => setValue(e.target.value.replace(/\D/g, '').slice(0, 6))}
             inputProps={{ inputMode: 'numeric', pattern: '\\d{6}', maxLength: 6 }}
-            onKeyDown={e => { if (e.key === 'Enter' && isValid) handleConfirm() }}
+            onKeyDown={e => { if (e.key === 'Enter' && isValid) void handleConfirm() }}
             autoFocus
           />
         )}

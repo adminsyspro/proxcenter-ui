@@ -10,22 +10,32 @@ import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/component
 import { microsegApi } from '@/lib/microseg/api'
 import type { MicrosegPolicy, MicrosegZone } from '@/lib/microseg/types'
 
-import { assignRows, filterRows, GUESTS_PAGE_SIZE, isSelectable, MAX_ASSIGN, membersBody, type AssignRow } from './assignModel'
-import { DialogErrorLine, isVersionConflict, ONE_LINE_SX, OneLine, useDialogAction } from './dialogParts'
+import { assignRows, chosenByCluster, filterRows, GUESTS_PAGE_SIZE, isSelectable, MAX_ASSIGN, membersBody, type AssignRow } from './assignModel'
+import ClusterChip from './ClusterChip'
+import { DialogErrorLine, isVersionConflict, ONE_LINE_SX, OneLine, useDialogAction, writeErrorMessage } from './dialogParts'
+import { GroupGuestsUnread } from './GroupGuestsUnread'
 import PolicyPager, { usePaged } from './PolicyPager'
-import { useZoneGuests } from './useZoneGuests'
+import { useGroupGuests, visibleClusterNames } from './useGroupGuests'
+import { guestId } from './zoneModel'
 import TruncatedText from './TruncatedText'
+import { useMicrosegClusterWrite } from './microsegAccess'
 
 type Props = {
   open: boolean
+  /** The connection the policy is read through. */
   connectionId: string
+  /** The clusters sharing the policy, whose guests are listed; the connection alone when absent. */
+  clusterIds?: string[]
+  /** Names a cluster (the cluster chip of each guest of a shared policy, and a partial save). */
+  clusterName?: (id: string) => string
   zone: MicrosegZone
   policy: MicrosegPolicy
   /** Re-reads the draft: after a save, and on a VERSION_CONFLICT. */
   reloadPolicy: () => Promise<unknown>
   /**
-   * Guests (`type/vmid`) ticked when the dialog opens. A preselected guest that already carries the tag of
-   * the zone stays selectable: sending it makes the zone its only one (a guest tagged with several zones).
+   * Guests ticked when the dialog opens, by `guestId`, or by `type/vmid` for a guest of `connectionId`. A preselected
+   * guest that already carries the tag of the zone stays selectable: sending it makes the zone its only one (a guest
+   * tagged with several zones).
    */
   preselect?: string[]
   onClose: () => void
@@ -33,7 +43,17 @@ type Props = {
   onAssigned?: () => void
 }
 
-function GuestLine({ row, zoneName, checked, selectable, onToggle }: { row: AssignRow; zoneName: string; checked: boolean; selectable: boolean; onToggle: () => void }) {
+/** A preselected `type/vmid` names a guest of the dialog's connection (one cluster's key). */
+const ONE_CLUSTER_KEY = /^(qemu|lxc)\/(\d+)$/
+
+function preselectIds(preselect: readonly string[] | undefined, connectionId: string): string[] {
+  return (preselect ?? []).map(key => {
+    const one = ONE_CLUSTER_KEY.exec(key)
+    return one ? guestId({ connectionId, type: one[1], vmid: Number(one[2]) }) : key
+  })
+}
+
+function GuestLine({ row, zoneName, checked, selectable, onToggle, cluster }: { row: AssignRow; zoneName: string; checked: boolean; selectable: boolean; onToggle: () => void; cluster?: string }) {
   const t = useTranslations('microsegPilot.policy.assign')
   const { guest } = row
   const others = row.otherZones.join(', ')
@@ -48,6 +68,7 @@ function GuestLine({ row, zoneName, checked, selectable, onToggle }: { row: Assi
         sx={{ p: 0.5 }}
       />
       <StatusIcon type='vm' vmType={guest.type} status={guest.status} />
+      {cluster !== undefined && <ClusterChip connectionId={guest.connectionId} name={cluster} compact />}
       <TruncatedText text={guest.name} sx={{ flex: '0 1 auto' }} />
       <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{`${guest.vmid} · ${guest.node}`}</Typography>
       {row.member === 'tag' && !row.change && <Chip size='small' variant='outlined' label={t('member')} sx={{ flexShrink: 0 }} />}
@@ -86,15 +107,26 @@ function GuestLine({ row, zoneName, checked, selectable, onToggle }: { row: Assi
  * Assign guests to a zone. The selection is sent as pending members of the zone
  * (a draft): nothing is written to Proxmox until the plan is applied. A guest
  * of another zone is flagged and will be moved. Select-all covers every
- * filtered guest, across pages.
+ * filtered guest, across pages. On a shared policy the guests of every cluster
+ * are listed (each with its cluster chip) and the selection is sent once per
+ * cluster, through that cluster, each request with the draft version the
+ * previous one answered.
  */
-export default function AssignGuestsDialog({ open, connectionId, zone, policy, reloadPolicy, preselect, onClose, onAssigned }: Props) {
+export default function AssignGuestsDialog({ open, connectionId, clusterIds, clusterName, zone, policy, reloadPolicy, preselect, onClose, onAssigned }: Props) {
   const t = useTranslations('microsegPilot.policy.assign')
   const tc = useTranslations('common')
-  const { guests, status } = useZoneGuests(connectionId)
+  const tAll = useTranslations()
+  const groupIds = clusterIds ?? [connectionId]
+  const shared = groupIds.length > 1
+  // Members are written on each guest's cluster: the guests of a cluster the user may not write are not offered.
+  const { canWriteOn } = useMicrosegClusterWrite()
+  const { guests, status, errors } = useGroupGuests(groupIds.filter(id => canWriteOn(id)))
   const { busy, error, run } = useDialogAction()
+  // A save that went through on some clusters and not on the next one: said instead of the plain error.
+  const [partial, setPartial] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(preselect))
+  const preselected = useMemo(() => preselectIds(preselect, connectionId), [preselect, connectionId])
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(preselected))
 
   const rows = useMemo(
     () => assignRows(zone, policy.zones, policy.policy.tag_prefix, guests, policy.pending_members),
@@ -104,12 +136,13 @@ export default function AssignGuestsDialog({ open, connectionId, zone, policy, r
   const paged = usePaged(filtered, GUESTS_PAGE_SIZE)
 
   // A guest that became a member (after a reload) drops out of the selection.
-  const canTick = useCallback((r: AssignRow) => isSelectable(r) || (r.member === 'tag' && !!preselect?.includes(r.key)), [preselect])
+  const canTick = useCallback((r: AssignRow) => isSelectable(r) || (r.member === 'tag' && preselected.includes(r.key)), [preselected])
   const chosen = useMemo(() => rows.filter(r => canTick(r) && selected.has(r.key)), [rows, selected, canTick])
   const selectable = filtered.filter(canTick)
   const selectedInFilter = selectable.filter(r => selected.has(r.key)).length
   const allChecked = selectable.length > 0 && selectedInFilter === selectable.length
   const tooMany = chosen.length > MAX_ASSIGN
+  const failure = partial ?? error
 
   const toggle = (key: string) => setSelected(prev => {
     const next = new Set(prev)
@@ -129,14 +162,28 @@ export default function AssignGuestsDialog({ open, connectionId, zone, policy, r
     paged.setPage(0)
   }
 
+  const partialText = (saved: string[], e: unknown) => {
+    const names = visibleClusterNames(saved, clusterName)
+    const reason = writeErrorMessage(tAll as (key: string) => string, e)
+    return names ? t('partial', { clusters: names.join(', '), error: reason }) : t('partialSome', { error: reason })
+  }
+
   const submit = async () => {
     if (chosen.length === 0 || tooMany) return
-    const api = microsegApi(connectionId)
+    setPartial(null)
     const ok = await run(async () => {
+      // POST /members writes the rows of its URL's cluster only: one request per cluster, never retried on its own.
+      const saved: string[] = []
+      let version = policy.version
       try {
-        await api.setMembers(membersBody(policy.version, zone.id, chosen))
+        for (const [cluster, rows] of chosenByCluster(chosen)) {
+          const answer = await microsegApi(cluster).setMembers(membersBody(version, zone.id, rows))
+          version = answer?.version ?? version
+          saved.push(cluster)
+        }
       } catch (e) {
-        if (isVersionConflict(e)) await reloadPolicy().catch(() => undefined)
+        if (saved.length > 0 || isVersionConflict(e)) await reloadPolicy().catch(() => undefined)
+        if (saved.length > 0) setPartial(partialText(saved, e))
         throw e
       }
       await reloadPolicy().catch(() => undefined)
@@ -166,6 +213,7 @@ export default function AssignGuestsDialog({ open, connectionId, zone, policy, r
         />
         {status === 'loading' && <OneLine text={t('loading')} />}
         {status === 'error' && <OneLine text={t('loadFailed')} color='error.main' />}
+        {status === 'ready' && <GroupGuestsUnread errors={errors} clusterName={clusterName} />}
         {status === 'ready' && rows.length === 0 && <OneLine text={t('noGuests')} />}
         {status === 'ready' && rows.length > 0 && (
           <>
@@ -188,7 +236,15 @@ export default function AssignGuestsDialog({ open, connectionId, zone, policy, r
               <>
                 <Box role='list'>
                   {paged.rows.map(row => (
-                    <GuestLine key={row.key} row={row} zoneName={zone.name} checked={selected.has(row.key)} selectable={canTick(row)} onToggle={() => toggle(row.key)} />
+                    <GuestLine
+                      key={row.key}
+                      row={row}
+                      zoneName={zone.name}
+                      checked={selected.has(row.key)}
+                      selectable={canTick(row)}
+                      onToggle={() => toggle(row.key)}
+                      cluster={shared ? clusterName?.(row.guest.connectionId) ?? row.guest.connectionId : undefined}
+                    />
                   ))}
                 </Box>
                 <PolicyPager count={paged.count} page={paged.page} size={paged.size} onPage={paged.setPage} />
@@ -203,7 +259,7 @@ export default function AssignGuestsDialog({ open, connectionId, zone, policy, r
             </Tooltip>
           </Alert>
         )}
-        {error && <Box sx={{ mt: 1 }}><DialogErrorLine message={error} /></Box>}
+        {failure && <Box sx={{ mt: 1 }}><DialogErrorLine message={failure} /></Box>}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={busy}>{tc('cancel')}</Button>

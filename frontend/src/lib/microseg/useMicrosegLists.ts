@@ -27,6 +27,9 @@ export function useMicrosegDrifts(connId: string | null | undefined, options: { 
   return { data, loading: isLoading, error, reload: () => mutate() }
 }
 
+/** The drifts of one cluster at their usual pace, for the reads merged per cluster (`useMergedClusters`). */
+export const useClusterDrifts = (connId: string | null) => useMicrosegDrifts(connId)
+
 /**
  * The engine reads the firewall log every minute or so and records what it saw: the observed flows are read again at
  * that pace while the page is shown (orchestrator database, no Proxmox call), or a page opened before the first flows
@@ -40,7 +43,7 @@ export const SUGGESTIONS_REFRESH_MS = 60_000
  */
 export function useMicrosegSuggestions(connId: string | null | undefined, params: ListSuggestionsParams) {
   const api = useMemo(() => (connId ? microsegApi(connId) : null), [connId])
-  const key = connId ? [`${microsegBaseUrl(connId)}/suggestions`, params.kind, params.status, params.zone, params.direction, params.service?.join(' '), params.source, params.limit, params.offset] : null
+  const key = connId ? [`${microsegBaseUrl(connId)}/suggestions`, params.kind, params.status, params.zone, params.direction, params.service?.join(' '), params.source, params.limit, params.offset, params.connection] : null
   const { data, error, isLoading, isValidating, mutate } = useSWR<MicrosegSuggestion[], MicrosegApiError>(
     key,
     async () => (await api!.listSuggestions(params)).suggestions,

@@ -7,7 +7,11 @@ export type HistoryKind = 'all' | 'revisions' | 'runs'
 export type RevisionDiff = { added: number; removed: number; changed: number }
 
 export type HistoryRow =
-  | { type: 'revision'; id: string; at: number; revision: MicrosegRevision; zones: number | null; flows: number | null; exceptions: number; diff: RevisionDiff | null }
+  | {
+    type: 'revision'; id: string; at: number; revision: MicrosegRevision; zones: number | null; flows: number | null; exceptions: number; diff: RevisionDiff | null
+    /** On a shared policy: the application runs of every cluster that recorded the revision (absent on one cluster). */
+    runs?: MicrosegRun[]
+  }
   | { type: 'run'; id: string; at: number; run: MicrosegRun }
 
 /** The fields that make a flow what it is: two flows with the same id and these differ are a change. */
@@ -63,11 +67,26 @@ const time = (iso: string) => {
   return Number.isFinite(t) ? t : 0
 }
 
+/** The runs that record a revision when they end well: an application, a restore. */
+const RECORDING_KINDS = new Set(['apply', 'restore'])
+
+/**
+ * The revision a run of an application or a restore recorded, as GET /runs names it (`revision_id`), when that revision
+ * is among those listed; null for a run still going, one that recorded none (failed before), or any other kind.
+ */
+function revisionOf(run: MicrosegRun, listed: ReadonlySet<string>): string | null {
+  if (!RECORDING_KINDS.has(run.kind)) return null
+  const id = run.revision_id
+  return typeof id === 'string' && listed.has(id) ? id : null
+}
+
 /**
  * The revisions and the runs in one list, the newest first (ties: revisions first, then by id), `kind` keeping one of
  * the two. Each revision carries its counts and its diff against the revision before it (the next older one read).
+ * `grouped` (a shared policy): a revision is one line, and the application runs of every cluster that recorded it go
+ * under it instead of on lines of their own (not under the Runs filter, which lists every run).
  */
-export function historyRows(revisions: readonly MicrosegRevision[], runs: readonly MicrosegRun[], kind: HistoryKind = 'all'): HistoryRow[] {
+export function historyRows(revisions: readonly MicrosegRevision[], runs: readonly MicrosegRun[], kind: HistoryKind = 'all', options: { grouped?: boolean } = {}): HistoryRow[] {
   const byVersion = [...revisions].sort((a, b) => b.version - a.version)
   const revRows: HistoryRow[] = byVersion.map((revision, i) => ({
     type: 'revision',
@@ -80,7 +99,21 @@ export function historyRows(revisions: readonly MicrosegRevision[], runs: readon
     exceptions: (revision.snapshot?.exceptions ?? []).length,
     diff: revisionDiff(revision, byVersion[i + 1]),
   }))
-  const runRows: HistoryRow[] = runs.map(run => ({ type: 'run', id: run.id, at: time(run.started_at), run }))
+  let listed = runs
+  if (options.grouped && kind !== 'runs') {
+    const under = new Map<string, MicrosegRun[]>()
+    const revIds = new Set(revRows.map(r => r.id))
+    listed = runs.filter(run => {
+      const rev = revisionOf(run, revIds)
+      if (!rev) return true
+      under.set(rev, [...(under.get(rev) ?? []), run])
+      return false
+    })
+    for (const row of revRows) {
+      if (row.type === 'revision') row.runs = (under.get(row.id) ?? []).sort((a, b) => time(a.started_at) - time(b.started_at) || a.connection_id.localeCompare(b.connection_id))
+    }
+  }
+  const runRows: HistoryRow[] = listed.map(run => ({ type: 'run', id: run.id, at: time(run.started_at), run }))
   const rows = [...(kind === 'runs' ? [] : revRows), ...(kind === 'revisions' ? [] : runRows)]
   return rows.sort((a, b) => b.at - a.at || tie(a, b))
 }

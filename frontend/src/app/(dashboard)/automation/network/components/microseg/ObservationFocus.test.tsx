@@ -18,7 +18,7 @@ const web = zone('zw', { name: 'web' })
 const db = zone('zd', { name: 'db' })
 
 const sug = (id: string, over: Partial<MicrosegSuggestion> = {}): MicrosegSuggestion => ({
-  id, policy_id: 'p1', kind: 'would_block', src_key: `k${id}`, src_ip: '', src_zone_id: 'zw', dst_ip: '10.0.0.9', dst_zone_id: 'zd',
+  id, policy_id: 'p1', connection_id: 'c1', kind: 'would_block', src_key: `k${id}`, src_ip: '', src_zone_id: 'zw', dst_ip: '10.0.0.9', dst_zone_id: 'zd',
   proto: 'tcp', dport: '22', hits: 12, first_seen: '2026-11-01T10:00:00Z', last_seen: '2026-11-02T12:00:00Z', status: 'pending', ...over,
 })
 

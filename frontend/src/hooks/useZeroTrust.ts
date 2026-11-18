@@ -123,14 +123,30 @@ async function readCoverage(url: string, signal?: AbortSignal): Promise<Firewall
  * figures. The request in flight is aborted when the component goes away. The per-guest Proxmox calls are the
  * server's, bounded there: the browser never asks a guest config, rules or options for this.
  */
+/** The consumers mounted on each coverage URL: SWR gives them one request, owned by whichever asked first. */
+const consumers = new Map<string, number>()
+
 export function useVMFirewallCoverage(connectionId: string | null | undefined) {
   const key = connectionId ? firewallCoverageUrl(connectionId) : null
-  // Every read in flight, the mount read and a refresh alike: a refresh must not lose the controller of the first.
-  const controllers = useRef(new Set<AbortController>())
+  // Every read in flight (the mount read and a refresh alike: a refresh must not lose the controller of the first), by URL.
+  const controllers = useRef(new Map<AbortController, string>())
   const mounted = useRef(false)
   const [refreshing, setRefreshing] = useState(false)
 
-  // Aborted on a real unmount only: React's development double mount runs the cleanup and mounts again at once.
+  // The URL this hook shows is watched: a read that others wait on is not aborted when its owner goes away.
+  useEffect(() => {
+    if (!key) return
+    consumers.set(key, (consumers.get(key) ?? 0) + 1)
+    return () => {
+      const left = (consumers.get(key) ?? 1) - 1
+      if (left > 0) consumers.set(key, left)
+      else consumers.delete(key)
+    }
+  }, [key])
+
+  // Aborted on a real unmount only: React's development double mount runs the cleanup and mounts again at once. A read
+  // that another consumer of the same key still waits on (SWR deduped it onto this one) is left to finish: aborting it
+  // would hand that consumer an AbortError as if the cluster had failed.
   useEffect(() => {
     mounted.current = true
     const inFlight = controllers.current
@@ -138,15 +154,18 @@ export function useVMFirewallCoverage(connectionId: string | null | undefined) {
       mounted.current = false
       setTimeout(() => {
         if (mounted.current) return
-        for (const c of inFlight) c.abort()
-        inFlight.clear()
+        for (const [controller, url] of inFlight) {
+          if ((consumers.get(url) ?? 0) > 0) continue
+          controller.abort()
+          inFlight.delete(controller)
+        }
       }, 0)
     }
   }, [])
 
   const fetcher = useCallback((url: string) => {
     const controller = new AbortController()
-    controllers.current.add(controller)
+    controllers.current.set(controller, url.split('?')[0])
     return readCoverage(url, controller.signal).finally(() => controllers.current.delete(controller))
   }, [])
 

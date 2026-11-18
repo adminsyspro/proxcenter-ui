@@ -26,7 +26,7 @@ const flow = (id: string, over: Partial<MicrosegFlow> = {}): MicrosegFlow => ({
 })
 
 const seen = (id: string, over: Partial<MicrosegSuggestion> = {}): MicrosegSuggestion => ({
-  id, policy_id: 'p1', kind: 'would_block', src_key: 'k', src_ip: '', src_zone_id: 'zw', dst_ip: '', dst_zone_id: 'zd',
+  id, policy_id: 'p1', connection_id: 'c1', kind: 'would_block', src_key: 'k', src_ip: '', src_zone_id: 'zw', dst_ip: '', dst_zone_id: 'zd',
   proto: 'tcp', dport: '80', hits: 3, first_seen: '2026-11-02T10:00:00Z', last_seen: '2026-11-02T11:00:00Z', status: 'pending', ...over,
 })
 
@@ -487,7 +487,7 @@ describe('the occurrences of an edge', () => {
 describe('the exceptions between two zones', () => {
   const guest = (vmid: number, name = '') => ({ type: 'qemu' as const, vmid, name })
   const exception = (id: string, over: Partial<MicrosegException> = {}): MicrosegException => ({
-    id, policy_id: 'p1', zone_id: 'zd', sources: [guest(101, 'web-1')], destinations: [guest(102, 'db-1')],
+    id, policy_id: 'p1', connection_id: 'c1', zone_id: 'zd', sources: [guest(101, 'web-1')], destinations: [guest(102, 'db-1')],
     services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'me', ...over,
   })
   const members = new Map([['zw', [member(101, 'web-1'), member(103, 'web-2')]], ['zd', [member(102, 'db-1'), member(104, 'db-2')]]])

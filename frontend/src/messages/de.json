@@ -9600,7 +9600,19 @@
       "postureTrafficByDstZone": "Verkehr nach Zielzone",
       "postureCaptionEmitted": "gesendete Treffer pro Zone",
       "postureCaptionReceived": "empfangene Treffer pro Zone",
-      "postureDirectionBoth": "Beide"
+      "postureDirectionBoth": "Beide",
+      "clustersStateStop": "Notfall-Stopp",
+      "clustersStateUnreachable": "Nicht erreichbar seit {time}",
+      "clustersStateApplied": "Angewendet",
+      "clustersStateUnknown": "Status unbekannt",
+      "clustersMembers": "{members} Mitglieder · {protected} geschützt",
+      "clustersMembersShort": "{members} · {protected} geschützt",
+      "clustersAll": "Alle Cluster",
+      "clustersCount": "{count, plural, one {# Cluster} other {# Cluster}}",
+      "clustersDrifts": "{count, plural, =0 {Keine Abweichung} one {# Abweichung} other {# Abweichungen}}",
+      "clustersFiguresMissing": "Zahlen fehlen",
+      "clustersOutOfScope": "Außerhalb Ihres Bereichs",
+      "clustersHiddenTraffic": "{count, plural, one {Der Verkehr von # Cluster außerhalb Ihres Bereichs ist nicht enthalten.} other {Der Verkehr von # Clustern außerhalb Ihres Bereichs ist nicht enthalten.}}"
     },
     "rulesOnDemand": {
       "chip": "Regeln beim Öffnen",
@@ -11924,7 +11936,8 @@
       "truncated": "ältere Zeilen wurden verworfen",
       "frozen": "Zonen- und Gastnamen wie zum Zeitpunkt des Ereignisses",
       "loadOlder": "Ältere laden",
-      "empty": "Noch kein Ereignis: Die Engine liest die Knotenprotokolle jede Minute."
+      "empty": "Noch kein Ereignis: Die Engine liest die Knotenprotokolle jede Minute.",
+      "otherCluster": "Anderer Cluster"
     }
   },
   "vdcUsageHistory": {
@@ -13014,7 +13027,11 @@
         "running": "Läuft"
       },
       "logNode": "{node} · {rate} Zeilen/Min. · {lag} Verzug",
-      "logBehind": "Protokoll im Rückstand"
+      "logBehind": "Protokoll im Rückstand",
+      "unreachableSince": "Der Cluster {name} ist seit {time} nicht erreichbar: Seine Regeln werden nicht aktualisiert, die anderen Cluster behalten seine zuletzt bekannten Adressen.",
+      "unreachableSinceSingle": "Dieser Cluster ist seit {time} nicht erreichbar: Seine Regeln werden nicht aktualisiert.",
+      "firewallOff": "{name}: Die Cluster-Firewall ist ausgeschaltet, dort wird nichts gefiltert.",
+      "firewallOffSingle": "Die Cluster-Firewall ist ausgeschaltet, dort wird nichts gefiltert."
     },
     "stop": {
       "button": "Notfall-Stopp",
@@ -13034,7 +13051,17 @@
       "clusterFirewallOff": "Cluster-Firewall deaktiviert",
       "notDeployed": "Nichts bereitgestellt",
       "socleUncovered": "Von den Regeln nicht akzeptierte Adressen: {ips}",
-      "socleUncoveredNodes": "Von den Regeln nicht akzeptierte Adressen: {ips} (auf {nodes})"
+      "socleUncoveredNodes": "Von den Regeln nicht akzeptierte Adressen: {ips} (auf {nodes})",
+      "clusterFirewallOffOf": "Cluster-Firewall aus: {name}",
+      "clustersStop": "Stoppt alle Cluster der Richtlinie: {names}",
+      "clustersResume": "Setzt alle Cluster der Richtlinie fort: {names}",
+      "clustersAndOthers": "{names} und {count, plural, one {# weiterer Cluster} other {# weitere Cluster}}",
+      "followStop": "Stopp ausstehend: wird jede Minute erneut versucht",
+      "followResume": "Fortsetzung ausstehend: wird jede Minute erneut versucht",
+      "followHeld": "Firewall bleibt aus, bis die Zugriffsregeln ihrer Knoten geprüft sind",
+      "socleOn": "Abgelehnt auf {name}.",
+      "socleOnOther": "Abgelehnt auf einem anderen Cluster der Richtlinie.",
+      "bodyShared": "Alle Zonen der Richtlinie wechseln auf allen zugeordneten Clustern in die Beobachtung."
     },
     "pending": {
       "noCount": "Änderungen noch nicht angewendet.",
@@ -13073,7 +13100,9 @@
       "untilApplied": "In Proxmox ändert sich nichts, bis der Plan angewendet wird.",
       "applying": "Wird angewendet: {list}",
       "applyingInline": "wird angewendet: {list}",
-      "applyingNoCount": "Änderungen werden angewendet"
+      "applyingNoCount": "Änderungen werden angewendet",
+      "clusterAdded": "Cluster {name} wird hinzugefügt",
+      "clustersAdded": "{count, plural, one {# Cluster wird hinzugefügt} other {# Cluster werden hinzugefügt}}"
     },
     "firstRun": {
       "title": "Mikrosegmentierung einrichten",
@@ -13109,7 +13138,11 @@
       "CHECK_PENDING": "Eine Prüfung ist bereits eingereiht: die Engine startet sie bei ihrem nächsten Durchlauf.",
       "generic": "Etwas ist schiefgelaufen. Versuchen Sie es erneut.",
       "SOCLE_MISSING": "Ein Knoten mit eingeschalteter Firewall lässt die Weboberfläche (8006) und SSH (22) nicht zu, daher wurde die Cluster-Firewall nicht wieder eingeschaltet. Erlauben Sie sie in der Firewall dieses Knotens oder schalten Sie sie aus, und setzen Sie dann fort.",
-      "NOT_DEPLOYED": "Es ist noch nichts bereitgestellt: wenden Sie zuerst einen Plan an, der Notfallstopp wirkt auf eine bereitgestellte Richtlinie."
+      "NOT_DEPLOYED": "Es ist noch nichts bereitgestellt: wenden Sie zuerst einen Plan an, der Notfallstopp wirkt auf eine bereitgestellte Richtlinie.",
+      "CLUSTER_NOT_EMPTY": "Ein Cluster dieser Richtlinie ist nicht leer: entfernen Sie zuerst seine Zonen, Flüsse und Mitglieder.",
+      "TOO_MANY_CLUSTERS": "Diese Richtlinie hat bereits die maximale Anzahl an Clustern.",
+      "CLUSTER_UNREADABLE": "Ein Cluster dieser Richtlinie ist derzeit nicht lesbar. Versuchen Sie es erneut, sobald er erreichbar ist.",
+      "CLUSTER_FIREWALL_OFF": "Die Cluster-Firewall eines Clusters dieser Richtlinie ist ausgeschaltet: Es wurde nichts angewendet. Schalten Sie sie in Proxmox ein und planen Sie dann erneut."
     },
     "policy": {
       "zonesTitle": "Zonen",
@@ -13358,6 +13391,14 @@
           "readingStart": "Proxmox wird gelesen",
           "reading": "Proxmox wird gelesen, {done, number} / {total, number} Gäste",
           "writing": "Schreiben in Proxmox, {done, number} / {total, number}"
+        },
+        "group": {
+          "done": "{label}: auf allen {total} Clustern erledigt",
+          "partial": "{label}: auf {done} von {total} Clustern erledigt",
+          "failed": "{label}: auf allen Clustern fehlgeschlagen",
+          "showClusters": "Cluster anzeigen",
+          "hideClusters": "Cluster ausblenden",
+          "partialApplyAgain": "{label}: auf {done} von {total} Clustern erledigt, wenden Sie erneut an, sobald der nie angewendete Cluster erreichbar ist"
         }
       },
       "assign": {
@@ -13381,7 +13422,9 @@
         "pendingRemoval": "Entfernung ausstehend",
         "removalHint": "Zur Entfernung vorgemerkt, erneut auswählen, um ihn in dieser Zone zu behalten.",
         "pendingMove": "Wechsel nach {zone}",
-        "moveHint": "Für den Wechsel nach {zone} vorgemerkt, erneut auswählen, um ihn in dieser Zone zu behalten."
+        "moveHint": "Für den Wechsel nach {zone} vorgemerkt, erneut auswählen, um ihn in dieser Zone zu behalten.",
+        "partial": "Nur auf {clusters} gespeichert; die anderen Cluster wurden nicht gespeichert: {error}",
+        "partialSome": "Nur auf einem Teil der Cluster gespeichert; die anderen wurden nicht gespeichert: {error}"
       },
       "preflightButton": "Vorabprüfungen",
       "state": {
@@ -13499,8 +13542,15 @@
           "missing_guest": "Eine Quelle oder ein Ziel ist nicht mehr im Inventar.",
           "waiting_address": "Das Inventar kennt noch keine Adresse einer Quelle: Ihre Regeln lassen möglicherweise nichts durch, bis eine gelesen wird.",
           "renamed": "Eine VM trägt nicht mehr den gespeicherten Namen: Sie wurde umbenannt, oder ihre VMID wurde wiederverwendet. Prüfen Sie, ob die Ausnahme noch die richtige VM benennt."
-        }
-      }
+        },
+        "cluster": "Cluster",
+        "clusterInactive": "{name} ist noch nicht angewendet: Eine Ausnahme würde dort nichts schützen.",
+        "noActiveCluster": "Noch kein Cluster der Richtlinie ist angewendet: Eine Ausnahme würde nichts schützen."
+      },
+      "guestsUnread": "Die Gäste von {clusters} konnten nicht gelesen werden: Sie werden nicht aufgeführt.",
+      "guestsUnreadSome": "Die Gäste einiger Cluster konnten nicht gelesen werden: Sie werden nicht aufgeführt.",
+      "guestsUncounted": "Die Gäste von {clusters} konnten nicht gelesen werden: Sie werden nicht mitgezählt.",
+      "guestsUncountedSome": "Die Gäste einiger Cluster konnten nicht gelesen werden: Sie werden nicht mitgezählt."
     },
     "plan": {
       "title": "Mikrosegmentierungsplan",
@@ -13542,7 +13592,45 @@
       "notes": "Hinweise: {list}",
       "nothingRecord": "Nichts in Proxmox zu schreiben: Das Anwenden speichert die Revision.",
       "stopActive": "Geschrieben, während der Notfallstopp die Cluster-Firewall deaktiviert hält; wirkt, sobald der Stopp aufgehoben wird",
-      "stopActivePlan": "Eine Anwendung würde jetzt geschrieben, während der Notfallstopp die Cluster-Firewall deaktiviert hält"
+      "stopActivePlan": "Eine Anwendung würde jetzt geschrieben, während der Notfallstopp die Cluster-Firewall deaktiviert hält",
+      "cluster": {
+        "other": "Anderer Cluster",
+        "computing": "Wird berechnet",
+        "applyFailed": "Fehlgeschlagen: Wird angewendet, sobald der Cluster wieder erreichbar ist.",
+        "error": {
+          "no_client": "Nicht erreichbar: Holt nach, sobald er wieder erreichbar ist.",
+          "engine_stopped": "Die Engine ist auf diesem Cluster gestoppt.",
+          "stopped": "Der Notstopp ist aktiv: Nach dem Aufheben erneut anwenden.",
+          "internal": "Der Lauf konnte auf diesem Cluster nicht starten."
+        },
+        "applied": {
+          "done": "Auf allen {total} Clustern angewendet",
+          "partial": "Auf {done} von {total} Clustern angewendet",
+          "failed": "Auf keinem Cluster angewendet",
+          "partialApplyAgain": "Auf {done} von {total} Clustern angewendet: Wenden Sie erneut an, sobald der nie angewendete Cluster erreichbar ist."
+        },
+        "unreadable": "Dieser Lauf kann nicht gelesen werden.",
+        "runFailed": "Fehlgeschlagen.",
+        "blocked": {
+          "start": "Der Plan konnte auf diesem Cluster nicht starten: Vor dem Anwenden neu berechnen.",
+          "unreadable": "Der Plan dieses Clusters kann nicht gelesen werden: Vor dem Anwenden neu berechnen."
+        },
+        "unfollowed": "Status unbekannt: Dieser Lauf konnte nicht verfolgt werden.",
+        "planUnreachable": "Nicht erreichbar: Wird angewendet, sobald der Cluster wieder erreichbar ist.",
+        "neverApplied": "Dieser Cluster wurde nie angewendet: Wenden Sie erneut an, sobald er erreichbar ist.",
+        "firewallOff": "Die Cluster-Firewall ist ausgeschaltet: Es würde nichts gefiltert. Schalten Sie sie in Proxmox ein und planen Sie dann erneut.",
+        "serviceStopped": "Der Firewall-Dienst ist auf {nodes} gestoppt: Auf diesen Knoten wird nichts gefiltert.",
+        "firewallOffRun": "Die Cluster-Firewall ist ausgeschaltet: Hier wurde nichts angewendet. Schalten Sie sie in Proxmox ein und planen Sie dann erneut."
+      },
+      "applyBlocked": {
+        "failed": "Anwenden nicht möglich: Der Plan eines Clusters ist fehlgeschlagen. Öffnen Sie seinen Abschnitt für den Grund und berechnen Sie dann neu.",
+        "stale": "Anwenden nicht möglich: Berechnen Sie den Plan neu, er stammt aus einem älteren Entwurf.",
+        "collisions": "Anwenden nicht möglich: Der Plan eines Clusters enthält Kollisionen, die zuerst behoben werden müssen.",
+        "noCluster": "Anwenden nicht möglich: Kein Cluster war erreichbar, um den Plan zu berechnen."
+      },
+      "firewallOffBlock": "Anwenden nicht möglich: Die Cluster-Firewall ist auf {names} ausgeschaltet.",
+      "firewallOffRefused": "Es wurde nichts angewendet: Die Cluster-Firewall ist auf {names} ausgeschaltet, dort würde nichts gefiltert. Schalten Sie sie in Proxmox ein und planen Sie dann erneut.",
+      "firewallOffRefusedAny": "Es wurde nichts angewendet: Die Cluster-Firewall eines Clusters der Richtlinie ist ausgeschaltet, dort würde nichts gefiltert. Schalten Sie sie in Proxmox ein und planen Sie dann erneut."
     },
     "drifts": {
       "asOf": "Stand des letzten vollständigen Durchlaufs, {time}",
@@ -13635,6 +13723,34 @@
         "destinationLocal": "das lokale Netzwerk",
         "verdict": {
           "disabled": "deaktiviert"
+        },
+        "peer_unreadable": {
+          "title": "Cluster {name} kann nicht gelesen werden",
+          "titleUnknown": "Ein verknüpfter Cluster kann nicht gelesen werden",
+          "detail": "Cluster {name} kann nicht gelesen werden: das Entfernen von Adressen ist angehalten",
+          "detailUnknown": "Ein verknüpfter Cluster kann nicht gelesen werden: das Entfernen von Adressen ist angehalten",
+          "hint": "Prüfen Sie, ob ProxCenter diesen Cluster erreicht: das Entfernen läuft weiter, sobald er wieder lesbar ist."
+        },
+        "stop_lift_held": {
+          "title": "Die Cluster-Firewall von {name} bleibt aus",
+          "titleUnknown": "Die Cluster-Firewall eines verknüpften Clusters bleibt aus",
+          "detail": "Die Cluster-Firewall von {name} bleibt aus: die Zugriffsregeln der Knoten müssen geprüft werden, bevor sie wieder eingeschaltet wird",
+          "detailUnknown": "Die Cluster-Firewall eines verknüpften Clusters bleibt aus: die Zugriffsregeln der Knoten müssen geprüft werden, bevor sie wieder eingeschaltet wird",
+          "hint": "Führen Sie die Vorabprüfungen dieses Clusters aus: die Engine schaltet seine Firewall wieder ein, sobald die Zugriffsregeln der Knoten vorhanden sind."
+        },
+        "heldNote": "Entfernen angehalten, bis jeder verknüpfte Cluster gelesen werden kann.",
+        "clusterOther": "Anderer Cluster",
+        "cluster_firewall_off": {
+          "title": "Cluster-Firewall von {name} ist ausgeschaltet",
+          "titleUnknown": "Die Cluster-Firewall eines verknüpften Clusters ist ausgeschaltet",
+          "detail": "Cluster-Firewall von {name} ist ausgeschaltet: Dort wird nichts gefiltert",
+          "detailUnknown": "Die Cluster-Firewall eines verknüpften Clusters ist ausgeschaltet: Dort wird nichts gefiltert",
+          "hint": "Schalten Sie sie in dieser Zeile wieder ein, oder in Proxmox (Datacenter > Firewall > Optionen)."
+        },
+        "firewall_service_stopped": {
+          "title": "Firewall-Dienst auf {node} gestoppt",
+          "detail": "Der Firewall-Dienst ist auf {node} gestoppt: Auf diesem Knoten wird nichts gefiltert",
+          "hint": "Starten Sie den Dienst pve-firewall auf diesem Knoten."
         }
       },
       "chip": {
@@ -13652,7 +13768,11 @@
         "known_rule_missing": "Bekannte Regel fehlt",
         "known_rule_extra": "Bekannte Regel überzählig",
         "local_set_desync": "Lokales Set nicht synchron",
-        "egress_no_subnet": "Kein Subnetz"
+        "egress_no_subnet": "Kein Subnetz",
+        "peer_unreadable": "Cluster nicht lesbar",
+        "stop_lift_held": "Firewall bleibt aus",
+        "cluster_firewall_off": "Cluster-Firewall aus",
+        "firewall_service_stopped": "Dienst gestoppt"
       },
       "zoneFilter": "Nur Zone {name}",
       "zoneFilterClear": "Alle Zonen anzeigen",
@@ -13671,7 +13791,11 @@
         "known_rule_extra": "Überzählige Regeln für bekannte Adressen ({count, number})",
         "local_set_desync": "Nicht synchrone Sets des lokalen Netzes ({count, number})",
         "egress_no_subnet": "Ausgang ohne lokales Subnetz ({count, number})",
-        "generic": "{kind} (Anzahl: {count, number})"
+        "generic": "{kind} (Anzahl: {count, number})",
+        "peer_unreadable": "Verknüpfte Cluster, die nicht gelesen werden können ({count, number})",
+        "stop_lift_held": "Cluster-Firewalls, die aus bleiben ({count, number})",
+        "cluster_firewall_off": "Ausgeschaltete Cluster-Firewalls ({count, number})",
+        "firewall_service_stopped": "Knoten mit gestopptem Firewall-Dienst ({count, number})"
       },
       "noneZone": "keine",
       "select": "{name} auswählen",
@@ -13690,7 +13814,18 @@
       "colDiffers": "Was abweicht",
       "colSince": "Bei der letzten Vollprüfung gesehen",
       "colActions": "Aktionen",
-      "colSinceHint": "Die Engine liefert keine Erstsichtung pro Abweichung: das ist der Zeitpunkt ihrer letzten Vollprüfung."
+      "colSinceHint": "Die Engine liefert keine Erstsichtung pro Abweichung: das ist der Zeitpunkt ihrer letzten Vollprüfung.",
+      "enableFirewall": {
+        "button": "Wieder einschalten",
+        "title": "Cluster-Firewall von {name} wieder einschalten",
+        "titleUnknown": "Cluster-Firewall wieder einschalten",
+        "body": "Die Cluster-Firewall filtert wieder, sobald sie eingeschaltet ist.",
+        "check": "Zuerst geprüft: Zugriffsregeln der Knoten (Web 8006, SSH 22).",
+        "after": "Eine vollständige Prüfung gleicht danach die Gäste dieses Clusters ab.",
+        "confirm": "Wieder einschalten",
+        "stop": "Unter einem Notstopp wird sie beim Fortsetzen eingeschaltet.",
+        "refused": "Ein Knoten mit eingeschalteter eigener Firewall lässt die Weboberfläche (8006) und SSH (22) nicht herein, daher blieb die Cluster-Firewall ausgeschaltet. Erlauben Sie sie in der Firewall dieses Knotens oder schalten Sie diese aus, und versuchen Sie es erneut."
+      }
     },
     "observation": {
       "sampling": "Proxmox protokolliert standardmäßig höchstens eine Zeile pro Sekunde und Kette, daher können stark ausgelastete Flüsse zu niedrig gezählt werden.",
@@ -13707,7 +13842,9 @@
         "direction": "Richtung",
         "directionAll": "Alle",
         "directionIn": "Eingehend",
-        "directionOut": "Ausgehend"
+        "directionOut": "Ausgehend",
+        "cluster": "Cluster",
+        "clusterAll": "Alle Cluster"
       },
       "kind": {
         "would_block": "Würde blockiert",
@@ -13861,7 +13998,9 @@
         "unzoned": "Gäste ohne Zone ({count, number})",
         "unzonedHint": "Laufende Gäste in keiner Zone. Abweichungen listet sie auch.",
         "guestAria": "{name}, Gast {vmid}",
+        "guestAriaCluster": "{name}, Gast {vmid}, {cluster}",
         "guestWhere": "Gast {vmid} auf {node}",
+        "guestWhereCluster": "Gast {vmid} auf {node}, {cluster}",
         "guestIps": "IP-Adressen: {ips}",
         "guestNoIp": "Keine IP-Adresse bekannt",
         "guestPending": "Für die Zone vorgemerkt, mit dem nächsten Plan angewendet",
@@ -13947,6 +14086,7 @@
         "logsEmpty": "Kein Ereignis dieses Paars im Speicher der Engine"
       },
       "partial": "Teilweise: Nur die ersten {count, number} ausstehenden Flüsse werden gezeichnet.",
+      "hiddenClusters": "{count, plural, one {Die Gäste von # Cluster außerhalb Ihres Bereichs werden nicht angezeigt.} other {Die Gäste von # Clustern außerhalb Ihres Bereichs werden nicht angezeigt.}}",
       "filters": {
         "title": "Flüsse:"
       },
@@ -13998,6 +14138,7 @@
       },
       "pve": {
         "aria": "Proxmox-Knoten {name}, {guests}",
+        "ariaCluster": "Proxmox-Knoten {name} von {cluster}, {guests}",
         "guests": "{count, plural, one {# Gast} other {# Gäste}}",
         "zoneShare": "Zone {zone}: {count, plural, one {# Gast} other {# Gäste}}",
         "unzonedShare": "Ohne Zone: {count, plural, one {# Gast} other {# Gäste}}",
@@ -14110,7 +14251,7 @@
       "runAgain": "Erneut prüfen",
       "openWizard": "Bereitstellungsassistent öffnen",
       "raiseLogRate": "Während der Beobachtung anheben",
-      "busy": "Eine Anwendung läuft, versuchen Sie es gleich noch einmal.",
+      "busy": "Die Engine schließt gerade einen Durchlauf oder eine Anwendung auf diesem Cluster ab, versuchen Sie es gleich noch einmal.",
       "noClient": "Für diese Verbindung ist kein Proxmox-Client verfügbar.",
       "readFailed": "Proxmox konnte nicht gelesen werden: {error}",
       "status": {
@@ -14158,6 +14299,12 @@
           "title": "Ausgangs-Subnetze",
           "pass": "Jedes Mitglied einer Zone mit Ausgangskontrolle hat ein bekanntes Subnetz.",
           "warn": "{count, plural, one {# Mitglied hat kein bekanntes Subnetz} other {# Mitglieder haben kein bekanntes Subnetz}} ({guests}): ihr lokales Netz beschränkt sich auf ihre eigenen IPs."
+        },
+        "firewall_service": {
+          "title": "Firewall-Dienst",
+          "pass": "Der Firewall-Dienst läuft auf jedem Knoten.",
+          "stopped": "Der Firewall-Dienst ist auf {nodes} gestoppt: Auf diesen Knoten wird nichts gefiltert.",
+          "unreadable": "Der Zustand des Firewall-Dienstes konnte auf {nodes} nicht gelesen werden."
         }
       },
       "rateUnits": {
@@ -14240,7 +14387,10 @@
         "confirm": "Entfernen",
         "running": "{label}: Mikrosegmentierung wird entfernt...",
         "complete": "{label}: Entfernung abgeschlossen, die Zonen-Tags bleiben an den Gästen",
-        "incomplete": "{label}: Entfernung unvollständig, führen Sie sie erneut aus"
+        "incomplete": "{label}: Entfernung unvollständig, führen Sie sie erneut aus",
+        "bodyShared": "Macht alles rückgängig, was ProxCenter auf dem gewählten Cluster in Proxmox geschrieben hat; die anderen Cluster erkennen nur seine Gäste nicht mehr.",
+        "leaves": "{name} verlässt die gemeinsame Richtlinie und behält nichts davon; die Zonen-Tags bleiben an seinen Gästen.",
+        "needsEveryCluster": "Sie benötigen das Recht zur Knotenverwaltung auf jedem Cluster dieser Richtlinie"
       },
       "prefixChange": {
         "warning": "Gäste mit dem alten Präfix verlassen ihre Zonen bei der nächsten Anwendung.",
@@ -14255,6 +14405,37 @@
         "readyAfter": "Dauer ohne neuen Fluss, der blockiert würde, bevor eine Zone als bereit angezeigt wird; das ist keine Sperre.",
         "writeCap": "Darüber hält die Engine an und bittet um Bestätigung.",
         "selfIps": "Adressen, von denen aus ProxCenter die Knoten erreicht. Die Vorabprüfung stellt sicher, dass sie nicht abgeschnitten werden. Leer lassen, um die Erkennung zu verwenden."
+      },
+      "clusters": {
+        "row": "Verknüpfte Cluster",
+        "hint": "Die Cluster, die diese Richtlinie teilen: dieselben Zonen, Flüsse und Einstellungen, und die Gäste jedes Clusters werden von den anderen erkannt.",
+        "pending": "gilt ab der nächsten Anwendung",
+        "add": "Cluster hinzufügen",
+        "maxReached": "Eine Richtlinie umfasst höchstens {max} Cluster.",
+        "noCandidate": "Kein weiterer Cluster zum Verknüpfen.",
+        "removeLabel": "{name} trennen",
+        "target": "Cluster oder Knoten",
+        "associate": {
+          "title": "Cluster verknüpfen",
+          "cluster": "Cluster oder Knoten",
+          "nothingWritten": "Bis zur nächsten Anwendung wird dort nichts geschrieben.",
+          "room": "Die Richtlinie kann noch {count} aufnehmen.",
+          "confirm": "Verknüpfen",
+          "errors": {
+            "CLUSTER_NOT_EMPTY": "{name} enthält noch Daten der Mikrosegmentierung. Nur ein Cluster ohne jede Richtlinie kann verknüpft werden: Entfernen Sie dort die Mikrosegmentierung und löschen Sie dann seine Zonen und Regeln.",
+            "TOO_MANY_CLUSTERS": "Diese Richtlinie hat bereits die höchste Anzahl an Clustern.",
+            "CLUSTER_UNREADABLE": "Der Cluster konnte nicht geprüft werden. Versuchen Sie es später erneut."
+          },
+          "firewallOffHint": "Die Cluster-Firewall ist auf diesem Cluster ausgeschaltet: Verknüpfen ist möglich, das Anwenden wird abgelehnt, bis sie eingeschaltet ist.",
+          "serviceStoppedHint": "Der Firewall-Dienst ist auf {nodes} gestoppt."
+        },
+        "dissociate": {
+          "title": "{name} trennen?",
+          "impact": "Nicht mehr erkannt werden: {leaving, plural, one {# Gast} other {# Gäste}} von {name} durch die anderen Cluster, {staying, plural, one {# Gast} other {# Gäste}} der anderen durch {name}.",
+          "keepsRules": "{name} behält seine Regeln, mit einer eigenen Kopie der Richtlinie.",
+          "typeName": "Geben Sie {name} zur Bestätigung ein",
+          "confirm": "Trennen"
+        }
       }
     },
     "history": {
@@ -14325,6 +14506,7 @@
           },
           "triggerCheck": "Jetzt prüfen",
           "triggerSchedule": "Zeitplan",
+          "triggerPeer": "Ein anderer Cluster hat sich geändert",
           "failed": "Der Lauf ist fehlgeschlagen.",
           "failedWith": "Der Lauf ist fehlgeschlagen: {error}",
           "errors": "Fehler: {list}"
@@ -14371,7 +14553,12 @@
         "loading": "Verlauf wird geladen...",
         "capped": "Nur die letzten {count, number} Revisionen und die letzten {count, number} Läufe werden gelesen.",
         "actorInferred": "Aus der Art des Laufs abgeleitet",
-        "actorCheck": "Gestartet mit Jetzt prüfen"
+        "actorCheck": "Gestartet mit Jetzt prüfen",
+        "peer": "Ein anderer Cluster hat sich geändert",
+        "actorPeer": "Von der Engine gestartet, weil sich die Adressen eines anderen Clusters der Richtlinie geändert haben",
+        "clusterRuns": "Der Lauf jedes Clusters",
+        "showClusterRuns": "Den Lauf jedes Clusters anzeigen",
+        "hideClusterRuns": "Den Lauf jedes Clusters ausblenden"
       }
     },
     "waitingFirstCheck": "Warten auf die erste vollständige Prüfung",
@@ -14463,6 +14650,12 @@
         "title": "Was die Prüfung tut",
         "ips": "IP-Adressen der Mitglieder",
         "guests": "Gäste erneut gelesen, mit der Richtlinie verglichen, Abweichungen behoben"
+      },
+      "group": {
+        "searching": "Von der Engine übernommen: sein Lauf wird gesucht",
+        "running": "{count, plural, one {# Cluster wird} other {# Cluster werden}} geprüft",
+        "done": "Auf {done, number} von {total, number} Clustern geprüft",
+        "clusters": "Geprüfte Cluster"
       }
     },
     "trafficLens": {
@@ -14652,10 +14845,19 @@
       "title": "{count, plural, one {Die # nicht angewendete Änderung verwerfen?} other {Die # nicht angewendeten Änderungen verwerfen?}}",
       "titleNoCount": "Die nicht angewendeten Änderungen verwerfen?",
       "body": "Der Entwurf kehrt zur zuletzt angewendeten Revision zurück.",
-      "confirm": "Verwerfen"
+      "confirm": "Verwerfen",
+      "busy": "Die Engine schließt gerade eine Arbeit auf einem Cluster dieser Richtlinie ab (einen geplanten Durchlauf oder eine andere Aktion). Versuchen Sie es gleich noch einmal."
     },
     "gateway": {
       "name": "Gateway von {zones}"
+    },
+    "merged": {
+      "unreadList": "Kann nicht gelesen werden: seine Zeilen werden nicht aufgeführt.",
+      "unreadListOther": "Ein verknüpfter Cluster kann nicht gelesen werden: seine Zeilen werden nicht aufgeführt.",
+      "unreachable": "Nicht erreichbar: sein Zustand ist unbekannt.",
+      "unreachableOther": "Ein verknüpfter Cluster ist nicht erreichbar: sein Zustand ist unbekannt.",
+      "unreadState": "Kann nicht gelesen werden: sein Zustand wird nicht angezeigt.",
+      "unreadStateOther": "Ein verknüpfter Cluster kann nicht gelesen werden: sein Zustand wird nicht angezeigt."
     }
   },
   "bulkPower": {

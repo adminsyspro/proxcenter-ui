@@ -29,7 +29,7 @@ const values = { name: 'web', label: 'front', color: '#ef4444', isolate_members:
 const app1 = { type: 'qemu' as const, vmid: 101, name: 'app-01' }
 const db1 = { type: 'qemu' as const, vmid: 201, name: 'db-01' }
 const stored = (id: string): MicrosegException => ({
-  id, policy_id: 'p1', zone_id: 'zw', sources: [app1], destinations: [db1], services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'me',
+  id, policy_id: 'p1', connection_id: 'c1', zone_id: 'zw', sources: [app1], destinations: [db1], services: [{ proto: 'tcp', dport: '5432' }], comment: '', created_by: 'me',
 })
 const [e1, e2, e3] = ['e1', 'e2', 'e3'].map(stored)
 const withExceptions = { ...draft, exceptions: [e1, e2, e3] }
@@ -293,6 +293,32 @@ describe('useZoneEdits', () => {
     expect((error as InboundRunFailedError).detail).toBe('boom')
     expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
     expect(reloadPolicy).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends the outbound change when the inbound one went through on at least one cluster of a shared policy', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web })
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1', runs: [{ connection_id: 'c1', run_id: 'r1' }, { connection_id: 'c2', run_id: 'r2' }] })
+    mock.routes['GET /runs/r1'] = () => reply(200, { id: 'r1', status: 'done' })
+    mock.routes['GET /api/v1/firewall/microseg/c2/runs/r2'] = () => reply(200, { id: 'r2', status: 'failed', error: 'unreachable' })
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web], version: 6 }))
+    mock.routes['POST /zones/zw/egress-state'] = () => reply(202, { run_id: 'r3' })
+    const { result, startRun } = setup()
+    await act(() => result.current.saveZone(web, { ...values, state: 'observe', egress_state: 'enforce' }))
+    expect(body(calls('POST /zones/zw/egress-state')[0][1] as RequestInit)).toEqual({ version: 6, state: 'enforce' })
+    // The inbound line follows both clusters: it reports the partial outcome itself.
+    expect(startRun).toHaveBeenNthCalledWith(1, expect.objectContaining({ runId: 'r1', runs: [{ connection_id: 'c1', run_id: 'r1' }, { connection_id: 'c2', run_id: 'r2' }] }))
+  })
+
+  it('stops when the inbound run failed on every cluster of a shared policy', async () => {
+    mock.routes['PUT /zones/zw'] = () => reply(200, { version: 4, zone: web })
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1', runs: [{ connection_id: 'c1', run_id: 'r1' }, { connection_id: 'c2', run_id: 'r2' }] })
+    mock.routes['GET /runs/r1'] = () => reply(200, { id: 'r1', status: 'failed', error: 'boom' })
+    mock.routes['GET /api/v1/firewall/microseg/c2/runs/r2'] = () => reply(200, { id: 'r2', status: 'failed', error: 'unreachable' })
+    const { result } = setup()
+    const error = await refused(result.current.saveZone(web, { ...values, state: 'observe', egress_state: 'observe' }))
+    expect(error).toBeInstanceOf(InboundRunFailedError)
+    expect((error as InboundRunFailedError).detail).toBe('boom')
+    expect(calls('POST /zones/zw/egress-state')).toHaveLength(0)
   })
 
   it('says which state changes a zone dialog asks for: none for the outbound of a zone set disabled', () => {

@@ -6,12 +6,11 @@ import { gatewayZones } from './gatewayNames'
 import type { Point } from './edgeGeometry'
 import {
   BOX_SHAPE, EXTERNAL_ID, NODE_H, NODE_W, OUTSIDE_ID, UNZONED_ID, addAllowedPairs, addPair, addressBook, bareIp, cellCenters,
-  comparePairs, exceptionLinks, groupOf, memberBook, outsideEgressOf, placeBoundary, placeGroup, placePairs, zoneNodeId,
+  comparePairs, exceptionLinks, groupOf, isSharedMap, memberBook, outsideEgressOf, placeBoundary, placeGroup, placePairs, zoneNodeId,
   type AddressBooks, type Cell, type ExceptionLink, type Group, type IpNodeData, type MapEdgeKind, type MapInput, type MapMember, type Pair,
   type Placement, type ZoneGraph, type ZoneNodeData,
 } from './zoneGraph'
 import { INSIDE_GUEST_W, INSIDE_MAX_SHOWN, byText, insideSlots, ringLayout } from './zoneLayout'
-import { guestKey } from './zoneModel'
 
 /** The addresses in no zone drawn on their own (the busiest first); the others go to Unknown / External. */
 export const MAX_IPS = 8
@@ -61,15 +60,15 @@ type Around = {
   named: Map<string, Set<string>>
 }
 
-/** The guests the exceptions name in each zone but the centre (and under UNZONED_ID): drawn like the ones that talked to it. */
+/** The guests (map keys) the exceptions name in each zone but the centre (and under UNZONED_ID): drawn like the ones that talked to it. */
 function namedGuests(centre: MicrosegZone, links: readonly ExceptionLink[]): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>()
-  const add = (zoneId: string, guest: { type: string; vmid: number }) => {
-    if (zoneId !== centre.id) out.set(zoneId, (out.get(zoneId) ?? new Set()).add(guestKey(guest)))
+  const add = (zoneId: string, key: string) => {
+    if (zoneId !== centre.id) out.set(zoneId, (out.get(zoneId) ?? new Set()).add(key))
   }
   for (const l of links) {
-    add(l.srcZone, l.source)
-    add(l.exception.zone_id, l.destination)
+    add(l.srcZone, l.sourceKey)
+    add(l.exception.zone_id, l.destinationKey)
   }
   return out
 }
@@ -115,10 +114,10 @@ function busyInCentre({ centre, seen, links }: Around): (m: MapMember) => boolea
   }
   const keys = new Set<string>()
   for (const l of links) {
-    if (l.srcZone === centre.id) keys.add(guestKey(l.source))
-    if (l.exception.zone_id === centre.id) keys.add(guestKey(l.destination))
+    if (l.srcZone === centre.id) keys.add(l.sourceKey)
+    if (l.exception.zone_id === centre.id) keys.add(l.destinationKey)
   }
-  return m => keys.has(guestKey(m)) || hasAddress(m, ips)
+  return m => keys.has(m.key) || hasAddress(m, ips)
 }
 
 /**
@@ -162,7 +161,7 @@ function buildCircles(around: Around, members: MapInput['members'], peers: strin
       }
       continue
     }
-    const drawn = all && id !== around.centre.id ? all.filter(m => hasAddress(m, involved.get(id)) || !!named.get(id)?.has(guestKey(m))) : all
+    const drawn = all && id !== around.centre.id ? all.filter(m => hasAddress(m, involved.get(id)) || !!named.get(id)?.has(m.key)) : all
     const g = groupOf(zoneNodeId(id), drawn, { kind: 'zone', zone: z, members: all ? all.length : null, state: z.state, radius: 0 })
     if (id !== around.centre.id && g.shown.length === 0) {
       g.radius = EMPTY_PEER_R
@@ -180,7 +179,7 @@ function addUnzoned(groups: Map<string, Group>, books: AddressBooks, around: Aro
   const { seen, known } = around
   const sources = new Set(seen.filter(s => !known.has(s.src_zone_id) && s.src_ip).map(s => bareIp(s.src_ip)))
   const named = around.named.get(UNZONED_ID)
-  const drawn = unzoned.filter(m => hasAddress(m, sources) || !!named?.has(guestKey(m)))
+  const drawn = unzoned.filter(m => hasAddress(m, sources) || !!named?.has(m.key))
   if (!drawn.length) return
   const g = groupOf(UNZONED_ID, drawn, { kind: 'unzoned', count: drawn.length, radius: 0 })
   groups.set(UNZONED_ID, g)
@@ -218,13 +217,13 @@ function observedPairs(pairs: Map<string, Pair>, seen: MicrosegSuggestion[], kno
  */
 function exceptionPairs(pairs: Map<string, Pair>, links: readonly ExceptionLink[], groups: ReadonlyMap<string, Group>, boxes: ReadonlySet<string>) {
   const books = new Map([...groups].map(([id, g]) => [id, memberBook(g)]))
-  const nodeOf = (zoneId: string, guest: { type: string; vmid: number }) => {
+  const nodeOf = (zoneId: string, key: string) => {
     const groupId = zoneId === UNZONED_ID ? UNZONED_ID : zoneNodeId(zoneId)
-    return books.get(groupId)?.get(guestKey(guest)) ?? (groups.has(groupId) || boxes.has(groupId) ? groupId : null)
+    return books.get(groupId)?.get(key) ?? (groups.has(groupId) || boxes.has(groupId) ? groupId : null)
   }
   for (const l of links) {
-    const source = nodeOf(l.srcZone, l.source)
-    const target = nodeOf(l.exception.zone_id, l.destination)
+    const source = nodeOf(l.srcZone, l.sourceKey)
+    const target = nodeOf(l.exception.zone_id, l.destinationKey)
     if (!source || !target) continue
     for (const service of l.exception.services) addPair(pairs, 'exception', source, target, flowService(service), undefined, undefined, l.exception)
   }
@@ -272,13 +271,13 @@ export function buildZoneInside(input: GuestViewInput): ZoneGraph {
   return buildAround(input, true)
 }
 
-function buildAround({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null, centre }: GuestViewInput, inside: boolean): ZoneGraph {
+function buildAround({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null, clusters = null, centre }: GuestViewInput, inside: boolean): ZoneGraph {
   const sorted = [...zones].sort((a, b) => byText(a.name, b.name) || byText(a.id, b.id))
   const known = new Map(sorted.map(z => [z.id, z]))
   const zone = known.get(centre)
   if (!zone) return { nodes: [], edges: [] }
   const touches = (src: string, dst: string) => src === centre || dst === centre
-  const links = exceptionLinks(exceptions, known, members, unzoned).filter(l => touches(l.srcZone, l.exception.zone_id))
+  const links = exceptionLinks(exceptions, known, members, unzoned, isSharedMap({ clusters })).filter(l => touches(l.srcZone, l.exception.zone_id))
   const around: Around = {
     centre: zone,
     known,

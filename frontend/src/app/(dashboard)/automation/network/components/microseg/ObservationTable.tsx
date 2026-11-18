@@ -36,6 +36,8 @@ type Props = {
   /** The folded destinations (a zone id, or an address; '' = unknown destination), and the fold or unfold of one. */
   collapsed: ReadonlySet<string>
   onToggleGroup: (key: string) => void
+  /** On a shared policy: the cluster of a flow, for the chip of its row; absent on one cluster (no chip). */
+  clusterOf?: (s: MicrosegSuggestion) => { id: string; name: string }
 }
 
 /**
@@ -68,7 +70,7 @@ function GroupHeader({ group, color, collapsed, onToggle }: { group: Observation
  * busiest first) that folds its flows (the panel keeps the folded zones). The grouping covers the page only:
  * the caption says so when the next page goes on with a zone.
  */
-export default function ObservationTable({ rows, zones, guestName, gatewayName, selected, busy, now, allChecked, someChecked, canSelect, onToggleAll, onToggle, onResolve, onOpenDetails, exceptionOf, nextFlow, collapsed, onToggleGroup }: Props) {
+export default function ObservationTable({ rows, zones, guestName, gatewayName, selected, busy, now, allChecked, someChecked, canSelect, onToggleAll, onToggle, onResolve, onOpenDetails, exceptionOf, nextFlow, collapsed, onToggleGroup, clusterOf }: Props) {
   const t = useTranslations('microsegPilot.observation')
   const max = maxHits(rows)
 
@@ -132,6 +134,7 @@ export default function ObservationTable({ rows, zones, guestName, gatewayName, 
                     sharedServices={shared}
                     onOpenDetails={() => onOpenDetails(s)}
                     exception={exceptionOf?.(s)}
+                    cluster={clusterOf?.(s)}
                   />
                 ))}
               </Fragment>

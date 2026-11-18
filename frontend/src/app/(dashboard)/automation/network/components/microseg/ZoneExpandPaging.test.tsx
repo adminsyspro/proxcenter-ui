@@ -81,7 +81,7 @@ describe('zone dialog: page height and paging', () => {
   })
 
   it('pages the members', async () => {
-    const dialog = await openDialog({ pending_members: Array.from({ length: 12 }, (_, i) => ({ id: `m${i}`, policy_id: 'p1', node: 'pve1', type: 'qemu', vmid: 100 + i, zone_id: 'zd' })) })
+    const dialog = await openDialog({ pending_members: Array.from({ length: 12 }, (_, i) => ({ id: `m${i}`, policy_id: 'p1', connection_id: 'c1', node: 'pve1', type: 'qemu', vmid: 100 + i, zone_id: 'zd' })) })
     fireEvent.click(within(dialog).getByRole('tab', { name: 'Data' }))
     fireEvent.click(within(dialog).getByRole('tab', { name: /^Members/ }))
     expect(within(dialog).getAllByRole('listitem')).toHaveLength(10)

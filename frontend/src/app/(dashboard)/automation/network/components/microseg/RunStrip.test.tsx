@@ -9,7 +9,7 @@ import { act, within } from '@testing-library/react'
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 import type { MicrosegRun } from '@/lib/microseg/types'
 
-import { GUESTS_ROUTE, calls, mock, reply } from './microsegTestKit'
+import { GUESTS_ROUTE, REVISION_HEAD, calls, mock, policy, reply } from './microsegTestKit'
 import { db, installFreshMocks, run, setup, web } from './policyTestKit'
 
 installFreshMocks()
@@ -127,5 +127,81 @@ describe('run strip', () => {
     current = run('done', { guests: 1, members: 1, steps: 99, drifts: 0 })
     const ended = (await screen.findByText('web: 0 done, 0 failed, 0 not run', undefined, { timeout: 5_000 })).closest('[role="alert"]') as HTMLElement
     expect(within(ended).queryByRole('progressbar')).toBeNull()
+  })
+})
+
+describe('run strip of a policy shared by several clusters', () => {
+  const C2 = '/api/v1/firewall/microseg/c2'
+  const writing = (done: number, total: number) => run('running', { progress: { phase: 'writing', done, total } } as MicrosegRun['result'])
+
+  it('shows one line per action, its bar summing the steps of every cluster, the clusters behind a chevron', async () => {
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1', runs: [{ connection_id: 'c1', run_id: 'r1' }, { connection_id: 'c2', run_id: 'r2' }] })
+    let first: MicrosegRun = writing(3, 10)
+    let second: MicrosegRun = { ...writing(5, 10), id: 'r2', connection_id: 'c2' }
+    mock.routes['GET /runs/r1'] = () => reply(200, first)
+    mock.routes[`GET ${C2}/runs/r2`] = () => reply(200, second)
+    setup({ zones: [web({ state: 'disabled' })] })
+
+    await chooseState('web', 'Observe')
+    const line = (await screen.findByText(/web: change to observation in progress/)).closest('[role="alert"]') as HTMLElement
+    expect(await within(line).findByText('writing to Proxmox, 8 / 20')).toBeTruthy()
+    const bar = within(line).getByRole('progressbar', { name: /web: change to observation in progress/ })
+    expect(bar.getAttribute('aria-valuenow')).toBe('40')
+    // Each cluster's run is read through its own cluster.
+    expect(calls(`GET ${C2}/runs/r2`).length).toBeGreaterThan(0)
+
+    const strip = screen.getByTestId('microseg-run-strip')
+    // The bars only (the spinners of the line and of each cluster are progress bars too).
+    const bars = () => within(strip).getAllByRole('progressbar').filter(el => el.className.includes('MuiLinearProgress'))
+    expect(bars()).toHaveLength(1)
+    fireEvent.click(within(strip).getByRole('button', { name: 'Show the clusters' }))
+    await waitFor(() => expect(bars()).toHaveLength(3))
+
+    first = run('done', { guests: 1, members: 1, steps: 1, drifts: 0, done: [{ index: 0, kind: 'guest.tags', object: 'g', summary: 's' }] })
+    second = { ...run('failed'), id: 'r2', connection_id: 'c2', error: 'dial tcp: no route to host' }
+    expect(await screen.findByText('web: done on 1 of 2 clusters', undefined, { timeout: 5_000 })).toBeTruthy()
+  })
+
+  it('keeps a single-cluster answer listing its run on one plain line', async () => {
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1', runs: [{ connection_id: 'c1', run_id: 'r1' }] })
+    mock.routes['GET /runs/r1'] = () => reply(200, run('done', { guests: 0, members: 0, steps: 0, drifts: 0 }))
+    setup({ zones: [web({ state: 'disabled' })] })
+    await chooseState('web', 'Observe')
+    expect(await screen.findByText('web: 0 done, 0 failed, 0 not run')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Show the clusters' })).toBeNull()
+  })
+
+  it('ends the line when the run of a cluster cannot be read, lets it be closed and frees the zone', async () => {
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1', runs: [{ connection_id: 'c1', run_id: 'r1' }, { connection_id: 'c2', run_id: 'r2' }] })
+    mock.routes['GET /runs/r1'] = () => reply(200, run('done', { guests: 0, members: 0, steps: 0, drifts: 0 }))
+    mock.routes[`GET ${C2}/runs/r2`] = () => reply(404, { code: 'NOT_FOUND', error: 'x' })
+    setup({ zones: [web({ state: 'disabled' })] })
+
+    await chooseState('web', 'Observe')
+    const line = (await screen.findByText('web: done on 1 of 2 clusters')).closest('[role="alert"]') as HTMLElement
+    expect(within(line).getByRole('button', { name: /close/i })).toBeTruthy()
+    const row = screen.getByRole('listitem', { name: 'web' })
+    await waitFor(() => expect((within(row).getByRole('button', { name: 'Change state' }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(within(line).getByRole('button', { name: 'Show the clusters' }))
+    expect(await within(line).findByText('This run cannot be read.')).toBeTruthy()
+  })
+})
+
+describe('run strip with a cluster never applied', () => {
+  const C2 = '/api/v1/firewall/microseg/c2'
+  const link = (connection_id: string, active: boolean) => ({ connection_id, active, stop_cluster_disabled: false, policy_id: 'p1', created_at: '', activated_at: null })
+
+  it('says on its line and in the headline to apply again once it is reachable, instead of a catch-up', async () => {
+    mock.routes['POST /zones/zw/state'] = () => reply(202, { run_id: 'r1', runs: [{ connection_id: 'c1', run_id: 'r1' }, { connection_id: 'c2', run_id: 'r2' }] })
+    mock.routes['GET /runs/r1'] = () => reply(200, run('done', { guests: 1, members: 1, steps: 0, drifts: 0 }))
+    mock.routes[`GET ${C2}/runs/r2`] = () => reply(200, { ...run('failed'), id: 'r2', connection_id: 'c2', error: 'request failed: dial tcp 10.0.0.2:8006: connect: no route to host' })
+    setup({ zones: [web({ state: 'disabled' })] })
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [web({ state: 'disabled' })], last_revision: REVISION_HEAD, clusters: [link('c1', true), link('c2', false)] }))
+    await screen.findByRole('listitem', { name: 'web' })
+    await chooseState('web', 'Observe')
+    const line = (await screen.findByText('web: done on 1 of 2 clusters, apply again once the cluster never applied is reachable', undefined, { timeout: 5_000 })).closest('[role="alert"]') as HTMLElement
+    fireEvent.click(within(line).getByRole('button', { name: 'Show the clusters' }))
+    expect(await within(line).findByText('This cluster was never applied: apply again once it is reachable.')).toBeTruthy()
+    expect(within(line).queryByText(/reachable again/)).toBeNull()
   })
 })

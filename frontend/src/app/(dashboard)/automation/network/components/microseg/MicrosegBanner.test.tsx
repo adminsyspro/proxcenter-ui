@@ -55,6 +55,35 @@ describe('banner: nothing to say, nothing drawn (UA27)', () => {
     await waitFor(() => expect(row.parentElement!.firstElementChild).not.toBe(row))
   })
 
+  it('says on one line, without a cluster name, that the cluster cannot be reached since a time', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ engine: { paused_until: null, held: false, last_runs: {}, last_log: null, unreachable_since: '2026-11-17T07:58:00Z' } }))
+    renderTab()
+    expect(await screen.findByText(/^This cluster has been unreachable since .*2026.*: its rules are not updated\.$/)).toBeTruthy()
+  })
+
+  const engineOf = (cluster_firewall: 'enabled' | 'disabled') => ({ paused_until: null, held: false, last_runs: {}, last_log: null, cluster_firewall })
+
+  it('says on one line that the cluster firewall is off when nothing explains it, with a single cluster too', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ engine: engineOf('disabled') }))
+    renderTab()
+    expect(await screen.findByText('The cluster firewall is off, nothing is filtered there.')).toBeTruthy()
+    expect(screen.queryByText('Cluster firewall disabled')).toBeNull()
+  })
+
+  it('does not add that line when the emergency stop explains it', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ emergency_stop: true, engine: engineOf('disabled') }))
+    renderTab()
+    expect(await screen.findByText('Cluster firewall disabled')).toBeTruthy()
+    expect(screen.queryByText('The cluster firewall is off, nothing is filtered there.')).toBeNull()
+  })
+
+  it('does not add that line when the firewall is on', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ engine: engineOf('enabled') }))
+    renderTab()
+    await bannerReady()
+    expect(screen.queryByText('The cluster firewall is off, nothing is filtered there.')).toBeNull()
+  })
+
   it('draws the strip when the status cannot be read', async () => {
     mock.routes['GET /status'] = () => reply(504, { code: 'ORCHESTRATOR_TIMEOUT', error: 't' })
     renderTab()

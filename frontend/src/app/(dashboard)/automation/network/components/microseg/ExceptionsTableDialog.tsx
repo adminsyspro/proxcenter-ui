@@ -9,9 +9,10 @@ import { useTranslations } from 'next-intl'
 
 import type { GuestRefLite, ZoneState } from '@/lib/microseg/types'
 
+import ClusterChip from './ClusterChip'
 import { ONE_LINE_SX } from './dialogParts'
-import ExceptionDialog, { useExceptionServiceName } from './ExceptionDialog'
-import { draftException, draftMatches, exceptionLabel, exceptionStatus, namedGuests, type ExceptionDraft } from './exceptionModel'
+import ExceptionDialog, { clusterGuestsRead, exceptionEditable, useExceptionServiceName, type ExceptionClusters } from './ExceptionDialog'
+import { draftException, draftMatches, exceptionLabel, exceptionStatus, namedGuests, ofCluster, type ExceptionDraft } from './exceptionModel'
 import { ExceptionGuestIcon, ExceptionStatusChip } from './ExceptionLine'
 import PolicyPager, { usePaged } from './PolicyPager'
 import TruncatedText from './TruncatedText'
@@ -43,6 +44,8 @@ type Props = {
   zoneState: ZoneState
   /** False while the guest list is loading or failed. */
   guestsKnown?: boolean
+  /** Given only when the policy is shared: each row shows its cluster first, its guests named from that cluster. */
+  clusters?: ExceptionClusters
   /** The whole list after an add, an edit (at its place) or a delete. Nothing is written here. */
   onChange: (next: ExceptionDraft[]) => void
   onClose: () => void
@@ -83,15 +86,17 @@ function GuestsCell({ refs, guests }: { refs: GuestRefLite[]; guests: PolicyGues
  * row, and added through the exception dialog. It edits the list of the zone form: the save of the zone writes it.
  * Mounted while it is open: its filter and its page start anew each time.
  */
-export default function ExceptionsTableDialog({ zoneName, zoneColor, values, guests, members, zoneState, guestsKnown = true, onChange, onClose }: Props) {
+export default function ExceptionsTableDialog({ zoneName, zoneColor, values, guests, members, zoneState, guestsKnown = true, clusters, onChange, onClose }: Props) {
   const t = useTranslations('microsegPilot.policy.exceptions')
   const tc = useTranslations('common')
   const serviceName = useExceptionServiceName()
   const [filter, setFilter] = useState('')
   // The row being edited, or `null` for a new exception; undefined while the exception dialog is closed.
   const [editing, setEditing] = useState<number | null | undefined>(undefined)
+  // The guests and members an exception names are those of its cluster (a shared policy), every one otherwise.
+  const scope = (exception: ExceptionDraft) => (clusters ? exception.connectionId ?? clusters.preferred : undefined)
   // Each exception with its place in the list: the filter and the pages do not change what an action targets.
-  const rows = values.map((exception, index) => ({ exception, index })).filter(r => draftMatches(r.exception, guests, serviceName, filter))
+  const rows = values.map((exception, index) => ({ exception, index })).filter(r => draftMatches(r.exception, ofCluster(guests, scope(r.exception)), serviceName, filter))
   const paged = usePaged(rows)
   const name = zoneName.trim()
 
@@ -141,6 +146,7 @@ export default function ExceptionsTableDialog({ zoneName, zoneColor, values, gue
           <Table size='small' aria-label={t('title')} sx={{ minWidth: 720 }}>
             <TableHead>
               <TableRow>
+                {clusters && <TableCell sx={FITTED_CELL_SX}>{t('cluster')}</TableCell>}
                 <TableCell sx={{ ...YIELDING_CELL_SX, width: '36%' }}>{t('sources')}</TableCell>
                 <TableCell sx={{ ...YIELDING_CELL_SX, width: '36%' }}>{t('destinations')}</TableCell>
                 <TableCell sx={{ ...YIELDING_CELL_SX, width: '28%' }}>{t('columns.services')}</TableCell>
@@ -151,22 +157,29 @@ export default function ExceptionsTableDialog({ zoneName, zoneColor, values, gue
             <TableBody>
               {paged.rows.map(({ exception, index }) => {
                 const stored = draftException(exception, '')
+                const cluster = scope(exception)
+                const own = ofCluster(guests, cluster)
+                // An exception of a cluster outside the user's scope, or of one that left the group, is listed, not changed.
+                const fixed = !exceptionEditable(clusters, cluster)
                 return (
                   // A new exception has no id yet: its place names it.
-                  <TableRow hover key={exception.id ?? `new-${index}`} aria-label={exceptionLabel(stored, guests, serviceName)}>
-                    <TableCell sx={YIELDING_CELL_SX}><GuestsCell refs={exception.sources} guests={guests} /></TableCell>
-                    <TableCell sx={YIELDING_CELL_SX}><GuestsCell refs={exception.destinations} guests={guests} /></TableCell>
+                  <TableRow hover key={exception.id ?? `new-${index}`} aria-label={exceptionLabel(stored, own, serviceName)}>
+                    {clusters && cluster && (
+                      <TableCell sx={FITTED_CELL_SX}><Box sx={CELL_SX}><ClusterChip connectionId={cluster} name={clusters.name(cluster)} compact /></Box></TableCell>
+                    )}
+                    <TableCell sx={YIELDING_CELL_SX}><GuestsCell refs={exception.sources} guests={own} /></TableCell>
+                    <TableCell sx={YIELDING_CELL_SX}><GuestsCell refs={exception.destinations} guests={own} /></TableCell>
                     <TableCell sx={YIELDING_CELL_SX}><TruncatedText text={exception.services.map(serviceName).join(', ')} variant='body2' /></TableCell>
                     <TableCell sx={FITTED_CELL_SX}>
-                      <Box sx={CELL_SX}><ExceptionStatusChip status={exceptionStatus(stored, { state: zoneState }, members, guests)} guestsKnown={guestsKnown} /></Box>
+                      <Box sx={CELL_SX}><ExceptionStatusChip status={exceptionStatus(stored, { state: zoneState }, ofCluster(members, cluster), own)} guestsKnown={guestsKnown && clusterGuestsRead(clusters, cluster)} /></Box>
                     </TableCell>
                     <TableCell align='right' sx={{ ...FITTED_CELL_SX, py: 0 }}>
                       <Tooltip title={t('edit')}>
-                        <IconButton size='small' aria-label={t('edit')} onClick={() => setEditing(index)}><i className='ri-pencil-line' /></IconButton>
+                        <span><IconButton size='small' aria-label={t('edit')} disabled={fixed} onClick={() => setEditing(index)}><i className='ri-pencil-line' /></IconButton></span>
                       </Tooltip>
                       {/* No question asked: nothing is written before the zone is saved. */}
                       <Tooltip title={t('delete')}>
-                        <IconButton size='small' aria-label={t('delete')} onClick={() => onChange(values.filter((_, i) => i !== index))}><i className='ri-delete-bin-line' /></IconButton>
+                        <span><IconButton size='small' aria-label={t('delete')} disabled={fixed} onClick={() => onChange(values.filter((_, i) => i !== index))}><i className='ri-delete-bin-line' /></IconButton></span>
                       </Tooltip>
                     </TableCell>
                   </TableRow>
@@ -174,7 +187,7 @@ export default function ExceptionsTableDialog({ zoneName, zoneColor, values, gue
               })}
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={COLUMNS}>
+                  <TableCell colSpan={clusters ? COLUMNS + 1 : COLUMNS}>
                     <Typography variant='body2' color='text.secondary' sx={ONE_LINE_SX}>{values.length === 0 ? t('none') : t('noMatch')}</Typography>
                   </TableCell>
                 </TableRow>
@@ -192,6 +205,7 @@ export default function ExceptionsTableDialog({ zoneName, zoneColor, values, gue
         exception={editing == null ? null : values[editing] ?? null}
         guests={guests}
         members={members}
+        clusters={clusters}
         onSave={save}
         onClose={() => setEditing(undefined)}
       />

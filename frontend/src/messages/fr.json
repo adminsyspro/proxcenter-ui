@@ -9653,7 +9653,19 @@
       "postureTrafficByDstZone": "Trafic par zone de destination",
       "postureCaptionEmitted": "occurrences émises par zone",
       "postureCaptionReceived": "occurrences reçues par zone",
-      "postureDirectionBoth": "Les deux"
+      "postureDirectionBoth": "Les deux",
+      "clustersStateStop": "Arrêt d'urgence",
+      "clustersStateUnreachable": "Injoignable depuis {time}",
+      "clustersStateApplied": "Appliqué",
+      "clustersStateUnknown": "État inconnu",
+      "clustersMembers": "{members} membres · {protected} protégés",
+      "clustersMembersShort": "{members} · {protected} protégés",
+      "clustersAll": "Tous les clusters",
+      "clustersCount": "{count, plural, one {# cluster} other {# clusters}}",
+      "clustersDrifts": "{count, plural, =0 {Aucun écart} one {# écart} other {# écarts}}",
+      "clustersFiguresMissing": "Chiffres manquants",
+      "clustersOutOfScope": "Hors de votre périmètre",
+      "clustersHiddenTraffic": "{count, plural, one {Le trafic de # cluster hors de votre périmètre n'est pas inclus.} other {Le trafic de # clusters hors de votre périmètre n'est pas inclus.}}"
     },
     "rulesOnDemand": {
       "chip": "Règles à l'ouverture",
@@ -12354,7 +12366,8 @@
       "truncated": "les lignes plus anciennes ont été abandonnées",
       "frozen": "noms de zones et d'invités tels qu'au moment de l'événement",
       "loadOlder": "Charger les plus anciens",
-      "empty": "Aucun événement pour l'instant : le moteur lit les journaux des nœuds chaque minute."
+      "empty": "Aucun événement pour l'instant : le moteur lit les journaux des nœuds chaque minute.",
+      "otherCluster": "Autre cluster"
     }
   },
   "vdcUsageHistory": {
@@ -13444,7 +13457,11 @@
         "running": "En cours"
       },
       "logNode": "{node} · {rate} lignes/min · retard {lag}",
-      "logBehind": "Journal en retard"
+      "logBehind": "Journal en retard",
+      "unreachableSince": "Le cluster {name} est injoignable depuis {time} : ses règles ne sont pas mises à jour, les autres clusters gardent ses dernières adresses connues.",
+      "unreachableSinceSingle": "Ce cluster est injoignable depuis {time} : ses règles ne sont pas mises à jour.",
+      "firewallOff": "{name} : le pare-feu du cluster est désactivé, rien n'y est filtré.",
+      "firewallOffSingle": "Le pare-feu du cluster est désactivé, rien n'y est filtré."
     },
     "stop": {
       "button": "Arrêt d'urgence",
@@ -13464,7 +13481,17 @@
       "clusterFirewallOff": "Pare-feu de cluster désactivé",
       "notDeployed": "Rien de déployé",
       "socleUncovered": "Adresses que les règles n'acceptent pas : {ips}",
-      "socleUncoveredNodes": "Adresses que les règles n'acceptent pas : {ips} (sur {nodes})"
+      "socleUncoveredNodes": "Adresses que les règles n'acceptent pas : {ips} (sur {nodes})",
+      "clusterFirewallOffOf": "Pare-feu du cluster coupé : {name}",
+      "clustersStop": "Arrête tous les clusters de la politique : {names}",
+      "clustersResume": "Reprend tous les clusters de la politique : {names}",
+      "clustersAndOthers": "{names} et {count, plural, one {# autre cluster} other {# autres clusters}}",
+      "followStop": "Arrêt en attente : nouvel essai chaque minute",
+      "followResume": "Reprise en attente : nouvel essai chaque minute",
+      "followHeld": "Pare-feu laissé coupé tant que les règles d'accès à ses nœuds ne sont pas vérifiées",
+      "socleOn": "Refusé sur {name}.",
+      "socleOnOther": "Refusé sur un autre cluster de la politique.",
+      "bodyShared": "Toutes les zones de la politique passent en observation sur tous les clusters associés."
     },
     "pending": {
       "noCount": "Changements pas encore appliqués.",
@@ -13503,7 +13530,9 @@
       "untilApplied": "Rien ne change dans Proxmox tant que le plan n'est pas appliqué.",
       "applying": "Application en cours : {list}",
       "applyingInline": "application en cours : {list}",
-      "applyingNoCount": "Application des changements en cours"
+      "applyingNoCount": "Application des changements en cours",
+      "clusterAdded": "cluster {name} ajouté",
+      "clustersAdded": "{count, plural, one {# cluster ajouté} other {# clusters ajoutés}}"
     },
     "firstRun": {
       "title": "Mettre en place la micro-segmentation",
@@ -13539,7 +13568,11 @@
       "CHECK_PENDING": "Une vérification est déjà en file d'attente : le moteur la lance à son prochain passage.",
       "generic": "Une erreur est survenue. Réessayez.",
       "SOCLE_MISSING": "Un nœud dont le pare-feu est actif ne laisse pas entrer l'interface web (8006) et SSH (22) : le pare-feu du cluster n'a pas été réactivé. Autorisez-les dans le pare-feu de ce nœud, ou désactivez-le, puis reprenez.",
-      "NOT_DEPLOYED": "Rien n'est déployé : appliquez d'abord un plan, l'arrêt d'urgence agit sur une politique déployée."
+      "NOT_DEPLOYED": "Rien n'est déployé : appliquez d'abord un plan, l'arrêt d'urgence agit sur une politique déployée.",
+      "CLUSTER_NOT_EMPTY": "Un cluster de cette politique n'est pas vide : retirez d'abord ses zones, flux et membres.",
+      "TOO_MANY_CLUSTERS": "Cette politique a déjà le nombre maximal de clusters.",
+      "CLUSTER_UNREADABLE": "Un cluster de cette politique est illisible pour le moment. Réessayez quand il est joignable.",
+      "CLUSTER_FIREWALL_OFF": "Le pare-feu d'un cluster de cette politique est désactivé : rien n'a été appliqué. Activez-le dans Proxmox, puis planifiez à nouveau."
     },
     "policy": {
       "zonesTitle": "Zones",
@@ -13788,6 +13821,14 @@
           "readingStart": "lecture de Proxmox",
           "reading": "lecture de Proxmox, {done, number} / {total, number} invités",
           "writing": "écriture dans Proxmox, {done, number} / {total, number}"
+        },
+        "group": {
+          "done": "{label} : terminé sur les {total} clusters",
+          "partial": "{label} : terminé sur {done} clusters sur {total}",
+          "failed": "{label} : échec sur tous les clusters",
+          "showClusters": "Afficher les clusters",
+          "hideClusters": "Masquer les clusters",
+          "partialApplyAgain": "{label} : terminé sur {done} clusters sur {total}, appliquez de nouveau dès que le cluster jamais appliqué est joignable"
         }
       },
       "assign": {
@@ -13811,7 +13852,9 @@
         "pendingRemoval": "Retrait en attente",
         "removalHint": "Retrait en file, sélectionnez-le à nouveau pour le garder dans cette zone.",
         "pendingMove": "Déplacement vers {zone}",
-        "moveHint": "Déplacement vers {zone} en file, sélectionnez-le à nouveau pour le garder dans cette zone."
+        "moveHint": "Déplacement vers {zone} en file, sélectionnez-le à nouveau pour le garder dans cette zone.",
+        "partial": "Enregistré sur {clusters} seulement ; les autres clusters n'ont pas été enregistrés : {error}",
+        "partialSome": "Enregistré sur une partie des clusters seulement ; les autres n'ont pas été enregistrés : {error}"
       },
       "preflightButton": "Vérifications préalables",
       "state": {
@@ -13929,8 +13972,15 @@
           "missing_guest": "Une source ou une destination n'est plus dans l'inventaire.",
           "waiting_address": "L'inventaire ne connaît pas encore d'adresse pour une source : ses règles peuvent ne rien laisser passer tant qu'aucune n'est relevée.",
           "renamed": "Une VM n'a plus le nom enregistré : elle a été renommée, ou son VMID a été réutilisé. Vérifiez que l'exception désigne toujours la bonne VM."
-        }
-      }
+        },
+        "cluster": "Cluster",
+        "clusterInactive": "{name} n'est pas encore appliqué : une exception n'y protégerait rien.",
+        "noActiveCluster": "Aucun cluster de la politique n'est encore appliqué : une exception ne protégerait rien."
+      },
+      "guestsUnread": "Les invités de {clusters} n'ont pas pu être lus : ils ne sont pas listés.",
+      "guestsUnreadSome": "Les invités de certains clusters n'ont pas pu être lus : ils ne sont pas listés.",
+      "guestsUncounted": "Les invités de {clusters} n'ont pas pu être lus : ils ne sont pas comptés.",
+      "guestsUncountedSome": "Les invités de certains clusters n'ont pas pu être lus : ils ne sont pas comptés."
     },
     "plan": {
       "title": "Plan de micro-segmentation",
@@ -13972,7 +14022,45 @@
       "notes": "Remarques : {list}",
       "nothingRecord": "Rien à écrire dans Proxmox : l'application enregistre la révision.",
       "stopActive": "Écrit pendant que l'arrêt d'urgence maintient le pare-feu de cluster désactivé ; prend effet à la levée de l'arrêt",
-      "stopActivePlan": "Une application maintenant serait écrite pendant que l'arrêt d'urgence maintient le pare-feu de cluster désactivé"
+      "stopActivePlan": "Une application maintenant serait écrite pendant que l'arrêt d'urgence maintient le pare-feu de cluster désactivé",
+      "cluster": {
+        "other": "Autre cluster",
+        "computing": "Calcul en cours",
+        "applyFailed": "Échec : elle sera appliquée dès que le cluster sera de nouveau joignable.",
+        "error": {
+          "no_client": "Injoignable : il se mettra à jour dès qu'il sera de nouveau joignable.",
+          "engine_stopped": "Le moteur est arrêté sur ce cluster.",
+          "stopped": "L'arrêt d'urgence est actif : appliquez de nouveau une fois levé.",
+          "internal": "L'exécution n'a pas pu démarrer sur ce cluster."
+        },
+        "applied": {
+          "done": "Appliqué sur les {total} clusters",
+          "partial": "Appliqué sur {done} clusters sur {total}",
+          "failed": "Appliqué sur aucun cluster",
+          "partialApplyAgain": "Appliqué sur {done} clusters sur {total} : appliquez de nouveau dès que le cluster jamais appliqué est joignable."
+        },
+        "unreadable": "Cette exécution ne peut pas être lue.",
+        "runFailed": "Échec.",
+        "blocked": {
+          "start": "Le plan n'a pas pu démarrer sur ce cluster : recalculez-le avant d'appliquer.",
+          "unreadable": "Le plan de ce cluster ne peut pas être lu : recalculez-le avant d'appliquer."
+        },
+        "unfollowed": "Statut inconnu : cette exécution n'a pas pu être suivie.",
+        "planUnreachable": "Injoignable : elle sera appliquée dès que le cluster sera de nouveau joignable.",
+        "neverApplied": "Ce cluster n'a jamais été appliqué : appliquez de nouveau dès qu'il est joignable.",
+        "firewallOff": "Le pare-feu du cluster est désactivé : rien ne serait filtré. Activez-le dans Proxmox, puis planifiez à nouveau.",
+        "serviceStopped": "Le service de pare-feu est arrêté sur {nodes} : rien n'est filtré sur ces nœuds.",
+        "firewallOffRun": "Le pare-feu du cluster est désactivé : rien n'a été appliqué ici. Activez-le dans Proxmox, puis planifiez à nouveau."
+      },
+      "applyBlocked": {
+        "failed": "Application impossible : le plan d'un cluster a échoué. Ouvrez sa section pour en voir la raison, puis recalculez.",
+        "stale": "Application impossible : recalculez le plan, il provient d'un brouillon plus ancien.",
+        "collisions": "Application impossible : le plan d'un cluster comporte des collisions à résoudre d'abord.",
+        "noCluster": "Application impossible : aucun cluster n'a pu être joint pour calculer le plan."
+      },
+      "firewallOffBlock": "Application impossible : le pare-feu du cluster est désactivé sur {names}.",
+      "firewallOffRefused": "Rien n'a été appliqué : le pare-feu du cluster est désactivé sur {names}, rien n'y serait filtré. Activez-le dans Proxmox, puis planifiez à nouveau.",
+      "firewallOffRefusedAny": "Rien n'a été appliqué : le pare-feu d'un cluster de la politique est désactivé, rien n'y serait filtré. Activez-le dans Proxmox, puis planifiez à nouveau."
     },
     "drifts": {
       "asOf": "Au dernier passage complet, {time}",
@@ -14065,6 +14153,34 @@
         "destinationLocal": "le réseau local",
         "verdict": {
           "disabled": "désactivée"
+        },
+        "peer_unreadable": {
+          "title": "Le cluster {name} est illisible",
+          "titleUnknown": "Un cluster associé est illisible",
+          "detail": "Le cluster {name} est illisible : les retraits d'adresses sont suspendus",
+          "detailUnknown": "Un cluster associé est illisible : les retraits d'adresses sont suspendus",
+          "hint": "Vérifiez que ProxCenter joint ce cluster : les retraits reprennent dès qu'il est de nouveau lisible."
+        },
+        "stop_lift_held": {
+          "title": "Le pare-feu du cluster {name} reste désactivé",
+          "titleUnknown": "Le pare-feu d'un cluster associé reste désactivé",
+          "detail": "Le pare-feu du cluster {name} reste désactivé : les règles d'accès aux nœuds doivent être vérifiées avant de le réactiver",
+          "detailUnknown": "Le pare-feu d'un cluster associé reste désactivé : les règles d'accès aux nœuds doivent être vérifiées avant de le réactiver",
+          "hint": "Lancez les vérifications préalables de ce cluster : le moteur réactive son pare-feu dès que les règles d'accès aux nœuds sont en place."
+        },
+        "heldNote": "Retrait suspendu jusqu'à ce que chaque cluster associé soit lisible.",
+        "clusterOther": "Autre cluster",
+        "cluster_firewall_off": {
+          "title": "Le pare-feu du cluster {name} est désactivé",
+          "titleUnknown": "Le pare-feu d'un cluster associé est désactivé",
+          "detail": "Le pare-feu du cluster {name} est désactivé : rien n'y est filtré",
+          "detailUnknown": "Le pare-feu d'un cluster associé est désactivé : rien n'y est filtré",
+          "hint": "Réactivez-le depuis cette ligne, ou dans Proxmox (Datacenter > Pare-feu > Options)."
+        },
+        "firewall_service_stopped": {
+          "title": "Service de pare-feu arrêté sur {node}",
+          "detail": "Le service de pare-feu est arrêté sur {node} : rien n'est filtré sur ce nœud",
+          "hint": "Démarrez le service pve-firewall sur ce nœud."
         }
       },
       "chip": {
@@ -14082,7 +14198,11 @@
         "known_rule_missing": "Règle connue absente",
         "known_rule_extra": "Règle connue en trop",
         "local_set_desync": "Réseau local désynchronisé",
-        "egress_no_subnet": "Sans sous-réseau"
+        "egress_no_subnet": "Sans sous-réseau",
+        "peer_unreadable": "Cluster illisible",
+        "stop_lift_held": "Pare-feu maintenu coupé",
+        "cluster_firewall_off": "Pare-feu cluster off",
+        "firewall_service_stopped": "Service arrêté"
       },
       "zoneFilter": "Zone {name} seulement",
       "zoneFilterClear": "Afficher toutes les zones",
@@ -14101,7 +14221,11 @@
         "known_rule_extra": "Règles d'adresses connues en trop ({count, number})",
         "local_set_desync": "Ensembles du réseau local désynchronisés ({count, number})",
         "egress_no_subnet": "Sorties sans sous-réseau local ({count, number})",
-        "generic": "{kind} (nombre : {count, number})"
+        "generic": "{kind} (nombre : {count, number})",
+        "peer_unreadable": "Clusters associés illisibles ({count, number})",
+        "stop_lift_held": "Pare-feu de cluster maintenus coupés ({count, number})",
+        "cluster_firewall_off": "Pare-feu de cluster désactivés ({count, number})",
+        "firewall_service_stopped": "Nœuds dont le service de pare-feu est arrêté ({count, number})"
       },
       "noneZone": "aucune",
       "select": "Sélectionner {name}",
@@ -14120,7 +14244,18 @@
       "colDiffers": "Ce qui diffère",
       "colSince": "Vu au dernier contrôle complet",
       "colActions": "Actions possibles",
-      "colSinceHint": "Le moteur ne donne pas de date de première détection par écart : c'est l'heure de son dernier contrôle complet."
+      "colSinceHint": "Le moteur ne donne pas de date de première détection par écart : c'est l'heure de son dernier contrôle complet.",
+      "enableFirewall": {
+        "button": "Réactiver",
+        "title": "Réactiver le pare-feu du cluster {name}",
+        "titleUnknown": "Réactiver le pare-feu du cluster",
+        "body": "Le pare-feu du cluster filtre de nouveau dès qu'il est réactivé.",
+        "check": "Contrôle préalable : règles d'accès aux nœuds (web 8006, SSH 22).",
+        "after": "Une vérification complète réaligne ensuite les invités de ce cluster.",
+        "confirm": "Réactiver",
+        "stop": "Sous arrêt d'urgence, il est réactivé à la reprise.",
+        "refused": "Un nœud dont le pare-feu est actif ne laisse pas entrer l'interface web (8006) et SSH (22) : le pare-feu du cluster est resté coupé. Autorisez-les dans le pare-feu de ce nœud, ou coupez-le, puis réessayez."
+      }
     },
     "observation": {
       "sampling": "Par défaut, Proxmox journalise au plus une ligne par seconde et par chaîne : les flux très actifs peuvent être sous-comptés.",
@@ -14137,7 +14272,9 @@
         "direction": "Direction",
         "directionAll": "Toutes",
         "directionIn": "Entrant",
-        "directionOut": "Sortant"
+        "directionOut": "Sortant",
+        "cluster": "Cluster",
+        "clusterAll": "Tous les clusters"
       },
       "kind": {
         "would_block": "Serait bloqué",
@@ -14291,7 +14428,9 @@
         "unzoned": "Invités sans zone ({count, number})",
         "unzonedHint": "Invités en marche dans aucune zone. Écarts les liste aussi.",
         "guestAria": "{name}, invité {vmid}",
+        "guestAriaCluster": "{name}, invité {vmid}, {cluster}",
         "guestWhere": "Invité {vmid} sur {node}",
+        "guestWhereCluster": "Invité {vmid} sur {node}, {cluster}",
         "guestIps": "Adresses IP : {ips}",
         "guestNoIp": "Aucune adresse IP connue",
         "guestPending": "En attente pour la zone, appliqué avec le prochain plan",
@@ -14377,6 +14516,7 @@
         "logsEmpty": "Aucun événement de cette paire dans la mémoire du moteur"
       },
       "partial": "Partiel : seuls les {count, number} premiers flux en attente sont dessinés.",
+      "hiddenClusters": "{count, plural, one {Les invités de # cluster hors de votre périmètre ne sont pas affichés.} other {Les invités de # clusters hors de votre périmètre ne sont pas affichés.}}",
       "filters": {
         "title": "Flux :"
       },
@@ -14428,6 +14568,7 @@
       },
       "pve": {
         "aria": "Nœud Proxmox {name}, {guests}",
+        "ariaCluster": "Nœud Proxmox {name} de {cluster}, {guests}",
         "guests": "{count, plural, one {# invité} other {# invités}}",
         "zoneShare": "Zone {zone} : {count, plural, one {# invité} other {# invités}}",
         "unzonedShare": "Sans zone : {count, plural, one {# invité} other {# invités}}",
@@ -14540,7 +14681,7 @@
       "runAgain": "Relancer",
       "openWizard": "Ouvrir l'assistant de déploiement",
       "raiseLogRate": "Relever pendant l'observation",
-      "busy": "Une application est en cours, réessayez dans un instant.",
+      "busy": "Le moteur termine un passage ou une application sur ce cluster, réessayez dans un instant.",
       "noClient": "Aucun client Proxmox n'est disponible pour cette connexion.",
       "readFailed": "Proxmox n'a pas pu être lu : {error}",
       "status": {
@@ -14588,6 +14729,12 @@
           "title": "Sous-réseaux de sortie",
           "pass": "Chaque membre d'une zone à sortie contrôlée a un sous-réseau connu.",
           "warn": "{count, plural, one {# membre n'a aucun sous-réseau connu} other {# membres n'ont aucun sous-réseau connu}} ({guests}) : leur réseau local se réduit à leurs IP."
+        },
+        "firewall_service": {
+          "title": "Service de pare-feu",
+          "pass": "Le service de pare-feu tourne sur tous les nœuds.",
+          "stopped": "Le service de pare-feu est arrêté sur {nodes} : rien n'est filtré sur ces nœuds.",
+          "unreadable": "L'état du service de pare-feu n'a pas pu être lu sur {nodes}."
         }
       },
       "rateUnits": {
@@ -14670,7 +14817,10 @@
         "confirm": "Retirer",
         "running": "{label} : retrait de la micro-segmentation en cours...",
         "complete": "{label} : retrait terminé, les tags de zone restent sur les invités",
-        "incomplete": "{label} : retrait incomplet, relancez-le"
+        "incomplete": "{label} : retrait incomplet, relancez-le",
+        "bodyShared": "Annule tout ce que ProxCenter a écrit dans Proxmox sur le cluster choisi ; les autres clusters cessent seulement de reconnaître ses invités.",
+        "leaves": "{name} quitte la politique partagée et n'en garde rien ; les tags de zone restent sur ses invités.",
+        "needsEveryCluster": "Il vous faut le droit de gérer les nœuds sur chaque cluster de cette politique"
       },
       "prefixChange": {
         "warning": "Les invités taggés avec l'ancien préfixe quittent leur zone à la prochaine application.",
@@ -14685,6 +14835,37 @@
         "readyAfter": "Durée sans nouveau flux qui serait bloqué avant qu'une zone soit indiquée prête ; ce n'est pas un verrou.",
         "writeCap": "Au-delà, le moteur s'arrête et demande une confirmation.",
         "selfIps": "Adresses depuis lesquelles ProxCenter joint les nœuds. Le pré-vol vérifie qu'elles ne sont pas coupées. Laisser vide pour utiliser la détection."
+      },
+      "clusters": {
+        "row": "Clusters associés",
+        "hint": "Les clusters qui partagent cette politique : mêmes zones, flux et réglages, et les invités de chacun sont reconnus par les autres.",
+        "pending": "s'applique à la prochaine application",
+        "add": "Ajouter un cluster",
+        "maxReached": "Une politique compte au plus {max} clusters.",
+        "noCandidate": "Aucun autre cluster à associer.",
+        "removeLabel": "Dissocier {name}",
+        "target": "Cluster ou nœud",
+        "associate": {
+          "title": "Associer des clusters",
+          "cluster": "Clusters ou nœuds",
+          "nothingWritten": "Rien n'est écrit dessus avant la prochaine application.",
+          "room": "La politique peut encore en accueillir {count}.",
+          "confirm": "Associer",
+          "errors": {
+            "CLUSTER_NOT_EMPTY": "{name} contient encore des données de micro-segmentation. Seul un cluster sans aucune politique peut être associé : retirez-y la micro-segmentation, puis supprimez ses zones et ses règles.",
+            "TOO_MANY_CLUSTERS": "Cette politique compte déjà le nombre maximal de clusters.",
+            "CLUSTER_UNREADABLE": "Le cluster n'a pas pu être inspecté. Réessayez plus tard."
+          },
+          "firewallOffHint": "Le pare-feu du cluster est désactivé sur ce cluster : l'association est possible, l'application sera refusée tant qu'il ne l'est pas.",
+          "serviceStoppedHint": "Le service de pare-feu est arrêté sur {nodes}."
+        },
+        "dissociate": {
+          "title": "Dissocier {name} ?",
+          "impact": "Les autres clusters ne reconnaîtront plus {leaving, plural, =0 {aucun invité} one {# invité} other {# invités}} de {name}, et {name} ne reconnaîtra plus {staying, plural, =0 {aucun invité} one {# invité} other {# invités}} des autres.",
+          "keepsRules": "{name} garde ses règles, avec sa propre copie de la politique.",
+          "typeName": "Saisissez {name} pour confirmer",
+          "confirm": "Dissocier"
+        }
       }
     },
     "history": {
@@ -14755,6 +14936,7 @@
           },
           "triggerCheck": "Vérifier maintenant",
           "triggerSchedule": "Planification",
+          "triggerPeer": "Un autre cluster a changé",
           "failed": "L'exécution a échoué.",
           "failedWith": "L'exécution a échoué : {error}",
           "errors": "Erreurs : {list}"
@@ -14801,7 +14983,12 @@
         "loading": "Chargement de l'historique...",
         "capped": "Seules les {count, number} dernières révisions et les {count, number} dernières exécutions sont lues.",
         "actorInferred": "Déduit du type d'exécution",
-        "actorCheck": "Lancé par Vérifier maintenant"
+        "actorCheck": "Lancé par Vérifier maintenant",
+        "peer": "Un autre cluster a changé",
+        "actorPeer": "Lancé par le moteur parce que les adresses d'un autre cluster de la politique ont changé",
+        "clusterRuns": "L'exécution de chaque cluster",
+        "showClusterRuns": "Afficher l'exécution de chaque cluster",
+        "hideClusterRuns": "Masquer l'exécution de chaque cluster"
       }
     },
     "waitingFirstCheck": "En attente du premier contrôle complet",
@@ -14893,6 +15080,12 @@
         "title": "Ce que fait la vérification",
         "ips": "Adresses IP des membres",
         "guests": "Invités relus et comparés à la politique, écarts réparés"
+      },
+      "group": {
+        "searching": "Pris en charge par le moteur : recherche de son exécution",
+        "running": "Vérification de {count, plural, one {# cluster} other {# clusters}}",
+        "done": "Vérifié sur {done, number} des {total, number} clusters",
+        "clusters": "Clusters vérifiés"
       }
     },
     "trafficLens": {
@@ -15082,10 +15275,19 @@
       "title": "{count, plural, one {Abandonner le changement non appliqué ?} other {Abandonner les # changements non appliqués ?}}",
       "titleNoCount": "Abandonner les changements non appliqués ?",
       "body": "Le brouillon revient à la dernière révision appliquée.",
-      "confirm": "Abandonner"
+      "confirm": "Abandonner",
+      "busy": "Le moteur termine un travail sur un cluster de cette politique (un passage planifié ou une autre action). Réessayez dans un instant."
     },
     "gateway": {
       "name": "Passerelle de {zones}"
+    },
+    "merged": {
+      "unreadList": "Illisible : ses lignes ne sont pas listées.",
+      "unreadListOther": "Un cluster associé est illisible : ses lignes ne sont pas listées.",
+      "unreachable": "Injoignable : son état est inconnu.",
+      "unreachableOther": "Un cluster associé est injoignable : son état est inconnu.",
+      "unreadState": "Illisible : son état n'est pas affiché.",
+      "unreadStateOther": "Un cluster associé est illisible : son état n'est pas affiché."
     }
   },
   "bulkPower": {

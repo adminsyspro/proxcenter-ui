@@ -13,7 +13,7 @@ describe('matchMicrosegRoute', () => {
   it('knows the exact route table of the orchestrator', () => {
     const table = MICROSEG_ROUTES.map(r => `${r.method} ${r.pattern.source}`).sort()
 
-    expect(MICROSEG_ROUTES).toHaveLength(32)
+    expect(MICROSEG_ROUTES).toHaveLength(36)
     expect(table).toHaveLength(new Set(table).size)
 
     const cases: Array<[string, string[], boolean]> = [
@@ -43,6 +43,7 @@ describe('matchMicrosegRoute', () => {
       ['POST', ['emergency-stop'], true],
       ['POST', ['remove'], true],
       ['POST', ['check'], true],
+      ['POST', ['cluster-firewall', 'enable'], true],
       ['GET', ['runs'], false],
       ['GET', ['runs', 'r-1'], false],
       ['GET', ['status'], false],
@@ -58,7 +59,7 @@ describe('matchMicrosegRoute', () => {
     }
   })
 
-  it('names who audits each route: the orchestrator its six lifecycle actions, the relay every other write, nobody a read', () => {
+  it('names who audits each route: the orchestrator its lifecycle actions and the cluster links, the relay every other write, nobody a read', () => {
     const owner = (method: string, path: string[]) => {
       const route = matchMicrosegRoute(method, path)
 
@@ -73,6 +74,9 @@ describe('matchMicrosegRoute', () => {
     expect(owner('POST', ['emergency-stop'])).toBe('orchestrator microseg.emergency_stop')
     expect(owner('POST', ['revisions', '7', 'restore'])).toBe('orchestrator microseg.restore')
     expect(owner('POST', ['remove'])).toBe('orchestrator microseg.remove')
+    // The orchestrator writes the association and the dissociation rows itself, with the cluster added or removed.
+    expect(owner('POST', ['clusters'])).toBe('orchestrator microseg.cluster.associate')
+    expect(owner('DELETE', ['clusters', 'abc'])).toBe('orchestrator microseg.cluster.dissociate')
 
     expect(owner('PUT', ['policy'])).toBe('relay microseg.policy.update')
     // R66: discarding the draft is a draft write, audited by the relay like the others.
@@ -90,11 +94,12 @@ describe('matchMicrosegRoute', () => {
     expect(owner('POST', ['suggestions', 'resolve'])).toBe('relay microseg.suggestions.resolve')
     expect(owner('POST', ['confirm-writes'])).toBe('relay microseg.confirm_writes')
     expect(owner('POST', ['check'])).toBe('relay microseg.check')
+    expect(owner('POST', ['cluster-firewall', 'enable'])).toBe('orchestrator microseg.cluster_firewall.enable')
 
     expect(owner('POST', ['plan'])).toBe('none')
     expect(owner('GET', ['traffic'])).toBe('none')
     for (const route of MICROSEG_ROUTES.filter(r => !r.write)) expect(route.audit).toBe('none')
-    expect(MICROSEG_ROUTES.filter(r => r.audit === 'orchestrator')).toHaveLength(6)
+    expect(MICROSEG_ROUTES.filter(r => r.audit === 'orchestrator')).toHaveLength(9)
   })
 
   it('refuses a verb the orchestrator does not serve on a known path', () => {
@@ -130,5 +135,75 @@ describe('matchMicrosegRoute', () => {
 
   it('is case sensitive on the verb', () => {
     expect(matchMicrosegRoute('get', ['policy'])).toBeNull()
+  })
+
+  it('serves the clusters of a shared policy: list, associate and dissociate, the writes audited by the orchestrator', () => {
+    expect(matchMicrosegRoute('GET', ['clusters'])).toMatchObject({ write: false, audit: 'none', scope: 'policy', clustersRead: true })
+    expect(MICROSEG_ROUTES.filter(r => r.clustersRead)).toHaveLength(1)
+    expect(matchMicrosegRoute('POST', ['clusters'])).toMatchObject({ write: true, audit: 'orchestrator', auditAction: 'microseg.cluster.associate', scope: 'policy' })
+    expect(matchMicrosegRoute('DELETE', ['clusters', 'abc'])).toMatchObject({ write: true, audit: 'orchestrator', auditAction: 'microseg.cluster.dissociate', scope: 'policy' })
+    // The association is told apart by its own flag, not by its audit action.
+    expect(matchMicrosegRoute('POST', ['clusters'])?.associate).toBe(true)
+    expect(MICROSEG_ROUTES.filter(r => r.associate)).toHaveLength(1)
+    expect(matchMicrosegRoute('DELETE', ['clusters'])).toBeNull()
+    expect(matchMicrosegRoute('POST', ['clusters', 'abc'])).toBeNull()
+    expect(matchMicrosegRoute('GET', ['clusters', 'abc'])).toBeNull()
+    expect(matchMicrosegRoute('DELETE', ['clusters', 'abc', 'extra'])).toBeNull()
+  })
+
+  it('gives every route a scope: the URL cluster alone, or every cluster of the policy', () => {
+    for (const route of MICROSEG_ROUTES) expect(['policy', 'cluster'], `${route.method} ${route.pattern.source}`).toContain(route.scope)
+
+    const scope = (method: string, path: string[]) => matchMicrosegRoute(method, path)?.scope
+
+    const cluster: Array<[string, string[]]> = [
+      ['GET', ['runs']],
+      // A run of the URL's cluster: the relay hands back no run of another cluster.
+      ['GET', ['runs', 'r-1']],
+      ['GET', ['status']],
+      ['GET', ['events']],
+      ['GET', ['traffic']],
+      ['GET', ['preflight']],
+      ['POST', ['check']],
+      ['POST', ['cluster-firewall', 'enable']],
+      ['POST', ['confirm-writes']],
+      ['POST', ['members']],
+      ['POST', ['exceptions']],
+      ['PUT', ['exceptions', 'e1']],
+      ['DELETE', ['exceptions', 'e1']],
+    ]
+    const policy: Array<[string, string[]]> = [
+      // The drifts name the peer clusters.
+      ['GET', ['drifts']],
+      ['GET', ['policy']],
+      ['PUT', ['policy']],
+      ['POST', ['policy', 'discard']],
+      ['POST', ['zones']],
+      ['PUT', ['zones', 'z1']],
+      ['DELETE', ['zones', 'z1']],
+      ['POST', ['zones', 'z1', 'state']],
+      ['POST', ['zones', 'z1', 'egress-state']],
+      ['POST', ['flows']],
+      ['PUT', ['flows', 'f1']],
+      ['DELETE', ['flows', 'f1']],
+      ['POST', ['plan']],
+      ['POST', ['apply']],
+      ['GET', ['revisions']],
+      ['POST', ['revisions', '7', 'restore']],
+      ['GET', ['suggestions']],
+      ['POST', ['suggestions', 'resolve']],
+      ['POST', ['emergency-stop']],
+      // On a shared policy the cluster leaves the policy and the other clusters' ipsets are rewritten.
+      ['POST', ['remove']],
+      ['GET', ['clusters']],
+      ['POST', ['clusters']],
+      ['DELETE', ['clusters', 'abc']],
+    ]
+
+    for (const [method, path] of cluster) expect(scope(method, path), `${method} /${path.join('/')}`).toBe('cluster')
+    for (const [method, path] of policy) expect(scope(method, path), `${method} /${path.join('/')}`).toBe('policy')
+    expect(matchMicrosegRoute('GET', ['runs', 'r-1'])?.urlClusterRun).toBe(true)
+    expect(MICROSEG_ROUTES.filter(r => r.urlClusterRun)).toHaveLength(1)
+    expect(cluster.length + policy.length).toBe(MICROSEG_ROUTES.length)
   })
 })

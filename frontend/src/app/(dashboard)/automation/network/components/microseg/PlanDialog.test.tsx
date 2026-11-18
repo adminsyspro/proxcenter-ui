@@ -11,6 +11,7 @@ import { forgetSharedReads } from '@/lib/microseg/api'
 
 import { calls, mock, policy, renderTab, reply, zone, REVISION_HEAD } from './microsegTestKit'
 import { failedWith, g101, openPlanDialog, planRun, resetPlanMocks, step } from './planTestKit'
+import MicrosegTab from './MicrosegTab'
 
 beforeEach(() => resetPlanMocks())
 
@@ -235,5 +236,226 @@ describe('closing', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Micro-segmentation plan' })).toBeNull())
     expect(calls('POST /apply')).toHaveLength(0)
+  })
+})
+
+describe('a policy shared by several clusters', () => {
+  const C2 = '/api/v1/firewall/microseg/c2'
+  const CONNECTIONS = [{ id: 'c1', name: 'PVE-PROD' }, { id: 'c2', name: 'PVE-DR' }]
+  const twoPlans = (second: Record<string, unknown> = { run_id: 'p2' }) => {
+    mock.routes['POST /plan'] = () => reply(202, { run_id: 'p1', runs: [{ connection_id: 'c1', run_id: 'p1' }, { connection_id: 'c2', ...second }] })
+  }
+  const openShared = async () => {
+    renderTab(<MicrosegTab connectionId='c1' connectionName='PVE-PROD' connections={CONNECTIONS} />)
+    fireEvent.click(await screen.findByRole('button', { name: /^(Review and apply|View plan)$/ }))
+    return screen.findByRole('dialog', { name: 'Micro-segmentation plan' })
+  }
+  const section = (dialog: HTMLElement, name: string) => within(dialog).getByRole('listitem', { name })
+
+  it('shows one section per cluster, with its chip, its step count and its status, the steps inside', async () => {
+    twoPlans()
+    mock.routes[`GET ${C2}/runs/p2`] = () => reply(200, { ...planRun({ plan: [step(0, 'ipset.create', 'Create ipset pcz-dr')], steps: 1 }), id: 'p2', connection_id: 'c2' })
+    const dialog = await openShared()
+
+    await waitFor(() => expect(applyButton(dialog).disabled).toBe(false))
+    const prod = section(dialog, 'PVE-PROD')
+    const dr = section(dialog, 'PVE-DR')
+    expect(within(prod).getByText('6 steps')).toBeTruthy()
+    expect(within(dr).getByText('1 step')).toBeTruthy()
+    // Each cluster's plan is read through its own cluster.
+    expect(calls('GET /runs/p1').length).toBeGreaterThan(0)
+    expect(calls(`GET ${C2}/runs/p2`).length).toBeGreaterThan(0)
+
+    expect(within(dr).queryByText('Create ipset pcz-dr')).toBeNull()
+    fireEvent.click(within(dr).getByRole('button', { name: /PVE-DR/ }))
+    expect(await within(dr).findByText('Create ipset pcz-dr')).toBeTruthy()
+  })
+
+  it('refuses the apply with the stale message when the plan of one cluster comes from an older draft', async () => {
+    twoPlans()
+    mock.routes[`GET ${C2}/runs/p2`] = () => reply(200, { ...planRun({ version: 2 }), id: 'p2', connection_id: 'c2' })
+    const dialog = await openShared()
+    expect(await within(dialog).findByText(/older draft \(version 2, now 3\)/)).toBeTruthy()
+    expect(applyButton(dialog).disabled).toBe(true)
+  })
+
+  it('keeps Apply disabled while the plan of a cluster is still computed', async () => {
+    twoPlans()
+    mock.routes[`GET ${C2}/runs/p2`] = () => reply(200, { ...planRun({}, 'running'), id: 'p2', connection_id: 'c2' })
+    const dialog = await openShared()
+    await within(section(dialog, 'PVE-PROD')).findByText('6 steps')
+    expect(applyButton(dialog).disabled).toBe(true)
+  })
+
+  it('says an unreachable cluster will catch up, lists no step for it and still allows the apply', async () => {
+    twoPlans({ error: 'no_client' })
+    const dialog = await openShared()
+    await waitFor(() => expect(applyButton(dialog).disabled).toBe(false))
+    const dr = section(dialog, 'PVE-DR')
+    expect(within(dr).getByText('Unreachable: it will catch up once it is reachable again.')).toBeTruthy()
+    expect(within(dr).queryByText(/steps?$/)).toBeNull()
+  })
+
+  it('applies once, follows each cluster and says the application is partial when one cluster failed', async () => {
+    twoPlans()
+    mock.routes[`GET ${C2}/runs/p2`] = () => reply(200, { ...planRun(), id: 'p2', connection_id: 'c2' })
+    mock.routes['POST /apply'] = () => reply(202, { run_id: 'a1', runs: [{ connection_id: 'c1', run_id: 'a1' }, { connection_id: 'c2', run_id: 'a2' }] })
+    mock.routes['GET /runs/a1'] = () => reply(200, { ...planRun({ done: [step(0, 'ipset.create', 'x')] }), id: 'a1', kind: 'apply' })
+    mock.routes[`GET ${C2}/runs/a2`] = () => reply(200, { ...failedWith(planRun(), 'request failed: dial tcp 10.0.0.2:8006: connect: no route to host'), id: 'a2', kind: 'apply', connection_id: 'c2', result: null })
+    const dialog = await openShared()
+    await waitFor(() => expect(applyButton(dialog).disabled).toBe(false))
+    fireEvent.click(applyButton(dialog))
+
+    expect(await within(dialog).findByText('Applied on 1 of 2 clusters')).toBeTruthy()
+    expect(calls('POST /apply')).toHaveLength(1)
+    const dr = section(dialog, 'PVE-DR')
+    expect(within(dr).getByText('Failed: it will be applied when the cluster is reachable again.')).toBeTruthy()
+    fireEvent.click(within(dr).getByRole('button', { name: /PVE-DR/ }))
+    expect(await within(dr).findByText('The apply run failed: request failed: dial tcp 10.0.0.2:8006: connect: no route to host')).toBeTruthy()
+    expect(within(section(dialog, 'PVE-PROD')).getByText('1 done, 0 failed, 0 not run')).toBeTruthy()
+  })
+
+  it('renders an answer that lists a single cluster exactly as an answer without runs', async () => {
+    mock.routes['POST /plan'] = () => reply(202, { run_id: 'p1', runs: [{ connection_id: 'c1', run_id: 'p1' }] })
+    const dialog = await openShared()
+    expect(await within(dialog).findByText('6 writes planned, 2 guests affected')).toBeTruthy()
+    expect(within(dialog).getByText('Cluster objects')).toBeTruthy()
+    expect(within(dialog).queryByRole('listitem', { name: 'PVE-PROD' })).toBeNull()
+    expect(within(dialog).queryByText(/of 1 cluster/)).toBeNull()
+    expect(applyButton(dialog).disabled).toBe(false)
+  })
+
+  it('lets a cluster whose engine is stopped catch up later, but blocks the apply on an internal start error and says why', async () => {
+    twoPlans({ error: 'engine_stopped' })
+    const dialog = await openShared()
+    await waitFor(() => expect(applyButton(dialog).disabled).toBe(false))
+    expect(within(section(dialog, 'PVE-DR')).getByText('The engine is stopped on this cluster.')).toBeTruthy()
+    cleanup()
+    forgetSharedReads()
+
+    twoPlans({ error: 'internal' })
+    const again = await openShared()
+    await within(section(again, 'PVE-PROD')).findByText('6 steps')
+    expect(within(section(again, 'PVE-DR')).getByText('The plan could not start on this cluster: recompute before applying.')).toBeTruthy()
+    expect(applyButton(again).disabled).toBe(true)
+  })
+
+  it('stops computing a cluster whose plan cannot be read, says so and blocks the apply', async () => {
+    twoPlans()
+    mock.routes[`GET ${C2}/runs/p2`] = () => reply(403, { code: 'FORBIDDEN', error: 'x' })
+    const dialog = await openShared()
+    const dr = section(dialog, 'PVE-DR')
+    expect(await within(dr).findByText('The plan of this cluster cannot be read: recompute before applying.')).toBeTruthy()
+    expect(within(dr).queryByText('Computing')).toBeNull()
+    await within(section(dialog, 'PVE-PROD')).findByText('6 steps')
+    expect(applyButton(dialog).disabled).toBe(true)
+  })
+
+  const applyBoth = async (second: () => unknown) => {
+    twoPlans()
+    mock.routes[`GET ${C2}/runs/p2`] = () => reply(200, { ...planRun(), id: 'p2', connection_id: 'c2' })
+    mock.routes['POST /apply'] = () => reply(202, { run_id: 'a1', runs: [{ connection_id: 'c1', run_id: 'a1' }, { connection_id: 'c2', run_id: 'a2' }] })
+    mock.routes['GET /runs/a1'] = () => reply(200, { ...planRun({ done: [step(0, 'ipset.create', 'x')] }), id: 'a1', kind: 'apply' })
+    mock.routes[`GET ${C2}/runs/a2`] = second
+    const dialog = await openShared()
+    await waitFor(() => expect(applyButton(dialog).disabled).toBe(false))
+    fireEvent.click(applyButton(dialog))
+    return dialog
+  }
+
+  it('ends the application of a cluster whose run cannot be read, and still gives the headline', async () => {
+    const dialog = await applyBoth(() => reply(403, { code: 'FORBIDDEN', error: 'x' }))
+    expect(await within(dialog).findByText('Applied on 1 of 2 clusters')).toBeTruthy()
+    expect(within(section(dialog, 'PVE-DR')).getByText('This run cannot be read.')).toBeTruthy()
+  })
+
+  it('says a cluster will catch up only when its run failed to reach it; another failure is a plain failure', async () => {
+    const dialog = await applyBoth(() => reply(200, { ...failedWith(planRun(), '1 step(s) failed, 0 not run'), id: 'a2', kind: 'apply', connection_id: 'c2' }))
+    expect(await within(dialog).findByText('Applied on 1 of 2 clusters')).toBeTruthy()
+    const dr = section(dialog, 'PVE-DR')
+    expect(within(dr).getByText('Failed.')).toBeTruthy()
+    expect(within(dr).queryByText(/reachable again/)).toBeNull()
+    fireEvent.click(within(dr).getByRole('button', { name: /PVE-DR/ }))
+    expect(await within(dr).findByText('The apply run failed: 1 step(s) failed, 0 not run')).toBeTruthy()
+  })
+  const LAB_UNREACHABLE = 'read the guests: GET /cluster/resources?type=vm: request failed: all 3 cluster nodes unreachable (last error: dial tcp 10.42.0.111:8006: connect: connection refused)'
+  const failedPlan = (error: string) => () => reply(200, { ...failedWith({ ...planRun(), result: null }, error), id: 'p2', connection_id: 'c2' })
+
+  it('applies on the reachable clusters when the plan of one ended failed because it could not be reached, and says it catches up', async () => {
+    twoPlans()
+    mock.routes[`GET ${C2}/runs/p2`] = failedPlan(LAB_UNREACHABLE)
+    const dialog = await openShared()
+    await waitFor(() => expect(applyButton(dialog).disabled).toBe(false))
+    const dr = section(dialog, 'PVE-DR')
+    expect(within(dr).getByText('Unreachable: it will be applied when the cluster is reachable again.')).toBeTruthy()
+    expect(within(dr).queryByText(/steps?$/)).toBeNull()
+    expect(within(dialog).queryByText(/Apply is unavailable/)).toBeNull()
+    // The raw error names node addresses of that cluster: only inside its own section.
+    fireEvent.click(within(dr).getByRole('button', { name: /PVE-DR/ }))
+    expect(await within(dr).findByText(`The plan could not be computed: ${LAB_UNREACHABLE}`)).toBeTruthy()
+    expect(within(section(dialog, 'PVE-PROD')).queryByText(/10\.42\.0\.111/)).toBeNull()
+  })
+
+  it('blocks the apply on any other failed plan, gives the reason in its section and says why Apply is disabled', async () => {
+    twoPlans()
+    mock.routes[`GET ${C2}/runs/p2`] = failedPlan('save the revision: duplicate key')
+    const dialog = await openShared()
+    await within(section(dialog, 'PVE-PROD')).findByText('6 steps')
+    const dr = section(dialog, 'PVE-DR')
+    expect(await within(dr).findByText('The plan could not be computed: save the revision: duplicate key')).toBeTruthy()
+    expect(applyButton(dialog).disabled).toBe(true)
+    expect(within(dialog).getByText('Apply is unavailable: the plan of a cluster failed. Open its section for the reason, then recompute.')).toBeTruthy()
+  })
+
+  it('keeps Apply disabled and says why when no cluster could be planned', async () => {
+    mock.routes['POST /plan'] = () => reply(202, { run_id: 'p1', runs: [{ connection_id: 'c1', error: 'no_client' }, { connection_id: 'c2', run_id: 'p2' }] })
+    mock.routes[`GET ${C2}/runs/p2`] = failedPlan(LAB_UNREACHABLE)
+    const dialog = await openShared()
+    expect(await within(dialog).findByText('Apply is unavailable: no cluster could be reached to compute the plan.')).toBeTruthy()
+    expect(applyButton(dialog).disabled).toBe(true)
+  })
+
+  it('says why Apply is disabled when a plan of a cluster comes from an older draft', async () => {
+    twoPlans()
+    mock.routes[`GET ${C2}/runs/p2`] = () => reply(200, { ...planRun({ version: 2 }), id: 'p2', connection_id: 'c2' })
+    const dialog = await openShared()
+    expect(await within(dialog).findByText('Apply is unavailable: recompute the plan, it comes from an older draft.')).toBeTruthy()
+  })
+  describe('a cluster never applied', () => {
+    const NEVER = 'This cluster was never applied: apply again once it is reachable.'
+    const withInactive = () => {
+      mock.routes['GET /policy'] = () => reply(200, policy({
+        zones: [zone('a')], last_revision: REVISION_HEAD, pending_changes: true,
+        clusters: [
+          { connection_id: 'c1', active: true, stop_cluster_disabled: false, policy_id: 'p1', created_at: '2026-11-01T10:00:00Z', activated_at: null },
+          { connection_id: 'c2', active: false, stop_cluster_disabled: false, policy_id: 'p1', created_at: '2026-11-01T10:00:00Z', activated_at: null },
+        ],
+      }))
+    }
+
+    it('says to apply again, not that it catches up, when its plan could not reach it or did not start for no_client', async () => {
+      withInactive()
+      twoPlans()
+      mock.routes[`GET ${C2}/runs/p2`] = failedPlan(LAB_UNREACHABLE)
+      const dialog = await openShared()
+      expect(await within(section(dialog, 'PVE-DR')).findByText(NEVER)).toBeTruthy()
+      expect(within(dialog).queryByText(/reachable again/)).toBeNull()
+      cleanup()
+      forgetSharedReads()
+
+      withInactive()
+      twoPlans({ error: 'no_client' })
+      const again = await openShared()
+      expect(await within(section(again, 'PVE-DR')).findByText(NEVER)).toBeTruthy()
+      expect(within(again).queryByText(/catch up/)).toBeNull()
+    })
+
+    it('says to apply again on its line and in the headline when its application could not reach it', async () => {
+      withInactive()
+      const dialog = await applyBoth(() => reply(200, { ...failedWith(planRun(), 'request failed: dial tcp 10.0.0.2:8006: connect: no route to host'), id: 'a2', kind: 'apply', connection_id: 'c2', result: null }))
+      expect(await within(dialog).findByText('Applied on 1 of 2 clusters: apply again once the cluster never applied is reachable.')).toBeTruthy()
+      expect(within(section(dialog, 'PVE-DR')).getByText(NEVER)).toBeTruthy()
+      expect(within(dialog).queryByText(/reachable again/)).toBeNull()
+    })
   })
 })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 
@@ -26,12 +26,16 @@ import ObjectsTab from './components/ObjectsTab'
 import SecurityGroupsPanel from './components/rules/SecurityGroupsPanel'
 import LoggingTab from './components/LoggingTab'
 import MicrosegTab from './components/microseg/MicrosegTab'
+import ClusterGroupProbe from './components/microseg/ClusterGroupProbe'
+import { entryOf, selectionAfterDissociation, selectorEntries, sharedConnections, visible } from './components/microseg/clusterModel'
+import { ConnectionKindsContext, ConnectionsLabel, useConnectionKinds } from './components/microseg/ConnectionGlyph'
 import { MicrosegWriteContext, useCanManageMicroseg } from './components/microseg/microsegAccess'
 import { connectionOfVm, parseNetworkLink, pickConnection, readStoredConnection, storeConnection, TAB } from './networkLink'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MAIN PAGE, 7 tabs: Dashboard, Micro-segmentation, Firewalling, Logging, Security Groups, IP Sets, Aliases (order = NETWORK_TABS)
 ═══════════════════════════════════════════════════════════════════════════ */
+
 
 export default function NetworkAutomationPage() {
   const theme = useTheme()
@@ -74,6 +78,30 @@ export default function NetworkAutomationPage() {
     || (waitingForVm ? '' : pickConnection(connections, [link.connection, vmConnection, storedConnection]))
   // The live ?vm= (the Overview drops it from the address once the admin picks or clears a target).
   const linkedVm = params?.get('vm') ?? null
+
+  // ── Groups of connections sharing one micro-segmentation policy ──
+  // On the Dashboard and Micro-segmentation tabs (both show the whole policy), the clusters of one group are one entry
+  // of the selector, valued with the group's anchor: the same entry stays selected from one of them to the other. Each
+  // connection's group is read once (a page with a single connection reads none); the other tabs keep the plain list.
+  const [groups, setGroups] = useState<Record<string, string[]>>({})
+  const reportGroup = useCallback((id: string, ids: string[]) => {
+    setGroups(prev => (prev[id]?.join() === ids.join() ? prev : { ...prev, [id]: ids }))
+  }, [])
+  const groupsShown = (activeTab === TAB.microseg || activeTab === TAB.dashboard) && connections.length > 1
+  const selectorItems = useMemo(
+    () => (groupsShown ? selectorEntries(connections, groups) : connections.map(c => ({ value: c.id, label: c.name, ids: [c.id] }))),
+    [groupsShown, connections, groups],
+  )
+  const selectorValue = (selectedConnection && entryOf(selectorItems, selectedConnection)?.value) || selectedConnection
+  // The connection the page is on left its group: stay on the group (a cluster that remains), not on its own new policy.
+  const followGroup = useCallback((left: string, remaining: string[]) => {
+    const next = selectionAfterDissociation(selectedConnection, left, remaining, connections)
+    if (next !== selectedConnection) setPickedConnection(next)
+  }, [selectedConnection, connections])
+  const groupedConnections = useMemo(() => sharedConnections(groups), [groups])
+  // Cluster or standalone node, and its state, for the glyphs of the selector and of the cluster chips: read once.
+  const connectionIds = useMemo(() => connections.map(c => c.id), [connections])
+  const connectionKinds = useConnectionKinds(connectionIds, true)
 
   // ── Data hooks ──
   const {
@@ -153,6 +181,7 @@ export default function NetworkAutomationPage() {
         )}
 
         {/* Main Content Card */}
+        <ConnectionKindsContext.Provider value={connectionKinds}>
         <MicrosegWriteContext.Provider value={canWriteFirewall}>
         <Card sx={{ background: alpha(theme.palette.background.paper, 0.8), backdropFilter: 'blur(10px)', border: `1px solid ${alpha(theme.palette.divider, 0.1)}`, borderRadius: 3, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}` }}>
@@ -169,15 +198,28 @@ export default function NetworkAutomationPage() {
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexShrink: 0, ml: 'auto', px: 2, pt: 1.5, pb: 1 }}>
               <FormControl size="small" sx={{ minWidth: 200 }}>
                 <InputLabel>{t('firewall.connection')}</InputLabel>
-                <Select value={selectedConnection} label={t('firewall.connection')} onChange={(e) => {
-                  setPickedConnection(e.target.value)
-                  setVMFirewallData([])
-                }}>
-                  {connections.map((c) => (
-                    <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
+                {/* A group's label ("PVE-PROD + PVE-DR") is cut with an ellipsis; the whole label shows on hover. */}
+                <Select
+                  value={selectorValue}
+                  label={t('firewall.connection')}
+                  onChange={(e) => {
+                    setPickedConnection(e.target.value)
+                    setVMFirewallData([])
+                  }}
+                  renderValue={(value) => {
+                    const entry = selectorItems.find(c => c.value === value)
+                    return entry ? <ConnectionsLabel connections={visible(entry.ids, connections)} kinds={connectionKinds} title={entry.label} /> : null
+                  }}
+                  sx={{ maxWidth: 320 }}
+                >
+                  {selectorItems.map((c) => (
+                    <MenuItem key={c.value} value={c.value} title={c.label} sx={{ maxWidth: 420 }}>
+                      <ConnectionsLabel connections={visible(c.ids, connections)} kinds={connectionKinds} />
+                    </MenuItem>
                   ))}
                 </Select>
               </FormControl>
+              {groupsShown && connections.map(c => <ClusterGroupProbe key={c.id} connectionId={c.id} onGroup={reportGroup} />)}
               <IconButton onClick={loadFirewallData} disabled={loading || !selectedConnection} size="small">
                 <i className={`ri-refresh-line ${loading ? 'animate-spin' : ''}`} />
               </IconButton>
@@ -196,6 +238,7 @@ export default function NetworkAutomationPage() {
               currentOptions={currentOptions}
               selectedConnection={selectedConnection}
               connectionName={connections.find(c => c.id === selectedConnection)?.name}
+              connections={connections}
               totalRules={totalRules}
               totalIPSetEntries={totalIPSetEntries}
               nodesList={nodesList}
@@ -279,6 +322,7 @@ export default function NetworkAutomationPage() {
               nodesList={nodesList}
               securityGroups={securityGroups}
               firewallMode={firewallMode}
+              connections={connections}
             />
           )}
 
@@ -291,12 +335,16 @@ export default function NetworkAutomationPage() {
               initialSubTab={microsegSubTab ?? undefined}
               initialObservation={observationFocus}
               targetVm={linkedVm}
+              connections={connections}
+              groupedConnections={groupedConnections}
+              onDissociated={followGroup}
               firewall={{ clusterOptions, clusterRules, nodesList, nodeStatus, firewallMode, onComplete: loadFirewallData }}
             />
           )}
 
         </Card>
         </MicrosegWriteContext.Provider>
+        </ConnectionKindsContext.Provider>
       </Box>
     </EnterpriseGuard>
     </ProviderTenantGuard>

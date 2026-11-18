@@ -186,6 +186,22 @@ describe('orchestratorFetch', () => {
     const { orchestratorFetch } = await import('./client')
     await expect(orchestratorFetch('/slow')).rejects.toThrow('Orchestrator request timeout')
   })
+
+  it('aborts the fetch when the caller signal fires, and when it already fired', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({}))
+    const { orchestratorFetch } = await import('./client')
+    const caller = new AbortController()
+
+    await orchestratorFetch('/microseg/c1/clusters', { signal: caller.signal })
+    const sent = fetchMock.mock.calls[0][1].signal as AbortSignal
+
+    expect(sent.aborted).toBe(false)
+    caller.abort()
+    expect(sent.aborted).toBe(true)
+
+    await orchestratorFetch('/microseg/c1/clusters', { signal: caller.signal })
+    expect((fetchMock.mock.calls[1][1].signal as AbortSignal).aborted).toBe(true)
+  })
 })
 
 describe('OrchestratorClient axios-style wrapper', () => {
@@ -718,5 +734,49 @@ describe('orchestratorRelay', () => {
 
     await orchestratorRelay('/microseg/c1/policy', { signal: caller.signal })
     expect((fetchMock.mock.calls[1][1].signal as AbortSignal).aborted).toBe(true)
+  })
+
+  it('leaves no listener on the caller signal, whether the call answered or failed', async () => {
+    const { getEventListeners } = await import('node:events')
+    const { orchestratorFetch, orchestratorRelay } = await import('./client')
+    const caller = new AbortController()
+
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }))
+    await orchestratorRelay('/microseg/c1/policy', { signal: caller.signal })
+    fetchMock.mockRejectedValueOnce(Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } }))
+    await expect(orchestratorRelay('/microseg/c1/policy', { signal: caller.signal })).rejects.toMatchObject({ code: 'ORCHESTRATOR_UNAVAILABLE' })
+    fetchMock.mockResolvedValueOnce(jsonResponse({ clusters: [] }))
+    await orchestratorFetch('/microseg/c1/clusters', { signal: caller.signal })
+    fetchMock.mockResolvedValueOnce(textErrorResponse(500, 'boom'))
+    await expect(orchestratorFetch('/microseg/c1/clusters', { signal: caller.signal })).rejects.toThrow('Orchestrator 500')
+
+    expect(getEventListeners(caller.signal, 'abort')).toHaveLength(0)
+  })
+
+  it('still aborts the answer being read when the caller goes away after the headers came', async () => {
+    let bodySignal: AbortSignal | undefined
+    fetchMock.mockImplementationOnce(async (_url: string, init: RequestInit) => {
+      bodySignal = init.signal as AbortSignal
+      return new Response('{}', { status: 200 })
+    })
+    const { orchestratorRelay } = await import('./client')
+    const caller = new AbortController()
+
+    await orchestratorRelay('/microseg/c1/policy', { signal: caller.signal })
+    expect(bodySignal?.aborted).toBe(false)
+    caller.abort()
+    expect(bodySignal?.aborted).toBe(true)
+  })
+
+  it('adds the headers a caller gives, never in place of the server ones', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('t-1')
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }))
+    const { orchestratorRelay } = await import('./client')
+
+    await orchestratorRelay('/microseg/c1/policy', { headers: { 'X-Microseg-Clusters': 'c1,c2', 'X-Tenant-ID': 't-9' } })
+    const { headers } = fetchMock.mock.calls[0][1]
+
+    expect(headers['X-Microseg-Clusters']).toBe('c1,c2')
+    expect(headers['X-Tenant-ID']).toBe('t-1')
   })
 })

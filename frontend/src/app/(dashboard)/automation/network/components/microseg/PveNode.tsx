@@ -7,9 +7,10 @@ import { useTranslations } from 'next-intl'
 
 import { NodeIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 
-import { UNZONED_COLOR } from './nodeViewModel'
+import ConnectionGlyph, { useConnectionKind } from './ConnectionGlyph'
+import { FRAME_HEAD, UNZONED_COLOR } from './nodeViewModel'
 import { Handles, circleTitleSx } from './ZoneNode'
-import type { PveNodeData } from './zoneGraph'
+import type { PveClusterData, PveNodeData } from './zoneGraph'
 
 /** The zones drawn as dots under the name of a node; a "+N" stands for the others (its tooltip names them). */
 export const MAX_ZONE_DOTS = 8
@@ -51,7 +52,7 @@ function PveNodeComponent({ data }: NodeProps) {
   return (
     <Box
       role='group'
-      aria-label={t('aria', { name: d.node, guests })}
+      aria-label={d.cluster ? t('ariaCluster', { name: d.node, cluster: d.cluster.name, guests }) : t('aria', { name: d.node, guests })}
       sx={{ position: 'relative', width: 2 * r, height: 2 * r, boxSizing: 'border-box', borderRadius: '50%', border: '2px solid', borderColor: 'text.secondary', bgcolor: 'action.hover' }}
     >
       <Handles />
@@ -82,3 +83,27 @@ function PveNodeComponent({ data }: NodeProps) {
 }
 
 export const PveNode = memo(PveNodeComponent)
+
+/**
+ * On the node view of a shared policy, the frame around the nodes of one cluster: a dashed outline in the colour of the
+ * dividers (the colours of the map belong to the zones and the flows), headed by the glyph of the cluster (or of the
+ * standalone node) and its name, cut with an ellipsis. It takes no pointer: the map behind it pans as usual.
+ */
+function PveClusterComponent({ data }: NodeProps) {
+  const d = data as unknown as PveClusterData
+  const kind = useConnectionKind(d.cluster.id)
+  return (
+    <Box
+      role='group'
+      aria-label={d.cluster.name}
+      sx={{ position: 'relative', width: d.width, height: d.height, boxSizing: 'border-box', border: '1px dashed', borderColor: 'divider', borderRadius: 2 }}
+    >
+      <Box sx={{ position: 'absolute', top: 0, left: 16, right: 16, height: FRAME_HEAD, display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+        <ConnectionGlyph kind={kind} />
+        <Typography noWrap fontWeight={600} sx={{ minWidth: 0, fontSize: '0.9rem' }}>{d.cluster.name}</Typography>
+      </Box>
+    </Box>
+  )
+}
+
+export const PveCluster = memo(PveClusterComponent)

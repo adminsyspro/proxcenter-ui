@@ -1,14 +1,17 @@
 'use client'
 
+import { useState } from 'react'
 import { Box, Button, Checkbox, Chip, IconButton, TableCell, TableRow, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import type { MicrosegDrift, MicrosegZone } from '@/lib/microseg/types'
 
+import ClusterChip from './ClusterChip'
 import type { DriftLabel } from './driftLabels'
+import EnableClusterFirewallDialog from './EnableClusterFirewallDialog'
 import type { PolicyGuest } from './zoneModel'
-import { WriteTip, useMicrosegWrite } from './microsegAccess'
+import { WriteTip, useMicrosegClusterWrite, useMicrosegWrite } from './microsegAccess'
 import { ZoneShield } from './ZoneNode'
 import TruncatedText from './TruncatedText'
 
@@ -18,6 +21,10 @@ const OBJECT_GLYPH: Record<string, string> = {
   ipset_out_of_sync: 'ri-list-settings-line',
   object_collision: 'ri-error-warning-line',
   local_set_desync: 'ri-list-settings-line',
+  peer_unreadable: 'ri-link-unlink',
+  stop_lift_held: 'ri-shield-cross-line',
+  cluster_firewall_off: 'ri-shield-cross-line',
+  firewall_service_stopped: 'ri-server-line',
 }
 
 type KindChipColor = 'warning' | 'error' | 'info'
@@ -38,7 +45,14 @@ export const KIND_CHIP: Record<string, { color: KindChipColor; icon: string }> =
   known_rule_extra: { color: 'info', icon: 'ri-bookmark-3-line' },
   local_set_desync: { color: 'info', icon: 'ri-database-2-line' },
   egress_no_subnet: { color: 'warning', icon: 'ri-map-pin-line' },
+  peer_unreadable: { color: 'warning', icon: 'ri-link-unlink' },
+  stop_lift_held: { color: 'error', icon: 'ri-shield-cross-line' },
+  cluster_firewall_off: { color: 'error', icon: 'ri-shield-cross-line' },
+  firewall_service_stopped: { color: 'error', icon: 'ri-server-line' },
 }
+/** The drifts of a cluster firewall that reads off: `object` is the connection ID, and the row offers to turn it back on. */
+const FIREWALL_OFF_KINDS: ReadonlySet<string> = new Set(['cluster_firewall_off', 'stop_lift_held'])
+
 const UNKNOWN_KIND_CHIP = { color: 'error', icon: 'ri-alert-line' } as const
 
 /**
@@ -111,19 +125,31 @@ export type DriftRowProps = {
   onFix: (anchor: HTMLElement) => void
   onIgnore: () => void
   onRestore: () => void
+  /** On a shared policy: the cluster the drift was read from, its chip after the glyph. */
+  cluster?: { id: string; name: string }
+  /** False for a drift that cannot be ignored (one about a cluster of the policy): no Ignore button. */
+  ignorable?: boolean
+  /** The cluster firewall was turned back on from the row: the drifts are read again. */
+  onChanged?: () => void
 }
 
 /**
  * One drift on one row of the Drifts table: a checkbox, the object (glyph, name, vmid and node, or the cluster
  * object), its zone, what differs, since when, and Fix (assign to a zone or open the plan) and Ignore.
  */
-export default function DriftRow({ drift, label, subject, guest, zone = null, since, ignored, hasZones, selected, onSelect, onFix, onIgnore, onRestore }: DriftRowProps) {
+export default function DriftRow({ drift, label, subject, guest, zone = null, since, ignored, hasZones, selected, onSelect, onFix, onIgnore, onRestore, cluster, ignorable = true, onChanged }: DriftRowProps) {
   const t = useTranslations('microsegPilot.drifts')
-  const { canWrite } = useMicrosegWrite()
+  const { canWrite: canPlan } = useMicrosegWrite()
+  const { canWriteOn } = useMicrosegClusterWrite()
   const assign = label.fix === 'assign'
+  // Assigning writes the members of the guest's cluster (its own right); the plan is a write of the whole policy.
+  const canWrite = assign ? canWriteOn(cluster?.id ?? '') : canPlan
   const noZone = assign && !hasZones
   const where = drift.guest ? `${drift.guest.vmid} · ${guest?.node ?? drift.guest.node}` : null
-  const differs = label.hint ? `${label.detail} ${label.hint}` : label.detail
+  // The cluster whose firewall reads off: the drift names it by its connection ID.
+  const firewallOf = FIREWALL_OFF_KINDS.has(drift.kind) && drift.object ? drift.object : null
+  const [enabling, setEnabling] = useState(false)
+  const differs = [label.detail, label.hint, label.note].filter(Boolean).join(' ')
 
   return (
     <TableRow aria-label={`${label.title}: ${subject}`} selected={selected} sx={{ opacity: ignored ? 0.6 : 1 }}>
@@ -133,19 +159,30 @@ export default function DriftRow({ drift, label, subject, guest, zone = null, si
       <TableCell sx={{ maxWidth: 260 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
           <DriftGlyph drift={drift} guest={guest} />
+          {cluster && <ClusterChip connectionId={cluster.id} name={cluster.name} compact />}
           <TruncatedText text={subject} fontWeight={600} sx={{ minWidth: 0 }} />
           {where && <Typography noWrap variant='body2' color='text.secondary' sx={{ flexShrink: 0 }}>{where}</Typography>}
         </Box>
       </TableCell>
       <TableCell sx={{ maxWidth: 180 }}><DriftZone zone={zone} /></TableCell>
       <TableCell sx={{ maxWidth: 380 }}>
-        <TruncatedText text={label.detail} title={differs} variant='body2' data-testid='drift-differs' />
+        {label.note ? (
+          // A removal on hold is a remark, not an error: a muted clock with the note on hover, the detail on the same line.
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+            <Tooltip title={label.note}>
+              <Box component='i' className='ri-time-line' role='img' aria-label={label.note} data-testid='drift-held' sx={{ fontSize: 16, color: 'text.secondary', flexShrink: 0 }} />
+            </Tooltip>
+            <TruncatedText text={label.detail} title={differs} variant='body2' data-testid='drift-differs' sx={{ minWidth: 0 }} />
+          </Box>
+        ) : (
+          <TruncatedText text={label.detail} title={differs} variant='body2' data-testid='drift-differs' />
+        )}
       </TableCell>
       <TableCell sx={{ whiteSpace: 'nowrap' }}><Typography variant='body2' color='text.secondary'>{since}</Typography></TableCell>
       <TableCell align='right' sx={{ whiteSpace: 'nowrap' }}>
         {ignored && <Chip size='small' variant='outlined' label={t('ignoredChip')} sx={{ mr: 1 }} />}
         {!ignored && label.fix && (
-          <WriteTip title={noZone ? t('noZone') : ''}>
+          <WriteTip allowed={assign ? canWrite : undefined} title={noZone ? t('noZone') : ''}>
             <Button
               size='small'
               variant='outlined'
@@ -158,12 +195,39 @@ export default function DriftRow({ drift, label, subject, guest, zone = null, si
             </Button>
           </WriteTip>
         )}
-        {ignored ? (
-          <Button size='small' onClick={onRestore} sx={{ whiteSpace: 'nowrap' }}>{t('restore')}</Button>
-        ) : (
+        {firewallOf && (
+          <WriteTip allowed={canWriteOn(firewallOf)}>
+            <Button
+              size='small'
+              variant='outlined'
+              disabled={!canWriteOn(firewallOf)}
+              startIcon={<i className='ri-shield-check-line' />}
+              onClick={() => setEnabling(true)}
+              data-testid='drift-enable-firewall'
+              sx={{ whiteSpace: 'nowrap', mr: 0.5 }}
+            >
+              {t('enableFirewall.button')}
+            </Button>
+          </WriteTip>
+        )}
+        {firewallOf && (
+          <EnableClusterFirewallDialog
+            open={enabling}
+            connectionId={firewallOf}
+            name={cluster?.name ?? null}
+            onClose={() => setEnabling(false)}
+            onDone={() => onChanged?.()}
+          />
+        )}
+        {ignored && <Button size='small' onClick={onRestore} sx={{ whiteSpace: 'nowrap' }}>{t('restore')}</Button>}
+        {!ignored && ignorable && (
           <Tooltip title={t('ignore')}>
             <IconButton size='small' aria-label={t('ignore')} onClick={onIgnore}><i className='ri-eye-off-line' /></IconButton>
           </Tooltip>
+        )}
+        {/* No Ignore on this row: the same room is kept, so its button lines up with those of the other rows. */}
+        {!ignored && !ignorable && (
+          <IconButton size='small' disabled aria-hidden tabIndex={-1} data-testid='drift-ignore-spacer' sx={{ visibility: 'hidden' }}><i className='ri-eye-off-line' /></IconButton>
         )}
       </TableCell>
     </TableRow>

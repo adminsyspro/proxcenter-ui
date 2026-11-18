@@ -358,3 +358,44 @@ describe('ignoring a drift', () => {
     }
   })
 })
+
+describe('turning a cluster firewall back on', () => {
+  const OFF: MicrosegDrift[] = [{ kind: 'cluster_firewall_off', object: 'c1', detail: { name: 'c1' } }]
+  const offRow = () => screen.findByRole('row', { name: /^Cluster firewall of .* is off|^The cluster firewall of an associated cluster is off/ })
+
+  it('offers the button on the drift, confirms in a dialog, posts once and reads the drifts again', async () => {
+    setup(OFF)
+    mock.routes['POST /cluster-firewall/enable'] = () => reply(200, { ok: true, cluster_firewall: 'enabled' })
+    const line = await offRow()
+    expect(within(line).queryByRole('button', { name: 'Ignore' })).toBeNull()
+    fireEvent.click(within(line).getByTestId('drift-enable-firewall'))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/^Checked first: the node access rules/)).toBeTruthy()
+    expect(within(dialog).getByText(/^Under an emergency stop, it is turned back on at the lift/)).toBeTruthy()
+    expect(calls('POST /cluster-firewall/enable')).toHaveLength(0)
+    const reads = calls('GET /drifts').length
+    const statusReads = calls('GET /status').length
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Turn back on' }))
+    await waitFor(() => expect(calls('POST /cluster-firewall/enable')).toHaveLength(1))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(calls('GET /drifts').length).toBeGreaterThan(reads))
+    await waitFor(() => expect(calls('GET /status').length).toBeGreaterThan(statusReads))
+  })
+
+  it('keeps the dialog open on a refusal and says why', async () => {
+    setup(OFF)
+    mock.routes['POST /cluster-firewall/enable'] = () => reply(409, { code: 'SOCLE_MISSING', error: 'rule SSH 22 missing' })
+    fireEvent.click(within(await offRow()).getByTestId('drift-enable-firewall'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Turn back on' }))
+    expect(await within(dialog).findByText(/so the cluster firewall was left off/)).toBeTruthy()
+    expect(within(dialog).getByText('rule SSH 22 missing')).toBeTruthy()
+    expect(screen.getByRole('dialog')).toBeTruthy()
+  })
+
+  it('offers no such button on the other drifts', async () => {
+    setup()
+    await row('Name already used in Proxmox: pcz-db')
+    expect(screen.queryByTestId('drift-enable-firewall')).toBeNull()
+  })
+})

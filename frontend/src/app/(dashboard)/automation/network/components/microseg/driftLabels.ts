@@ -21,7 +21,26 @@ export const DRIFT_KINDS = [
  */
 export type DriftFix = 'assign' | 'plan'
 
-export type DriftLabel = { title: string; detail: string; fixable: boolean; fix: DriftFix | null; hint: string | null }
+/** `note`: a remark on the row that is no error (a removal on hold while an associated cluster cannot be read). */
+export type DriftLabel = { title: string; detail: string; fixable: boolean; fix: DriftFix | null; hint: string | null; note?: string | null }
+
+/**
+ * The drifts about the clusters of a shared policy themselves, first in the list: an associated cluster that cannot be
+ * read (`object` is its connection ID), and a cluster firewall kept off after an emergency stop was lifted (`object` is
+ * that cluster's connection ID), a cluster whose firewall was switched off in Proxmox (`object` is its connection ID) and a node
+ * whose firewall service is stopped (`object` is the node name). None has a fix here nor can be ignored: they end on their own once the cause is gone.
+ */
+export const CLUSTER_DRIFT_KINDS = ['cluster_firewall_off', 'firewall_service_stopped', 'stop_lift_held', 'peer_unreadable'] as const
+
+const isClusterKind = (kind: string): kind is (typeof CLUSTER_DRIFT_KINDS)[number] => (CLUSTER_DRIFT_KINDS as readonly string[]).includes(kind)
+
+/** Whether "Ignore" is offered for a drift: never for a drift about a cluster of the policy. */
+export function canIgnoreDrift(d: Pick<MicrosegDrift, 'kind'>): boolean {
+  return !isClusterKind(d.kind)
+}
+
+/** The kinds whose `detail.held` says a removal waits until every associated cluster can be read. */
+const HOLDABLE = new Set(['ipset_out_of_sync', 'local_set_desync'])
 
 /** `t` is the translator of the `microsegPilot.drifts.kind` namespace. */
 type Translate = (key: string, values?: Record<string, string | number>) => string
@@ -107,10 +126,52 @@ function hintKeyOf(d: MicrosegDrift, collided: boolean): string {
   return collided ? `${d.kind}.hintCollision` : `${d.kind}.hint`
 }
 
-/** Title, one-line detail and fix of a drift; an unknown kind gets a generic label and no fix. */
-export function driftLabel(d: MicrosegDrift, t: Translate): DriftLabel {
+/**
+ * The label of a drift about a cluster: named as the user knows it (`clusterName`), never with the name or the ID the
+ * backend sent, and in general words ("an associated cluster") for a cluster the user cannot see.
+ */
+function clusterDriftLabel(d: MicrosegDrift, t: Translate, clusterName?: (id: string) => string): DriftLabel {
+  // A node is named by the engine itself: its name is not a cluster the user may or may not see.
+  if (d.kind === 'firewall_service_stopped') {
+    const node = nodeOfDrift(d)
+    return { title: t(`${d.kind}.title`, { node }), detail: t(`${d.kind}.detail`, { node }), fixable: false, fix: null, hint: t(`${d.kind}.hint`), note: null }
+  }
+  const id = d.object ?? ''
+  const name = id ? clusterName?.(id) : undefined
+  const known = !!name && name !== id
+  const values: Record<string, string> = known ? { name } : {}
+  const suffix = known ? '' : 'Unknown'
+  return {
+    title: t(`${d.kind}.title${suffix}`, values),
+    detail: t(`${d.kind}.detail${suffix}`, values),
+    fixable: false,
+    fix: null,
+    hint: t(`${d.kind}.hint`),
+    note: null,
+  }
+}
+
+/** The node a `firewall_service_stopped` drift is about: its `detail.node`, else its object. */
+function nodeOfDrift(d: MicrosegDrift): string {
+  return text(d.detail?.node, text(d.object))
+}
+
+/** The name a drift about a cluster shows in its Object column: the user's name for it, else `other`. */
+export function clusterDriftSubject(d: MicrosegDrift, other: string, clusterName?: (id: string) => string): string {
+  if (d.kind === 'firewall_service_stopped') return nodeOfDrift(d)
+  const id = d.object ?? ''
+  const name = id ? clusterName?.(id) : undefined
+  return name && name !== id ? name : other
+}
+
+/**
+ * Title, one-line detail and fix of a drift; an unknown kind gets a generic label and no fix. `clusterName` names the
+ * clusters of a shared policy (the drifts about a cluster).
+ */
+export function driftLabel(d: MicrosegDrift, t: Translate, clusterName?: (id: string) => string): DriftLabel {
+  if (isClusterKind(d.kind)) return clusterDriftLabel(d, t, clusterName)
   const values = valuesOf(d, t)
-  if (!isKnown(d.kind)) return { title: t('generic.title', values), detail: t('generic.detail', values), fixable: false, fix: null, hint: null }
+  if (!isKnown(d.kind)) return { title: t('generic.title', values), detail: t('generic.detail', values), fixable: false, fix: null, hint: null, note: null }
   // A foreign rule inside one of our groups has no guest: its detail names the group.
   const variant = detailVariant(d)
   const detailKey = `${d.kind}.${variant ? DETAIL_KEY[variant] : 'detail'}`
@@ -118,13 +179,19 @@ export function driftLabel(d: MicrosegDrift, t: Translate): DriftLabel {
   const collided = variant === 'collision'
   const fix = collided ? null : FIX_OF[d.kind]
   const hintKey = hintKeyOf(d, collided)
-  return { title: t(`${d.kind}.title`, values), detail: t(detailKey, values), fixable: fix !== null, fix, hint: fix === null ? t(hintKey, values) : null }
+  const note = HOLDABLE.has(d.kind) && d.detail?.held === true ? t('heldNote') : null
+  return { title: t(`${d.kind}.title`, values), detail: t(detailKey, values), fixable: fix !== null, fix, hint: fix === null ? t(hintKey, values) : null, note }
 }
 
 /** Identity of a drift for "Ignore": the kind, the guest (type and vmid, like the backend), the object and the rule position. */
 export function driftKey(d: MicrosegDrift): string {
   const pos = typeof d.detail?.pos === 'number' ? String(d.detail.pos) : ''
   return [d.kind, d.guest ? guestKey(d.guest) : '', d.object ?? '', pos].join('|')
+}
+
+/** Identity of a drift of one cluster of a shared policy: two clusters can report the same guest or object. */
+export function clusterDriftKey(d: MicrosegDrift, connectionId: string): string {
+  return `${connectionId}|${driftKey(d)}`
 }
 
 /** The zone a drift is about (its detail names it by name or id), when the policy holds it. */

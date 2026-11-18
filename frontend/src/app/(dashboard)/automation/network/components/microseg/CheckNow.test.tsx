@@ -10,13 +10,15 @@ import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProvider
 import RBACContext, { type RBACContextValue } from '@/contexts/RBACContext'
 import type { MicrosegRun, MicrosegRunResult } from '@/lib/microseg/types'
 
-import { calls, mock, policy, renderTab, reply, resetMocks, status, zone } from './microsegTestKit'
+import { GUESTS_ROUTE, calls, mock, policy, renderTab, reply, resetMocks, status, zone } from './microsegTestKit'
 import MicrosegTab from './MicrosegTab'
+import CheckDialog from './CheckDialog'
+import type { GroupCheck, MicrosegCheck } from './useMicrosegCheck'
 
 const REQUESTED = '2026-11-03T10:00:00Z'
 
 const runOf = (id: string, kind: string, startedAt: string, over: Partial<MicrosegRun> = {}): MicrosegRun => ({
-  id, policy_id: 'p1', kind, status: 'done', started_at: startedAt, duration_ms: 4200, api_calls: 111, writes: 0, error: '', ...over,
+  id, policy_id: 'p1', connection_id: 'c1', kind, status: 'done', started_at: startedAt, duration_ms: 4200, api_calls: 111, writes: 0, error: '', ...over,
 })
 const result = (over: Partial<MicrosegRunResult>) => ({ guests: 0, members: 0, steps: 0, drifts: 0, ...over }) as MicrosegRunResult
 
@@ -238,5 +240,13 @@ describe('Check window', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Full check' })).toBeNull())
+  })
+})
+
+describe('Check window of a shared policy', () => {
+  it('reads the guests of the tab connection while the group has no cluster yet, as the other screens fall back to it', async () => {
+    const group = { clusters: [], runs: null, polled: [], done: false, active: false, started: false, start: vi.fn() } as unknown as GroupCheck
+    renderTab(<CheckDialog check={{} as MicrosegCheck} group={group} connectionId='c1' onClose={vi.fn()} onOpenDrifts={vi.fn()} />)
+    await waitFor(() => expect(calls(`GET ${GUESTS_ROUTE}`).length).toBeGreaterThan(0))
   })
 })

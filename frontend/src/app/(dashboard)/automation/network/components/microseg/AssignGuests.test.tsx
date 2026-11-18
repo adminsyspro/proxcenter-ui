@@ -8,8 +8,12 @@ import { describe, expect, it } from 'vitest'
 import { within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
-import { calls, mock, policy, reply, revisionWithSnapshot, REVISION_HEAD } from './microsegTestKit'
+import type { PendingMember } from '@/lib/microseg/types'
+
+// The kit first: it stubs the map's stylesheet before MicrosegTab is loaded.
+import { calls, GUESTS_ROUTE, mock, policy, renderTab, reply, revisionWithSnapshot, REVISION_HEAD } from './microsegTestKit'
 import { body, db, installFreshMocks, setup, vm, web } from './policyTestKit'
+import MicrosegTab from './MicrosegTab'
 
 installFreshMocks()
 
@@ -81,7 +85,7 @@ describe('assign guests dialog: list', () => {
     setup({
       zones: [web()],
       vms: [vm(100, 'tagged', ['zone-web']), vm(101, 'queued', []), vm(102, 'free', [])],
-      pending_members: [{ id: 'p1', policy_id: 'p1', node: 'pve1', type: 'qemu', vmid: 101, zone_id: 'zw' }],
+      pending_members: [{ id: 'p1', policy_id: 'p1', connection_id: 'c1', node: 'pve1', type: 'qemu', vmid: 101, zone_id: 'zw' }],
     })
     const dialog = await openDialog()
     const tagged = await within(dialog).findByRole('listitem', { name: 'tagged' })
@@ -97,7 +101,7 @@ describe('assign guests dialog: list', () => {
     setup({
       zones: [web()],
       vms: [...manyGuests(60), vm(100, 'tagged', ['zone-web']), vm(101, 'queued', [])],
-      pending_members: [{ id: 'p1', policy_id: 'p1', node: 'pve1', type: 'qemu', vmid: 101, zone_id: 'zw' }],
+      pending_members: [{ id: 'p1', policy_id: 'p1', connection_id: 'c1', node: 'pve1', type: 'qemu', vmid: 101, zone_id: 'zw' }],
     })
     const dialog = await openDialog()
     expect(await within(dialog).findByText('1-25 of 62')).toBeTruthy()
@@ -123,7 +127,7 @@ describe('assign guests dialog: list', () => {
     setup({
       zones: [web(), db()],
       vms: [vm(100, 'queued-db', [])],
-      pending_members: [{ id: 'p1', policy_id: 'p1', node: 'pve1', type: 'qemu', vmid: 100, zone_id: 'zd' }],
+      pending_members: [{ id: 'p1', policy_id: 'p1', connection_id: 'c1', node: 'pve1', type: 'qemu', vmid: 100, zone_id: 'zd' }],
     })
     const dialog = await openDialog()
     const row = await within(dialog).findByRole('listitem', { name: 'queued-db' })
@@ -275,7 +279,7 @@ describe('remove from zone', () => {
     mock.routes['POST /members'] = () => reply(200, { version: 4 })
     setup({
       zones: [web()], vms: [],
-      pending_members: [{ id: 'p1', policy_id: 'p1', node: 'pve9', type: 'lxc', vmid: 400, zone_id: 'zw' }],
+      pending_members: [{ id: 'p1', policy_id: 'p1', connection_id: 'c1', node: 'pve9', type: 'lxc', vmid: 400, zone_id: 'zw' }],
     })
     const row = await openDetails('web')
     fireEvent.click(await within(row).findByRole('button', { name: 'Remove from zone' }))
@@ -297,7 +301,7 @@ describe('remove from zone', () => {
 })
 
 describe('queued removals and moves of tagged members', () => {
-  const queued = (zoneId: string, node = 'pve1') => [{ id: 'p1', policy_id: 'p1', node, type: 'qemu' as const, vmid: 100, zone_id: zoneId }]
+  const queued = (zoneId: string, node = 'pve1') => [{ id: 'p1', policy_id: 'p1', connection_id: 'c1', node, type: 'qemu' as const, vmid: 100, zone_id: zoneId }]
 
   it('shows the removal after "Remove from zone" once the policy reloads with the pending row', async () => {
     let pendingRows: ReturnType<typeof queued> = []
@@ -399,5 +403,156 @@ describe('queued removals and moves of tagged members', () => {
 
     release(reply(200, { version: 4 }))
     await waitFor(() => expect(buttons().every(b => !b.disabled)).toBe(true))
+  })
+})
+
+describe('shared policy: guests of every cluster', () => {
+  const C2_MEMBERS = 'POST /api/v1/firewall/microseg/c2/members'
+  const CONNECTIONS = [{ id: 'c1', name: 'PVE-A' }, { id: 'c2', name: 'PVE-B' }]
+  const cluster = (connection_id: string) =>
+    ({ connection_id, active: true, stop_cluster_disabled: false, policy_id: 'p1', created_at: '2026-11-01T10:00:00Z', activated_at: null })
+  const ct = (name: string, tags: string[] = []) => vm(100, name, tags, { type: 'lxc' })
+
+  /** A policy shared by c1 (PVE-A) and c2 (PVE-B), opened from c1; `c2Vms` a number fails c2's guest read. */
+  function setupShared(opts: { c1Vms: unknown[]; c2Vms: unknown[] | number; pending_members?: PendingMember[] }) {
+    window.localStorage.setItem('microseg.subTab', 'policy')
+    mock.routes['GET /clusters'] = () => reply(200, { clusters: [cluster('c1'), cluster('c2')], max: 8 })
+    mock.routes['GET /policy'] = () => reply(200, policy({
+      zones: [web(), db()], flows: [], exceptions: [], pending_members: opts.pending_members ?? [], last_revision: REVISION_HEAD,
+      clusters: [cluster('c1'), cluster('c2')],
+    }))
+    mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: opts.c1Vms } })
+    mock.routes['GET /api/v1/vms?connId=c2'] = () => (typeof opts.c2Vms === 'number' ? reply(opts.c2Vms, { error: 'down' }) : reply(200, { data: { vms: opts.c2Vms } }))
+    return renderTab(<MicrosegTab connectionId='c1' connections={CONNECTIONS} />)
+  }
+
+  /** The dialog once both clusters' guests are listed. */
+  async function openShared(names: string[]) {
+    const dialog = await openDialog()
+    for (const name of names) await within(dialog).findByRole('listitem', { name })
+    return dialog
+  }
+
+  it('lists two guests with the same type and VMID on two clusters, each with its cluster chip, selected apart', async () => {
+    setupShared({ c1Vms: [ct('ct-a')], c2Vms: [ct('ct-b')] })
+    const dialog = await openShared(['ct-a', 'ct-b'])
+    expect(within(within(dialog).getByRole('listitem', { name: 'ct-a' })).getByText('PVE-A')).toBeTruthy()
+    expect(within(within(dialog).getByRole('listitem', { name: 'ct-b' })).getByText('PVE-B')).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'ct-a' }))
+    expect((within(dialog).getByRole('checkbox', { name: 'ct-a' }) as HTMLInputElement).checked).toBe(true)
+    expect((within(dialog).getByRole('checkbox', { name: 'ct-b' }) as HTMLInputElement).checked).toBe(false)
+    expect(within(dialog).getByText('Selected: 1')).toBeTruthy()
+  })
+
+  it('posts members once per cluster through its own URL, the second with the version of the first answer', async () => {
+    mock.routes['POST /members'] = () => reply(200, { version: 4 })
+    mock.routes[C2_MEMBERS] = () => reply(200, { version: 5 })
+    setupShared({ c1Vms: [ct('ct-a')], c2Vms: [ct('ct-b')] })
+    const dialog = await openShared(['ct-a', 'ct-b'])
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'ct-a' }))
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'ct-b' }))
+    fireEvent.click(assignButton(dialog, 'Assign 2 guests'))
+
+    await waitFor(() => expect(calls(C2_MEMBERS)).toHaveLength(1))
+    expect(calls('POST /members')).toHaveLength(1)
+    const first = body(calls('POST /members')[0][1] as RequestInit)
+    const second = body(calls(C2_MEMBERS)[0][1] as RequestInit)
+    expect(first).toEqual({ version: 3, zone_id: 'zw', guests: [{ node: 'pve1', type: 'lxc', vmid: 100 }] })
+    expect(second).toEqual({ version: 4, zone_id: 'zw', guests: [{ node: 'pve1', type: 'lxc', vmid: 100 }] })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  it('says which cluster was saved when the second cluster refuses, reloads the policy and does not retry', async () => {
+    mock.routes['POST /members'] = () => reply(200, { version: 4 })
+    mock.routes[C2_MEMBERS] = () => reply(409, { code: 'BUSY', error: 'busy' })
+    setupShared({ c1Vms: [ct('ct-a')], c2Vms: [ct('ct-b')] })
+    const dialog = await openShared(['ct-a', 'ct-b'])
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'ct-a' }))
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'ct-b' }))
+    const before = calls('GET /policy').length
+    fireEvent.click(assignButton(dialog, 'Assign 2 guests'))
+
+    expect(await within(dialog).findByText(/Saved on PVE-A only/)).toBeTruthy()
+    await waitFor(() => expect(calls('GET /policy').length).toBeGreaterThan(before))
+    expect(calls('POST /members')).toHaveLength(1)
+    expect(calls(C2_MEMBERS)).toHaveLength(1)
+    expect(screen.getByRole('dialog', { name: 'Assign guests to web' })).toBeTruthy()
+  })
+
+  it('marks only the guest of the cluster a pending member belongs to', async () => {
+    setupShared({
+      c1Vms: [ct('ct-a')], c2Vms: [ct('ct-b')],
+      pending_members: [{ id: 'p1', policy_id: 'p1', connection_id: 'c2', node: 'pve1', type: 'lxc', vmid: 100, zone_id: 'zw' }],
+    })
+    const dialog = await openShared(['ct-a', 'ct-b'])
+    expect(within(within(dialog).getByRole('listitem', { name: 'ct-b' })).getByText('Pending')).toBeTruthy()
+    expect(within(within(dialog).getByRole('listitem', { name: 'ct-a' })).queryByText('Pending')).toBeNull()
+    expect((within(dialog).getByRole('checkbox', { name: 'ct-a' }) as HTMLInputElement).disabled).toBe(false)
+  })
+
+  it('keeps the guests of a cluster that answers when the other one fails, and says which one in one line', async () => {
+    setupShared({ c1Vms: [ct('ct-a')], c2Vms: 500 })
+    const dialog = await openShared(['ct-a'])
+    expect(await within(dialog).findByText('The guests of PVE-B could not be read: they are not listed.')).toBeTruthy()
+    expect(within(dialog).queryByText('The guest list could not be read.')).toBeNull()
+  })
+
+  it('offers the exceptions editor the members of its own cluster only (a conn-2 lxc 100 is not conn-1\'s)', async () => {
+    setupShared({ c1Vms: [ct('ct-a')], c2Vms: [ct('ct-b', ['zone-web'])] })
+    const details = await openDetails('web')
+    await within(details).findByRole('listitem', { name: 'ct-b' })
+    fireEvent.click(within(details).getByRole('button', { name: 'Add an exception' }))
+    const dialog = await screen.findByRole('dialog', { name: 'New exception' })
+    const field = within(dialog).getByRole('combobox', { name: 'Destination VMs' })
+    fireEvent.mouseDown(field)
+    const list = await screen.findByRole('listbox')
+    expect(list.textContent).not.toMatch(/Members of the zone/)
+    expect(list.textContent).toMatch(/Not members yet.*ct-a/)
+  })
+
+  it('cuts a long cluster name in its chip and keeps it whole in the title', async () => {
+    setupShared({ c1Vms: [ct('ct-a')], c2Vms: [ct('ct-b')] })
+    const dialog = await openShared(['ct-a', 'ct-b'])
+    const chip = within(within(dialog).getByRole('listitem', { name: 'ct-b' })).getByText('PVE-B').closest('.MuiChip-root') as HTMLElement
+    expect(chip.getAttribute('title')).toBe('PVE-B')
+  })
+
+  it('removes a member of the other cluster through that cluster, and shows its chip on the member line', async () => {
+    mock.routes[C2_MEMBERS] = () => reply(200, { version: 4 })
+    setupShared({ c1Vms: [ct('ct-a')], c2Vms: [ct('ct-b', ['zone-web'])] })
+    const details = await openDetails('web')
+    const line = await within(details).findByRole('listitem', { name: 'ct-b' })
+    expect(within(line).getByText('PVE-B')).toBeTruthy()
+    fireEvent.click(within(line).getByRole('button', { name: 'Remove from zone' }))
+    await waitFor(() => expect(calls(C2_MEMBERS)).toHaveLength(1))
+    expect(calls('POST /members')).toHaveLength(0)
+    expect(body(calls(C2_MEMBERS)[0][1] as RequestInit)).toEqual({ version: 3, zone_id: '', guests: [{ node: 'pve1', type: 'lxc', vmid: 100 }] })
+  })
+})
+
+describe.each([['empty', ''], ['absent', undefined]])('pending rows whose connection_id is %s (an older orchestrator)', (_label, connectionId) => {
+  const row = (vmid: number, zoneId: string) => {
+    const out: Record<string, unknown> = { id: `p${vmid}`, policy_id: 'p1', node: 'pve1', type: 'qemu', vmid, zone_id: zoneId }
+    if (connectionId !== undefined) out.connection_id = connectionId
+    return out as unknown as PendingMember
+  }
+  const rows = () => [row(100, 'zd'), row(101, 'zw')]
+
+  it('keeps the move marker and shows the queued guest once among the members', async () => {
+    setup({ zones: [web(), db()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'queued', [])], pending_members: rows() })
+    const details = await openDetails('web')
+    expect(await within(details).findByText('Moving to db')).toBeTruthy()
+    expect(within(details).getAllByRole('listitem', { name: 'queued' })).toHaveLength(1)
+    expect(within(within(details).getByRole('listitem', { name: 'queued' })).getByText('Pending')).toBeTruthy()
+  })
+
+  it('does not offer the queued guest again in the assign dialog', async () => {
+    setup({ zones: [web(), db()], vms: [vm(100, 'web-1', ['zone-web']), vm(101, 'queued', [])], pending_members: rows() })
+    const dialog = await openDialog()
+    const queuedRow = await within(dialog).findByRole('listitem', { name: 'queued' })
+    expect(within(queuedRow).getByText('Pending')).toBeTruthy()
+    expect((within(queuedRow).getByRole('checkbox') as HTMLInputElement).disabled).toBe(true)
+    expect(within(within(dialog).getByRole('listitem', { name: 'web-1' })).getByText('Moving to db')).toBeTruthy()
   })
 })

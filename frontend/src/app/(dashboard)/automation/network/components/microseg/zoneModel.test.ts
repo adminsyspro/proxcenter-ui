@@ -6,7 +6,7 @@ import { flowsOfZone, isEgressReady, isZoneReady, pendingOutboundOf, zoneMembers
 import { flow, zone } from './microsegTestKit'
 
 const guest = (vmid: number, tags: string[], over: Partial<PolicyGuest> = {}): PolicyGuest => ({
-  vmid, name: `vm${vmid}`, node: 'pve1', type: 'qemu', status: 'running', tags, ...over,
+  connectionId: 'c1', vmid, name: `vm${vmid}`, node: 'pve1', type: 'qemu', status: 'running', tags, ...over,
 })
 
 describe('zoneMembers', () => {
@@ -25,10 +25,10 @@ describe('zoneMembers', () => {
 
   it('adds the pending members of the zone that carry no tag yet, once', () => {
     const pending: PendingMember[] = [
-      { id: 'p1', policy_id: 'p', node: 'pve1', type: 'qemu', vmid: 100, zone_id: 'z1' },
-      { id: 'p2', policy_id: 'p', node: 'pve2', type: 'lxc', vmid: 200, zone_id: 'z1' },
-      { id: 'p3', policy_id: 'p', node: 'pve2', type: 'lxc', vmid: 300, zone_id: 'other' },
-      { id: 'p4', policy_id: 'p', node: 'pve2', type: 'lxc', vmid: 400, zone_id: '' },
+      { id: 'p1', policy_id: 'p', connection_id: 'c1', node: 'pve1', type: 'qemu', vmid: 100, zone_id: 'z1' },
+      { id: 'p2', policy_id: 'p', connection_id: 'c1', node: 'pve2', type: 'lxc', vmid: 200, zone_id: 'z1' },
+      { id: 'p3', policy_id: 'p', connection_id: 'c1', node: 'pve2', type: 'lxc', vmid: 300, zone_id: 'other' },
+      { id: 'p4', policy_id: 'p', connection_id: 'c1', node: 'pve2', type: 'lxc', vmid: 400, zone_id: '' },
     ]
     const members = zoneMembers(z, 'zone-', [guest(100, ['zone-web']), guest(200, [], { node: 'pve2', type: 'lxc' })], pending)
     expect(members.map(m => [m.ref.vmid, m.pending])).toEqual([[100, false], [200, true]])
@@ -38,10 +38,10 @@ describe('zoneMembers', () => {
   it('reports the removal or the move queued for a tagged member, and matches by type and vmid', () => {
     const other = zone('z2', { name: 'db' })
     const pending: PendingMember[] = [
-      { id: 'p1', policy_id: 'p', node: 'pve-old', type: 'qemu', vmid: 100, zone_id: '' },
-      { id: 'p2', policy_id: 'p', node: 'pve1', type: 'qemu', vmid: 101, zone_id: 'z2' },
-      { id: 'p3', policy_id: 'p', node: 'pve1', type: 'qemu', vmid: 102, zone_id: 'z1' },
-      { id: 'p4', policy_id: 'p', node: 'pve1', type: 'lxc', vmid: 103, zone_id: '' },
+      { id: 'p1', policy_id: 'p', connection_id: 'c1', node: 'pve-old', type: 'qemu', vmid: 100, zone_id: '' },
+      { id: 'p2', policy_id: 'p', connection_id: 'c1', node: 'pve1', type: 'qemu', vmid: 101, zone_id: 'z2' },
+      { id: 'p3', policy_id: 'p', connection_id: 'c1', node: 'pve1', type: 'qemu', vmid: 102, zone_id: 'z1' },
+      { id: 'p4', policy_id: 'p', connection_id: 'c1', node: 'pve1', type: 'lxc', vmid: 103, zone_id: '' },
     ]
     const members = zoneMembers(z, 'zone-', [guest(100, ['zone-web']), guest(101, ['zone-web']), guest(102, ['zone-web']), guest(103, ['zone-web'])], pending, [z, other])
     expect(members.map(m => [m.ref.vmid, m.pending, m.change])).toEqual([
@@ -53,7 +53,7 @@ describe('zoneMembers', () => {
   })
 
   it('keeps a pending member whose guest is not in the inventory', () => {
-    const pending: PendingMember[] = [{ id: 'p1', policy_id: 'p', node: 'pve9', type: 'qemu', vmid: 900, zone_id: 'z1' }]
+    const pending: PendingMember[] = [{ id: 'p1', policy_id: 'p', connection_id: 'c1', node: 'pve9', type: 'qemu', vmid: 900, zone_id: 'z1' }]
     const members = zoneMembers(z, 'zone-', [], pending)
     expect(members).toHaveLength(1)
     expect(members[0].guest).toBeNull()
@@ -75,7 +75,7 @@ describe('isZoneReady', () => {
   const NOW = Date.parse('2026-11-02T12:00:00Z')
   const hoursAgo = (h: number) => new Date(NOW - h * 3600_000).toISOString()
   const sug = (lastSeen: string): MicrosegSuggestion => ({
-    id: 's', policy_id: 'p', kind: 'would_block', src_key: 'k', src_ip: '', src_zone_id: 'z1', dst_ip: '', dst_zone_id: '',
+    id: 's', policy_id: 'p', connection_id: 'c1', kind: 'would_block', src_key: 'k', src_ip: '', src_zone_id: 'z1', dst_ip: '', dst_zone_id: '',
     proto: 'tcp', dport: '80', hits: 1, first_seen: lastSeen, last_seen: lastSeen, status: 'pending',
   })
   const observed = zone('z1', { state: 'observe', observe_since: hoursAgo(30) })
@@ -104,7 +104,7 @@ describe('isEgressReady', () => {
   const NOW = Date.parse('2026-11-02T12:00:00Z')
   const hoursAgo = (h: number) => new Date(NOW - h * 3600_000).toISOString()
   const sug = (lastSeen: string, over: Partial<MicrosegSuggestion> = {}): MicrosegSuggestion => ({
-    id: 's', policy_id: 'p', kind: 'would_block', direction: 'out', src_key: 'z1', src_ip: '', src_zone_id: 'z1', dst_ip: '8.8.8.8', dst_zone_id: '',
+    id: 's', policy_id: 'p', connection_id: 'c1', kind: 'would_block', direction: 'out', src_key: 'z1', src_ip: '', src_zone_id: 'z1', dst_ip: '8.8.8.8', dst_zone_id: '',
     proto: 'tcp', dport: '443', hits: 1, first_seen: lastSeen, last_seen: lastSeen, status: 'pending', ...over,
   })
   const observing = { egress_state: 'observe' as const, egress_observe_since: hoursAgo(30) }
@@ -131,7 +131,7 @@ describe('isEgressReady', () => {
 
 describe('pendingOutboundOf', () => {
   const base = (id: string, over: Partial<MicrosegSuggestion>): MicrosegSuggestion => ({
-    id, policy_id: 'p', kind: 'would_block', direction: 'out', src_key: 'z1', src_ip: '', src_zone_id: 'z1', dst_ip: '', dst_zone_id: '',
+    id, policy_id: 'p', connection_id: 'c1', kind: 'would_block', direction: 'out', src_key: 'z1', src_ip: '', src_zone_id: 'z1', dst_ip: '', dst_zone_id: '',
     proto: 'tcp', dport: '80', hits: 1, first_seen: '2026-11-02T10:00:00Z', last_seen: '2026-11-02T10:00:00Z', status: 'pending', ...over,
   })
 

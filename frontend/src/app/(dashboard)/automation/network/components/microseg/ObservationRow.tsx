@@ -10,6 +10,7 @@ import { destinationLabel, hitsShare } from './observationModel'
 import { FlowActions } from './ObservationActions'
 import { DirectionGlyph, ObservedKindGlyph } from './observationParts'
 import { formatWhen } from './summaryModel'
+import ClusterChip from './ClusterChip'
 import TruncatedText from './TruncatedText'
 
 /** Columns of the table: select, details, source, arrow, destination, service, hits, last seen, status, actions. */
@@ -65,10 +66,12 @@ export type ObservationRowProps = {
   onOpenDetails: () => void
   /** "Allow this flow only", when the flow is between two known guests: their names and what opens the exception. */
   exception?: { source: string; destination: string; open: () => void }
+  /** On a shared policy: the cluster the flow was seen on, its chip after the marks of the row. */
+  cluster?: { id: string; name: string }
 }
 
 /** One observed flow, one row of the table; its details open in a centred dialog (ObservedFlowDialog). */
-export default function ObservationRow({ suggestion: s, zones, guestName, gatewayName, checked, busy, maxHits, now, onToggle, onResolve, onOpenDetails, exception, sharedServices = NO_SHARED }: ObservationRowProps) {
+export default function ObservationRow({ suggestion: s, zones, guestName, gatewayName, checked, busy, maxHits, now, onToggle, onResolve, onOpenDetails, exception, sharedServices = NO_SHARED, cluster }: ObservationRowProps) {
   const t = useTranslations('microsegPilot.observation')
   const format = useFormatter()
 
@@ -106,6 +109,7 @@ export default function ObservationRow({ suggestion: s, zones, guestName, gatewa
             <DirectionGlyph direction={s.direction} />
             <ObservedKindGlyph kind={s.kind} />
             <Box component='span' data-source-dot={dot} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: dot, flexShrink: 0 }} />
+            {cluster && <ClusterChip connectionId={cluster.id} name={cluster.name} compact />}
             <TruncatedText text={source} fontWeight={600} tabIndex={0} sx={NAME_SX} />
           </Box>
         </TableCell>

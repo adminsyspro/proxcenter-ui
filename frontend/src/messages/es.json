@@ -9653,7 +9653,19 @@
       "postureTrafficByDstZone": "Tráfico por zona de destino",
       "postureCaptionEmitted": "coincidencias emitidas por zona",
       "postureCaptionReceived": "coincidencias recibidas por zona",
-      "postureDirectionBoth": "Ambos"
+      "postureDirectionBoth": "Ambos",
+      "clustersStateStop": "Parada de emergencia",
+      "clustersStateUnreachable": "Inaccesible desde {time}",
+      "clustersStateApplied": "Aplicado",
+      "clustersStateUnknown": "Estado desconocido",
+      "clustersMembers": "{members} miembros · {protected} protegidos",
+      "clustersMembersShort": "{members} · {protected} protegidos",
+      "clustersAll": "Todos los clústeres",
+      "clustersCount": "{count, plural, one {# clúster} other {# clústeres}}",
+      "clustersDrifts": "{count, plural, =0 {Sin desviaciones} one {# desviación} other {# desviaciones}}",
+      "clustersFiguresMissing": "Faltan cifras",
+      "clustersOutOfScope": "Fuera de su ámbito",
+      "clustersHiddenTraffic": "{count, plural, one {El tráfico de # clúster fuera de su ámbito no está incluido.} other {El tráfico de # clústeres fuera de su ámbito no está incluido.}}"
     },
     "rulesOnDemand": {
       "chip": "Reglas al abrir",
@@ -12353,7 +12365,8 @@
       "truncated": "se descartaron las líneas más antiguas",
       "frozen": "nombres de zonas e invitados tal como estaban en el momento del evento",
       "loadOlder": "Cargar anteriores",
-      "empty": "Aún no hay eventos: el motor lee los registros de los nodos cada minuto."
+      "empty": "Aún no hay eventos: el motor lee los registros de los nodos cada minuto.",
+      "otherCluster": "Otro clúster"
     }
   },
   "vdcUsageHistory": {
@@ -13443,7 +13456,11 @@
         "running": "En curso"
       },
       "logNode": "{node} · {rate} líneas/min · retraso {lag}",
-      "logBehind": "Registro atrasado"
+      "logBehind": "Registro atrasado",
+      "unreachableSince": "El clúster {name} está inaccesible desde {time}: sus reglas no se actualizan, los demás clústeres conservan sus últimas direcciones conocidas.",
+      "unreachableSinceSingle": "Este clúster está inaccesible desde {time}: sus reglas no se actualizan.",
+      "firewallOff": "{name}: el cortafuegos del clúster está desactivado, allí no se filtra nada.",
+      "firewallOffSingle": "El cortafuegos del clúster está desactivado, allí no se filtra nada."
     },
     "stop": {
       "button": "Parada de emergencia",
@@ -13463,7 +13480,17 @@
       "clusterFirewallOff": "Cortafuegos de clúster desactivado",
       "notDeployed": "Nada desplegado",
       "socleUncovered": "Direcciones que las reglas no aceptan: {ips}",
-      "socleUncoveredNodes": "Direcciones que las reglas no aceptan: {ips} (en {nodes})"
+      "socleUncoveredNodes": "Direcciones que las reglas no aceptan: {ips} (en {nodes})",
+      "clusterFirewallOffOf": "Cortafuegos del clúster apagado: {name}",
+      "clustersStop": "Detiene todos los clústeres de la política: {names}",
+      "clustersResume": "Reanuda todos los clústeres de la política: {names}",
+      "clustersAndOthers": "{names} y {count, plural, one {# clúster más} other {# clústeres más}}",
+      "followStop": "Detención pendiente: se reintenta cada minuto",
+      "followResume": "Reanudación pendiente: se reintenta cada minuto",
+      "followHeld": "Cortafuegos apagado hasta que se verifiquen las reglas de acceso a sus nodos",
+      "socleOn": "Rechazado en {name}.",
+      "socleOnOther": "Rechazado en otro clúster de la política.",
+      "bodyShared": "Todas las zonas de la política pasan a observación en todos los clústeres asociados."
     },
     "pending": {
       "noCount": "Cambios aún sin aplicar.",
@@ -13502,7 +13529,9 @@
       "untilApplied": "Nada cambia en Proxmox hasta que se aplique el plan.",
       "applying": "Aplicación en curso: {list}",
       "applyingInline": "aplicación en curso: {list}",
-      "applyingNoCount": "Aplicando los cambios"
+      "applyingNoCount": "Aplicando los cambios",
+      "clusterAdded": "se añadirá el clúster {name}",
+      "clustersAdded": "{count, plural, one {se añadirá # clúster} other {se añadirán # clústeres}}"
     },
     "firstRun": {
       "title": "Configurar la microsegmentación",
@@ -13538,7 +13567,11 @@
       "CHECK_PENDING": "Ya hay una comprobación en cola: el motor la inicia en su próxima pasada.",
       "generic": "Algo salió mal. Inténtelo de nuevo.",
       "SOCLE_MISSING": "Un nodo con su cortafuegos activo no deja entrar la interfaz web (8006) y SSH (22), por lo que no se reactivó el cortafuegos del clúster. Permítalos en el cortafuegos de ese nodo, o desactívelo, y reanude.",
-      "NOT_DEPLOYED": "Aún no hay nada desplegado: aplique antes un plan, la parada de emergencia actúa sobre una política desplegada."
+      "NOT_DEPLOYED": "Aún no hay nada desplegado: aplique antes un plan, la parada de emergencia actúa sobre una política desplegada.",
+      "CLUSTER_NOT_EMPTY": "Un clúster de esta política no está vacío: retire antes sus zonas, flujos y miembros.",
+      "TOO_MANY_CLUSTERS": "Esta política ya tiene el número máximo de clústeres.",
+      "CLUSTER_UNREADABLE": "Un clúster de esta política no se puede leer ahora mismo. Inténtelo de nuevo cuando sea accesible.",
+      "CLUSTER_FIREWALL_OFF": "El cortafuegos de un clúster de esta política está desactivado: no se aplicó nada. Actívelo en Proxmox y vuelva a planificar."
     },
     "policy": {
       "zonesTitle": "Zonas",
@@ -13787,6 +13820,14 @@
           "readingStart": "lectura de Proxmox",
           "reading": "lectura de Proxmox, {done, number} / {total, number} invitados",
           "writing": "escritura en Proxmox, {done, number} / {total, number}"
+        },
+        "group": {
+          "done": "{label}: terminado en los {total} clústeres",
+          "partial": "{label}: terminado en {done} de {total} clústeres",
+          "failed": "{label}: error en todos los clústeres",
+          "showClusters": "Mostrar los clústeres",
+          "hideClusters": "Ocultar los clústeres",
+          "partialApplyAgain": "{label}: hecho en {done} de {total} clústeres, vuelva a aplicar cuando el clúster nunca aplicado esté accesible"
         }
       },
       "assign": {
@@ -13810,7 +13851,9 @@
         "pendingRemoval": "Retirada pendiente",
         "removalHint": "En cola para retirarse, selecciónelo de nuevo para mantenerlo en esta zona.",
         "pendingMove": "Moviendo a {zone}",
-        "moveHint": "En cola para moverse a {zone}, selecciónelo de nuevo para mantenerlo en esta zona."
+        "moveHint": "En cola para moverse a {zone}, selecciónelo de nuevo para mantenerlo en esta zona.",
+        "partial": "Guardado solo en {clusters}; los demás clústeres no se guardaron: {error}",
+        "partialSome": "Guardado solo en una parte de los clústeres; los demás no se guardaron: {error}"
       },
       "preflightButton": "Comprobaciones previas",
       "state": {
@@ -13928,8 +13971,15 @@
           "missing_guest": "Un origen o un destino ya no está en el inventario.",
           "waiting_address": "El inventario aún no conoce ninguna dirección de un origen: puede que sus reglas no dejen pasar nada hasta que se lea una.",
           "renamed": "Una VM ya no tiene el nombre registrado: se renombró, o su VMID se reutilizó. Compruebe que la excepción sigue designando la VM correcta."
-        }
-      }
+        },
+        "cluster": "Clúster",
+        "clusterInactive": "{name} aún no está aplicado: una excepción allí no protegería nada.",
+        "noActiveCluster": "Ningún clúster de la política está aplicado aún: una excepción no protegería nada."
+      },
+      "guestsUnread": "No se pudieron leer los invitados de {clusters}: no aparecen en la lista.",
+      "guestsUnreadSome": "No se pudieron leer los invitados de algunos clústeres: no aparecen en la lista.",
+      "guestsUncounted": "No se pudieron leer los invitados de {clusters}: no se cuentan.",
+      "guestsUncountedSome": "No se pudieron leer los invitados de algunos clústeres: no se cuentan."
     },
     "plan": {
       "title": "Plan de microsegmentación",
@@ -13971,7 +14021,45 @@
       "notes": "Notas: {list}",
       "nothingRecord": "Nada que escribir en Proxmox: aplicar registra la revisión.",
       "stopActive": "Escrito mientras la parada de emergencia mantiene desactivado el cortafuegos de clúster; surte efecto al levantar la parada",
-      "stopActivePlan": "Una aplicación ahora se escribiría mientras la parada de emergencia mantiene desactivado el cortafuegos de clúster"
+      "stopActivePlan": "Una aplicación ahora se escribiría mientras la parada de emergencia mantiene desactivado el cortafuegos de clúster",
+      "cluster": {
+        "other": "Otro clúster",
+        "computing": "Calculando",
+        "applyFailed": "Error: se aplicará cuando el clúster vuelva a estar accesible.",
+        "error": {
+          "no_client": "Inaccesible: se pondrá al día cuando vuelva a estar accesible.",
+          "engine_stopped": "El motor está detenido en este clúster.",
+          "stopped": "La parada de emergencia está activa: aplique de nuevo cuando se levante.",
+          "internal": "La ejecución no pudo iniciarse en este clúster."
+        },
+        "applied": {
+          "done": "Aplicado en los {total} clústeres",
+          "partial": "Aplicado en {done} de {total} clústeres",
+          "failed": "No aplicado en ningún clúster",
+          "partialApplyAgain": "Aplicada en {done} de {total} clústeres: vuelva a aplicar cuando el clúster nunca aplicado esté accesible."
+        },
+        "unreadable": "Esta ejecución no se puede leer.",
+        "runFailed": "Error.",
+        "blocked": {
+          "start": "El plan no pudo iniciarse en este clúster: recalcúlelo antes de aplicar.",
+          "unreadable": "El plan de este clúster no se puede leer: recalcúlelo antes de aplicar."
+        },
+        "unfollowed": "Estado desconocido: no se pudo seguir esta ejecución.",
+        "planUnreachable": "Inaccesible: se aplicará cuando el clúster vuelva a estar accesible.",
+        "neverApplied": "Este clúster nunca se ha aplicado: vuelva a aplicar cuando esté accesible.",
+        "firewallOff": "El cortafuegos del clúster está desactivado: no se filtraría nada. Actívelo en Proxmox y vuelva a planificar.",
+        "serviceStopped": "El servicio de cortafuegos está detenido en {nodes}: en esos nodos no se filtra nada.",
+        "firewallOffRun": "El cortafuegos del clúster está desactivado: aquí no se aplicó nada. Actívelo en Proxmox y vuelva a planificar."
+      },
+      "applyBlocked": {
+        "failed": "No se puede aplicar: el plan de un clúster falló. Abra su sección para ver el motivo y luego vuelva a calcular.",
+        "stale": "No se puede aplicar: vuelva a calcular el plan, proviene de un borrador anterior.",
+        "collisions": "No se puede aplicar: el plan de un clúster tiene colisiones que resolver primero.",
+        "noCluster": "No se puede aplicar: no se pudo acceder a ningún clúster para calcular el plan."
+      },
+      "firewallOffBlock": "No se puede aplicar: el cortafuegos del clúster está desactivado en {names}.",
+      "firewallOffRefused": "No se aplicó nada: el cortafuegos del clúster está desactivado en {names}, allí no se filtraría nada. Actívelo en Proxmox y vuelva a planificar.",
+      "firewallOffRefusedAny": "No se aplicó nada: el cortafuegos de un clúster de la política está desactivado, allí no se filtraría nada. Actívelo en Proxmox y vuelva a planificar."
     },
     "drifts": {
       "asOf": "Al último ciclo completo, {time}",
@@ -14064,6 +14152,34 @@
         "destinationLocal": "la red local",
         "verdict": {
           "disabled": "desactivada"
+        },
+        "peer_unreadable": {
+          "title": "No se puede leer el clúster {name}",
+          "titleUnknown": "No se puede leer un clúster asociado",
+          "detail": "No se puede leer el clúster {name}: las retiradas de direcciones están en espera",
+          "detailUnknown": "No se puede leer un clúster asociado: las retiradas de direcciones están en espera",
+          "hint": "Compruebe que ProxCenter llega a este clúster: las retiradas se reanudan en cuanto vuelve a poder leerse."
+        },
+        "stop_lift_held": {
+          "title": "El cortafuegos del clúster {name} sigue desactivado",
+          "titleUnknown": "El cortafuegos de un clúster asociado sigue desactivado",
+          "detail": "El cortafuegos del clúster {name} sigue desactivado: hay que comprobar las reglas de acceso a los nodos antes de reactivarlo",
+          "detailUnknown": "El cortafuegos de un clúster asociado sigue desactivado: hay que comprobar las reglas de acceso a los nodos antes de reactivarlo",
+          "hint": "Ejecute las comprobaciones previas de este clúster: el motor reactiva su cortafuegos en cuanto las reglas de acceso a los nodos están en su sitio."
+        },
+        "heldNote": "Retirada en espera hasta que se puedan leer todos los clústeres asociados.",
+        "clusterOther": "Otro clúster",
+        "cluster_firewall_off": {
+          "title": "El cortafuegos del clúster {name} está desactivado",
+          "titleUnknown": "El cortafuegos de un clúster asociado está desactivado",
+          "detail": "El cortafuegos del clúster {name} está desactivado: allí no se filtra nada",
+          "detailUnknown": "El cortafuegos de un clúster asociado está desactivado: allí no se filtra nada",
+          "hint": "Vuelva a activarlo desde esta fila, o en Proxmox (Datacenter > Firewall > Options)."
+        },
+        "firewall_service_stopped": {
+          "title": "Servicio de cortafuegos detenido en {node}",
+          "detail": "El servicio de cortafuegos está detenido en {node}: en este nodo no se filtra nada",
+          "hint": "Inicie el servicio pve-firewall en este nodo."
         }
       },
       "chip": {
@@ -14081,7 +14197,11 @@
         "known_rule_missing": "Falta regla conocida",
         "known_rule_extra": "Regla conocida de más",
         "local_set_desync": "Red local desincronizada",
-        "egress_no_subnet": "Sin subred"
+        "egress_no_subnet": "Sin subred",
+        "peer_unreadable": "Clúster ilegible",
+        "stop_lift_held": "Cortafuegos sigue apagado",
+        "cluster_firewall_off": "Cortafuegos del clúster off",
+        "firewall_service_stopped": "Servicio detenido"
       },
       "zoneFilter": "Solo zona {name}",
       "zoneFilterClear": "Mostrar todas las zonas",
@@ -14100,7 +14220,11 @@
         "known_rule_extra": "Reglas de direcciones conocidas sobrantes ({count, number})",
         "local_set_desync": "Conjuntos de la red local desincronizados ({count, number})",
         "egress_no_subnet": "Salida sin subred local ({count, number})",
-        "generic": "{kind} (cantidad: {count, number})"
+        "generic": "{kind} (cantidad: {count, number})",
+        "peer_unreadable": "Clústeres asociados que no se pueden leer ({count, number})",
+        "stop_lift_held": "Cortafuegos de clúster que siguen apagados ({count, number})",
+        "cluster_firewall_off": "Cortafuegos de clúster desactivados ({count, number})",
+        "firewall_service_stopped": "Nodos con el servicio de cortafuegos detenido ({count, number})"
       },
       "noneZone": "ninguna",
       "select": "Seleccionar {name}",
@@ -14119,7 +14243,18 @@
       "colDiffers": "Qué difiere",
       "colSince": "Visto en la última comprobación completa",
       "colActions": "Acciones",
-      "colSinceHint": "El motor no da una fecha de primera detección por desviación: es la hora de su última comprobación completa."
+      "colSinceHint": "El motor no da una fecha de primera detección por desviación: es la hora de su última comprobación completa.",
+      "enableFirewall": {
+        "button": "Reactivar",
+        "title": "Reactivar el cortafuegos del clúster {name}",
+        "titleUnknown": "Reactivar el cortafuegos del clúster",
+        "body": "El cortafuegos del clúster vuelve a filtrar en cuanto se activa.",
+        "check": "Se comprueban antes las reglas de acceso a los nodos (8006, SSH 22).",
+        "after": "Después, una comprobación completa realinea los invitados.",
+        "confirm": "Reactivar",
+        "stop": "Bajo una parada de emergencia, se reactiva al reanudar.",
+        "refused": "Un nodo con su propio cortafuegos activo no deja entrar la interfaz web (8006) ni SSH (22), por lo que el cortafuegos del clúster sigue apagado. Permítalos en el cortafuegos de ese nodo, o apáguelo, y vuelva a intentarlo."
+      }
     },
     "observation": {
       "sampling": "Por defecto Proxmox registra como máximo una línea por segundo y por cadena, por lo que los flujos muy activos pueden contarse de menos.",
@@ -14136,7 +14271,9 @@
         "direction": "Dirección",
         "directionAll": "Todas",
         "directionIn": "Entrante",
-        "directionOut": "Saliente"
+        "directionOut": "Saliente",
+        "cluster": "Clúster",
+        "clusterAll": "Todos los clústeres"
       },
       "kind": {
         "would_block": "Se bloquearía",
@@ -14290,7 +14427,9 @@
         "unzoned": "Invitados sin zona ({count, number})",
         "unzonedHint": "Invitados en ejecución sin zona. Desviaciones también los lista.",
         "guestAria": "{name}, invitado {vmid}",
+        "guestAriaCluster": "{name}, invitado {vmid}, {cluster}",
         "guestWhere": "Invitado {vmid} en {node}",
+        "guestWhereCluster": "Invitado {vmid} en {node}, {cluster}",
         "guestIps": "Direcciones IP: {ips}",
         "guestNoIp": "Ninguna dirección IP conocida",
         "guestPending": "En cola para la zona, se aplica con el próximo plan",
@@ -14376,6 +14515,7 @@
         "logsEmpty": "Ningún evento de este par en la memoria del motor"
       },
       "partial": "Parcial: solo se dibujan los primeros {count, number} flujos pendientes.",
+      "hiddenClusters": "{count, plural, one {Los invitados de # clúster fuera de su ámbito no se muestran.} other {Los invitados de # clústeres fuera de su ámbito no se muestran.}}",
       "filters": {
         "title": "Flujos:"
       },
@@ -14427,6 +14567,7 @@
       },
       "pve": {
         "aria": "Nodo Proxmox {name}, {guests}",
+        "ariaCluster": "Nodo Proxmox {name} de {cluster}, {guests}",
         "guests": "{count, plural, one {# invitado} other {# invitados}}",
         "zoneShare": "Zona {zone}: {count, plural, one {# invitado} other {# invitados}}",
         "unzonedShare": "Sin zona: {count, plural, one {# invitado} other {# invitados}}",
@@ -14539,7 +14680,7 @@
       "runAgain": "Repetir",
       "openWizard": "Abrir el asistente de despliegue",
       "raiseLogRate": "Elevar durante la observación",
-      "busy": "Hay una aplicación en curso, inténtelo de nuevo en un momento.",
+      "busy": "El motor está terminando una pasada o una aplicación en este clúster, inténtelo de nuevo en un momento.",
       "noClient": "No hay ningún cliente de Proxmox disponible para esta conexión.",
       "readFailed": "No se pudo leer Proxmox: {error}",
       "status": {
@@ -14587,6 +14728,12 @@
           "title": "Subredes de salida",
           "pass": "Cada miembro de una zona con salida controlada tiene una subred conocida.",
           "warn": "{count, plural, one {# miembro no tiene subred conocida} other {# miembros no tienen subred conocida}} ({guests}): su red local se reduce a sus propias IP."
+        },
+        "firewall_service": {
+          "title": "Servicio de cortafuegos",
+          "pass": "El servicio de cortafuegos se está ejecutando en todos los nodos.",
+          "stopped": "El servicio de cortafuegos está detenido en {nodes}: en esos nodos no se filtra nada.",
+          "unreadable": "No se pudo leer el estado del servicio de cortafuegos en {nodes}."
         }
       },
       "rateUnits": {
@@ -14669,7 +14816,10 @@
         "confirm": "Retirar",
         "running": "{label}: retirando la microsegmentación...",
         "complete": "{label}: retirada completa, las etiquetas de zona permanecen en los invitados",
-        "incomplete": "{label}: retirada incompleta, vuelva a ejecutarla"
+        "incomplete": "{label}: retirada incompleta, vuelva a ejecutarla",
+        "bodyShared": "Deshace todo lo que ProxCenter escribió en Proxmox en el clúster elegido; los demás clústeres solo dejan de reconocer sus invitados.",
+        "leaves": "{name} abandona la política compartida y no conserva nada de ella; las etiquetas de zona permanecen en sus invitados.",
+        "needsEveryCluster": "Necesita el permiso de gestión de nodos en cada clúster de esta política"
       },
       "prefixChange": {
         "warning": "Los invitados con la etiqueta del prefijo antiguo salen de su zona en la próxima aplicación.",
@@ -14684,6 +14834,37 @@
         "readyAfter": "Tiempo sin ningún flujo nuevo que se bloquearía antes de indicar que una zona está lista; no es un bloqueo.",
         "writeCap": "Superado el tope, el motor se detiene y pide una confirmación.",
         "selfIps": "Direcciones desde las que ProxCenter alcanza los nodos. La comprobación previa verifica que no queden cortadas. Déjelo vacío para usar la detección."
+      },
+      "clusters": {
+        "row": "Clústeres asociados",
+        "hint": "Los clústeres que comparten esta política: las mismas zonas, flujos y ajustes, y los invitados de cada uno son reconocidos por los demás.",
+        "pending": "se aplica en la próxima aplicación",
+        "add": "Añadir un clúster",
+        "maxReached": "Una política admite como máximo {max} clústeres.",
+        "noCandidate": "No hay otro clúster que asociar.",
+        "removeLabel": "Disociar {name}",
+        "target": "Clúster o nodo",
+        "associate": {
+          "title": "Asociar clústeres",
+          "cluster": "Clústeres o nodos",
+          "nothingWritten": "No se escribe nada en ellos hasta la próxima aplicación.",
+          "room": "La política aún puede admitir {count}.",
+          "confirm": "Asociar",
+          "errors": {
+            "CLUSTER_NOT_EMPTY": "{name} todavía contiene datos de microsegmentación. Solo se puede asociar un clúster sin ninguna política: retire allí la microsegmentación y después elimine sus zonas y reglas.",
+            "TOO_MANY_CLUSTERS": "Esta política ya tiene el número máximo de clústeres.",
+            "CLUSTER_UNREADABLE": "No se pudo inspeccionar el clúster. Inténtelo de nuevo más tarde."
+          },
+          "firewallOffHint": "El cortafuegos del clúster está desactivado en este clúster: se puede asociar, pero la aplicación se rechazará hasta que esté activado.",
+          "serviceStoppedHint": "El servicio de cortafuegos está detenido en {nodes}."
+        },
+        "dissociate": {
+          "title": "¿Disociar {name}?",
+          "impact": "Los demás clústeres dejarán de reconocer {leaving, plural, one {# invitado} other {# invitados}} de {name}, y {name} dejará de reconocer {staying, plural, one {# invitado} other {# invitados}} de los demás.",
+          "keepsRules": "{name} conserva sus reglas, con su propia copia de la política.",
+          "typeName": "Escriba {name} para confirmar",
+          "confirm": "Disociar"
+        }
       }
     },
     "history": {
@@ -14754,6 +14935,7 @@
           },
           "triggerCheck": "Comprobar ahora",
           "triggerSchedule": "Planificación",
+          "triggerPeer": "Otro clúster cambió",
           "failed": "La ejecución falló.",
           "failedWith": "La ejecución falló: {error}",
           "errors": "Errores: {list}"
@@ -14800,7 +14982,12 @@
         "loading": "Cargando el historial...",
         "capped": "Solo se leen las últimas {count, number} revisiones y las últimas {count, number} ejecuciones.",
         "actorInferred": "Deducido del tipo de ejecución",
-        "actorCheck": "Iniciado con Comprobar ahora"
+        "actorCheck": "Iniciado con Comprobar ahora",
+        "peer": "Otro clúster cambió",
+        "actorPeer": "Iniciado por el motor porque cambiaron las direcciones de otro clúster de la política",
+        "clusterRuns": "La ejecución de cada clúster",
+        "showClusterRuns": "Mostrar la ejecución de cada clúster",
+        "hideClusterRuns": "Ocultar la ejecución de cada clúster"
       }
     },
     "waitingFirstCheck": "A la espera de la primera comprobación completa",
@@ -14892,6 +15079,12 @@
         "title": "Qué hace la comprobación",
         "ips": "Direcciones IP de los miembros",
         "guests": "Invitados releídos y comparados con la política, desviaciones corregidas"
+      },
+      "group": {
+        "searching": "Tomado por el motor: buscando su ejecución",
+        "running": "Comprobando {count, plural, one {# clúster} other {# clústeres}}",
+        "done": "Comprobado en {done, number} de {total, number} clústeres",
+        "clusters": "Clústeres comprobados"
       }
     },
     "trafficLens": {
@@ -15081,10 +15274,19 @@
       "title": "{count, plural, one {¿Descartar el # cambio sin aplicar?} other {¿Descartar los # cambios sin aplicar?}}",
       "titleNoCount": "¿Descartar los cambios sin aplicar?",
       "body": "El borrador vuelve a la última revisión aplicada.",
-      "confirm": "Descartar"
+      "confirm": "Descartar",
+      "busy": "El motor está terminando un trabajo en un clúster de esta política (una pasada programada u otra acción). Inténtelo de nuevo en un momento."
     },
     "gateway": {
       "name": "Puerta de enlace de {zones}"
+    },
+    "merged": {
+      "unreadList": "No se puede leer: sus filas no se muestran.",
+      "unreadListOther": "No se puede leer un clúster asociado: sus filas no se muestran.",
+      "unreachable": "Inaccesible: su estado es desconocido.",
+      "unreachableOther": "Un clúster asociado es inaccesible: su estado es desconocido.",
+      "unreadState": "No se puede leer: su estado no se muestra.",
+      "unreadStateOther": "No se puede leer un clúster asociado: su estado no se muestra."
     }
   },
   "bulkPower": {

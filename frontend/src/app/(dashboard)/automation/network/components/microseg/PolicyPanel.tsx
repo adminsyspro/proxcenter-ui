@@ -5,9 +5,12 @@ import { Box, Button } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { MicrosegZone, ZoneState } from '@/lib/microseg/types'
+import { useMergedClusters } from '@/lib/microseg/useMerged'
+import { useCachedMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 
 import AssignGuestsDialog from './AssignGuestsDialog'
 import { zoneDeleteBody } from './exceptionModel'
+import { shownClusterName } from './ClusterRunRow'
 import { useDialogAction } from './dialogParts'
 import FlowTable from './FlowTable'
 import MicrosegConfirmDialog from './MicrosegConfirmDialog'
@@ -22,10 +25,14 @@ import { ZoneStateConfirm, useEgressChange, useFlowEditor } from './ZonePanelAct
 import { useZoneUncovered } from './useZoneUncovered'
 import { usePendingChanges } from './usePendingChanges'
 import { useZoneEdits, type ExceptionCreated } from './useZoneEdits'
-import { useZoneGuests } from './useZoneGuests'
+import { useGroupGuests, withUnreachable } from './useGroupGuests'
+import { GroupGuestsUnread } from './GroupGuestsUnread'
 import { targetPeers } from './targetModel'
 
 type Editing<T> = { item: T | null } | null
+
+/** A cluster named by its ID, when the tab gives no lookup. */
+const bareId = (id: string) => id
 
 /**
  * The Policy sub-tab: zones of the draft (one compact line each, members and flows side by side under the chevron),
@@ -35,10 +42,20 @@ type Editing<T> = { item: T | null } | null
  * Every write carries the draft version; a VERSION_CONFLICT reloads the policy and keeps the dialog (and its input)
  * open. A zone state change starts a run, followed in the strip of the tab (it survives a switch of sub-tab).
  */
-export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan, onOpenPreflight }: MicrosegSubTabProps) {
+export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan, onOpenPreflight, clusterIds, clusterName }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.policy')
   const inSlot = useContext(MicrosegActionsSlot) !== null
-  const { guests, status: guestsStatus } = useZoneGuests(connectionId)
+  // The guests of every cluster sharing the policy (the connection alone until the group is known).
+  const groupIds = clusterIds ?? [connectionId]
+  const { guests, status: guestsStatus, errors: readErrors } = useGroupGuests(groupIds)
+  const shared = groupIds.length > 1
+  // The statuses the banner reads (the visible clusters of a shared policy), from its cache: no request of their own.
+  const statusIds = useMemo(
+    () => (shared ? groupIds.filter(id => shownClusterName(id, connectionId, clusterName) !== null) : []),
+    [shared, groupIds, connectionId, clusterName],
+  )
+  const { byCluster: statuses } = useMergedClusters(statusIds, useCachedMicrosegStatus)
+  const guestErrors = useMemo(() => (shared ? withUnreachable(readErrors, guests, statuses) : readErrors), [shared, readErrors, guests, statuses])
 
   const [zoneDialog, setZoneDialog] = useState<Editing<MicrosegZone>>(null)
   const [deleting, setDeleting] = useState<MicrosegZone | null>(null)
@@ -46,14 +63,23 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
   const [changing, setChanging] = useState<{ zone: MicrosegZone; state: ZoneState } | null>(null)
   const [assigning, setAssigning] = useState<MicrosegZone | null>(null)
   const removal = useDialogAction()
-  const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan })
+  const edits = useZoneEdits({ connectionId, policy, reloadPolicy, startRun, onOpenPlan, clusterName })
   const flowEditor = useFlowEditor(edits)
   const egressChange = useEgressChange(edits)
   const { diff } = usePendingChanges(connectionId, policy)
   const uncovered = useZoneUncovered(connectionId)
   // The details of a zone card show the zone panel of the map: they write through the same edits.
   const peers = useMemo(() => targetPeers(guests), [guests])
-  const work = useMemo(() => ({ connectionId, edits, version: policy.version, reloadPolicy, peers }), [connectionId, edits, policy.version, reloadPolicy, peers])
+  const memberCluster = shared ? clusterName ?? bareId : undefined
+  // Some cluster's guests could not be read: each zone card and zone panel says its members are not all counted.
+  const membersNote = useMemo(
+    () => (guestsStatus === 'ready' && Object.keys(guestErrors).length > 0 ? <GroupGuestsUnread errors={guestErrors} clusterName={clusterName} counted /> : null),
+    [guestsStatus, guestErrors, clusterName],
+  )
+  const work = useMemo(
+    () => ({ connectionId, edits, version: policy.version, reloadPolicy, peers, clusterName: memberCluster, membersNote }),
+    [connectionId, edits, policy.version, reloadPolicy, peers, memberCluster, membersNote],
+  )
 
   const saveZone = (zone: MicrosegZone | null) => async (values: ZoneFormValues, onExceptionCreated: ExceptionCreated) => {
     await edits.saveZone(zone, values, onExceptionCreated)
@@ -82,6 +108,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         </SlotActions>
       )}
       {edits.memberError != null && <MicrosegErrorAlert error={edits.memberError} onClose={edits.clearMemberError} />}
+      {guestsStatus === 'ready' && <GroupGuestsUnread errors={guestErrors} clusterName={clusterName} />}
 
       <ZoneList
         connectionId={connectionId}
@@ -90,6 +117,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         tagPrefix={policy.policy.tag_prefix}
         guests={guests}
         guestsStatus={guestsStatus}
+        membersNote={membersNote}
         pendingMembers={policy.pending_members}
         diff={diff}
         readyAfterHours={edits.readyAfterHours}
@@ -105,7 +133,7 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         onSetState={onSetState}
         onSetEgress={(zone, action) => { edits.clearMemberError(); egressChange.ask(zone, action) }}
         onAssign={setAssigning}
-        onRemoveMember={ref => edits.changeMember(ref, '')}
+        onRemoveMember={(ref, cluster) => edits.changeMember(ref, '', cluster)}
         removeBusy={edits.memberBusy}
       />
       <FlowTable
@@ -119,12 +147,14 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         onDelete={flowEditor.remove}
       />
 
-      {zoneDialog && <ZoneDialog zone={zoneDialog.item} connectionId={connectionId} readyAfterHours={edits.readyAfterHours} onSave={saveZone(zoneDialog.item)} flows={edits.flows} policy={edits.policy} onClose={() => setZoneDialog(null)} gate={zoneGateOf(edits, () => setZoneDialog(null))} />}
+      {zoneDialog && <ZoneDialog zone={zoneDialog.item} connectionId={connectionId} readyAfterHours={edits.readyAfterHours} onSave={saveZone(zoneDialog.item)} flows={edits.flows} policy={edits.policy} clusterName={clusterName} onClose={() => setZoneDialog(null)} gate={zoneGateOf(edits, () => setZoneDialog(null))} />}
       {flowEditor.dialogs}
       {assigning && (
         <AssignGuestsDialog
           open
           connectionId={connectionId}
+          clusterIds={groupIds}
+          clusterName={clusterName}
           zone={assigning}
           policy={policy}
           reloadPolicy={reloadPolicy}

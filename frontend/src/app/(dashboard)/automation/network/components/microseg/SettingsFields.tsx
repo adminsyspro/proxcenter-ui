@@ -132,11 +132,13 @@ type Props = {
   selfIpsSource?: SelfIpsSource
   /** The only address known is a container one: say Proxmox sees the host's. */
   selfIpsDockerInternal?: boolean
+  /** Rows shown in the General section after the tag prefix (the clusters sharing the policy). */
+  generalRows?: ReactNode
   onChange: <K extends keyof SettingsForm>(key: K, value: SettingsForm[K]) => void
 }
 
 /** The inputs of the Settings dialog, grouped under small headings, every setting on one line. */
-export default function SettingsFields({ form, problems, busy, prefixWarning, effectiveSelfIps, selfIpsSource, selfIpsDockerInternal = false, onChange }: Props) {
+export default function SettingsFields({ form, problems, busy, prefixWarning, effectiveSelfIps, selfIpsSource, selfIpsDockerInternal = false, generalRows, onChange }: Props) {
   const t = useTranslations('microsegPilot.settings')
   const fallback = selfIpsFallback(effectiveSelfIps, selfIpsSource)
   const selfIpsPlaceholder = fallback
@@ -155,6 +157,7 @@ export default function SettingsFields({ form, problems, busy, prefixWarning, ef
         onChange={v => onChange('tagPrefix', v)}
       />
       {prefixWarning && <Notice severity='warning' text={t('prefixChange.warning')} />}
+      {generalRows}
 
       {NUMBER_SECTIONS.map(section => (
         <Box key={section.title}>

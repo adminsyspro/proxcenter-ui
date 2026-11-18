@@ -14,7 +14,7 @@ const zone = (id: string, name: string, over: Partial<MicrosegZone> = {}): Micro
 
 let seq = 0
 const seen = (over: Partial<MicrosegSuggestion>): MicrosegSuggestion => ({
-  id: `s${seq++}`, policy_id: 'p1', kind: 'would_block', src_key: '', src_ip: '', src_zone_id: '', dst_ip: '', dst_zone_id: 'zdb',
+  id: `s${seq++}`, policy_id: 'p1', connection_id: 'c1', kind: 'would_block', src_key: '', src_ip: '', src_zone_id: '', dst_ip: '', dst_zone_id: 'zdb',
   proto: 'tcp', dport: '5432', hits: 1, first_seen: '2026-11-03T08:00:00Z', last_seen: '2026-11-03T09:00:00Z', status: 'pending', ...over,
 })
 
@@ -26,7 +26,7 @@ type Row = NonNullable<FirewallCoverage['guests']>[number]
 const row = (vmid: number, node: string, tags: string[], vlans: number[], status = 'running', enabled: boolean | null = true): Row => ({
   type: 'qemu', node, vmid: String(vmid), name: `vm${vmid}`, status, tags, enabled, optionsEnabled: enabled, nicFirewall: enabled, options: null, vlans,
 })
-const guest = (vmid: number, node: string, tags: string[], ips: string[]): PolicyGuest => ({ vmid, name: `vm${vmid}`, node, type: 'qemu', status: 'running', tags, ips })
+const guest = (vmid: number, node: string, tags: string[], ips: string[]): PolicyGuest => ({ connectionId: 'c1', vmid, name: `vm${vmid}`, node, type: 'qemu', status: 'running', tags, ips })
 
 const ZONES = [zone('zweb', 'web'), zone('zdb', 'db', { state: 'enforce' }), zone('zapp', 'app')]
 /** web 101 (10.0.0.1, VLAN 10, pve1), db 102 (10.0.0.2, VLAN 20, pve2), app 103 (10.0.0.3, no VLAN, pve1), unzoned 104 (10.0.0.4). */

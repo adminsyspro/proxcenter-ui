@@ -8,12 +8,15 @@ import type { FlowDirection, MicrosegZone, SuggestionKind, SuggestionStatus } fr
 
 import { MicrosegActionsSlot, SlotActions } from './microsegAccess'
 
-export type ObservationFilterValues = { kind: '' | SuggestionKind; status: '' | SuggestionStatus; zone: string; direction: '' | FlowDirection }
+/** `cluster`: the flows of one cluster of a shared policy, '' (or absent) for every cluster. */
+export type ObservationFilterValues = { kind: '' | SuggestionKind; status: '' | SuggestionStatus; zone: string; direction: '' | FlowDirection; cluster?: string }
 
 type Props = {
   values: ObservationFilterValues
   zones: MicrosegZone[]
   onChange: (values: ObservationFilterValues) => void
+  /** The clusters of a shared policy the user sees (`clusterFilterOptions`): none, and the Cluster filter is not shown. */
+  clusters?: { value: string; label: string }[]
 }
 
 const KINDS: SuggestionKind[] = ['would_block', 'blocked']
@@ -28,9 +31,12 @@ const COMPACT_SELECT_SX = {
   height: 30,
   // The type of a small button (pxToRem(13)), so it follows the root size the way the buttons do.
   fontSize: '0.8125rem',
-  // As wide as its name and value: the row of the tabs holds the four filters and the buttons.
-  minWidth: 0,
-  '& .MuiSelect-select': { py: 0, pl: 1.25, display: 'flex', alignItems: 'center', minHeight: 0 },
+  // The filters share the room left on the row of the tabs, each growing from the width of its own content (its name and
+  // value), so a longer one takes more than a short one; never narrower than a short value, then its value is cut.
+  flex: '1 1 auto',
+  minWidth: 130,
+  // The right padding is the room of the arrow: the value is cut by an ellipsis (in its own box below) before it.
+  '& .MuiSelect-select': { py: 0, pl: 1.25, pr: '32px !important', display: 'flex', alignItems: 'center', minHeight: 0, minWidth: 0 },
 } as const
 
 function FilterSelect<T extends string>({ name, value, options, onChange }: Readonly<{
@@ -47,10 +53,10 @@ function FilterSelect<T extends string>({ name, value, options, onChange }: Read
       value={value}
       onChange={e => onChange(e.target.value as T)}
       renderValue={v => (
-        <>
+        <Box component='span' sx={{ display: 'block', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           <Box component='span' sx={{ color: 'text.secondary', mr: 0.75 }}>{name}</Box>
           {labelOf(v as T)}
-        </>
+        </Box>
       )}
       inputProps={{ 'aria-label': name }}
       sx={COMPACT_SELECT_SX}
@@ -61,16 +67,16 @@ function FilterSelect<T extends string>({ name, value, options, onChange }: Read
 }
 
 /**
- * The four server-side filters of the list: type, status, zone (source or destination) and direction. On the row of the
- * sub-tabs, next to Check now (SlotActions), as tall as its buttons; in place, above the table, when the panel has no
- * tab row.
+ * The server-side filters of the list: type, status, zone (source or destination), direction, and the cluster on a
+ * shared policy. On the row of the sub-tabs, next to Check now (SlotActions), as tall as its buttons; in place, above
+ * the table, when the panel has no tab row.
  */
-export default function ObservationFilters({ values, zones, onChange }: Props) {
+export default function ObservationFilters({ values, zones, onChange, clusters = [] }: Props) {
   const t = useTranslations('microsegPilot.observation')
   const inSlot = useContext(MicrosegActionsSlot) !== null
   return (
-    <SlotActions order={1}>
-      <Box data-testid='observation-filters' sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: inSlot ? 0 : 1.5 }}>
+    <SlotActions order={1} grow>
+      <Box data-testid='observation-filters' sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', flex: '1 1 auto', minWidth: 0, mb: inSlot ? 0 : 1.5 }}>
         <FilterSelect
           name={t('filters.kind')}
           value={values.kind}
@@ -95,6 +101,14 @@ export default function ObservationFilters({ values, zones, onChange }: Props) {
           options={[{ value: '', label: t('filters.directionAll') }, ...DIRECTIONS.map(d => ({ value: d, label: t(d === 'in' ? 'filters.directionIn' : 'filters.directionOut') }))]}
           onChange={direction => onChange({ ...values, direction })}
         />
+        {clusters.length > 0 && (
+          <FilterSelect
+            name={t('filters.cluster')}
+            value={values.cluster ?? ''}
+            options={[{ value: '', label: t('filters.clusterAll') }, ...clusters]}
+            onChange={cluster => onChange({ ...values, cluster })}
+          />
+        )}
       </Box>
     </SlotActions>
   )

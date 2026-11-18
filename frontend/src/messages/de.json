@@ -9657,7 +9657,9 @@
     "doneFirewallNotEnabled": "Cluster-Firewall nicht aktiviert (manuelle Aktivierung erforderlich)",
     "doneClose": "Schließen",
     "next": "Weiter",
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+    "trafficCut": "Die Cluster-Firewall jetzt einzuschalten würde den Verkehr zwischen den Knoten unterbrechen. Schalten Sie die Knoten-Firewalls aus (enable: 0) oder fügen Sie Cluster-Regeln hinzu, die ihn akzeptieren, und öffnen Sie diesen Assistenten erneut.",
+    "trafficReading": "Der Verkehr zwischen den Knoten wird geprüft…"
   },
   "firewall": {
     "type": "Typ",
@@ -13047,7 +13049,7 @@
       "infoObjects": "Die Mikrosegmentierungsobjekte bleiben erhalten; Fortsetzen aktiviert die Cluster-Firewall wieder und wendet die Richtlinie erneut an",
       "infoUse": "Nutzen Sie dies, wenn die Segmentierung etwas blockiert, das sie nicht blockieren soll",
       "resumeInfoReenable": "Aktiviert die Cluster-Firewall wieder und wendet dann die letzte Revision erneut an",
-      "resumeInfoSocle": "Abgelehnt, wenn ein Knoten mit eingeschalteter Firewall die Weboberfläche (8006) und SSH (22) nicht zulässt: zuerst in der Firewall dieses Knotens erlauben oder sie ausschalten",
+      "resumeInfoSocle": "Abgelehnt, wenn die Knoten-Firewalls Zugriff oder Verkehr der Knoten unterbrechen.",
       "clusterFirewallOff": "Cluster-Firewall deaktiviert",
       "notDeployed": "Nichts bereitgestellt",
       "socleUncovered": "Von den Regeln nicht akzeptierte Adressen: {ips}",
@@ -13061,7 +13063,8 @@
       "followHeld": "Firewall bleibt aus, bis die Zugriffsregeln ihrer Knoten geprüft sind",
       "socleOn": "Abgelehnt auf {name}.",
       "socleOnOther": "Abgelehnt auf einem anderen Cluster der Richtlinie.",
-      "bodyShared": "Alle Zonen der Richtlinie wechseln auf allen zugeordneten Clustern in die Beobachtung."
+      "bodyShared": "Alle Zonen der Richtlinie wechseln auf allen zugeordneten Clustern in die Beobachtung.",
+      "trafficRefused": "Nicht wieder eingeschaltet: Die Knoten-Firewalls würden den Verkehr zwischen den Knoten unterbrechen."
     },
     "pending": {
       "noCount": "Änderungen noch nicht angewendet.",
@@ -13820,11 +13823,12 @@
         "title": "Cluster-Firewall von {name} wieder einschalten",
         "titleUnknown": "Cluster-Firewall wieder einschalten",
         "body": "Die Cluster-Firewall filtert wieder, sobald sie eingeschaltet ist.",
-        "check": "Zuerst geprüft: Zugriffsregeln der Knoten (Web 8006, SSH 22).",
+        "check": "Zuerst geprüft: Knoten-Zugriff (8006, 22) und Verkehr zwischen den Knoten.",
         "after": "Eine vollständige Prüfung gleicht danach die Gäste dieses Clusters ab.",
         "confirm": "Wieder einschalten",
         "stop": "Unter einem Notstopp wird sie beim Fortsetzen eingeschaltet.",
-        "refused": "Ein Knoten mit eingeschalteter eigener Firewall lässt die Weboberfläche (8006) und SSH (22) nicht herein, daher blieb die Cluster-Firewall ausgeschaltet. Erlauben Sie sie in der Firewall dieses Knotens oder schalten Sie diese aus, und versuchen Sie es erneut."
+        "refused": "Ein Knoten mit eingeschalteter eigener Firewall lässt die Weboberfläche (8006) und SSH (22) nicht herein, daher blieb die Cluster-Firewall ausgeschaltet. Erlauben Sie sie in der Firewall dieses Knotens oder schalten Sie diese aus, und versuchen Sie es erneut.",
+        "refusedTraffic": "Bleibt aus: Die Knoten-Firewalls würden den Verkehr zwischen den Knoten unterbrechen."
       }
     },
     "observation": {
@@ -14305,6 +14309,33 @@
           "pass": "Der Firewall-Dienst läuft auf jedem Knoten.",
           "stopped": "Der Firewall-Dienst ist auf {nodes} gestoppt: Auf diesen Knoten wird nichts gefiltert.",
           "unreadable": "Der Zustand des Firewall-Dienstes konnte auf {nodes} nicht gelesen werden."
+        },
+        "node_traffic": {
+          "title": "Verkehr zwischen den Knoten",
+          "pass": "Nichts von dem, was die Knoten untereinander austauschen, würde unterbrochen.",
+          "nodesOff": "Die Knoten-Firewalls sind aus, es kann also nichts unterbrochen werden.",
+          "policyAccept": "Die Eingangsrichtlinie des Clusters akzeptiert, was die Knoten austauschen.",
+          "cut": {
+            "ceph_public": "Ceph (öffentliches Netz {network}, TCP {ports}) würde auf {nodes} unterbrochen.",
+            "ceph_cluster": "Ceph (Cluster-Netz {network}, TCP {ports}) würde auf {nodes} unterbrochen.",
+            "migration": "Die Migration ({network}, TCP {ports}) würde auf {nodes} unterbrochen.",
+            "other": "{network} (TCP {ports}) würde auf {nodes} unterbrochen."
+          },
+          "doubt": {
+            "ceph_public": "Ceph (öffentliches Netz {network}, TCP {ports}) konnte auf {nodes} nicht geprüft werden.",
+            "ceph_cluster": "Ceph (Cluster-Netz {network}, TCP {ports}) konnte auf {nodes} nicht geprüft werden.",
+            "migration": "Die Migration ({network}, TCP {ports}) konnte auf {nodes} nicht geprüft werden.",
+            "other": "{network} (TCP {ports}) konnte auf {nodes} nicht geprüft werden."
+          },
+          "fix": "Schalten Sie die Knoten-Firewalls aus (enable: 0) oder fügen Sie Cluster-Regeln hinzu, die ihn akzeptieren, bevor Sie die Cluster-Firewall einschalten.",
+          "doubtWhy": "Eine Regel dort kann nicht ausgewertet werden (Schnittstelle, Makro oder Name): Prüfen Sie sie von Hand.",
+          "fixShort": "Knoten-Firewalls ausschalten oder Cluster-Regeln hinzufügen, die ihn akzeptieren.",
+          "short": {
+            "ceph_public": "Öffentliches Ceph-Netz {network}: unterbrochen auf {nodes}",
+            "ceph_cluster": "Ceph-Cluster-Netz {network}: unterbrochen auf {nodes}",
+            "migration": "Migrationsnetz {network}: unterbrochen auf {nodes}",
+            "other": "{network}: unterbrochen auf {nodes}"
+          }
         }
       },
       "rateUnits": {

@@ -9710,7 +9710,9 @@
     "doneFirewallNotEnabled": "Cluster firewall not enabled (manual activation needed)",
     "doneClose": "Close",
     "next": "Next",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "trafficCut": "Turning the cluster firewall on now would cut traffic between the nodes. Set the node firewalls to off (enable: 0), or add cluster rules that accept it, then open this wizard again.",
+    "trafficReading": "Checking the traffic between the nodes…"
   },
   "firewall": {
     "type": "Type",
@@ -13476,7 +13478,7 @@
       "infoObjects": "The micro-segmentation objects stay in place; Resume re-enables the cluster firewall and re-applies the policy",
       "infoUse": "Use it when the segmentation blocks something it should not",
       "resumeInfoReenable": "Re-enables the cluster firewall, then re-applies the last revision",
-      "resumeInfoSocle": "Refused if a node whose own firewall is on does not let the web UI (8006) and SSH (22) in: allow them in that node's firewall, or turn it off, first",
+      "resumeInfoSocle": "Refused if node firewalls would cut node access or traffic between nodes.",
       "clusterFirewallOff": "Cluster firewall disabled",
       "notDeployed": "Nothing deployed",
       "socleUncovered": "Addresses the rules do not accept: {ips}",
@@ -13490,7 +13492,8 @@
       "followHeld": "Firewall kept off until its node access rules are checked",
       "socleOn": "Refused on {name}.",
       "socleOnOther": "Refused on another cluster of the policy.",
-      "bodyShared": "Every zone of the policy moves to observation on all the associated clusters."
+      "bodyShared": "Every zone of the policy moves to observation on all the associated clusters.",
+      "trafficRefused": "Not re-enabled: the node firewalls would cut traffic between the nodes."
     },
     "pending": {
       "noCount": "Changes not applied yet.",
@@ -14249,11 +14252,12 @@
         "title": "Turn the cluster firewall of {name} back on",
         "titleUnknown": "Turn the cluster firewall back on",
         "body": "The cluster firewall filters again as soon as it is on.",
-        "check": "Checked first: the node access rules (web UI 8006, SSH 22).",
+        "check": "Checked first: node access (8006, 22) and traffic between the nodes.",
         "after": "A full check then realigns the guests of this cluster.",
         "confirm": "Turn back on",
         "stop": "Under an emergency stop, it is turned back on at the lift.",
-        "refused": "A node whose own firewall is on does not let the web UI (8006) and SSH (22) in, so the cluster firewall was left off. Allow them in that node's firewall, or turn it off, then try again."
+        "refused": "A node whose own firewall is on does not let the web UI (8006) and SSH (22) in, so the cluster firewall was left off. Allow them in that node's firewall, or turn it off, then try again.",
+        "refusedTraffic": "Left off: the node firewalls would cut traffic between the nodes."
       }
     },
     "observation": {
@@ -14734,6 +14738,33 @@
           "pass": "The firewall service is running on every node.",
           "stopped": "The firewall service is stopped on {nodes}: nothing is filtered on these nodes.",
           "unreadable": "The state of the firewall service could not be read on {nodes}."
+        },
+        "node_traffic": {
+          "title": "Traffic between nodes",
+          "pass": "Nothing the nodes exchange between themselves would be cut.",
+          "nodesOff": "The node firewalls are off, so nothing can be cut.",
+          "policyAccept": "The cluster input policy accepts what the nodes exchange.",
+          "cut": {
+            "ceph_public": "Ceph (public network {network}, TCP {ports}) would be cut on {nodes}.",
+            "ceph_cluster": "Ceph (cluster network {network}, TCP {ports}) would be cut on {nodes}.",
+            "migration": "Migration ({network}, TCP {ports}) would be cut on {nodes}.",
+            "other": "{network} (TCP {ports}) would be cut on {nodes}."
+          },
+          "doubt": {
+            "ceph_public": "Ceph (public network {network}, TCP {ports}) could not be checked on {nodes}.",
+            "ceph_cluster": "Ceph (cluster network {network}, TCP {ports}) could not be checked on {nodes}.",
+            "migration": "Migration ({network}, TCP {ports}) could not be checked on {nodes}.",
+            "other": "{network} (TCP {ports}) could not be checked on {nodes}."
+          },
+          "fix": "Set the node firewalls to off (enable: 0), or add cluster rules that accept it, before turning the cluster firewall on.",
+          "doubtWhy": "A rule there cannot be evaluated (interface, macro or name): check it by hand.",
+          "fixShort": "Turn the node firewalls off, or add cluster rules that accept it.",
+          "short": {
+            "ceph_public": "Ceph public network {network}: cut on {nodes}",
+            "ceph_cluster": "Ceph cluster network {network}: cut on {nodes}",
+            "migration": "Migration network {network}: cut on {nodes}",
+            "other": "{network}: cut on {nodes}"
+          }
         }
       },
       "rateUnits": {

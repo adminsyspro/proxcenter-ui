@@ -81,6 +81,48 @@ function socleMessage(detail: Record<string, unknown>): PreflightMessage['detail
   return more.length > 0 ? { ...first, more } : first
 }
 
+const TRAFFIC_KINDS = new Set(['ceph_public', 'ceph_cluster', 'migration'])
+
+/**
+ * The sentences of a node traffic check, under microsegPilot.preflight: one per network the nodes' own firewalls would
+ * cut (`blocked`) or that a rule left undecided (`unsure`), each with its ports and its nodes.
+ */
+function trafficLines(detail: Record<string, unknown>, from: 'blocked' | 'unsure'): Line[] {
+  const list = Array.isArray(detail[from]) ? detail[from] : []
+  return list
+    .filter((n): n is Record<string, unknown> => !!n && typeof n === 'object')
+    .map(n => {
+      const kind = text(n.kind)
+      return {
+        key: `checks.node_traffic.${from === 'blocked' ? 'cut' : 'doubt'}.${TRAFFIC_KINDS.has(kind) ? kind : 'other'}`,
+        values: { network: text(n.network), ports: text(n.ports), nodes: strings(n.nodes).join(', ') },
+      }
+    })
+}
+
+function trafficMessage(check: PreflightCheck, detail: Record<string, unknown>): PreflightMessage['detail'] & { more?: Line[] } {
+  if (check.status === 'pass') {
+    if (detail.node_firewalls === 'off') return { key: 'checks.node_traffic.nodesOff' }
+    return { key: detail.policy_in === 'ACCEPT' ? 'checks.node_traffic.policyAccept' : 'checks.node_traffic.pass' }
+  }
+  const cut = trafficLines(detail, 'blocked')
+  const doubt = trafficLines(detail, 'unsure')
+  const lines = [
+    ...cut,
+    ...(cut.length > 0 ? [{ key: 'checks.node_traffic.fix' }] : []),
+    ...doubt,
+    ...(doubt.length > 0 ? [{ key: 'checks.node_traffic.doubtWhy' }] : []),
+  ]
+  if (lines.length === 0) return { key: 'checks.node_traffic.fix' }
+  const [first, ...more] = lines
+  return more.length > 0 ? { ...first, more } : first
+}
+
+/** A refusal to turn the cluster firewall on because the nodes' own firewalls would cut what the nodes exchange. */
+export function isTrafficRefusal(detail: Record<string, unknown> | undefined): boolean {
+  return !!detail && Array.isArray(detail.blocked) && detail.blocked.length > 0
+}
+
 function detailOf(check: PreflightCheck): PreflightMessage['detail'] & { more?: Line[] } | null {
   const detail = check.detail ?? {}
   const error = text(detail.error)
@@ -98,6 +140,8 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] & { more?: 
       if (check.status === 'pass') return { key: detail.node_firewalls === 'off' ? 'checks.socle_rules.nodesOff' : 'checks.socle_rules.pass' }
       return socleMessage(detail)
     }
+    case 'node_traffic':
+      return trafficMessage(check, detail)
     case 'log_ratelimit': {
       const rate = text(detail.rate)
       if (check.status === 'warn') return { key: 'checks.log_ratelimit.default', values: { rate } }
@@ -124,11 +168,17 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] & { more?: 
 
 /**
  * What a SOCLE_MISSING refusal says beyond its fixed message, from the failed
- * socle check it carries: the Docker reason, the security group that could not
- * be read and the addresses the rules leave out, as keys under microsegPilot.
+ * check it carries, as keys under microsegPilot: for the socle check, the
+ * Docker reason, the security group that could not be read and the addresses
+ * the rules leave out; for the node traffic check, the networks cut.
  */
 export function socleRefusalLines(detail: Record<string, unknown> | undefined): Array<{ key: string; values?: Record<string, string> }> {
   if (!detail) return []
+  if (isTrafficRefusal(detail)) {
+    // Short sentences, one per line of the refusal: what to do, then each network cut and its nodes.
+    const cut = trafficLines(detail, 'blocked').map(line => ({ key: `preflight.${line.key.replace('.cut.', '.short.')}`, values: { network: line.values?.network ?? '', nodes: line.values?.nodes ?? '' } }))
+    return [{ key: 'preflight.checks.node_traffic.fixShort' }, ...cut]
+  }
   const { reasons } = socleLines(detail, '')
   const lines: Array<{ key: string; values?: Record<string, string> }> = reasons.map(r => (r.key === 'checks.socle_rules.dockerInternal'
     ? { key: 'preflight.checks.self_in_zone.dockerInternal' }
@@ -161,7 +211,7 @@ export function parseRate(raw: string | undefined): { count: number; unit: RateU
   return m ? { count: Number(m[1]), unit: m[2] as RateUnit } : null
 }
 
-const KNOWN_IDS = new Set(['cluster_firewall', 'firewall_service', 'socle_rules', 'log_ratelimit', 'self_in_zone', 'egress_subnets'])
+const KNOWN_IDS = new Set(['cluster_firewall', 'firewall_service', 'socle_rules', 'node_traffic', 'log_ratelimit', 'self_in_zone', 'egress_subnets'])
 
 export function preflightMessage(check: PreflightCheck): PreflightMessage {
   const found = detailOf(check)

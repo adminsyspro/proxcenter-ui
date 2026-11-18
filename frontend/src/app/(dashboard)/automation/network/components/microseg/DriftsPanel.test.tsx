@@ -370,7 +370,7 @@ describe('turning a cluster firewall back on', () => {
     expect(within(line).queryByRole('button', { name: 'Ignore' })).toBeNull()
     fireEvent.click(within(line).getByTestId('drift-enable-firewall'))
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText(/^Checked first: the node access rules/)).toBeTruthy()
+    expect(within(dialog).getByText('Checked first: node access (8006, 22) and traffic between the nodes.')).toBeTruthy()
     expect(within(dialog).getByText(/^Under an emergency stop, it is turned back on at the lift/)).toBeTruthy()
     expect(calls('POST /cluster-firewall/enable')).toHaveLength(0)
     const reads = calls('GET /drifts').length
@@ -391,6 +391,25 @@ describe('turning a cluster firewall back on', () => {
     expect(await within(dialog).findByText(/so the cluster firewall was left off/)).toBeTruthy()
     expect(within(dialog).getByText('rule SSH 22 missing')).toBeTruthy()
     expect(screen.getByRole('dialog')).toBeTruthy()
+  })
+
+  it('says, on a refusal for the traffic between the nodes, what to do and each network cut, each on its line', async () => {
+    setup(OFF)
+    mock.routes['POST /cluster-firewall/enable'] = () => reply(409, {
+      code: 'SOCLE_MISSING',
+      error: 'the cluster firewall is left off: turning the cluster firewall back on would cut traffic between the nodes',
+      detail: { blocked: [{ kind: 'ceph_public', network: '10.250.250.0/24', ports: '3300, 6789, 6800-7300', nodes: ['pve1', 'pve2'] }, { kind: 'migration', network: '10.51.51.0/24', ports: '22', nodes: ['pve2'] }] },
+    })
+    fireEvent.click(within(await offRow()).getByTestId('drift-enable-firewall'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Turn back on' }))
+    expect(await within(dialog).findByText('Left off: the node firewalls would cut traffic between the nodes.')).toBeTruthy()
+    expect(within(dialog).getByText('Turn the node firewalls off, or add cluster rules that accept it.')).toBeTruthy()
+    expect(within(dialog).getByText('Ceph public network 10.250.250.0/24: cut on pve1, pve2')).toBeTruthy()
+    expect(within(dialog).getByText('Migration network 10.51.51.0/24: cut on pve2')).toBeTruthy()
+    // Neither the wording about the web UI and SSH, nor the English text of the orchestrator.
+    expect(within(dialog).queryByText(/does not let the web UI/)).toBeNull()
+    expect(within(dialog).queryByText(/turning the cluster firewall back on would cut/)).toBeNull()
   })
 
   it('offers no such button on the other drifts', async () => {

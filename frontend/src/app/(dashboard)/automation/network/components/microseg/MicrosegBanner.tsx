@@ -17,7 +17,7 @@ import LogNodeLines from './LogNodeLines'
 import MicrosegConfirmDialog, { type ConfirmInfoLine } from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PendingChangesBar from './PendingChangesBar'
-import { socleRefusalCluster, socleRefusalLines } from './preflightModel'
+import { isTrafficRefusal, socleRefusalCluster, socleRefusalLines } from './preflightModel'
 import { clusterFirewallOff, firewallOffByHand, formatWhen, stillPaused, stopFollowState } from './summaryModel'
 import type { ControlAction, MicrosegControls, StopFollowUp } from './useMicrosegControls'
 import { NOW_REFRESH_MS, useNow } from './useNow'
@@ -134,6 +134,10 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
   let refusedLine: string | null = null
   if (refusedOn) refusedLine = refusedName !== null ? t('microsegPilot.stop.socleOn', { name: refusedName }) : t('microsegPilot.stop.socleOnOther')
   const refusalLines = refusedLine ? [refusedLine, ...socleLines] : socleLines
+  // A lift refused for the traffic between the nodes has its own wording: the generic one speaks of the web UI and SSH.
+  const trafficRefused = dialogError?.code === 'SOCLE_MISSING' && isTrafficRefusal(dialogError.detail)
+  let dialogErrorText: string | null = null
+  if (dialogError) dialogErrorText = trafficRefused ? t('microsegPilot.stop.trafficRefused') : t(microsegErrorKeyOf(dialogError))
 
   // The clusters the stop and the lift act on, in the confirmation of a shared policy: those the user sees, by name,
   // and how many others.
@@ -334,7 +338,7 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
         confirmLabel={dialog[action].label}
         color={dialog[action].color}
         busy={busy}
-        error={dialogError ? t(microsegErrorKeyOf(dialogError)) : null}
+        error={dialogErrorText}
         errorDetail={refusalLines.length > 0 ? null : dialogError?.serverMessage}
         errorLines={refusalLines}
         onConfirm={controls.run}

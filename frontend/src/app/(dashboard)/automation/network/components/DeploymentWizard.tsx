@@ -9,6 +9,9 @@ import {
 } from '@mui/material'
 
 import * as firewallAPI from '@/lib/api/firewall'
+import { microsegApi } from '@/lib/microseg/api'
+
+import { preflightMessage } from './microseg/preflightModel'
 
 const STEPS = ['stepAnalysis', 'stepActivate', 'stepDone'] as const
 
@@ -57,21 +60,52 @@ function useNodeFirewalls(open: boolean, connection: string, nodes: string[]) {
   return open ? states : null
 }
 
+type TrafficLine = { key: string; values?: Record<string, string | number> }
+
+/**
+ * What the nodes' own firewalls would cut between the nodes once the cluster firewall is on (the node traffic check of
+ * the micro-segmentation preflight): null while it is read, the sentences of a failed check otherwise. A check that
+ * cannot be read, passes or only doubts says nothing here: the wizard then behaves as before.
+ */
+function useTrafficCut(open: boolean, connection: string) {
+  const [cut, setCut] = useState<{ connection: string; lines: TrafficLine[] } | null>(null)
+  useEffect(() => {
+    if (!open || !connection) return
+    let cancelled = false
+    microsegApi(connection).getPreflight().then(
+      checks => {
+        const check = checks.find(c => c.id === 'node_traffic')
+        const message = check?.status === 'fail' ? preflightMessage(check) : null
+        // The sentence on what to do is the wizard's own.
+        const lines = (message?.detail ? [message.detail, ...(message.more ?? [])] : []).filter(l => l.key !== 'checks.node_traffic.fix')
+        if (!cancelled) setCut({ connection, lines })
+      },
+      () => { if (!cancelled) setCut({ connection, lines: [] }) },
+    )
+    return () => { cancelled = true }
+  }, [open, connection])
+  return open && cut?.connection === connection ? cut.lines : null
+}
+
 /**
  * Turns the cluster firewall on, which the guests' firewalls (and the micro-segmentation) need. It writes nothing else:
  * no cluster rule, no inbound policy, nothing on the nodes. Those apply to the nodes only, and ProxCenter leaves the
  * nodes' firewalls alone. The analysis says which nodes have their own firewall on once the cluster firewall is (no
- * `enable: 0`), since PVE then filters them with what their admin set up.
+ * `enable: 0`), since PVE then filters them with what their admin set up; and it refuses to go on when those firewalls
+ * would cut what the nodes exchange between themselves (Ceph, migration on its own network).
  */
 export default function DeploymentWizard({ open, onClose, selectedConnection, nodesList, onComplete }: DeploymentWizardProps) {
   const theme = useTheme()
   const t = useTranslations('deployWizard')
+  const tPreflight = useTranslations('microsegPilot.preflight')
 
   const [activeStep, setActiveStep] = useState(0)
   const [activating, setActivating] = useState(false)
   const [activateError, setActivateError] = useState(false)
   const [activated, setActivated] = useState(false)
   const nodeFirewalls = useNodeFirewalls(open, selectedConnection, nodesList)
+  const trafficCut = useTrafficCut(open, selectedConnection)
+  const cutText = (trafficCut ?? []).map(line => tPreflight(line.key, line.values)).join(' ')
   const following = nodeFirewalls ? Object.entries(nodeFirewalls).filter(([, s]) => s === 'follows').map(([n]) => n).sort((a, b) => a.localeCompare(b)) : []
   const unknown = nodeFirewalls ? Object.entries(nodeFirewalls).filter(([, s]) => s === 'unknown').map(([n]) => n).sort((a, b) => a.localeCompare(b)) : []
 
@@ -128,9 +162,11 @@ export default function DeploymentWizard({ open, onClose, selectedConnection, no
       <Alert severity='info' sx={{ mb: 2 }}>{t('analysisInfo')}</Alert>
       {following.length > 0 && <Alert severity='warning' data-testid='wizard-nodes-follow' sx={{ mb: 2 }}>{t('analysisNodesWarning', { nodes: following.join(', ') })}</Alert>}
       {unknown.length > 0 && <Alert severity='warning' sx={{ mb: 2 }}>{t('analysisNodesUnknown', { nodes: unknown.join(', ') })}</Alert>}
+      {trafficCut === null && <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pl: 0.5, mb: 2 }}><CircularProgress size={18} /><Typography variant='body2' color='text.secondary'>{t('trafficReading')}</Typography></Box>}
+      {cutText !== '' && <Alert severity='error' data-testid='wizard-traffic-cut' sx={{ mb: 2 }}>{t('trafficCut')} {cutText}</Alert>}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
         <Button variant='text' onClick={handleClose}>{t('cancel')}</Button>
-        <Button variant='contained' onClick={() => setActiveStep(1)} disabled={nodeFirewalls === null}>{t('next')}</Button>
+        <Button variant='contained' onClick={() => setActiveStep(1)} disabled={nodeFirewalls === null || trafficCut === null || cutText !== ''}>{t('next')}</Button>
       </Box>
     </Box>
   )

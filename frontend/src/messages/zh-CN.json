@@ -9710,7 +9710,9 @@
     "doneFirewallNotEnabled": "集群防火墙未启用（需要手动激活）",
     "doneClose": "关闭",
     "next": "下一步",
-    "cancel": "取消"
+    "cancel": "取消",
+    "trafficCut": "现在开启集群防火墙会切断节点间流量。请关闭节点防火墙（enable: 0），或添加允许该流量的集群规则，然后重新打开此向导。",
+    "trafficReading": "正在检查节点间流量…"
   },
   "firewall": {
     "type": "类型",
@@ -13476,7 +13478,7 @@
       "infoObjects": "微分段对象保持不变；恢复时会重新启用集群防火墙并重新应用策略",
       "infoUse": "当分段阻止了不应阻止的流量时使用",
       "resumeInfoReenable": "重新启用集群防火墙，然后重新应用最新修订",
-      "resumeInfoSocle": "如果某个自身防火墙已启用的节点不允许 Web 界面 (8006) 和 SSH (22) 进入，则会被拒绝：请先在该节点防火墙中允许它们，或将其关闭",
+      "resumeInfoSocle": "如果节点防火墙会切断节点访问或节点间流量，则会被拒绝。",
       "clusterFirewallOff": "集群防火墙已禁用",
       "notDeployed": "尚未部署任何内容",
       "socleUncovered": "规则未接受的地址：{ips}",
@@ -13490,7 +13492,8 @@
       "followHeld": "在其节点访问规则检查完成前，防火墙保持关闭",
       "socleOn": "在 {name} 上被拒绝。",
       "socleOnOther": "在该策略的另一个集群上被拒绝。",
-      "bodyShared": "该策略的所有区域都将在所有关联集群上转为观察模式。"
+      "bodyShared": "该策略的所有区域都将在所有关联集群上转为观察模式。",
+      "trafficRefused": "未重新启用：节点防火墙会切断节点间流量。"
     },
     "pending": {
       "noCount": "更改尚未应用。",
@@ -14249,11 +14252,12 @@
         "title": "重新开启 {name} 的集群防火墙",
         "titleUnknown": "重新开启集群防火墙",
         "body": "集群防火墙一旦开启便会重新过滤。",
-        "check": "会先检查节点访问规则（Web 界面 8006、SSH 22）。",
+        "check": "先检查：节点访问（8006、22）和节点间流量。",
         "after": "随后一次完整检查会重新对齐该集群的客户机。",
         "confirm": "重新开启",
         "stop": "紧急停止期间，将在恢复时重新开启。",
-        "refused": "某个已开启自身防火墙的节点不允许 Web 界面（8006）和 SSH（22）进入，因此集群防火墙保持关闭。请在该节点的防火墙中放行，或将其关闭，然后重试。"
+        "refused": "某个已开启自身防火墙的节点不允许 Web 界面（8006）和 SSH（22）进入，因此集群防火墙保持关闭。请在该节点的防火墙中放行，或将其关闭，然后重试。",
+        "refusedTraffic": "保持关闭：节点防火墙会切断节点间流量。"
       }
     },
     "observation": {
@@ -14734,6 +14738,33 @@
           "pass": "所有节点上的防火墙服务都在运行。",
           "stopped": "{nodes} 上的防火墙服务已停止：这些节点上不会过滤任何流量。",
           "unreadable": "无法读取 {nodes} 上防火墙服务的状态。"
+        },
+        "node_traffic": {
+          "title": "节点间流量",
+          "pass": "节点之间交换的流量不会被切断。",
+          "nodesOff": "节点防火墙已关闭，不会切断任何流量。",
+          "policyAccept": "集群入站策略允许节点之间交换的流量。",
+          "cut": {
+            "ceph_public": "Ceph（公共网络 {network}，TCP {ports}）将在 {nodes} 上被切断。",
+            "ceph_cluster": "Ceph（集群网络 {network}，TCP {ports}）将在 {nodes} 上被切断。",
+            "migration": "迁移（{network}，TCP {ports}）将在 {nodes} 上被切断。",
+            "other": "{network}（TCP {ports}）将在 {nodes} 上被切断。"
+          },
+          "doubt": {
+            "ceph_public": "无法在 {nodes} 上检查 Ceph（公共网络 {network}，TCP {ports}）。",
+            "ceph_cluster": "无法在 {nodes} 上检查 Ceph（集群网络 {network}，TCP {ports}）。",
+            "migration": "无法在 {nodes} 上检查迁移（{network}，TCP {ports}）。",
+            "other": "无法在 {nodes} 上检查 {network}（TCP {ports}）。"
+          },
+          "fix": "在开启集群防火墙之前，请关闭节点防火墙（enable: 0），或添加允许该流量的集群规则。",
+          "doubtWhy": "那里有一条规则无法评估（接口、宏或名称）：请手动检查。",
+          "fixShort": "请关闭节点防火墙，或添加允许该流量的集群规则。",
+          "short": {
+            "ceph_public": "Ceph 公共网络 {network}：在 {nodes} 上被切断",
+            "ceph_cluster": "Ceph 集群网络 {network}：在 {nodes} 上被切断",
+            "migration": "迁移网络 {network}：在 {nodes} 上被切断",
+            "other": "{network}：在 {nodes} 上被切断"
+          }
         }
       },
       "rateUnits": {

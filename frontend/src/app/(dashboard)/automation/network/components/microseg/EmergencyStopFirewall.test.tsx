@@ -77,7 +77,7 @@ describe('the resume dialog', () => {
     const dialog = await screen.findByRole('dialog')
 
     expect(within(dialog).getByText('Re-enables the cluster firewall, then re-applies the last revision')).toBeTruthy()
-    expect(within(dialog).getByText("Refused if a node whose own firewall is on does not let the web UI (8006) and SSH (22) in: allow them in that node's firewall, or turn it off, first")).toBeTruthy()
+    expect(within(dialog).getByText('Refused if node firewalls would cut node access or traffic between nodes.')).toBeTruthy()
     expect(within(dialog).queryByRole('button', { name: 'Open the deployment wizard' })).toBeNull()
   })
 
@@ -112,6 +112,25 @@ describe('the resume dialog', () => {
     expect(within(dialog).getByText('The detected address is internal to Docker: in Settings > Advanced, enter the address of the host as Proxmox sees it.')).toBeTruthy()
     expect(within(dialog).getByText('Addresses the rules do not accept: 10.43.0.250, 10.44.0.250')).toBeTruthy()
     // The localized lines replace the English wording of the orchestrator.
+    expect(within(dialog).queryByText(/the emergency stop is kept/)).toBeNull()
+  })
+
+  it('says, in the dialog, that the node firewalls would cut the traffic between the nodes, and where', async () => {
+    mock.routes['POST /emergency-stop'] = () => reply(409, {
+      code: 'SOCLE_MISSING',
+      error: 'the emergency stop is kept: turning the cluster firewall back on would cut traffic between the nodes',
+      detail: { blocked: [{ kind: 'ceph_public', network: '10.250.250.0/24', ports: '3300, 6789, 6800-7300', nodes: ['pve1', 'pve2'] }, { kind: 'migration', network: '10.51.51.0/24', ports: '22', nodes: ['pve2'] }] },
+    })
+    renderConfigured()
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Resume' }))
+
+    expect(await within(dialog).findByText('Not re-enabled: the node firewalls would cut traffic between the nodes.')).toBeTruthy()
+    expect(within(dialog).getByText('Turn the node firewalls off, or add cluster rules that accept it.')).toBeTruthy()
+    expect(within(dialog).getByText('Ceph public network 10.250.250.0/24: cut on pve1, pve2')).toBeTruthy()
+    expect(within(dialog).getByText('Migration network 10.51.51.0/24: cut on pve2')).toBeTruthy()
+    expect(within(dialog).queryByText(/so the cluster firewall was not re-enabled/)).toBeNull()
     expect(within(dialog).queryByText(/the emergency stop is kept/)).toBeNull()
   })
 

@@ -9710,7 +9710,9 @@
     "doneFirewallNotEnabled": "클러스터 방화벽이 활성화되지 않음 (수동 활성화 필요)",
     "doneClose": "닫기",
     "next": "다음",
-    "cancel": "취소"
+    "cancel": "취소",
+    "trafficCut": "지금 클러스터 방화벽을 켜면 노드 간 트래픽이 차단됩니다. 노드 방화벽을 끄거나(enable: 0) 이를 허용하는 클러스터 규칙을 추가한 뒤 이 마법사를 다시 여세요.",
+    "trafficReading": "노드 간 트래픽을 확인하는 중…"
   },
   "firewall": {
     "type": "유형",
@@ -13476,7 +13478,7 @@
       "infoObjects": "마이크로 세분화 개체는 그대로 유지되며, 재개하면 클러스터 방화벽을 다시 활성화하고 정책을 다시 적용합니다",
       "infoUse": "세분화가 막지 말아야 할 트래픽을 차단할 때 사용하세요",
       "resumeInfoReenable": "클러스터 방화벽을 다시 활성화한 뒤 마지막 리비전을 다시 적용합니다",
-      "resumeInfoSocle": "자체 방화벽이 켜진 노드가 웹 UI(8006)와 SSH(22)를 허용하지 않으면 거부됩니다. 먼저 해당 노드 방화벽에서 허용하거나 끄십시오",
+      "resumeInfoSocle": "노드 방화벽이 노드 접근이나 노드 간 트래픽을 차단하면 거부됩니다.",
       "clusterFirewallOff": "클러스터 방화벽 비활성화됨",
       "notDeployed": "배포된 항목 없음",
       "socleUncovered": "규칙이 허용하지 않는 주소: {ips}",
@@ -13490,7 +13492,8 @@
       "followHeld": "노드 접근 규칙이 확인될 때까지 방화벽이 꺼진 상태로 유지됩니다",
       "socleOn": "{name}에서 거부되었습니다.",
       "socleOnOther": "정책의 다른 클러스터에서 거부되었습니다.",
-      "bodyShared": "정책의 모든 영역이 연결된 모든 클러스터에서 관찰 모드로 전환됩니다."
+      "bodyShared": "정책의 모든 영역이 연결된 모든 클러스터에서 관찰 모드로 전환됩니다.",
+      "trafficRefused": "다시 켜지 않음: 노드 방화벽이 노드 간 트래픽을 차단합니다."
     },
     "pending": {
       "noCount": "변경 사항이 아직 적용되지 않았습니다.",
@@ -14249,11 +14252,12 @@
         "title": "{name} 클러스터 방화벽 다시 켜기",
         "titleUnknown": "클러스터 방화벽 다시 켜기",
         "body": "클러스터 방화벽은 켜지는 즉시 다시 필터링합니다.",
-        "check": "먼저 노드 접근 규칙(웹 UI 8006, SSH 22)을 확인합니다.",
+        "check": "먼저 확인: 노드 접근(8006, 22)과 노드 간 트래픽.",
         "after": "그런 다음 전체 검사가 이 클러스터의 게스트를 다시 맞춥니다.",
         "confirm": "다시 켜기",
         "stop": "긴급 정지 중에는 재개할 때 다시 켜집니다.",
-        "refused": "자체 방화벽이 켜진 노드가 웹 UI(8006)와 SSH(22)를 허용하지 않아 클러스터 방화벽을 꺼진 채로 두었습니다. 해당 노드의 방화벽에서 허용하거나 방화벽을 끈 다음 다시 시도하세요."
+        "refused": "자체 방화벽이 켜진 노드가 웹 UI(8006)와 SSH(22)를 허용하지 않아 클러스터 방화벽을 꺼진 채로 두었습니다. 해당 노드의 방화벽에서 허용하거나 방화벽을 끈 다음 다시 시도하세요.",
+        "refusedTraffic": "꺼진 상태 유지: 노드 방화벽이 노드 간 트래픽을 차단합니다."
       }
     },
     "observation": {
@@ -14734,6 +14738,33 @@
           "pass": "모든 노드에서 방화벽 서비스가 실행 중입니다.",
           "stopped": "{nodes}에서 방화벽 서비스가 중지되어 있습니다: 해당 노드에서는 아무것도 필터링되지 않습니다.",
           "unreadable": "{nodes}의 방화벽 서비스 상태를 읽을 수 없습니다."
+        },
+        "node_traffic": {
+          "title": "노드 간 트래픽",
+          "pass": "노드끼리 주고받는 트래픽은 차단되지 않습니다.",
+          "nodesOff": "노드 방화벽이 꺼져 있어 차단될 것이 없습니다.",
+          "policyAccept": "클러스터 입력 정책이 노드 간 트래픽을 허용합니다.",
+          "cut": {
+            "ceph_public": "Ceph(공용 네트워크 {network}, TCP {ports})가 {nodes}에서 차단됩니다.",
+            "ceph_cluster": "Ceph(클러스터 네트워크 {network}, TCP {ports})가 {nodes}에서 차단됩니다.",
+            "migration": "마이그레이션({network}, TCP {ports})이 {nodes}에서 차단됩니다.",
+            "other": "{network}(TCP {ports})가 {nodes}에서 차단됩니다."
+          },
+          "doubt": {
+            "ceph_public": "Ceph(공용 네트워크 {network}, TCP {ports})를 {nodes}에서 확인할 수 없습니다.",
+            "ceph_cluster": "Ceph(클러스터 네트워크 {network}, TCP {ports})를 {nodes}에서 확인할 수 없습니다.",
+            "migration": "마이그레이션({network}, TCP {ports})을 {nodes}에서 확인할 수 없습니다.",
+            "other": "{network}(TCP {ports})를 {nodes}에서 확인할 수 없습니다."
+          },
+          "fix": "클러스터 방화벽을 켜기 전에 노드 방화벽을 끄거나(enable: 0) 이를 허용하는 클러스터 규칙을 추가하세요.",
+          "doubtWhy": "해당 노드의 규칙 하나를 평가할 수 없습니다(인터페이스, 매크로 또는 이름). 직접 확인하세요.",
+          "fixShort": "노드 방화벽을 끄거나 이를 허용하는 클러스터 규칙을 추가하세요.",
+          "short": {
+            "ceph_public": "Ceph 공용 네트워크 {network}: {nodes}에서 차단",
+            "ceph_cluster": "Ceph 클러스터 네트워크 {network}: {nodes}에서 차단",
+            "migration": "마이그레이션 네트워크 {network}: {nodes}에서 차단",
+            "other": "{network}: {nodes}에서 차단"
+          }
         }
       },
       "rateUnits": {

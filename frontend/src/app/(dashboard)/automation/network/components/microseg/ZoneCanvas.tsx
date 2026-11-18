@@ -37,6 +37,8 @@ export function canvasSx(theme: Theme) {
   return {
     width: '100%', height: '100%',
     '& .microseg-dim': { opacity: 0.25 },
+    // An observed flow not seen for an hour: its hits are a total, not what happens now.
+    '& .microseg-stale': { opacity: 0.45 },
     // Out of a target's scope (UA57): the outline only.
     '& .microseg-faint': { opacity: 0.08 },
     '& .react-flow__edgelabel-renderer': { zIndex: LABEL_LAYER_Z },

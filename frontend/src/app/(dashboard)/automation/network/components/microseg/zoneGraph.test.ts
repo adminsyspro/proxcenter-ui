@@ -10,7 +10,8 @@ import type { MicrosegException, MicrosegFlow, MicrosegSuggestion, MicrosegZone 
 
 import { crossesBox, crossesCircle, rectAround, rectHitsCircle, rectsOverlap, type Rect } from './edgeGeometry'
 import {
-  ALL_FLOWS, EDGE_COLORS, NODE_H, NODE_W, bareIp, buildZoneGraph, byGuestPair, filterEdges, focusSets, groupServices,
+  ALL_FLOWS, EDGE_COLORS, NODE_H, NODE_W, STALE_AFTER_MS, bareIp, buildZoneGraph, byGuestPair, edgeServices, filterEdgeAge, filterEdgeServices, filterEdges, focusSets, groupServices,
+  lastSeenOf,
   type GuestNodeData, type MapEdgeData, type MapMember, type MoreNodeData, type ZoneNodeData,
 } from './zoneGraph'
 import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, MIN_R } from './zoneLayout'
@@ -579,5 +580,86 @@ describe('an observed flow drawn guest to guest', () => {
     const edges = buildZoneGraph({ zones: [web, db], flows: [], suggestions: [s], members }).edges.filter(e => data(e).kind !== 'allowed')
     expect(edges).toHaveLength(1)
     expect(data(edges[0]).observed.map(o => [o.id, o.hits])).toEqual([['s1', 9]])
+  })
+})
+
+describe('the services a map draws', () => {
+  const members = new Map([['zw', [member(100, 'web-1', ['10.0.1.1'])]], ['zd', [member(200, 'db-1', ['10.0.4.1'])]]])
+  const graph = buildZoneGraph({
+    zones: [web, db],
+    flows: [flow('f1', { dport: '443' }), flow('f2', { dport: '22' })],
+    suggestions: [
+      seen('s1', { src_ip: '10.0.1.1', dst_ip: '10.0.4.1', proto: 'icmp', dport: '', hits: 5 }),
+      seen('s2', { src_ip: '10.0.1.1', dst_ip: '10.0.4.1', proto: 'tcp', dport: '5432', hits: 7 }),
+    ],
+    members,
+  })
+  const of = (edges: Edge[]) => edges.map(e => `${data(e).kind} ${data(e).label} ${data(e).hits ?? '-'}`).sort((a, b) => a.localeCompare(b))
+
+  it('lists each service the edges carry once, as it reads', () => {
+    expect(edgeServices(graph.edges).map(s => `${s.token}=${s.label}`)).toEqual(['tcp/443=HTTPS', 'icmp=icmp', 'tcp/5432=PostgreSQL', 'tcp/22=SSH'])
+  })
+
+  it('says the port of two services that read the same', () => {
+    const twice = buildZoneGraph({ zones: [web, db], flows: [flow('f1', { dport: '8008' }), flow('f2', { dport: '8080' }), flow('f3', { dport: '22' })], suggestions: [], members })
+    expect(edgeServices(twice.edges).map(s => s.label)).toEqual(['HTTP-alt (tcp/8008)', 'HTTP-alt (tcp/8080)', 'SSH'])
+  })
+
+  it('draws every edge when nothing is filtered', () => {
+    expect(filterEdgeServices(graph.edges, null)).toBe(graph.edges)
+    expect(of(graph.edges)).toEqual(['allowed SSH, HTTPS -', 'unprotected icmp · PostgreSQL 12'])
+  })
+
+  it('keeps of an edge the services shown, with their flows and their hits, and drops an edge left with none', () => {
+    const icmp = filterEdgeServices(graph.edges, new Set(['icmp']))
+    expect(of(icmp)).toEqual(['unprotected icmp 5'])
+    expect(data(icmp[0]).observed.map(o => o.id)).toEqual(['s1'])
+    expect(data(icmp[0]).count).toBe(1)
+
+    const ssh = filterEdgeServices(graph.edges, new Set(['tcp/22', 'tcp/5432']))
+    expect(of(ssh)).toEqual(['allowed SSH -', 'unprotected PostgreSQL 7'])
+    expect(data(ssh.find(e => data(e).kind === 'allowed')!).flows.map(f => f.id)).toEqual(['f2'])
+    expect(filterEdgeServices(graph.edges, new Set())).toEqual([])
+  })
+})
+
+describe('how far back the observed flows of a map go', () => {
+  const NOW = Date.parse('2026-11-18T15:00:00Z')
+  const members = new Map([['zw', [member(100, 'web-1', ['10.0.1.1'])]], ['zd', [member(200, 'db-1', ['10.0.4.1'])]]])
+  const graph = buildZoneGraph({
+    zones: [web, db],
+    flows: [flow('f1', { dport: '443' })],
+    suggestions: [
+      seen('recent', { src_ip: '10.0.1.1', dst_ip: '10.0.4.1', proto: 'icmp', dport: '', hits: 5, last_seen: '2026-11-18T14:50:00Z' }),
+      seen('yesterday', { src_ip: '10.0.1.1', dst_ip: '10.0.4.1', proto: 'tcp', dport: '5432', hits: 7, last_seen: '2026-11-17T20:00:00Z' }),
+      seen('undated', { src_ip: '10.0.1.1', dst_ip: '10.0.4.1', proto: 'udp', dport: '53', hits: 1, last_seen: '' }),
+    ],
+    members,
+  })
+  const of = (edges: Edge[]) => edges.map(e => `${data(e).kind} ${data(e).observed.map(o => o.id).join('+') || '-'} ${data(e).hits ?? '-'}`).sort((a, b) => a.localeCompare(b))
+
+  it('draws every flow whenever it was seen, by default', () => {
+    expect(filterEdgeAge(graph.edges, 'all', NOW)).toBe(graph.edges)
+    expect(of(graph.edges)).toEqual(['allowed - -', 'unprotected recent+undated+yesterday 13'])
+  })
+
+  it('keeps of an observed edge the flows seen within the period, the ones with no date too, and leaves the allowed flows', () => {
+    expect(of(filterEdgeAge(graph.edges, '1h', NOW))).toEqual(['allowed - -', 'unprotected recent+undated 6'])
+    expect(of(filterEdgeAge(graph.edges, '24h', NOW))).toEqual(['allowed - -', 'unprotected recent+undated+yesterday 13'])
+    const hour = filterEdgeAge(graph.edges, '1h', NOW).find(e => data(e).kind === 'unprotected')!
+    expect(data(hour).services).toEqual(['icmp', 'udp/53'])
+  })
+
+  it('drops an observed edge none of whose flows was seen within the period', () => {
+    const old = buildZoneGraph({ zones: [web, db], flows: [], suggestions: [seen('old', { src_ip: '10.0.1.1', dst_ip: '10.0.4.1', last_seen: '2026-11-10T00:00:00Z' })], members })
+    expect(filterEdgeAge(old.edges, '7d', NOW)).toEqual([])
+    expect(filterEdgeAge(old.edges, 'all', NOW)).toHaveLength(1)
+  })
+
+  it('tells when an edge was last seen: the latest of its flows, nothing for an allowed flow', () => {
+    const observed = graph.edges.find(e => data(e).kind === 'unprotected')!
+    expect(lastSeenOf(data(observed))).toBe(Date.parse('2026-11-18T14:50:00Z'))
+    expect(NOW - lastSeenOf(data(observed))!).toBeLessThan(STALE_AFTER_MS)
+    expect(lastSeenOf(data(graph.edges.find(e => data(e).kind === 'allowed')!))).toBeNull()
   })
 })

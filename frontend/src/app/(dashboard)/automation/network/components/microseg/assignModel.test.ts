@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { MicrosegZone, PendingMember } from '@/lib/microseg/types'
 
-import { assignRows, chosenByCluster, membersBody } from './assignModel'
+import { assignRows, chosenByCluster, isRemovable, membersBody, removalBodies } from './assignModel'
 import type { PolicyGuest } from './zoneModel'
 
 const zone = (id: string, name: string) => ({ id, name } as MicrosegZone)
@@ -45,5 +45,30 @@ describe('chosenByCluster', () => {
     const groups = chosenByCluster(rows)
     expect(groups).toHaveLength(1)
     expect(membersBody(3, 'zd', groups[0][1])).toEqual({ version: 3, zone_id: 'zd', guests: [{ node: 'pve1', type: 'lxc', vmid: 100 }] })
+  })
+})
+
+describe('the members a dialog takes out', () => {
+  const rows = assignRows(DB, [DB, WEB], 'zone-', [
+    { ...ct('conn-1', 'tagged', ['zone-db']), vmid: 1 }, { ...ct('conn-1', 'queued'), vmid: 2 }, { ...ct('conn-1', 'free'), vmid: 3 },
+    { ...ct('conn-1', 'leaving', ['zone-db']), vmid: 4 },
+  ], [
+    { id: 'p2', policy_id: 'p1', connection_id: 'conn-1', node: 'pve1', type: 'lxc', vmid: 2, zone_id: 'zd' },
+    { id: 'p4', policy_id: 'p1', connection_id: 'conn-1', node: 'pve1', type: 'lxc', vmid: 4, zone_id: '' },
+  ])
+  const by = (name: string) => rows.find(r => r.guest.name === name)!
+
+  it('are the tagged ones with no queued change and the ones queued for the zone', () => {
+    expect(rows.filter(isRemovable).map(r => r.guest.name).sort((a, b) => a.localeCompare(b))).toEqual(['queued', 'tagged'])
+  })
+
+  it('queues the tagged ones for no zone, then forgets the queued ones, each with the version it is given', () => {
+    const bodies = removalBodies([by('tagged'), by('queued')])
+    expect(bodies.map((b, i) => b(7 + i))).toEqual([
+      { version: 7, zone_id: '', guests: [{ node: 'pve1', type: 'lxc', vmid: 1 }] },
+      { version: 8, clear: [{ type: 'lxc', vmid: 2 }] },
+    ])
+    expect(removalBodies([by('queued')]).map(b => b(3))).toEqual([{ version: 3, clear: [{ type: 'lxc', vmid: 2 }] }])
+    expect(removalBodies([])).toEqual([])
   })
 })

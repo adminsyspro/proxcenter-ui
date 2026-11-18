@@ -13578,6 +13578,11 @@
     },
     "policy": {
       "zonesTitle": "区域",
+      "layout": {
+        "label": "区域显示方式",
+        "cards": "卡片",
+        "rows": "行"
+      },
       "flowsTitle": "流量规则",
       "addZone": "新建区域",
       "addFlow": "新建流量规则",
@@ -13856,7 +13861,10 @@
         "pendingMove": "正在移动到 {zone}",
         "moveHint": "已排队移动到 {zone}，再次选择可将其保留在此区域。",
         "partial": "仅在 {clusters} 上保存；其他集群未保存：{error}",
-        "partialSome": "仅在部分集群上保存；其余集群未保存：{error}"
+        "partialSome": "仅在部分集群上保存；其余集群未保存：{error}",
+        "willRemove": "将被移除",
+        "willRemoveHint": "已取消勾选：下次应用时从该区域移出。重新勾选可保留。",
+        "confirmChanges": "保存：分配 {add, number} 个，移除 {remove, number} 个"
       },
       "preflightButton": "预检",
       "state": {
@@ -14401,7 +14409,9 @@
         "accept": "接受"
       },
       "cidrOutTip": "按所选前缀，在草稿中创建流 {from} → {ip} 所在网络 {service}。",
-      "bulkCidrOutbound": "出站网络需逐个接受，以便分别选择前缀。"
+      "bulkCidrOutbound": "出站网络需逐个接受，以便分别选择前缀。",
+      "kindSeen": "{kind}，最后出现于 {time}",
+      "manySources": "多个来源"
     },
     "overview": {
       "empty": "还没有可绘制的区域。",
@@ -14416,7 +14426,8 @@
         "unprotected": "未受保护",
         "blocked": "已阻止",
         "draft": "允许，尚未应用",
-        "exception": "虚拟机之间的例外"
+        "exception": "虚拟机之间的例外",
+        "addresses": "外部地址"
       },
       "node": {
         "members": "{count, plural, other {# 个成员}}",
@@ -14446,7 +14457,8 @@
         "inside": "{count, plural, other {区域内观察到的流 # 条}}",
         "observed": "出站观察中",
         "gateway": "网关",
-        "gatewayHint": "{zones} 的网关（{ip}）：其流量在地图和“观察”子选项卡中显示名称"
+        "gatewayHint": "{zones} 的网关（{ip}）：其流量在地图和“观察”子选项卡中显示名称",
+        "networkHint": "{name}：已命名网络 {cidr}。其与该区域通信的地址绘制在此处。"
       },
       "edge": {
         "outside": "出站未阻断：{services}",
@@ -14478,7 +14490,8 @@
         "noMembers": "没有成员",
         "membersUnknown": "无法读取客户机列表。",
         "pending": "待处理",
-        "noFlows": "无"
+        "noFlows": "无",
+        "resize": "拖动以加宽面板（双击：恢复原始宽度）"
       },
       "zonePanel": {
         "inside": "查看区域内部",
@@ -14597,9 +14610,7 @@
         "hint": "点击另一个区域可将其置于中心。"
       },
       "inside": {
-        "back": "返回地图",
-        "title": "区域 {name} 内部",
-        "hint": "区域内的每个客户机，以及它们彼此之间和与外部的流量。双击另一个区域可进入。"
+        "back": "返回地图"
       },
       "sankey": {
         "label": "以条带显示区域之间的流量",
@@ -14676,6 +14687,40 @@
         "topBothEmpty": "此时间范围内没有来源或目的地",
         "fromInto": "从 {name} 进入此区域",
         "toFrom": "从此区域到 {name}"
+      },
+      "services": {
+        "button": "服务",
+        "all": "所有服务",
+        "some": "服务：{total, number} 个中的 {shown, number} 个"
+      },
+      "seen": {
+        "title": "观察到的流量时间范围",
+        "button": "时间范围：{period}",
+        "period": {
+          "1h": "最近 1 小时",
+          "24h": "最近 24 小时",
+          "7d": "最近 7 天",
+          "all": "任何时间"
+        },
+        "note": "无论选择哪个时间范围，流量的命中数都是自首次出现以来的总数。"
+      },
+      "guestPanel": {
+        "label": "客户机 {name}",
+        "logTitle": "防火墙日志",
+        "refresh": "重新读取最新的行",
+        "reading": "正在读取日志...",
+        "error": "无法读取日志：{error}",
+        "empty": "此客户机的防火墙日志中没有任何行。",
+        "policyAction": "{action}（策略）",
+        "noAction": "已记录",
+        "search": "搜索日志（地址、端口、动作...）",
+        "searchReading": "正在读取最新的 {count} 行...",
+        "searchFound": "在最新的 {scanned} 行中{count, plural, =0 {未找到任何行} other {找到 # 行}}",
+        "live": "实时",
+        "liveStart": "实时显示新行：每 {seconds} 秒读取一次，持续 {minutes} 分钟",
+        "liveStop": "停止实时模式",
+        "liveExpired": "实时模式已在 {minutes} 分钟后停止。",
+        "liveResume": "继续"
       }
     },
     "preflight": {
@@ -14784,7 +14829,8 @@
         "observation": "观察",
         "notifications": "通知我",
         "advanced": "高级",
-        "removal": "移除"
+        "removal": "移除",
+        "networks": "已命名网络"
       },
       "fields": {
         "tagPrefix": "标签前缀",
@@ -14834,7 +14880,12 @@
         "burstNumber": "日志突发量必须是不小于 0 的整数。",
         "rateBoth": "请同时填写日志速率和突发量，或都留空。",
         "selfIpInvalid": "{ip} 不是有效的 IP 地址。",
-        "selfIpTooMany": "最多 {max} 个地址。"
+        "selfIpTooMany": "最多 {max} 个地址。",
+        "networkName": "网络名称需为 1 到 {max, number} 个字符。",
+        "networkCidr": "{name} 的网络不是有效的 CIDR，例如 192.168.72.0/24。",
+        "networkNameTwice": "网络名称 {name} 使用了两次。",
+        "networkTwice": "{name} 的网络已被命名。",
+        "networkTooMany": "最多可命名 {max, number} 个网络。"
       },
       "remove": {
         "row": "移除微分段",
@@ -14896,6 +14947,15 @@
           "typeName": "输入 {name} 以确认",
           "confirm": "取消关联"
         }
+      },
+      "networks": {
+        "hint": "已命名网络中的地址与区域通信时，显示为该网络，并计为一个来源。",
+        "name": "名称",
+        "cidr": "网络 (CIDR)",
+        "add": "添加网络",
+        "remove": "移除此网络",
+        "empty": "尚未命名任何网络。",
+        "unnamed": "网络 {index, number}"
       }
     },
     "history": {
@@ -15151,7 +15211,6 @@
       "createFlow": "创建流量规则",
       "createFlowTip": "将此服务的流量规则添加到草稿",
       "draftNote": "按草稿评估，草稿中有未应用的更改",
-      "openFlowsTip": "打开按区域分组的“网络流量”页面",
       "summary": {
         "title": "按区域的流量",
         "intra": "区域内",

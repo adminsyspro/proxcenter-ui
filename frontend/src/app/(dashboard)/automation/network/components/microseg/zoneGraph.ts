@@ -11,6 +11,7 @@ import { placeEdges, type EdgeEnds, type Obstacle, type PlacedEdge } from './zon
 import type { Point } from './edgeGeometry'
 import { guestId, guestKey } from './zoneModel'
 import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, byText, circleRadius, foldColumns, layerZones, memberSlots, orderLayers, slotPositions } from './zoneLayout'
+import type { NamedNetwork } from '@/lib/microseg/namedNetworks'
 
 /** Size of the External and Outside boxes. */
 export const NODE_W = 200
@@ -92,7 +93,7 @@ export type MoreNodeData = { kind: 'more'; count: number; groupId: string }
 /** `egress`, on the Outside box: the worst state of the outbound traffic of the zones that send a flow to it. */
 export type BoundaryNodeData = { kind: 'external' | 'outside'; egress?: OutboundFlowStatus }
 /** An address that talks to a zone and is no guest (the guest view draws the busiest ones on their own). */
-export type IpNodeData = { kind: 'ip'; ip: string; /** The zones whose gateway the address is, by name. */ gatewayOf?: string[] }
+export type IpNodeData = { kind: 'ip'; ip: string; /** The zones whose gateway the address is, by name. */ gatewayOf?: string[]; /** The name of the network, when the box stands for a named network (`ip` is then its CIDR). */ network?: string }
 /** The guests a zone has on a Proxmox node. */
 export type PveZoneShare = { id: string; name: string; color: string; count: number }
 /**
@@ -175,6 +176,8 @@ export type MapInput = {
   suggestions: MicrosegSuggestion[]
   /** The members of each zone; null while the guests are unknown (no guest drawn, counts unknown). */
   members?: ReadonlyMap<string, MapMember[]> | null
+  /** The networks the admin named: the views centred on a zone draw the addresses of one as a single box. */
+  networks?: readonly NamedNetwork[] | null
   /** The running guests in no zone. */
   unzoned?: MapMember[] | null
   /** Ids of the flows of the draft that are not applied yet. */
@@ -735,6 +738,82 @@ export type FlowFilters = { allowed: boolean; unprotected: boolean; blocked: boo
 export const ALL_FLOWS: FlowFilters = { allowed: true, unprotected: true, blocked: true }
 /** The checkbox of the toolbar each kind of edge follows. */
 const FILTER_OF_KIND: Record<MapEdgeKind, keyof FlowFilters> = { allowed: 'allowed', exception: 'allowed', outside: 'allowed', unprotected: 'unprotected', blocked: 'blocked' }
+
+/** How far back the observed flows of the map go: seen within the last hour, day or week, or whenever. */
+export const SEEN_PERIODS = ['1h', '24h', '7d', 'all'] as const
+export type SeenPeriod = (typeof SEEN_PERIODS)[number]
+const SEEN_MS: Record<Exclude<SeenPeriod, 'all'>, number> = { '1h': 3_600_000, '24h': 86_400_000, '7d': 604_800_000 }
+
+/** An observed flow not seen for this long is drawn faded: its hits are a total since it was first seen, not now. */
+export const STALE_AFTER_MS = 3_600_000
+
+/** An edge with only some of its observed flows: their services, their hits, and the flows of those services. */
+function withObserved(e: Edge, d: MapEdgeData, observed: MicrosegSuggestion[]): Edge {
+  const kept = new Set(observed.map(o => flowService(o)))
+  const services = d.services.filter(s => kept.has(s))
+  const data: MapEdgeData = { ...d, services, label: groupServices(services), observed, count: observed.length, hits: observed.reduce((sum, o) => sum + (o.hits ?? 0), 0) }
+  return { ...e, data: data as unknown as Edge['data'] }
+}
+
+/** When the observed flows of an edge were last seen (the latest of them), null for an edge with none or no date. */
+export function lastSeenOf(d: Pick<MapEdgeData, 'observed'>): number | null {
+  const times = d.observed.map(o => Date.parse(o.last_seen)).filter(t => Number.isFinite(t))
+  return times.length > 0 ? Math.max(...times) : null
+}
+
+/**
+ * The edges left when only the observed flows seen within `period` are drawn: an observed edge keeps the flows seen
+ * since then (one with none goes), with their services and their hits; the hits stay the total of each flow since it
+ * was first seen. A flow with no readable date is kept. The allowed flows and the exceptions have no date: kept.
+ */
+export function filterEdgeAge(edges: Edge[], period: SeenPeriod, now: number): Edge[] {
+  if (period === 'all') return edges
+  const since = now - SEEN_MS[period]
+  return edges.flatMap(e => {
+    const d = e.data as unknown as MapEdgeData
+    if (d.hits === null) return [e]
+    const observed = d.observed.filter(o => {
+      const at = Date.parse(o.last_seen)
+      return !Number.isFinite(at) || at >= since
+    })
+    if (observed.length === 0) return []
+    return observed.length === d.observed.length ? [e] : [withObserved(e, d, observed)]
+  })
+}
+
+/** A service the edges of a map carry: its token ("tcp/22", "icmp") and how it reads ("SSH"). */
+export type EdgeService = { token: string; label: string }
+
+/** The services the edges carry, each once, by the way they read. */
+export function edgeServices(edges: readonly Edge[]): EdgeService[] {
+  const tokens = new Set(edges.flatMap(e => (e.data as unknown as MapEdgeData).services ?? []))
+  const named = [...tokens].map(token => ({ token, label: groupServices([token]) }))
+  // Two ports that read the same ("HTTP-alt" for 8008 and 8080) say their port.
+  const count = new Map<string, number>()
+  for (const s of named) count.set(s.label, (count.get(s.label) ?? 0) + 1)
+  // Read as a list: by name whatever the case ("icmp" between "HTTPS" and "PostgreSQL").
+  return named.map(s => (count.get(s.label)! > 1 && s.label !== s.token ? { token: s.token, label: `${s.label} (${s.token})` } : s)).sort((a, b) => a.label.localeCompare(b.label, 'en', { sensitivity: 'base' }) || byText(a.token, b.token))
+}
+
+/**
+ * The edges left when only the services `shown` are drawn (null: all of them): an edge none of whose services is shown
+ * goes, and one that keeps some carries only those, with their flows, their observed flows and their hits. An edge
+ * with no service at all (a link that only stands for exceptions between two zones) is not a matter of services: kept.
+ */
+export function filterEdgeServices(edges: Edge[], shown: ReadonlySet<string> | null): Edge[] {
+  if (!shown) return edges
+  return edges.flatMap(e => {
+    const d = e.data as unknown as MapEdgeData
+    if (d.services.length === 0) return [e]
+    const services = d.services.filter(s => shown.has(s))
+    if (services.length === 0) return []
+    if (services.length === d.services.length) return [e]
+    if (d.hits !== null) return [withObserved(e, d, d.observed.filter(o => shown.has(flowService(o))))]
+    const flows = d.flows.filter(f => shown.has(flowService(f)))
+    const data: MapEdgeData = { ...d, services, label: groupServices(services), flows, count: flows.length }
+    return [{ ...e, data: data as unknown as Edge['data'] }]
+  })
+}
 
 /** The edges the three checkboxes of the toolbar let through (the flows to Outside and the exceptions are allowed flows). */
 export function filterEdges(edges: Edge[], filters: FlowFilters): Edge[] {

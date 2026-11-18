@@ -105,7 +105,7 @@ describe('the inside of a zone of a shared policy', () => {
     const zone = await node('zone:zw')
     fireEvent.click(zone)
     fireEvent.click(zone, { detail: 2 })
-    expect(await screen.findByTestId('zone-inside-bar')).toBeTruthy()
+    expect(await screen.findByTestId('zone-inside-back')).toBeTruthy()
     expect((await node('guest:zw:c1/qemu/100')).getAttribute('data-parent')).toBe('zone:zw')
     expect((await node('guest:zw:c2/qemu/100')).getAttribute('data-parent')).toBe('zone:zw')
   })

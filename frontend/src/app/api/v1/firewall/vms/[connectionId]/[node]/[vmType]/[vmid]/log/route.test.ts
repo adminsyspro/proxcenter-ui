@@ -17,9 +17,11 @@ import { callRoute, readJson } from '@/__tests__/setup/route-test'
 // See the VM route test for the rationale: the orchestrator client and pveDirect
 // are stubbed, the fallback helper is the real one (#616).
 const getVMFirewallLogMock = vi.fn<(...args: any[]) => Promise<any>>()
+const getFirewallLogPageMock = vi.fn<(...args: any[]) => Promise<any>>()
 
 vi.mock('@/lib/firewall/pveDirect', () => ({
   getVMFirewallLog: getVMFirewallLogMock,
+  getFirewallLogPage: getFirewallLogPageMock,
 }))
 
 installFirewallRouteMocks()
@@ -157,5 +159,81 @@ describe('GET /api/v1/firewall/vms/[connectionId]/[node]/[vmType]/[vmid]/log', (
     expect(checkPermissionMock).not.toHaveBeenCalled()
     expect(orchestrator.get).not.toHaveBeenCalled()
     expect(getVMFirewallLogMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET .../log?page= (the newest lines first, a page at a time)', () => {
+  const LOG = '/firewall/vms/conn-1/pve1/lxc/204/log'
+  const lines = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => ({ n: from + i, t: `line ${from + i}` }))
+
+  it('reads the count, then the last lines of the log, in two reads', async () => {
+    orchestrator.get
+      .mockResolvedValueOnce({ data: { total: 95, lines: lines(1, 1) }, status: 200 })
+      .mockResolvedValueOnce({ data: { total: 95, lines: lines(76, 95) }, status: 200 })
+
+    const { GET } = handlersOf(await import('./route'))
+    const res = await callRoute(GET, { params: PARAMS, searchParams: { page: '0', size: '20' } })
+
+    expect(res.status).toBe(200)
+    expect(await readJson<any>(res)).toEqual({ total: 95, lines: lines(76, 95) })
+    expect(orchestrator.get.mock.calls.map(c => c[0])).toEqual([`${LOG}?start=0&limit=1&withTotal=1`, `${LOG}?start=75&limit=20&withTotal=1`])
+  })
+
+  it('reads a later page in one read with the count handed back, the oldest page short', async () => {
+    orchestrator.get.mockResolvedValueOnce({ data: { total: 99, lines: lines(1, 15) }, status: 200 })
+
+    const { GET } = handlersOf(await import('./route'))
+    const res = await callRoute(GET, { params: PARAMS, searchParams: { page: '4', size: '20', total: '95' } })
+
+    expect(res.status).toBe(200)
+    // Page 4 of 95 lines: the 15 oldest; the total stays the one handed back, so the pages do not move.
+    expect(await readJson<any>(res)).toEqual({ total: 95, lines: lines(1, 15) })
+    expect(orchestrator.get).toHaveBeenCalledTimes(1)
+    expect(orchestrator.get).toHaveBeenCalledWith(`${LOG}?start=0&limit=15&withTotal=1`)
+  })
+
+  it('answers a page past the oldest line with no line and no read', async () => {
+    const { GET } = handlersOf(await import('./route'))
+    const res = await callRoute(GET, { params: PARAMS, searchParams: { page: '5', size: '20', total: '95' } })
+
+    expect(await readJson<any>(res)).toEqual({ total: 95, lines: [] })
+    expect(orchestrator.get).not.toHaveBeenCalled()
+  })
+
+  it('caps the size at 2000 and takes 20 for a size that is not a whole number', async () => {
+    orchestrator.get.mockResolvedValue({ data: { total: 10_000, lines: [] }, status: 200 })
+
+    const { GET } = handlersOf(await import('./route'))
+    await callRoute(GET, { params: PARAMS, searchParams: { page: '0', size: '999999', total: '10000' } })
+    await callRoute(GET, { params: PARAMS, searchParams: { page: '-1', size: 'abc', total: '10000' } })
+
+    expect(orchestrator.get.mock.calls.map(c => c[0])).toEqual([`${LOG}?start=8000&limit=2000&withTotal=1`, `${LOG}?start=9980&limit=20&withTotal=1`])
+  })
+
+  it('reads the lines written since a count in one read (the live mode)', async () => {
+    orchestrator.get.mockResolvedValueOnce({ data: { total: 103, lines: lines(96, 103) }, status: 200 })
+
+    const { GET } = handlersOf(await import('./route'))
+    const res = await callRoute(GET, { params: PARAMS, searchParams: { page: '0', after: '95', size: '200' } })
+
+    expect(await readJson<any>(res)).toEqual({ total: 103, lines: lines(96, 103) })
+    expect(orchestrator.get).toHaveBeenCalledTimes(1)
+    expect(orchestrator.get).toHaveBeenCalledWith(`${LOG}?start=95&limit=200&withTotal=1`)
+  })
+
+  it('reads the page from PVE when the orchestrator is unavailable', async () => {
+    orchestrator.get.mockRejectedValue(unavailable())
+    getFirewallLogPageMock
+      .mockResolvedValueOnce({ total: 30, lines: lines(1, 1) })
+      .mockResolvedValueOnce({ total: 30, lines: lines(11, 30) })
+
+    const { GET } = handlersOf(await import('./route'))
+    const res = await callRoute(GET, { params: PARAMS, searchParams: { page: '0' } })
+
+    expect(await readJson<any>(res)).toEqual({ total: 30, lines: lines(11, 30) })
+    expect(getFirewallLogPageMock.mock.calls.map(c => c.slice(1))).toEqual([
+      ['pve1', { start: 0, limit: 1 }, { vmType: 'lxc', vmid: '204' }],
+      ['pve1', { start: 10, limit: 20 }, { vmType: 'lxc', vmid: '204' }],
+    ])
   })
 })

@@ -4,6 +4,8 @@
 // the Go json tags in internal/microseg/{models,engine_result,drift,preflight,
 // inventory}.go and the envelopes of internal/api/microseg*.go).
 
+import type { NamedNetwork } from './namedNetworks'
+
 export type GuestType = 'qemu' | 'lxc'
 
 export type GuestRef = { node: string; type: GuestType; vmid: number }
@@ -33,6 +35,8 @@ export type MicrosegSettings = {
   notify_blocked: boolean
   /** Optional: the addresses ProxCenter reaches the guests from, instead of the detected one (max 16). */
   self_ips?: string[]
+  /** Optional: the networks the admin named (max 64); the orchestrator answers their CIDR in its canonical form. */
+  networks?: NamedNetwork[]
 }
 
 /** The policy row of a connection (Go `Policy`). */

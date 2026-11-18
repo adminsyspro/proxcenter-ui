@@ -56,8 +56,15 @@ function IpNodeComponent({ data }: NodeProps) {
   const d = data as unknown as IpNodeData
   const t = useTranslations('microsegPilot.overview.node')
   const gateway = d.gatewayOf?.join(', ')
+  let boxIcon = 'ri-map-pin-line'
+  if (d.network) boxIcon = 'ri-global-line'
+  else if (gateway) boxIcon = 'ri-router-line'
+  const boxLabel = d.network ?? (gateway ? t('gateway') : d.ip)
+  let hint = t('ipHint', { ip: d.ip })
+  if (d.network) hint = t('networkHint', { name: d.network, cidr: d.ip })
+  else if (gateway) hint = t('gatewayHint', { ip: d.ip, zones: gateway })
   return (
-    <Tooltip title={gateway ? t('gatewayHint', { ip: d.ip, zones: gateway }) : t('ipHint', { ip: d.ip })}>
+    <Tooltip title={hint}>
       <Box
         sx={{
           width: NODE_W, height: NODE_H, boxSizing: 'border-box', border: '1px dashed', borderColor: 'text.disabled', borderRadius: 1.5,
@@ -65,8 +72,8 @@ function IpNodeComponent({ data }: NodeProps) {
         }}
       >
         <Handles />
-        <i className={gateway ? 'ri-router-line' : 'ri-map-pin-line'} style={{ fontSize: 16, flexShrink: 0 }} />
-        <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0, fontSize: '0.85rem' }}>{gateway ? t('gateway') : d.ip}</Typography>
+        <i className={boxIcon} style={{ fontSize: 16, flexShrink: 0 }} />
+        <Typography noWrap fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0, fontSize: '0.85rem' }}>{boxLabel}</Typography>
       </Box>
     </Tooltip>
   )

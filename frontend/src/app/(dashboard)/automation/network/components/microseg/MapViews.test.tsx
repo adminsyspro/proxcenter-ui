@@ -254,6 +254,20 @@ describe('the guest view', () => {
     expect(screen.queryByTestId('node-zone:zq')).toBeNull()
   })
 
+  it('offers to fold the external addresses on the views centred on a zone only, and remembers the choice', async () => {
+    window.localStorage.setItem('microseg.map.view', 'guests')
+    demo()
+    await screen.findByRole('combobox', { name: 'Zone in the centre' })
+    const box = screen.getByRole('checkbox', { name: 'External addresses' }) as HTMLInputElement
+    expect(box.checked).toBe(true)
+    fireEvent.click(box)
+    expect(box.checked).toBe(false)
+    expect(window.localStorage.getItem('microseg.map.addresses')).toBe('0')
+    // The other renderings draw no address box: no such checkbox.
+    fireEvent.click(screen.getByRole('button', { name: 'Groups' }))
+    await waitFor(() => expect(screen.queryByRole('checkbox', { name: 'External addresses' })).toBeNull())
+  })
+
   it('puts another zone in the centre on a click, and opens the panel of the zone in the centre', async () => {
     window.localStorage.setItem('microseg.map.view', 'guests')
     demo()

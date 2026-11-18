@@ -17,8 +17,9 @@ import { MemberChangeChip } from './ZoneRow'
 import EgressChip, { useZoneEgress } from './EgressChip'
 import ExpandDialog, { withCount, type DataTab } from './ExpandDialog'
 import ZoneStateChip from './ZoneStateChip'
-import { destinationName, endpoint } from './ObservationRow'
+import { destinationName, sourceName } from './ObservationRow'
 import { useGatewayName } from './useGatewayName'
+import { useNamedNetworks } from './namedNetworksContext'
 import { bareIp } from './zoneGraph'
 import { ExpandAddButton, FlowsList, MemberAction, NewFlowButton, ZoneHeaderActions, useExceptionEditor, useFlowEditor } from './ZonePanelActions'
 import { useMicrosegClusterWrite } from './microsegAccess'
@@ -104,10 +105,11 @@ function SuggestionLine({ suggestion: s, zonesById, peers, busy, onResolve }: {
 }) {
   const to = useTranslations('microsegPilot.observation')
   const gatewayName = useGatewayName(zonesById.values())
+  const networks = useNamedNetworks()
   // The peer of an inbound row is its source, the peer of an outbound row (emitted by this zone) is its destination.
   const source = s.direction === 'out'
     ? destinationName(s, zonesById, ip => peers?.get(bareIp(ip)) ?? gatewayName(ip), to as (key: string) => string)
-    : endpoint(s.src_zone_id, s.src_ip, zonesById, to as (key: string) => string, gatewayName)
+    : sourceName(s, zonesById, to as (key: string) => string, gatewayName, networks)
   return (
     <Box role='listitem' aria-label={source} data-suggestion={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minHeight: 36, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>
       <DirectionGlyph direction={s.direction} />
@@ -285,8 +287,9 @@ export default function ZonePanel(props: Props) {
             sx={{ flexShrink: 0 }}
           />
         )}
-        {/* One row over the whole width: the states as icons (their words in the tooltips), the actions, enlarge and close. */}
-        <Box data-testid='zone-panel-controls' sx={{ flex: '1 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.25, ml: 1 }}>
+        {/* One row: the states as icons (their words in the tooltips), the actions, enlarge and close; spread over the
+            room of the default width, kept together at the right of a widened panel. */}
+        <Box data-testid='zone-panel-controls' sx={{ flex: '1 0 auto', maxWidth: 340, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.25, ml: 'auto', pl: 1 }}>
           <ZoneStateChip state={zone.state} iconOnly />
           <EgressChip state={egress} ready={egressReady} iconOnly />
           <ZoneHeaderActions zone={zone} edits={edits} onAssign={onAssign} onDeleted={onClose} spread />

@@ -270,6 +270,29 @@ describe("GET /api/v1/vms PVE load (UA52)", () => {
     expect(configCalls()).toBe(3)
   })
 
+  it("?refresh=list reads the guest list alone again, with its new tags, under the same 30 s limit", async () => {
+    await get()
+    h.pveFetch.mockClear()
+    h.pveFetch.mockImplementationOnce(async () => guests.map(g => ({ ...g, status: "running", maxdisk: 1, tags: g.vmid === 100 ? "zone-db" : "zone-web" })))
+
+    // One second after a read: the list is kept 15 s, the forced read asks Proxmox anyway, and for the list only.
+    vi.setSystemTime(T0 + 1_000)
+    const data = await vmsOf(await get({ refresh: "list" }))
+    expect(data.vms.find((v: any) => v.vmid === "100").tags).toEqual(["zone-db"])
+    expect(listCalls()).toBe(2)
+    expect(configCalls()).toBe(0)
+
+    // A second one within 30 s is served from what was just read, as ?refresh=1 is.
+    h.pveFetch.mockClear()
+    vi.setSystemTime(T0 + 2_000)
+    await get({ refresh: "list" })
+    expect(h.pveFetch).not.toHaveBeenCalled()
+
+    // And it took the turn of ?refresh=1 for that connection.
+    await get({ refresh: "1" })
+    expect(h.pveFetch).not.toHaveBeenCalled()
+  })
+
   it("shows new tags at the next read past 15 s (an apply by the micro-segmentation engine)", async () => {
     await get()
     h.pveFetch.mockImplementationOnce(async () => guests.map(g => ({ ...g, status: "running", maxdisk: 1, tags: g.vmid === 100 ? "zone-db" : "zone-web" })))

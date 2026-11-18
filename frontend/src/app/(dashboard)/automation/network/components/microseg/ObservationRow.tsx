@@ -12,6 +12,8 @@ import { DirectionGlyph, ObservedKindGlyph } from './observationParts'
 import { formatWhen } from './summaryModel'
 import ClusterChip from './ClusterChip'
 import TruncatedText from './TruncatedText'
+import { isManySources, networkByCidr, networkOf, type NamedNetwork } from '@/lib/microseg/namedNetworks'
+import { useNamedNetworks } from './namedNetworksContext'
 
 /** Columns of the table: select, details, source, arrow, destination, service, hits, last seen, status, actions. */
 export const OBSERVATION_COLUMNS = 10
@@ -25,6 +27,30 @@ export function endpoint(zoneId: string, ip: string, zones: Map<string, Microseg
   if (zoneId) return zones.get(zoneId)?.name ?? t('deletedZone')
   if (!ip) return t('unknownEndpoint')
   return gatewayName?.(ip) ?? ip
+}
+
+/**
+ * What the source of an inbound flow is called: its zone; "Many sources" for the aggregate row of the addresses past
+ * the cap; a named network as "VPN (192.168.72.0/24)" (the row of the network, or an address of it recorded before
+ * the network was named); else its address, named when it is a gateway.
+ */
+export function sourceName(
+  s: Pick<MicrosegSuggestion, 'src_zone_id' | 'src_ip' | 'src_key'>,
+  zones: Map<string, MicrosegZone>,
+  t: (key: string) => string,
+  gatewayName: ((ip: string) => string | undefined) | undefined,
+  networks: readonly NamedNetwork[],
+): string {
+  if (s.src_zone_id) return endpoint(s.src_zone_id, s.src_ip, zones, t, gatewayName)
+  if (isManySources(s.src_key)) return t('manySources')
+  if (s.src_key?.includes('/')) {
+    const network = networkByCidr(s.src_key, networks)
+    return network ? `${network.name} (${network.cidr})` : s.src_key
+  }
+  const named = gatewayName?.(s.src_ip)
+  if (named) return named
+  const network = networkOf(s.src_ip, networks)
+  return network ? `${network.name} (${s.src_ip})` : endpoint('', s.src_ip, zones, t)
 }
 
 /** The name of the destination of a flow: an outbound one may be an address, a guest or many destinations. */
@@ -76,7 +102,8 @@ export default function ObservationRow({ suggestion: s, zones, guestName, gatewa
   const format = useFormatter()
 
   const when = (iso: string) => formatWhen(format, iso)
-  const source = endpoint(s.src_zone_id, s.src_ip, zones, t, gatewayName)
+  const networks = useNamedNetworks()
+  const source = sourceName(s, zones, t, gatewayName, networks)
   const destination = destinationName(s, zones, guestName, t)
   const service = serviceLabelIn(s.proto, s.dport, sharedServices)
   const serviceTip = serviceTitle(s.proto, s.dport)
@@ -107,7 +134,7 @@ export default function ObservationRow({ suggestion: s, zones, guestName, gatewa
         <TableCell sx={CELL_SX}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
             <DirectionGlyph direction={s.direction} />
-            <ObservedKindGlyph kind={s.kind} />
+            <ObservedKindGlyph kind={s.kind} lastSeen={s.last_seen} />
             <Box component='span' data-source-dot={dot} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: dot, flexShrink: 0 }} />
             {cluster && <ClusterChip connectionId={cluster.id} name={cluster.name} compact />}
             <TruncatedText text={source} fontWeight={600} tabIndex={0} sx={NAME_SX} />

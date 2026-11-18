@@ -4,6 +4,7 @@
 // mistake is shown at once instead of coming back as a 400; the server stays
 // the authority.
 
+import { networksProblem, type NamedNetwork } from '@/lib/microseg/namedNetworks'
 import type { MicrosegSettings, PolicyUpdate, SelfIpsSource } from '@/lib/microseg/types'
 
 import { isIpAddress } from './zoneForm'
@@ -49,6 +50,8 @@ export type SettingsForm = RateLimitForm & Record<SettingNumberKey, string> & Re
   tagPrefix: string
   /** Comma or space separated addresses. */
   selfIps: string
+  /** The named networks, one per row of the form. */
+  networks: NamedNetwork[]
 }
 
 /** A problem with one field: a key under microsegPilot.settings.validation and its values. */
@@ -98,6 +101,7 @@ export function formFromSettings(tagPrefix: string, settings: Partial<MicrosegSe
     ...numbers,
     ...parseRateLimit(s.observe_log_rate_limit ?? ''),
     selfIps: (s.self_ips ?? []).join(', '),
+    networks: (s.networks ?? []).map(n => ({ name: n.name, cidr: n.cidr })),
     ...notify,
   }
 }
@@ -141,6 +145,10 @@ export function validateSettingsForm(form: SettingsForm, baseline?: SettingsForm
   }
   if (edited(!!baseline && sameRate(baseline, form))) validateRate(form, problems)
   if (edited(baseline?.selfIps === form.selfIps)) validateSelfIps(form.selfIps, problems)
+  if (edited(!!baseline && sameNetworks(baseline.networks, form.networks))) {
+    const problem = networksProblem(form.networks)
+    if (problem) problems.networks = problem
+  }
   return problems
 }
 
@@ -153,6 +161,10 @@ export function associateBlock(count: number, max: number | undefined, candidate
   if (max !== undefined && count >= max) return 'max'
   return candidateCount === 0 ? 'none' : null
 }
+
+/** The networks as they are saved: names and CIDR trimmed. */
+const trimmedNetworks = (rows: readonly NamedNetwork[]) => rows.map(n => ({ name: n.name.trim(), cidr: n.cidr.trim() }))
+const sameNetworks = (a: readonly NamedNetwork[], b: readonly NamedNetwork[]) => JSON.stringify(trimmedNetworks(a)) === JSON.stringify(trimmedNetworks(b))
 
 type Changes = Pick<PolicyUpdate, 'tag_prefix' | 'settings'>
 
@@ -176,6 +188,7 @@ export function changedUpdate(baseline: SettingsForm, form: SettingsForm): Chang
   if (rateChanged) settings.observe_log_rate_limit = buildRateLimit({ rate: form.rate.trim(), rateUnit: form.rateUnit, burst: form.burst.trim() })
   const ips = parseSelfIps(form.selfIps)
   if (!sameList(ips, parseSelfIps(baseline.selfIps))) settings.self_ips = ips
+  if (!sameNetworks(baseline.networks, form.networks)) settings.networks = trimmedNetworks(form.networks)
 
   const out: Changes = {}
   if (form.tagPrefix !== baseline.tagPrefix) out.tag_prefix = form.tagPrefix

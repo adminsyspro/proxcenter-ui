@@ -13579,6 +13579,11 @@
     },
     "policy": {
       "zonesTitle": "Zones",
+      "layout": {
+        "label": "Afficher les zones en",
+        "cards": "Cartes",
+        "rows": "Lignes"
+      },
       "flowsTitle": "Flux",
       "addZone": "Nouvelle zone",
       "addFlow": "Nouveau flux",
@@ -13857,7 +13862,10 @@
         "pendingMove": "Déplacement vers {zone}",
         "moveHint": "Déplacement vers {zone} en file, sélectionnez-le à nouveau pour le garder dans cette zone.",
         "partial": "Enregistré sur {clusters} seulement ; les autres clusters n'ont pas été enregistrés : {error}",
-        "partialSome": "Enregistré sur une partie des clusters seulement ; les autres n'ont pas été enregistrés : {error}"
+        "partialSome": "Enregistré sur une partie des clusters seulement ; les autres n'ont pas été enregistrés : {error}",
+        "willRemove": "Sera retiré",
+        "willRemoveHint": "Décoché : retiré de cette zone à la prochaine application. Recochez-le pour le garder.",
+        "confirmChanges": "Enregistrer : {add, number} à assigner, {remove, number} à retirer"
       },
       "preflightButton": "Vérifications préalables",
       "state": {
@@ -14402,7 +14410,9 @@
         "accept": "Accepter"
       },
       "cidrOutTip": "Crée le flux {from} → le réseau de {ip} {service} dans le brouillon, avec le préfixe choisi.",
-      "bulkCidrOutbound": "Les réseaux sortants s'acceptent un par un, pour choisir chaque préfixe."
+      "bulkCidrOutbound": "Les réseaux sortants s'acceptent un par un, pour choisir chaque préfixe.",
+      "kindSeen": "{kind}, vu pour la dernière fois {time}",
+      "manySources": "Nombreuses sources"
     },
     "overview": {
       "empty": "Aucune zone à dessiner pour l'instant.",
@@ -14417,7 +14427,8 @@
         "unprotected": "Non protégé",
         "blocked": "Bloqué",
         "draft": "Autorisé, pas encore appliqué",
-        "exception": "Exception entre VM"
+        "exception": "Exception entre VM",
+        "addresses": "Adresses externes"
       },
       "node": {
         "members": "{count, plural, one {# membre} other {# membres}}",
@@ -14447,7 +14458,8 @@
         "inside": "{count, plural, one {# flux observé} other {# flux observés}} dans la zone",
         "observed": "sortie en observation",
         "gateway": "Passerelle",
-        "gatewayHint": "Passerelle de {zones} ({ip}) : son trafic est nommé sur la carte et dans le sous-onglet Observation"
+        "gatewayHint": "Passerelle de {zones} ({ip}) : son trafic est nommé sur la carte et dans le sous-onglet Observation",
+        "networkHint": "{name} : le réseau nommé {cidr}. Ses adresses qui parlent à cette zone sont dessinées ici."
       },
       "edge": {
         "outside": "Sortie non bloquée : {services}",
@@ -14479,7 +14491,8 @@
         "noMembers": "Aucun membre",
         "membersUnknown": "La liste des invités n'a pas pu être lue.",
         "pending": "En attente",
-        "noFlows": "Aucun"
+        "noFlows": "Aucun",
+        "resize": "Faire glisser pour élargir le panneau (double clic : sa largeur d'origine)"
       },
       "zonePanel": {
         "inside": "Voir l'intérieur de la zone",
@@ -14598,9 +14611,7 @@
         "hint": "Cliquez sur une autre zone pour la mettre au centre."
       },
       "inside": {
-        "back": "Retour à la carte",
-        "title": "Intérieur de la zone {name}",
-        "hint": "Chaque VM de la zone, ce qu'elles échangent entre elles et avec le reste. Double-cliquez sur une autre zone pour y entrer."
+        "back": "Retour à la carte"
       },
       "sankey": {
         "label": "Trafic entre les zones en rubans",
@@ -14677,6 +14688,40 @@
         "topBothEmpty": "Aucune source ni destination sur cette période",
         "fromInto": "Vers cette zone, depuis {name}",
         "toFrom": "Depuis cette zone, vers {name}"
+      },
+      "services": {
+        "button": "Services affichés",
+        "all": "Tous les services",
+        "some": "Services : {shown, number} sur {total, number}"
+      },
+      "seen": {
+        "title": "Flux observés vus",
+        "button": "Vus : {period}",
+        "period": {
+          "1h": "dernière heure",
+          "24h": "dernières 24 heures",
+          "7d": "7 derniers jours",
+          "all": "toute période"
+        },
+        "note": "Les occurrences d'un flux sont son total depuis sa première apparition, quelle que soit la période."
+      },
+      "guestPanel": {
+        "label": "Invité {name}",
+        "logTitle": "Journal du pare-feu",
+        "refresh": "Relire les lignes les plus récentes",
+        "reading": "Lecture du journal...",
+        "error": "Le journal n'a pas pu être lu : {error}",
+        "empty": "Aucune ligne dans le journal du pare-feu de cet invité.",
+        "policyAction": "{action} (politique)",
+        "noAction": "Journalisé",
+        "search": "Rechercher dans le journal (adresse, port, action...)",
+        "searchReading": "Lecture des {count} lignes les plus récentes...",
+        "searchFound": "{count, plural, =0 {Aucune ligne trouvée} one {# ligne trouvée} other {# lignes trouvées}} dans les {scanned} plus récentes",
+        "live": "Direct",
+        "liveStart": "Afficher les nouvelles lignes au fil de l'eau : une lecture toutes les {seconds} s, pendant {minutes} minutes",
+        "liveStop": "Arrêter le direct",
+        "liveExpired": "Direct arrêté au bout de {minutes} minutes.",
+        "liveResume": "Reprendre"
       }
     },
     "preflight": {
@@ -14785,7 +14830,8 @@
         "observation": "Observation",
         "notifications": "Me notifier de",
         "advanced": "Avancé",
-        "removal": "Retrait"
+        "removal": "Retrait",
+        "networks": "Réseaux nommés"
       },
       "fields": {
         "tagPrefix": "Préfixe de tag",
@@ -14835,7 +14881,12 @@
         "burstNumber": "La rafale du journal est un nombre entier, 0 ou plus.",
         "rateBoth": "Renseignez le débit et la rafale du journal, ou laissez les deux vides.",
         "selfIpInvalid": "{ip} n'est pas une adresse IP valide.",
-        "selfIpTooMany": "{max} adresses au plus."
+        "selfIpTooMany": "{max} adresses au plus.",
+        "networkName": "Un réseau a un nom de 1 à {max, number} caractères.",
+        "networkCidr": "Le réseau de {name} n'est pas un CIDR valide, comme 192.168.72.0/24.",
+        "networkNameTwice": "Le nom de réseau {name} est utilisé deux fois.",
+        "networkTwice": "Le réseau de {name} est déjà nommé.",
+        "networkTooMany": "{max, number} réseaux au plus peuvent être nommés."
       },
       "remove": {
         "row": "Retirer la micro-segmentation",
@@ -14897,6 +14948,15 @@
           "typeName": "Saisissez {name} pour confirmer",
           "confirm": "Dissocier"
         }
+      },
+      "networks": {
+        "hint": "Une adresse d'un réseau nommé qui parle à une zone est affichée comme ce réseau, et comptée comme une seule source.",
+        "name": "Nom",
+        "cidr": "Réseau (CIDR)",
+        "add": "Ajouter un réseau",
+        "remove": "Retirer ce réseau",
+        "empty": "Aucun réseau n'est nommé.",
+        "unnamed": "Réseau {index, number}"
       }
     },
     "history": {
@@ -15152,7 +15212,6 @@
       "createFlow": "Créer un flux",
       "createFlowTip": "Ajouter au brouillon un flux pour ce service",
       "draftNote": "Évalué d'après le brouillon, qui contient des changements non appliqués",
-      "openFlowsTip": "Ouvrir la page Flux réseau groupée par zone",
       "summary": {
         "title": "Trafic par zone",
         "intra": "Dans une zone",

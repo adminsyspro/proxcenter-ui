@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { isRunAffectedKey, zoneGuestsUrl } from './runRefresh'
+import { GUEST_LIST_SETTLE_MS, isRunAffectedKey, refreshZoneGuestsAfterRun, zoneGuestsUrl } from './runRefresh'
 
 describe('isRunAffectedKey', () => {
   const matches = isRunAffectedKey('c 1')
@@ -36,5 +36,46 @@ describe('isRunAffectedKey', () => {
 
   it('builds the inventory read of the zone members', () => {
     expect(zoneGuestsUrl('a/b')).toBe('/api/v1/vms?connId=a%2Fb')
+  })
+})
+
+describe('the zone members after a run', () => {
+  it('asks each connection for a fresh guest list, reads the members again, and once more later', async () => {
+    vi.useFakeTimers()
+    try {
+      const asked: string[] = []
+      const read: Array<(key: unknown) => boolean> = []
+      refreshZoneGuestsAfterRun(m => { read.push(m) }, ['c1', 'c 2'], async url => { asked.push(url) })
+      expect(asked).toEqual(['/api/v1/vms?connId=c1&refresh=list', '/api/v1/vms?connId=c%202&refresh=list'])
+      expect(read).toHaveLength(0)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(read).toHaveLength(1)
+      expect(read[0]('/api/v1/vms?connId=c1')).toBe(true)
+      expect(read[0](['/api/v1/vms?connId=c%202', 'x'])).toBe(true)
+      expect(read[0]('/api/v1/vms?connId=c3')).toBe(false)
+      expect(read[0](`${'/api/v1/firewall/microseg/c1'}/status`)).toBe(false)
+      await vi.advanceTimersByTimeAsync(GUEST_LIST_SETTLE_MS)
+      expect(read).toHaveLength(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reads the members again even when the fresh list is refused, and nothing once cancelled', async () => {
+    vi.useFakeTimers()
+    try {
+      const read: unknown[] = []
+      refreshZoneGuestsAfterRun(m => { read.push(m) }, ['c1'], async () => { throw new Error('throttled') })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(read).toHaveLength(1)
+
+      const later: unknown[] = []
+      const cancel = refreshZoneGuestsAfterRun(m => { later.push(m) }, ['c1'], async () => undefined)
+      cancel()
+      await vi.advanceTimersByTimeAsync(GUEST_LIST_SETTLE_MS + 10)
+      expect(later).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

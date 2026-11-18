@@ -67,3 +67,23 @@ describe('a gateway as the end of an observed flow', () => {
     expect(endpoint('', '', new Map(), t, name)).toBe('unknownEndpoint')
   })
 })
+
+describe('the source of an observed flow', () => {
+  const nets = [{ name: 'VPN', cidr: '192.168.72.0/24' }]
+  const t = (key: string) => key
+  const none = () => undefined
+
+  it('is the named network of its row, of an address recorded before the network was named, or many sources', async () => {
+    const { sourceName } = await import('./ObservationRow')
+    const zones = new Map([['zw', { id: 'zw', name: 'web' } as never]])
+    expect(sourceName({ src_zone_id: 'zw', src_ip: '10.0.1.1', src_key: 'zw' }, zones, t, none, nets)).toBe('web')
+    expect(sourceName({ src_zone_id: '', src_ip: '192.168.72.17', src_key: '192.168.72.0/24' }, zones, t, none, nets)).toBe('VPN (192.168.72.0/24)')
+    expect(sourceName({ src_zone_id: '', src_ip: '192.168.72.17', src_key: '192.168.72.17' }, zones, t, none, nets)).toBe('VPN (192.168.72.17)')
+    expect(sourceName({ src_zone_id: '', src_ip: '', src_key: '0.0.0.0/0' }, zones, t, none, nets)).toBe('manySources')
+    // A network that is no longer named keeps its CIDR; a plain address is itself, a gateway keeps its name.
+    expect(sourceName({ src_zone_id: '', src_ip: '10.9.0.4', src_key: '10.9.0.0/24' }, zones, t, none, nets)).toBe('10.9.0.0/24')
+    expect(sourceName({ src_zone_id: '', src_ip: '203.0.113.9', src_key: '203.0.113.9' }, zones, t, none, nets)).toBe('203.0.113.9')
+    expect(sourceName({ src_zone_id: '', src_ip: '192.168.72.1', src_key: '192.168.72.1' }, zones, t, ip => (ip === '192.168.72.1' ? 'Gateway of web (192.168.72.1)' : undefined), nets)).toBe('Gateway of web (192.168.72.1)')
+    expect(sourceName({ src_zone_id: '', src_ip: '', src_key: 'k' }, zones, t, none, nets)).toBe('unknownEndpoint')
+  })
+})

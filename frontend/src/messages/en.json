@@ -4692,7 +4692,7 @@
     "pveStep1": "Create a dedicated user",
     "pveStep2": "Create an API token (privsep=0 inherits user permissions)",
     "pveStep3": "Grant PVEAdmin role on the entire cluster",
-    "pveStep4": "Add the Sys.Modify and Sys.PowerMgmt privileges (Rolling Update apt refresh, and node reboot/shutdown)",
+    "pveStep4": "Add the Sys.Modify, Sys.PowerMgmt and Sys.Incoming privileges (Rolling Update apt refresh, node reboot/shutdown, and cross-cluster migration into this cluster)",
     "pbsStep1": "Create a dedicated user",
     "pbsStep2": "Generate an API token",
     "pbsStep3": "Grant permissions to the user AND to the token",

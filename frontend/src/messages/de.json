@@ -4681,7 +4681,7 @@
     "pveStep1": "erstellen a dedicated user",
     "pveStep2": "API-Token erstellen (privsep=0 erbt Benutzerberechtigungen)",
     "pveStep3": "PVEAdmin-Rolle für den gesamten Cluster zuweisen",
-    "pveStep4": "Die Privilegien Sys.Modify und Sys.PowerMgmt hinzufügen (apt-Paketaktualisierung für Rolling Update, Neustart/Herunterfahren von Knoten)",
+    "pveStep4": "Die Privilegien Sys.Modify, Sys.PowerMgmt und Sys.Incoming hinzufügen (apt-Paketaktualisierung für Rolling Update, Neustart/Herunterfahren von Knoten, clusterübergreifende Migration in diesen Cluster)",
     "pbsStep1": "Dedizierten Benutzer erstellen",
     "pbsStep2": "API-Token generieren",
     "pbsStep3": "Berechtigungen dem Benutzer UND dem Token gewähren",

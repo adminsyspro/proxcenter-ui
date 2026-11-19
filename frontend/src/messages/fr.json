@@ -4692,7 +4692,7 @@
     "pveStep1": "Créer un utilisateur dédié",
     "pveStep2": "Créer un token API (privsep=0 hérite des permissions utilisateur)",
     "pveStep3": "Attribuer le rôle PVEAdmin sur l'ensemble du cluster",
-    "pveStep4": "Ajouter les privilèges Sys.Modify et Sys.PowerMgmt (rafraîchissement des paquets apt de Rolling Update, redémarrage/arrêt des nœuds)",
+    "pveStep4": "Ajouter les privilèges Sys.Modify, Sys.PowerMgmt et Sys.Incoming (rafraîchissement des paquets apt de Rolling Update, redémarrage/arrêt des nœuds, migration inter-clusters vers ce cluster)",
     "pbsStep1": "Créer un utilisateur dédié",
     "pbsStep2": "Générer un token API",
     "pbsStep3": "Accorder les permissions à l'utilisateur ET au token",

@@ -35,8 +35,9 @@ import { CloneVmDialog } from '@/components/hardware/CloneVmDialog'
 import { usedVmidsOnConnection, nextVmidOnConnection } from '@/components/hardware/utils'
 import { crossClusterMigrate } from '@/lib/migration/crossClusterMigrate'
 import { openTaskViewer } from '@/lib/tasks/taskViewer'
-import { startTrackedMigration } from '@/lib/migration/guestMigrateClient'
+import { startPlannedMigration } from '@/lib/migration/guestMigrateClient'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
+import { useToast } from '@/contexts/ToastContext'
 import HostDrainDialog from '@/components/HostDrainDialog'
 import CephNooutOption from '@/components/ceph/CephNooutOption'
 import { useCephNoout } from '@/hooks/useCephNoout'
@@ -234,6 +235,7 @@ export interface TreeDialogsProps {
 export default function TreeDialogs(props: TreeDialogsProps) {
   const t = useTranslations()
   const { trackTask } = useTaskTracker()
+  const toast = useToast()
   // Leaving maintenance: the per-host Ceph noout set on entry is removed
   // once ha-manager has let the node go (ui#1164).
   const exitNoout = useCephNoout({
@@ -875,17 +877,29 @@ export default function TreeDialogs(props: TreeDialogsProps) {
           vmid={migrateTarget.vmid}
           vmStatus={migrateTarget.status || 'unknown'}
           vmType={migrateTarget.type as 'qemu' | 'lxc'}
-          onMigrate={async (targetNode, online, targetStorage, withLocalDisks) => {
+          onMigrate={async (targetNode, online, targetStorage, withLocalDisks, moveFirst) => {
             // Migration intra-cluster
             // #926: followed to its end, which toasts the outcome with the reason.
-            const description = `${migrateTarget.name || `VM ${migrateTarget.vmid}`}: ${t('vmActions.migrate')}`
-            const upid = await startTrackedMigration(
+            // #1402: an HA-managed guest has its disks moved first, then is migrated.
+            const name = migrateTarget.name || `VM ${migrateTarget.vmid}`
+            const migrateDescription = `${name}: ${t('vmActions.migrate')}`
+            const moveDescription = (disk: string) => `${name}: ${t('vmActions.moveDiskBeforeMigrate', { disk, storage: targetStorage || '' })}`
+            const { upid, first } = await startPlannedMigration(
               trackTask,
               migrateTarget,
-              { target: targetNode, online, targetstorage: targetStorage, 'with-local-disks': withLocalDisks },
-              { description, onDone: () => setReloadTick(x => x + 1) },
+              { target: targetNode, online, targetStorage, withLocalDisks, moveFirst },
+              {
+                migrateDescription,
+                moveDescription,
+                onDone: () => setReloadTick(x => x + 1),
+                onRequestError: message => toast.error(t('vmActions.migrateAfterMoveRefused', { error: message })),
+              },
             )
-            openTaskViewer({ upid, connectionId: migrateTarget.connId, description })
+            openTaskViewer({
+              upid,
+              connectionId: migrateTarget.connId,
+              description: first === 'move' && moveFirst?.[0] ? moveDescription(moveFirst[0]) : migrateDescription,
+            })
             setMigrateDialogOpen(false)
             setMigrateTarget(null)
             setReloadTick(x => x + 1)

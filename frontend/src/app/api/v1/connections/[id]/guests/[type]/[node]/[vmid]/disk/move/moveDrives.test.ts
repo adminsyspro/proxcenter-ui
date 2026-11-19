@@ -366,3 +366,28 @@ describe('POST disk/move: TPM state of a running VM (roadmap#193)', () => {
     expect(moveCalls()).toHaveLength(2)
   })
 })
+
+describe('POST disk/move: container volumes (#1402)', () => {
+  const moveBody = (endpoint: string) => {
+    const call = pveFetchMock.mock.calls.find((c) => String(c[1]).endsWith(endpoint))
+    return new URLSearchParams(String(call?.[2]?.body))
+  }
+
+  it('names the volume as PVE move_volume expects it, which knows no "disk" nor "format"', async () => {
+    const POST = await loadPost()
+    const res = await callRoute(POST, {
+      params: { ...baseParams, type: 'lxc' },
+      body: { disk: 'rootfs', storage: 'ceph', deleteSource: true, format: 'raw' },
+    })
+
+    expect(res.status).toBe(200)
+    expect(Object.fromEntries(moveBody('/lxc/100/move_volume'))).toEqual({ volume: 'rootfs', storage: 'ceph', delete: '1' })
+  })
+
+  it('keeps "disk" and the format for a VM', async () => {
+    const POST = await loadPost()
+    await callRoute(POST, { params: baseParams, body: { disk: 'scsi0', storage: 'ceph', deleteSource: true, format: 'qcow2' } })
+
+    expect(Object.fromEntries(moveBody('/qemu/100/move_disk'))).toEqual({ disk: 'scsi0', storage: 'ceph', delete: '1', format: 'qcow2' })
+  })
+})

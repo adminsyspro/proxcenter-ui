@@ -129,6 +129,7 @@ describe('inventory demo mocks: guest panel', () => {
     expect((await demoGet(`${GUEST}/unlock`)).data.locked).toBe(false)
     expect((await demoGet(`${GUEST}/migrate/pending-check`)).data.changes).toEqual([])
     expect((await demoGet(`${GUEST}/migrate/snapshot-check?target=pve-node-02`)).data).toEqual({ live: [], offline: [] })
+    expect((await demoGet(`${GUEST}/migrate/storage-check?target=pve-node-02&targetstorage=ceph`)).data).toEqual({ kind: 'direct' })
     expect(Array.isArray((await demoGet(`${GUEST}/remote-migrate/prepare`)).snapshots)).toBe(true)
     expect(Array.isArray((await demoGet(`${GUEST}/disk/snapshot-refs?disk=scsi0`)).data.snapshots)).toBe(true)
   })

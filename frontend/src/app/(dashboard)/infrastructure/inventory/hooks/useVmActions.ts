@@ -11,7 +11,7 @@ import { openTaskViewer } from '@/lib/tasks/taskViewer'
 import { bulkPowerMessage, bulkPowerSeverity, readPerNodePreference, runBulkGuestPower, type BulkPowerAction } from '@/lib/inventory/bulkGuestPower'
 import { gpuContingentMessage } from '@/lib/gpu/contingentErrors'
 import {
-  startTrackedMigration,
+  startPlannedMigration,
   type MigrateGuestRef,
 } from '@/lib/migration/guestMigrateClient'
 
@@ -210,33 +210,40 @@ export function useVmActions({
     online: boolean,
     targetStorage?: string,
     withLocalDisks?: boolean,
+    moveFirst?: ReadonlyArray<string>,
   ) => {
-    const body: Record<string, any> = { target: targetNode, online }
+    const name = guest.name || `VM ${guest.vmid}`
+    const migrateDescription = `${name}: ${t('vmActions.migrate')}`
+    const moveDescription = (disk: string) => `${name}: ${t('vmActions.moveDiskBeforeMigrate', { disk, storage: targetStorage || '' })}`
 
-    if (targetStorage) {
-      body['targetstorage'] = targetStorage
-    }
-
-    if (withLocalDisks) {
-      body['withLocalDisks'] = true
-    }
-
-    const upid = await startTrackedMigration(trackTask, guest, body, {
-      description: `${guest.name || `VM ${guest.vmid}`}: ${t('vmActions.migrate')}`,
-      onDone: () => { void onRefresh?.() },
-    })
+    // #1402: an HA-managed guest has its disks moved first, then is migrated.
+    const { upid, first } = await startPlannedMigration(
+      trackTask,
+      guest,
+      { target: targetNode, online, targetStorage, withLocalDisks, moveFirst },
+      {
+        migrateDescription,
+        moveDescription,
+        onDone: () => { void onRefresh?.() },
+        onRequestError: message => toast.error(t('vmActions.migrateAfterMoveRefused', { error: message })),
+      },
+    )
 
     if (!upid) toast.success(t('vmActions.migrateSuccess'))
     // Follow the migration on screen instead of leaving a blank page (#1392).
-    openTaskViewer({ upid, connectionId: guest.connId, description: `${guest.name || `VM ${guest.vmid}`}: ${t('vmActions.migrate')}` })
+    openTaskViewer({
+      upid,
+      connectionId: guest.connId,
+      description: first === 'move' && moveFirst?.[0] ? moveDescription(moveFirst[0]) : migrateDescription,
+    })
   }, [toast, t, trackTask, onRefresh])
 
-  const handleMigrateVm = useCallback(async (targetNode: string, online: boolean, targetStorage?: string, withLocalDisks?: boolean) => {
+  const handleMigrateVm = useCallback(async (targetNode: string, online: boolean, targetStorage?: string, withLocalDisks?: boolean, moveFirst?: ReadonlyArray<string>) => {
     if (selection?.type !== 'vm') throw new Error('No VM selected')
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
 
-    await migrateAndTrack({ connId, node, type, vmid, name: data?.title }, targetNode, online, targetStorage, withLocalDisks)
+    await migrateAndTrack({ connId, node, type, vmid, name: data?.title }, targetNode, online, targetStorage, withLocalDisks, moveFirst)
 
     if (onSelect) {
       onSelect({ type: 'cluster', id: connId })
@@ -345,10 +352,10 @@ export function useVmActions({
 
   // ── Table migrate: submit ───────────────────────────────────────────
 
-  const handleTableMigrateVm = useCallback(async (targetNode: string, online: boolean, targetStorage?: string, withLocalDisks?: boolean) => {
+  const handleTableMigrateVm = useCallback(async (targetNode: string, online: boolean, targetStorage?: string, withLocalDisks?: boolean, moveFirst?: ReadonlyArray<string>) => {
     if (!tableMigrateVm) throw new Error('No VM selected for migration')
 
-    await migrateAndTrack(tableMigrateVm, targetNode, online, targetStorage, withLocalDisks)
+    await migrateAndTrack(tableMigrateVm, targetNode, online, targetStorage, withLocalDisks, moveFirst)
 
     await new Promise(resolve => setTimeout(resolve, 2000))
 

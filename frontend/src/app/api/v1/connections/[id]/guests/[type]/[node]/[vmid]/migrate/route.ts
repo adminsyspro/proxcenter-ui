@@ -4,6 +4,8 @@ import { licenseExcludedResponse } from "@/lib/api/response"
 import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { describeSnapshotBlockers, snapshotMigrationGuard } from "@/lib/migration/snapshotMigrationCheck"
+import { checkTargetStorage } from "@/lib/migration/targetStorageCheck"
+import { describeTargetStoragePlan, type TargetStoragePlan } from "@/lib/migration/targetStoragePlan"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { migrateVmSchema } from "@/lib/schemas"
 import { refreshCachedGuests } from "@/lib/cache/guestSetRefresh"
@@ -74,7 +76,32 @@ async function handler(
         { status: 409 },
       )
     }
-    
+
+    // #1402: PVE drops the target storage without a word for an HA-managed
+    // guest and for replicated volumes, and still reports the migration OK.
+    // Refused here with the reason and what to do, for every caller. A failed
+    // check leaves the verdict to PVE, as before.
+    let storagePlan: TargetStoragePlan = { kind: 'direct' }
+    try {
+      storagePlan = await checkTargetStorage(
+        conn,
+        { node, type: resourceType, vmid },
+        { target, targetStorage: targetstorage || undefined },
+      )
+    } catch (e: any) {
+      console.warn('[migrate] target storage check skipped:', String(e?.message || e).replace(/[\r\n]/g, ''))
+    }
+    if (storagePlan.kind !== 'direct') {
+      return NextResponse.json(
+        {
+          error: describeTargetStoragePlan(storagePlan, targetstorage || ''),
+          code: storagePlan.kind === 'move-first' ? 'TARGET_STORAGE_NEEDS_DISK_MOVE' : 'TARGET_STORAGE_NOT_APPLICABLE',
+          plan: storagePlan,
+        },
+        { status: 409 },
+      )
+    }
+
     // Construire les paramètres de migration
     const migrateParams: Record<string, any> = {
       target,

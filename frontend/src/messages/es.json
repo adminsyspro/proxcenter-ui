@@ -8015,6 +8015,8 @@
     "bulkPartial": "{description} - {success} OK, {errors} errores",
     "bulkFailed": "{description} - {errors} errores",
     "migrateStillRunning": "Seguía en curso cuando ProxCenter dejó de seguirla, consulta el registro de la tarea",
+    "moveDiskBeforeMigrate": "mover {disk} a {storage} antes de migrar",
+    "migrateAfterMoveRefused": "Discos movidos, pero el siguiente paso fue rechazado: {error}",
     "migrateGuestFailed": "{name}: migración fallida: {reason}",
     "bulkStillRunning": "{count} siguen en curso en Proxmox"
   },
@@ -8369,6 +8371,22 @@
     "cloneHaLocal": "Necesita almacenamiento compartido: el almacenamiento de destino es local a su nodo.",
     "sharedDisksStay": "Los discos en almacenamiento compartido se quedan donde están",
     "targetStorageLocalOnly": "Solo se aplica a los discos locales",
+    "targetStoragePlan": {
+      "moveFirst": "Invitado HA: discos movidos a {storage} antes de la migración",
+      "haIgnoresStorage": "PVE descarta el almacenamiento de destino de una migración HA. El invitado sigue bajo HA.",
+      "blocked": {
+        "ha-target-not-shared": "Invitado HA: {storage} no es un almacenamiento compartido del nodo de origen",
+        "ha-running-container": "Contenedor HA: los volúmenes no se pueden mover en ejecución",
+        "ha-tpm-running": "VM HA: el estado TPM no se puede mover con la VM en ejecución",
+        "replicated": "Los discos replicados se quedan en su almacenamiento"
+      },
+      "remedy": {
+        "ha-target-not-shared": "Elija un almacenamiento compartido o retire el invitado de HA.",
+        "ha-running-container": "Detenga el contenedor o retírelo de HA.",
+        "ha-tpm-running": "Apague la VM o retírela de HA.",
+        "replicated": "PVE reutiliza la réplica del destino. Elimine el trabajo para cambiar de almacenamiento."
+      }
+    },
     "tpmMoveWhileRunning": "El estado TPM no se puede mover mientras la VM está en ejecución. Apague primero la VM.",
     "gpuContingent": {
       "gpu_via_my_vdc": "Las GPU se añaden desde la sección GPU de Mi datacenter.",

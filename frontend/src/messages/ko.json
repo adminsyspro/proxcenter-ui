@@ -8015,6 +8015,8 @@
     "bulkPartial": "{description} - {success}개 성공, {errors}개 오류",
     "bulkFailed": "{description} - {errors}개 오류",
     "migrateStillRunning": "ProxCenter가 추적을 중단했을 때 아직 실행 중이었습니다. 작업 로그를 확인하세요",
+    "moveDiskBeforeMigrate": "마이그레이션 전에 {disk}을(를) {storage}(으)로 이동",
+    "migrateAfterMoveRefused": "디스크는 이동했지만 다음 단계가 거부되었습니다: {error}",
     "migrateGuestFailed": "{name}: 마이그레이션 실패: {reason}",
     "bulkStillRunning": "{count}개가 Proxmox에서 아직 실행 중"
   },
@@ -8369,6 +8371,22 @@
     "cloneHaLocal": "공유 스토리지가 필요합니다: 대상 스토리지는 노드 로컬입니다.",
     "sharedDisksStay": "공유 스토리지의 디스크는 현재 위치에 그대로 남습니다",
     "targetStorageLocalOnly": "로컬 디스크에만 적용됩니다",
+    "targetStoragePlan": {
+      "moveFirst": "HA 게스트: 마이그레이션 전에 디스크를 {storage}(으)로 이동",
+      "haIgnoresStorage": "PVE는 HA 마이그레이션의 대상 스토리지를 무시합니다. 게스트는 HA 상태로 유지됩니다.",
+      "blocked": {
+        "ha-target-not-shared": "HA 게스트: {storage}은(는) 소스 노드의 공유 스토리지가 아닙니다",
+        "ha-running-container": "HA 컨테이너: 실행 중에는 볼륨을 이동할 수 없습니다",
+        "ha-tpm-running": "HA VM: VM 실행 중에는 TPM 상태를 이동할 수 없습니다",
+        "replicated": "복제된 디스크는 기존 스토리지에 남습니다"
+      },
+      "remedy": {
+        "ha-target-not-shared": "공유 스토리지를 선택하거나 게스트를 HA에서 제거하세요.",
+        "ha-running-container": "컨테이너를 중지하거나 HA에서 제거하세요.",
+        "ha-tpm-running": "VM을 종료하거나 HA에서 제거하세요.",
+        "replicated": "PVE는 대상의 복제본을 재사용합니다. 스토리지를 바꾸려면 작업을 제거하세요."
+      }
+    },
     "tpmMoveWhileRunning": "VM이 실행 중일 때는 TPM 상태를 이동할 수 없습니다. 먼저 VM을 종료하세요.",
     "gpuContingent": {
       "gpu_via_my_vdc": "GPU는 내 데이터센터의 GPU 섹션에서 추가합니다.",

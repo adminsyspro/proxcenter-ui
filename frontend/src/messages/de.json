@@ -7996,6 +7996,8 @@
     "bulkPartial": "{description} - {success} OK, {errors} Fehler",
     "bulkFailed": "{description} - {errors} Fehler",
     "migrateStillRunning": "Lief noch, als ProxCenter die Verfolgung beendet hat, siehe Task-Protokoll",
+    "moveDiskBeforeMigrate": "{disk} vor der Migration nach {storage} verschieben",
+    "migrateAfterMoveRefused": "Disks verschoben, aber der nächste Schritt wurde abgelehnt: {error}",
     "migrateGuestFailed": "{name}: Migration fehlgeschlagen: {reason}",
     "bulkStillRunning": "{count} laufen noch in Proxmox"
   },
@@ -8345,6 +8347,22 @@
     "cloneHaLocal": "Benötigt gemeinsamen Speicher: der Zielspeicher ist lokal auf seinem Knoten.",
     "sharedDisksStay": "Disks auf gemeinsamem Speicher bleiben, wo sie sind",
     "targetStorageLocalOnly": "Gilt nur für die lokalen Disks",
+    "targetStoragePlan": {
+      "moveFirst": "HA-Gast: Disks werden vor der Migration nach {storage} verschoben",
+      "haIgnoresStorage": "PVE verwirft den Zielspeicher einer HA-Migration. Der Gast bleibt unter HA.",
+      "blocked": {
+        "ha-target-not-shared": "HA-Gast: {storage} ist kein gemeinsamer Speicher des Quellknotens",
+        "ha-running-container": "HA-Container: Volumes im laufenden Betrieb nicht verschiebbar",
+        "ha-tpm-running": "HA-VM: TPM-Status bei laufender VM nicht verschiebbar",
+        "replicated": "Replizierte Disks bleiben auf ihrem Speicher"
+      },
+      "remedy": {
+        "ha-target-not-shared": "Gemeinsamen Speicher wählen oder den Gast aus HA entfernen.",
+        "ha-running-container": "Container stoppen oder aus HA entfernen.",
+        "ha-tpm-running": "VM herunterfahren oder aus HA entfernen.",
+        "replicated": "PVE nutzt das Replikat auf dem Ziel. Job entfernen, um den Speicher zu ändern."
+      }
+    },
     "tpmMoveWhileRunning": "Der TPM-Zustand kann nicht verschoben werden, solange die VM läuft. Fahren Sie die VM zuerst herunter.",
     "gpuContingent": {
       "gpu_via_my_vdc": "GPUs werden im GPU-Bereich von Mein Datacenter hinzugefügt.",

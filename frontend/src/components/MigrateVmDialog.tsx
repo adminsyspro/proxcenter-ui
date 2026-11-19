@@ -957,7 +957,7 @@ export function MigrateVmDialog({
 
     let cancelled = false
 
-    fetch(storagePlanUrl)
+    void fetch(storagePlanUrl)
       .then(async res => (res.ok ? (await res.json())?.data ?? null : null))
       .catch(() => null)
       .then((plan: TargetStoragePlan | null) => {

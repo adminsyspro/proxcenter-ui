@@ -75,6 +75,10 @@ import { getAlertIcon, severityLabelKey } from '@/lib/alerts/bellAlertStyle'
 import { useDRSRecommendations, useDRSSettings } from '@/hooks/useDRS'
 import { useAlertsSummary } from '@/hooks/useAlerts'
 import { useHaConfig } from '@/components/settings/ha/useHaConfig'
+import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
+import { reportBellItems } from '@/lib/compliance/report/reportBellItems'
+import { triggerUrlDownload } from '@/components/compliance/frameworksTab.helpers'
+import ReportBellRow from '@components/layout/shared/ReportBellRow'
 
 // Version config
 
@@ -368,8 +372,28 @@ const NavbarContent = ({ targetLayout } = {}) => {
       recommendation: r
     }))
 
-  // Combined notifications (update + node limit + license + DRS + alerts)
+  // Background compliance reports, ready or failed, until removed or expired:
+  // the bell is where a report the user asked for is waiting for them.
+  const { tasks: pcTasks, updateTask: updatePcTask } = useProxCenterTasks()
+  const reportNotifs = useMemo(
+    () => reportBellItems(pcTasks).map(item => ({
+      id: `bell-${item.taskId}`,
+      severity: item.status === 'done' ? 'info' : 'warn',
+      isReportNotif: true,
+      report: item
+    })),
+    [pcTasks]
+  )
+  const dismissReport = item => updatePcTask(item.taskId, { dismissed: true })
+  const downloadReport = item => {
+    setNotifAnchor(null)
+    triggerUrlDownload(item.downloadUrl)
+    dismissReport(item)
+  }
+
+  // Combined notifications (reports + update + node limit + license + DRS + alerts)
   const allNotifications = [
+    ...reportNotifs,
     ...(nodeLimitNotif ? [nodeLimitNotif] : []),
     ...(updateNotif ? [updateNotif] : []),
     ...(licenseExpirationNotif ? [licenseExpirationNotif] : []),
@@ -383,13 +407,13 @@ const NavbarContent = ({ targetLayout } = {}) => {
 
   // Combined count
   const drsCount = drsNotifications.length
-  const totalNotifCount = notifCount + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + (connectionNotif ? 1 : 0) + (connectionClonedNotif ? 1 : 0) + (leaseNotif ? 1 : 0) + drsCount
+  const totalNotifCount = notifCount + reportNotifs.length + (licenseExpirationNotif ? 1 : 0) + (updateNotif ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + (connectionNotif ? 1 : 0) + (connectionClonedNotif ? 1 : 0) + (leaseNotif ? 1 : 0) + drsCount
 
   // Combined stats
   const totalNotifStats = {
     crit: notifStats.crit + (licenseExpirationNotif?.severity === 'crit' ? 1 : 0) + (nodeLimitNotif ? 1 : 0) + (bindingNotif ? 1 : 0) + (connectionClonedNotif ? 1 : 0) + (leaseNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'crit').length,
-    warn: notifStats.warn + (licenseExpirationNotif?.severity === 'warn' ? 1 : 0) + (connectionNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'warn').length,
-    info: (updateNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'info').length,
+    warn: notifStats.warn + (licenseExpirationNotif?.severity === 'warn' ? 1 : 0) + (connectionNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'warn').length + reportNotifs.filter(r => r.severity === 'warn').length,
+    info: (updateNotif ? 1 : 0) + drsNotifications.filter(d => d.severity === 'info').length + reportNotifs.filter(r => r.severity === 'info').length,
     drs: drsCount
   }
 
@@ -868,6 +892,10 @@ return () => window.removeEventListener('keydown', onKeyDown)
         ) : (
           <Box sx={{ maxHeight: 360, overflow: 'auto' }}>
             {allNotifications.map((notif) => {
+              if (notif.isReportNotif) {
+                return <ReportBellRow key={notif.id} item={notif.report} onDownload={downloadReport} onDismiss={dismissReport} />
+              }
+
               // Handle update notification specially
               if (notif.isUpdateNotif) {
                 return (

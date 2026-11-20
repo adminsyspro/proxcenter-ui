@@ -46,8 +46,10 @@ vi.mock('@/lib/auth/requireEnterprise', () => ({
 // ---------------------------------------------------------------------------
 
 describe('GET /api/v1/compliance/frameworks', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
+    // The collection cache is process-wide: every test starts from an empty one.
+    ;(await import('@/lib/compliance/collectionCache')).resetCollectionCache()
     // Default: enterprise permitted, RBAC permitted, ownership OK
     requireEnterpriseMock.mockResolvedValue(null)
     checkPermissionMock.mockResolvedValue(null)
@@ -78,6 +80,8 @@ describe('GET /api/v1/compliance/frameworks', () => {
     expect(Array.isArray(body.nodes)).toBe(true)
     expect(body.nodes).toHaveLength(1)
     expect(body.nodes[0]).toHaveProperty('node', 'pve1')
+    // When the data was collected, for the screen to show.
+    expect(Number.isNaN(Date.parse(body.collectedAt))).toBe(false)
     expect(Array.isArray(body.nodes[0].checks)).toBe(true)
   })
 

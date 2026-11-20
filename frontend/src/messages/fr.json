@@ -10882,7 +10882,15 @@
         "cmmc-l2": "CMMC (Cybersecurity Maturity Model Certification) est le cadre du département de la Défense américain pour protéger les CUI dans la chaîne d'approvisionnement de défense. Le niveau 2 correspond exactement aux 110 exigences NIST SP 800-171 Rev 2.",
         "iso-27001-2022": "ISO/IEC 27001 est la norme internationale pour les systèmes de management de la sécurité de l'information (SMSI). L'annexe A recense 93 contrôles couvrant les thèmes organisationnels, humains, physiques et technologiques.",
         "cis-controls-v8-1": "18 contrôles et 153 safeguards du Center for Internet Security. Identifiants et titres courts uniquement ; le score est un taux de réussite technique, pas une certification CIS."
-      }
+      },
+      "reportQueued": "Rapport {framework} en cours de génération : vous serez averti quand il sera prêt.",
+      "reportTaskLabel": "Rapport {framework}",
+      "reportReady": "{report} prêt",
+      "reportDownload": "Télécharger",
+      "reportExpired": "Le rapport n'est plus disponible (expiré ou serveur redémarré).",
+      "tooManyReports": "Trop de rapports en cours de génération : attendez qu'un se termine.",
+      "reportChip": "Rapport PDF",
+      "reportDismiss": "Retirer"
     },
     "loginLockouts": {
       "title": "Comptes et IP verrouillés",
@@ -10897,6 +10905,16 @@
       "lockedUntil": "Verrouillé jusqu'à",
       "unlock": "Déverrouiller",
       "unlockFailed": "Déverrouillage impossible, réessayez."
+    },
+    "collection": {
+      "title": "Collecte des données de conformité",
+      "cacheMinutes": "Réutiliser une collecte pendant",
+      "cacheMinutesHelper": "Durcissement, Référentiels et rapports PDF partagent une seule lecture du cluster. Le bouton de scan collecte toujours à neuf.",
+      "cacheNever": "Jamais (collecte à chaque fois)",
+      "cacheMinutesValue": "{minutes} min",
+      "guestConcurrency": "Invités lus en parallèle",
+      "guestConcurrencyHelper": "Au plus {requests} requêtes simultanées vers l'API Proxmox VE",
+      "invalid": "La durée doit valoir 0, 1, 5, 15 ou 30 minutes, les invités en parallèle entre 1 et 10."
     }
   },
   "changes": {

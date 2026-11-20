@@ -122,7 +122,7 @@ interface ComplianceTabProps {
 
 export default function ComplianceTab({ connectionId, node }: ComplianceTabProps) {
   const t = useTranslations()
-  const { data, isLoading, mutate } = useHardeningChecks(connectionId || undefined, null, node || null)
+  const { data, isLoading, rescan, isScanning } = useHardeningChecks(connectionId || undefined, null, node || null)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
 
@@ -180,11 +180,11 @@ export default function ComplianceTab({ connectionId, node }: ComplianceTabProps
                     <IconButton
                       aria-label={t('compliance.runScan')}
                       size="small"
-                      onClick={() => mutate()}
-                      disabled={isLoading}
+                      onClick={() => void rescan()}
+                      disabled={isLoading || isScanning}
                       sx={{ position: 'absolute', top: 4, left: 4 }}
                     >
-                      {isLoading ? <CircularProgress size={16} /> : <i className="ri-refresh-line" style={{ fontSize: 16 }} />}
+                      {isLoading || isScanning ? <CircularProgress size={16} /> : <i className="ri-refresh-line" style={{ fontSize: 16 }} />}
                     </IconButton>
                   </span>
                 </Tooltip>

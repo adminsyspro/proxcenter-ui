@@ -48,6 +48,7 @@ import {
   runPveTaskStop
 } from '@/lib/tasks/jobActions'
 import StopTaskButton from '@/components/tasks/StopTaskButton'
+import { triggerUrlDownload } from '@/components/compliance/frameworksTab.helpers'
 import ActiveBulkBatchChips from '@/components/tasks/ActiveBulkBatchChips'
 import TaskLogButton from '@/components/tasks/TaskLogButton'
 import FailureReasonText from '@/components/tasks/FailureReasonText'
@@ -184,8 +185,14 @@ function pcTaskIcon(task: MergedPCTask): string {
   if (task.icon) return task.icon
   if (task.type === 'upload') return 'ri-upload-2-line'
   if (task.type === 'download') return 'ri-download-2-line'
+  if (task.type === 'report') return 'ri-file-pdf-2-line'
 
   return 'ri-settings-3-line'
+}
+
+/** A finished background report: its row offers the PDF. */
+function reportDownloadUrl(task: MergedPCTask): string | null {
+  return task.type === 'report' && task.status === 'done' && task.downloadUrl ? task.downloadUrl : null
 }
 
 function pcTaskStatusLabel(task: MergedPCTask, t: (key: string) => string): string {
@@ -236,7 +243,12 @@ export default function TasksFooter({
   const [activeTab, setActiveTab] = useState<'proxmox' | 'proxcenter'>('proxmox')
 
   // ProxCenter tasks
-  const { tasks: pcTasks, clearDone: clearPCDone, restoreTask, cancelTask } = useProxCenterTasks()
+  const { tasks: pcTasks, clearDone: clearPCDone, restoreTask, cancelTask, updateTask: updatePcTask } = useProxCenterTasks()
+  // A report downloaded from its row leaves the notification bell too.
+  const downloadReportRow = (task: MergedPCTask, url: string) => {
+    triggerUrlDownload(url)
+    updatePcTask(task.id, { dismissed: true })
+  }
   const { data: sharedResp, mutate: mutateSharedTasks } = useSharedTasks()
 
   // Task Center jobs (rolling updates, DRS, replication, Site Recovery) belong
@@ -469,6 +481,8 @@ export default function TasksFooter({
     task.shared || task.id.startsWith('migration-') || (!!task.jobId && jobsById.get(task.jobId)?.type === 'migration')
 
   const clickPcTask = (task: MergedPCTask) => {
+    const reportUrl = reportDownloadUrl(task)
+    if (reportUrl) return downloadReportRow(task, reportUrl)
     if (isMigrationRow(task)) return openMigrationRow(task)
     // A row backed by a Task Center job opens its dialog on double-click, like
     // the Proxmox tab: nothing to do on a single click.
@@ -1253,6 +1267,21 @@ export default function TasksFooter({
                           do, so the status chips stay aligned in the column. */}
                       <Box sx={{ width: 30, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
                         {(() => {
+                          const reportUrl = reportDownloadUrl(task)
+                          if (reportUrl) {
+                            return (
+                              <Tooltip title={t('compliance.frameworks.reportDownload')}>
+                                <IconButton
+                                  size="small"
+                                  aria-label={t('compliance.frameworks.reportDownload')}
+                                  onClick={event => { event.stopPropagation(); downloadReportRow(task, reportUrl) }}
+                                  sx={{ color: 'primary.main' }}
+                                >
+                                  <i className="ri-download-2-line" style={{ fontSize: 16 }} />
+                                </IconButton>
+                              </Tooltip>
+                            )
+                          }
                           const target = stopTargetForPcTask(task)
                           if (!target) return null
 

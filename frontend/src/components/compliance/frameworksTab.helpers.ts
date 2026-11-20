@@ -1,3 +1,4 @@
+import type { PCTask } from '@/contexts/ProxCenterTasksContext'
 import type { FrameworkAssessment } from '@/lib/compliance/frameworkAssessment'
 import type { NodeCheckResult } from '@/lib/compliance/nodeBreakdown'
 import { FRAMEWORK_LOGO_DIR, FRAMEWORK_LOGO_FILES } from '@/lib/compliance/frameworks/logos'
@@ -7,10 +8,6 @@ import { FRAMEWORK_LOGO_DIR, FRAMEWORK_LOGO_FILES } from '@/lib/compliance/frame
 export const FRAMEWORK_LOGOS: Record<string, string> = Object.fromEntries(
   Object.entries(FRAMEWORK_LOGO_FILES).map(([id, file]) => [id, `${FRAMEWORK_LOGO_DIR}/${file}`]),
 )
-
-export function buildReportUrl(frameworkId: string, connectionId: string): string {
-  return `/api/v1/compliance/frameworks/${frameworkId}/report?connectionId=${encodeURIComponent(connectionId)}`
-}
 
 export function coverageLabel(a: Pick<FrameworkAssessment, 'assessedControls' | 'totalControls'>): string {
   return `${a.assessedControls} / ${a.totalControls}`
@@ -35,15 +32,35 @@ export function breakdownSegments(
   ]
 }
 
-export function triggerDownload(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob)
+/** Downloads a file the server sends as an attachment, without leaving the page. */
+export function triggerUrlDownload(url: string): void {
   const link = document.createElement('a')
   link.href = url
-  link.download = filename
+  link.download = ''
   document.body.appendChild(link)
   link.click()
   link.remove()
-  URL.revokeObjectURL(url)
+}
+
+/** Where the report-job watcher follows a background report, and where its PDF is. */
+export function reportJobTaskUrls(jobId: string): { statusUrl: string; downloadUrl: string } {
+  const statusUrl = `/api/v1/compliance/report-jobs/${encodeURIComponent(jobId)}`
+
+  return { statusUrl, downloadUrl: `${statusUrl}/download` }
+}
+
+/** The ProxCenter taskbar row of a background report just started. */
+export function reportJobTask(jobId: string, label: string, connectionName?: string): PCTask {
+  return {
+    id: `report-${jobId}`,
+    type: 'report',
+    label,
+    detail: connectionName,
+    progress: 0,
+    status: 'running',
+    createdAt: Date.now(),
+    ...reportJobTaskUrls(jobId),
+  }
 }
 
 export function scoreColor(score: number): string {

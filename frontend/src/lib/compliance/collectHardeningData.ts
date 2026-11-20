@@ -6,14 +6,31 @@ import { buildSSHAuditCommand, parseSSHAuditOutput, type SSHNodeData, type SSHHa
 import { executeSSH } from '@/lib/ssh/exec'
 import { resolveNodeSshEndpoint } from '@/lib/ssh/node-endpoint'
 import type { HardeningData } from '@/lib/compliance/hardening'
+import { DEFAULT_GUEST_CONCURRENCY, MAX_GUEST_CONCURRENCY, MIN_GUEST_CONCURRENCY } from '@/lib/compliance/collectionSettings'
 
-const VM_CONCURRENCY = 10
+/**
+ * Runs fn over items with at most `limit` calls in flight. A pool, not
+ * batches: a slow guest no longer holds back the guests queued behind it, so
+ * a lower cap costs less time than batches of the same size would.
+ */
+export async function runPool<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0
+  // Each worker takes the next item once its own is done, until none is left.
+  const worker = async (): Promise<void> => {
+    if (next >= items.length) return
+    const item = items[next++]
+    await fn(item)
 
-async function runWithConcurrency<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>): Promise<void> {
-  for (let i = 0; i < items.length; i += concurrency) {
-    const batch = items.slice(i, i + concurrency)
-    await Promise.all(batch.map(fn))
+    return worker()
   }
+
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker))
+}
+
+function clampGuestConcurrency(v: number | undefined): number {
+  if (!Number.isInteger(v)) return DEFAULT_GUEST_CONCURRENCY
+
+  return Math.min(MAX_GUEST_CONCURRENCY, Math.max(MIN_GUEST_CONCURRENCY, v as number))
 }
 
 export interface CollectHardeningDataOptions {
@@ -25,6 +42,8 @@ export interface CollectHardeningDataOptions {
   nodeFilter?: string | null
   /** Whether SSH is enabled for this connection (from prisma.connection.sshEnabled). */
   sshEnabled: boolean
+  /** Guests read at the same time (3 API calls each). Default 4, bounded 1..10. */
+  guestConcurrency?: number
 }
 
 /**
@@ -33,7 +52,7 @@ export interface CollectHardeningDataOptions {
  * runChecksWithProfile. Contains no profile, scoring or response logic.
  */
 export async function collectHardeningData(opts: CollectHardeningDataOptions): Promise<HardeningData> {
-  const { connectionId, conn, nodeFilter, sshEnabled } = opts
+  const { connectionId, conn, nodeFilter, sshEnabled, guestConcurrency } = opts
 
   // Parallel fetch: cluster-level data
   const [firewallOptions, version, nodesRaw, usersRaw, resourcesRaw, backupJobsRaw, haResourcesRaw, replicationRaw, poolsRaw] = await Promise.all([
@@ -131,7 +150,7 @@ export async function collectHardeningData(opts: CollectHardeningDataOptions): P
   const vmSecurityGroups: Record<string, boolean> = {}
   const vmConfigs: Record<string, Record<string, any>> = {}
 
-  await runWithConcurrency(vms, VM_CONCURRENCY, async (vm: any) => {
+  await runPool(vms, clampGuestConcurrency(guestConcurrency), async (vm: any) => {
     const key = `${vm.node}/${vm.type}/${vm.vmid}`
     const nodeName = encodeURIComponent(vm.node)
     const vmType = vm.type === 'lxc' ? 'lxc' : 'qemu'

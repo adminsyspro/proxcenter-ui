@@ -3,6 +3,8 @@ import useSWR from 'swr'
 import type { FrameworkAssessment } from '@/lib/compliance/frameworkAssessment'
 import type { NodeBreakdown } from '@/lib/compliance/nodeBreakdown'
 
+import { COMPLIANCE_SWR_OPTIONS } from './useHardeningChecks'
+
 interface FrameworksResponse {
   assessments: FrameworkAssessment[]
   nodes: NodeBreakdown[]
@@ -26,6 +28,7 @@ export function useFrameworkAssessments(connectionId: string | null) {
       ? `/api/v1/compliance/frameworks?connectionId=${encodeURIComponent(connectionId)}`
       : null,
     fetcher,
+    COMPLIANCE_SWR_OPTIONS,
   )
   return { assessments: data?.assessments ?? [], nodes: data?.nodes ?? [], isLoading, error }
 }

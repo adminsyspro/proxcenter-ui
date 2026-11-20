@@ -22,6 +22,7 @@ import {
 } from '@/hooks/useHardeningChecks'
 import FrameworksTab from '@/components/compliance/FrameworksTab'
 import LoginLockoutsCard from '@/components/compliance/LoginLockoutsCard'
+import CollectionSettingsCard from '@/components/compliance/CollectionSettingsCard'
 import { jsonInit, requireOk } from '@/lib/api/fetchJsonSafe'
 
 // Severity config
@@ -268,7 +269,7 @@ function HardeningTab() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
 
   const profileId = selectedProfile?.id || null
-  const { data, isLoading, mutate } = useHardeningChecks(selectedConnection?.id, profileId)
+  const { data, isLoading, rescan, isScanning } = useHardeningChecks(selectedConnection?.id, profileId)
 
   // Auto-select first connection
   useEffect(() => {
@@ -327,9 +328,9 @@ function HardeningTab() {
         />
         <Button
           variant="contained"
-          startIcon={<i className="ri-refresh-line" />}
-          onClick={() => mutate()}
-          disabled={!selectedConnection || isLoading}
+          startIcon={isScanning ? <CircularProgress size={16} color="inherit" /> : <i className="ri-refresh-line" />}
+          onClick={() => void rescan()}
+          disabled={!selectedConnection || isLoading || isScanning}
         >
           {t('compliance.runScan')}
         </Button>
@@ -1016,6 +1017,9 @@ function PoliciesTab() {
           setPolicy2faError(t('twoFactor.policyNeedOwn2fa'))
           return
         }
+        if (err.code === 'E_COLLECTION_SETTINGS_INVALID') {
+          throw new Error(t('compliance.collection.invalid'))
+        }
         if (err.code === 'E_AUDIT_RETENTION_TOO_SHORT') {
           setRetentionError(t('compliance.retentionTooShort', { min: AUDIT_RETENTION_MIN_DAYS }))
           return
@@ -1252,6 +1256,13 @@ function PoliciesTab() {
           </Box>
         </CardContent>
       </Card>
+
+      {/* How the compliance screens read Proxmox VE (cache, guests in parallel) */}
+      <CollectionSettingsCard
+        cacheMinutes={form.compliance_cache_minutes}
+        guestConcurrency={form.compliance_guest_concurrency}
+        onChange={handleChange}
+      />
 
       {/* Save button */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>

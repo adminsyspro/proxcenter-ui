@@ -79,7 +79,17 @@ const DENIED_FILES = [
   "hardening/[connectionId]/route.ts",
   "frameworks/route.ts",
   "frameworks/[frameworkId]/report/route.ts",
+  "report-jobs/route.ts",
 ]
+
+/**
+ * Shared guard modules a denied file may delegate to instead of calling the
+ * guard itself: the module must call it, and the file must call the module in
+ * every handler.
+ */
+const SHARED_GUARDS: Record<string, string> = {
+  "resolveReportRequest(": "../../lib/compliance/report/reportRequest.ts",
+}
 
 /** Files that read no cluster or node, with what they read instead. */
 const NO_CLUSTER_READ: Record<string, string> = {
@@ -88,6 +98,8 @@ const NO_CLUSTER_READ: Record<string, string> = {
   "profiles/[profileId]/activate/route.ts": "the tenant's active profile",
   "policies/route.ts": "the tenant's own security policies",
   "login-lockouts/route.ts": "login lockouts of ProxCenter accounts, no PVE call",
+  "report-jobs/[jobId]/route.ts": "a report job the caller started itself (in memory, refused to anyone else)",
+  "report-jobs/[jobId]/download/route.ts": "the PDF of a report job the caller started itself",
 }
 
 const COMPLIANCE = fileURLToPath(new URL("../../app/api/v1/compliance/", import.meta.url))
@@ -109,6 +121,8 @@ const MODULES = import.meta.glob("../../app/api/v1/compliance/**/route.ts")
 const load = (file: string) => MODULES[`../../app/api/v1/compliance/${file}`]() as Promise<Record<string, any>>
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const
+/** The only database calls a refused audited handler makes: its audit row, and the syslog forwarder reading its settings. */
+const AUDIT_TRAIL_CALLS = ["auditLog.create", "setting.findUnique"]
 const SIDE_EFFECTS = ["verifyConnectionOwnership", "getConnectionById", "getSessionPrisma", "collectHardeningData", "renderPdf", "fetch"] as const
 
 const IAAS_SESSION = { ok: true, principal: { kind: "session", userId: "u1", tenantId: "tenant-iaas", connectionIds: null } }
@@ -131,6 +145,8 @@ const call = async (c: { file: string; method: string }) => {
     method: c.method as any,
     params: { connectionId: "conn-1", frameworkId: "cis-controls-v8-1" },
     searchParams: { connectionId: "conn-1", node: "pve1" },
+    // The report job creation takes its framework and connection in the body.
+    ...(c.method === "POST" ? { body: { frameworkId: "cis-controls-v8-1", connectionId: "conn-1" } } : {}),
   })
 }
 
@@ -163,7 +179,12 @@ describe("compliance routes: every file is classified for IaaS tenants", () => {
       const source = readFileSync(join(COMPLIANCE, file), "utf8")
       const mod = await load(file)
       const handlers = METHODS.filter(m => typeof mod[m] === "function").length
-      expect(source.match(/await denyIaasTenant\(\)/g)?.length ?? 0, file).toBeGreaterThanOrEqual(handlers)
+      const direct = source.match(/await denyIaasTenant\(\)/g)?.length ?? 0
+      const delegated = Object.entries(SHARED_GUARDS).reduce((n, [call, module]) => {
+        const guarded = /await denyIaasTenant\(\)/.test(readFileSync(fileURLToPath(new URL(module, import.meta.url)), "utf8"))
+        return n + (guarded ? source.split(call).length - 1 : 0)
+      }, 0)
+      expect(direct + delegated, file).toBeGreaterThanOrEqual(handlers)
     }
   })
 })
@@ -178,7 +199,9 @@ describe("denied compliance routes refuse an IaaS tenant", () => {
       expect(res.status, label).toBe(404)
       expect(await res.json(), label).toEqual({ error: "Not found" })
       for (const k of SIDE_EFFECTS) expect(h[k], `${label}: ${k}`).not.toHaveBeenCalled()
-      expect(h.prismaCalls, label).toEqual([])
+      // A mutating handler (withAudit) leaves the audit row of the refusal and
+      // its syslog forwarding lookup: never a read of the cluster or its data.
+      expect(h.prismaCalls, label).toEqual(c.method === "GET" ? [] : AUDIT_TRAIL_CALLS)
     }
   })
 

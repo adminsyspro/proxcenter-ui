@@ -11188,7 +11188,6 @@
   },
   "networkFlows": {
     "tabFlows": "Flows",
-    "title": "Network Flows",
     "setupDescription": "Enable sFlow monitoring to visualize network traffic between VMs, detect anomalies, and analyze bandwidth usage across your infrastructure.",
     "configuring": "Configuring sFlow...",
     "enableSflow": "Enable sFlow Monitoring",
@@ -11218,9 +11217,6 @@
     "timeSeriesComingSoon": "Time series analysis — coming in Phase 2",
     "securityComingSoon": "Security & anomaly detection — coming in Phase 3",
     "infraComingSoon": "Infrastructure traffic view — coming in Phase 4",
-    "subtitle": "sFlow monitoring and traffic analysis",
-    "noSshConnections": "No SSH-enabled connections",
-    "noSshConnectionsDesc": "Network Flows requires SSH configured on your PVE connections to communicate with Open vSwitch. Enable SSH in Settings > Connections.",
     "configureAll": "Configure sFlow on all nodes",
     "active": "Active",
     "notConfigured": "Not configured",

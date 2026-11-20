@@ -9,7 +9,7 @@ vi.mock('next/navigation', async () => {
   const { navigation } = await import('./lensRender')
   return {
     useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
-    usePathname: () => '/operations/network-flows',
+    usePathname: () => '/automation/network',
     useSearchParams: () => new URLSearchParams(navigation.search),
   }
 })
@@ -27,6 +27,7 @@ const STATUS = { enabled: true, listen_address: '0.0.0.0:6343', agents: [], tota
 
 let policy: unknown = POLICY
 let pairs: unknown = PAIRS
+let connections = [{ id: 'c1', name: 'PROD' }]
 const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
   const url = String(input)
   if (url.startsWith('/api/v1/orchestrator/sflow/agents')) return reply(200, { data: [] })
@@ -36,7 +37,7 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     if (endpoint === 'ip-pairs') return reply(200, pairs)
     return reply(200, [])
   }
-  if (url === '/api/v1/connections?type=pve') return reply(200, { data: [{ id: 'c1', name: 'PROD' }] })
+  if (url === '/api/v1/connections?type=pve') return reply(200, { data: connections })
   if (url === '/api/v1/firewall/microseg/c1/policy') return reply(200, policy)
   if (url.startsWith('/api/v1/firewall/microseg/c1/suggestions')) return reply(200, { suggestions: SUGGESTIONS, limit: 200, offset: 0 })
   if (url === '/api/v1/vms?connId=c1') return reply(200, VMS)
@@ -48,6 +49,7 @@ const renderTab = () => renderLens(<FlowsTab />)
 beforeEach(() => {
   policy = POLICY
   pairs = PAIRS
+  connections = [{ id: 'c1', name: 'PROD' }]
   fetchMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
   window.localStorage.clear()
@@ -60,6 +62,23 @@ afterEach(() => {
 })
 
 describe('FlowsTab grouped by zone', () => {
+  it('reads the zones of the connection the network page selected, and offers no choice of its own', async () => {
+    connections = [{ id: 'c2', name: 'DR' }, { id: 'c1', name: 'PROD' }]
+    renderLens(<FlowsTab connectionId='c1' />)
+
+    expect(await screen.findByTestId('traffic-by-zone')).toBeInTheDocument()
+    expect(fetchMock.mock.calls.map(([u]) => String(u))).not.toContain('/api/v1/firewall/microseg/c2/policy')
+    expect(screen.queryByRole('combobox')).toBeNull()
+  })
+
+  it('offers its own choice of connection when rendered alone', async () => {
+    connections = [{ id: 'c1', name: 'PROD' }, { id: 'c2', name: 'DR' }]
+    renderTab()
+
+    expect(await screen.findByTestId('traffic-by-zone')).toBeInTheDocument()
+    expect(screen.getByRole('combobox')).toHaveTextContent('PROD')
+  })
+
   it('opens in Zone mode from the link, with the strip and the Micro-segmentation column', async () => {
     renderTab()
 

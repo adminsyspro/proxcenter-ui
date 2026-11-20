@@ -114,14 +114,6 @@ export const menuData = (t: (key: string) => string = key => key): MenuDataItem[
         requiredFeature: 'microsegmentation'
       },
       {
-        label: t('navigation.networkFlows'),
-        icon: 'ri-flow-chart',
-        href: '/operations/network-flows',
-        permissions: ['automation.view'],
-        requires: { isProviderTenant: true },
-        requiredFeature: 'sflow_monitoring'
-      },
-      {
         label: t('navigation.resources'),
         icon: 'ri-pie-chart-fill',
         href: '/infrastructure/resources',

@@ -11,7 +11,7 @@ vi.mock('next/navigation', async () => {
   const { navigation } = await import('./lensRender')
   return {
     useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
-    usePathname: () => '/operations/network-flows',
+    usePathname: () => '/automation/network',
     useSearchParams: () => new URLSearchParams(navigation.search),
   }
 })

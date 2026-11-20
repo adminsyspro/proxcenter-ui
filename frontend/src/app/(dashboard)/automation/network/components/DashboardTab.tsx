@@ -35,6 +35,7 @@ import { shownClusterName } from './microseg/ClusterRunRow'
 import { useGroupGuests } from './microseg/useGroupGuests'
 import { useZoneGuests } from './microseg/useZoneGuests'
 import type { PolicyGuest } from './microseg/zoneModel'
+import { TAB } from '../networkLink'
 
 /** The guest filter Firewalling > VMs can open with. */
 export type GuestFilter = 'unprotected'
@@ -269,7 +270,7 @@ export default function DashboardTab({
   const openMicroseg = (subTab?: MicrosegSubTab, asked?: ObservationFocus) => {
     // A shared policy filtered on one cluster: the Observation opens on that cluster, the one these figures are about.
     const focus = filter && subTab === 'observation' ? { ...asked, cluster: filter } : asked
-    if (!onOpenMicroseg) onNavigateTab(6)
+    if (!onOpenMicroseg) onNavigateTab(TAB.microseg)
     else if (focus) onOpenMicroseg(subTab, focus)
     else onOpenMicroseg(subTab)
   }

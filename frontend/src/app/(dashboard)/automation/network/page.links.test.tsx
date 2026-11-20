@@ -26,7 +26,12 @@ vi.mock('next-auth/react', () => ({
 }))
 vi.mock('@/contexts/PageTitleContext', () => ({ usePageTitle: () => ({ setPageInfo: vi.fn() }) }))
 vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ showToast: vi.fn() }) }))
-vi.mock('@/contexts/LicenseContext', () => ({ Features: { MICROSEGMENTATION: 'microsegmentation' }, useLicense: () => ({ isEnterprise: true }) }))
+// The sFlow licence decides whether the Network flows tab exists.
+const licence = vi.hoisted(() => ({ sflow: true }))
+vi.mock('@/contexts/LicenseContext', () => ({
+  Features: { MICROSEGMENTATION: 'microsegmentation', SFLOW_MONITORING: 'sflow_monitoring' },
+  useLicense: () => ({ isEnterprise: true, hasFeature: (id: string) => id !== 'sflow_monitoring' || licence.sflow }),
+}))
 vi.mock('@/components/guards/EnterpriseGuard', () => ({ default: ({ children }: { children: ReactNode }) => <>{children}</> }))
 vi.mock('@/components/guards/ProviderTenantGuard', () => ({ default: ({ children }: { children: ReactNode }) => <>{children}</> }))
 vi.mock('@/lib/api/firewall', () => ({}))
@@ -60,6 +65,7 @@ vi.mock('./components/RulesTab', () => ({ default: ({ selectedConnection }: { se
 vi.mock('./components/ObjectsTab', () => ({ default: ({ view }: { view: string }) => <div>objects tab {view}</div> }))
 vi.mock('./components/rules/SecurityGroupsPanel', () => ({ default: () => <div>groups tab</div> }))
 vi.mock('./components/LoggingTab', () => ({ default: () => <div>logging tab</div> }))
+vi.mock('./components/flows/FlowsTab', () => ({ default: ({ connectionId }: { connectionId?: string }) => <div data-testid='flows' data-connection={connectionId ?? ''}>flows tab</div> }))
 vi.mock('./components/microseg/MicrosegTab', () => ({
   default: ({ connectionId, initialSubTab, targetVm, onDissociated }: { connectionId: string; initialSubTab?: string; targetVm?: string | null; onDissociated?: (left: string, remaining: string[]) => void }) => (
     <div data-testid='microseg' data-connection={connectionId} data-subtab={initialSubTab ?? ''} data-vm={targetVm ?? ''}>
@@ -116,6 +122,7 @@ afterEach(() => {
   clusterGroups.ids = null
   pve.connections = null
   navigation.search = ''
+  licence.sflow = true
   window.localStorage.clear()
   vi.unstubAllGlobals()
 })
@@ -123,7 +130,7 @@ afterEach(() => {
 describe('?tab=', () => {
   it.each([
     ['dashboard', 'dashboard tab'], ['firewalling', 'rules tab'], ['aliases', 'objects tab aliases'], ['ipsets', 'objects tab ipsets'],
-    ['groups', 'groups tab'], ['logging', 'logging tab'], ['microseg', 'microseg tab'],
+    ['groups', 'groups tab'], ['logging', 'logging tab'], ['microseg', 'microseg tab'], ['flows', 'flows tab'],
   ])('opens on the %s tab', async (tab, content) => {
     open(`tab=${tab}`)
     expect(await screen.findByText(content)).toBeInTheDocument()
@@ -132,6 +139,27 @@ describe('?tab=', () => {
   it('opens on the Dashboard for an unknown tab', async () => {
     open('tab=nope')
     expect(await screen.findByText('dashboard tab')).toBeInTheDocument()
+  })
+})
+
+describe('the Network flows tab', () => {
+  it('comes third, and groups the pairs by the zones of the connection selected on the page', async () => {
+    open('tab=flows&connection=dr')
+    expect((await screen.findByTestId('flows')).dataset.connection).toBe('dr')
+    expect(screen.getAllByRole('tab').map(t => t.textContent)).toEqual([
+      'Dashboard', 'Micro-segmentation', 'Network Flows', 'Firewalling', 'Logging', 'Security Groups', 'IP Sets', 'Aliases',
+    ])
+    expect(screen.getByRole('tab', { name: 'Network Flows' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('is absent without the sFlow licence, and a link to it opens the Dashboard', async () => {
+    licence.sflow = false
+    open('tab=flows')
+    expect(await screen.findByText('dashboard tab')).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Network Flows' })).toBeNull()
+    expect(screen.queryByText('flows tab')).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: 'Firewalling' }))
+    expect(await screen.findByText('rules tab')).toBeInTheDocument()
   })
 })
 

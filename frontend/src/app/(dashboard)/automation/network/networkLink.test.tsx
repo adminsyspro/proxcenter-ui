@@ -5,10 +5,10 @@ import { connectionOfVm, NETWORK_TABS, parseNetworkLink, pickConnection, readSto
 const link = (search: string) => parseNetworkLink(new URLSearchParams(search))
 
 describe('parseNetworkLink', () => {
-  it('keeps the page order: Dashboard, Micro-segmentation, Firewalling, Logging, Security Groups, IP Sets, Aliases', () => {
-    expect([...NETWORK_TABS]).toEqual(['dashboard', 'microseg', 'firewalling', 'logging', 'groups', 'ipsets', 'aliases'])
+  it('keeps the page order: Dashboard, Micro-segmentation, Network flows, Firewalling, Logging, Security Groups, IP Sets, Aliases', () => {
+    expect([...NETWORK_TABS]).toEqual(['dashboard', 'microseg', 'flows', 'firewalling', 'logging', 'groups', 'ipsets', 'aliases'])
     expect(TAB.microseg).toBe(1)
-    expect(TAB.aliases).toBe(6)
+    expect(TAB.aliases).toBe(7)
   })
 
   it('reads the tab, the connection and the Micro-segmentation sub-tab', () => {

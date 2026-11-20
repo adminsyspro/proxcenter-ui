@@ -11188,7 +11188,6 @@
   },
   "networkFlows": {
     "tabFlows": "Flows",
-    "title": "Network Flows",
     "setupDescription": "Enable sFlow monitoring to visualize network traffic between VMs, detect anomalies, and analyze bandwidth usage across your infrastructure.",
     "configuring": "Configuring sFlow...",
     "enableSflow": "Enable sFlow Monitoring",
@@ -11218,9 +11217,6 @@
     "timeSeriesComingSoon": "Time series analysis — coming in Phase 2",
     "securityComingSoon": "Security & anomaly detection — coming in Phase 3",
     "infraComingSoon": "Infrastructure traffic view — coming in Phase 4",
-    "subtitle": "sFlow monitoring and traffic analysis",
-    "noSshConnections": "No SSH-enabled connections",
-    "noSshConnectionsDesc": "Network Flows requires SSH configured on your PVE connections to communicate with Open vSwitch. Enable SSH in Settings > Connections.",
     "configureAll": "Configure sFlow on all nodes",
     "active": "Active",
     "notConfigured": "Not configured",
@@ -14662,6 +14658,7 @@
         "constellationHint": "the zones in orbit around the cluster, their flows as arcs (a double click on a zone puts its guests in orbit)"
       },
       "constellation": {
+        "inside": "{count, plural, one {# internal flow} other {# internal flows}}",
         "flows": "Flows between the pastilles",
         "pause": "Stop the rotation",
         "play": "Resume the rotation"
@@ -14818,7 +14815,10 @@
         "liveStart": "Show the new lines as they come: a read every {seconds} s, for {minutes} minutes",
         "liveStop": "Stop the live mode",
         "liveExpired": "Live mode stopped after {minutes} minutes.",
-        "liveResume": "Resume"
+        "liveResume": "Resume",
+        "hideNoise": "Hide multicast and broadcast",
+        "hideNoiseTip": "Hides what the network sends to every guest (multicast, broadcast). The {count} newest lines are read once and filtered in the browser.",
+        "noiseShown": "{count, plural, =0 {No line left} one {# line left} other {# lines left}} of the {scanned} newest"
       }
     },
     "preflight": {

@@ -25,7 +25,7 @@ vi.mock('next-auth/react', () => ({
 }))
 vi.mock('@/contexts/PageTitleContext', () => ({ usePageTitle: () => ({ setPageInfo: vi.fn() }) }))
 vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ showToast: vi.fn() }) }))
-vi.mock('@/contexts/LicenseContext', () => ({ Features: { MICROSEGMENTATION: 'microsegmentation' }, useLicense: () => ({ isEnterprise: true }) }))
+vi.mock('@/contexts/LicenseContext', () => ({ Features: { MICROSEGMENTATION: 'microsegmentation', SFLOW_MONITORING: 'sflow_monitoring' }, useLicense: () => ({ isEnterprise: true, hasFeature: () => false }) }))
 vi.mock('@/components/guards/EnterpriseGuard', () => ({ default: ({ children }: { children: ReactNode }) => <>{children}</> }))
 vi.mock('@/components/guards/ProviderTenantGuard', () => ({ default: ({ children }: { children: ReactNode }) => <>{children}</> }))
 vi.mock('@/lib/api/firewall', () => ({ getVMRules: vi.fn(), getVMOptions: vi.fn() }))

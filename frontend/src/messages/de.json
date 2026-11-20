@@ -11134,7 +11134,6 @@
   },
   "networkFlows": {
     "tabFlows": "Flows",
-    "title": "Netzwerk-Flows",
     "setupDescription": "Aktivieren Sie sFlow-Überwachung, um den Netzwerkverkehr zwischen VMs zu visualisieren, Anomalien zu erkennen und die Bandbreitennutzung Ihrer Infrastruktur zu analysieren.",
     "configuring": "sFlow wird konfiguriert...",
     "enableSflow": "sFlow-Überwachung aktivieren",
@@ -11164,9 +11163,6 @@
     "timeSeriesComingSoon": "Zeitreihenanalyse — kommt in Phase 2",
     "securityComingSoon": "Sicherheit & Anomalieerkennung — kommt in Phase 3",
     "infraComingSoon": "Infrastruktur-Verkehrsansicht — kommt in Phase 4",
-    "subtitle": "sFlow-Überwachung und Verkehrsanalyse",
-    "noSshConnections": "Keine SSH-aktivierten Verbindungen",
-    "noSshConnectionsDesc": "Netzwerk-Flows erfordern SSH auf Ihren PVE-Verbindungen für die Kommunikation mit Open vSwitch. Aktivieren Sie SSH unter Einstellungen > Verbindungen.",
     "configureAll": "sFlow auf allen Nodes konfigurieren",
     "active": "Aktiv",
     "notConfigured": "Nicht konfiguriert",
@@ -14233,6 +14229,7 @@
         "constellationHint": "die Zonen im Orbit um den Cluster, ihre Flüsse als Bögen (ein Doppelklick auf eine Zone bringt ihre Gäste in den Orbit)"
       },
       "constellation": {
+        "inside": "{count, plural, one {# interner Fluss} other {# interne Flüsse}}",
         "flows": "Flüsse zwischen den Kreisen",
         "pause": "Drehung anhalten",
         "play": "Drehung fortsetzen"
@@ -14389,7 +14386,10 @@
         "liveStart": "Neue Zeilen laufend anzeigen: ein Lesevorgang alle {seconds} s, {minutes} Minuten lang",
         "liveStop": "Echtzeitmodus beenden",
         "liveExpired": "Echtzeitmodus nach {minutes} Minuten beendet.",
-        "liveResume": "Fortsetzen"
+        "liveResume": "Fortsetzen",
+        "hideNoise": "Multicast und Broadcast ausblenden",
+        "hideNoiseTip": "Blendet aus, was das Netzwerk an alle Gäste sendet (Multicast, Broadcast). Die {count} neuesten Zeilen werden einmal gelesen und im Browser gefiltert.",
+        "noiseShown": "{count, plural, =0 {Keine Zeile übrig} one {# Zeile übrig} other {# Zeilen übrig}} von den {scanned} neuesten"
       }
     },
     "preflight": {

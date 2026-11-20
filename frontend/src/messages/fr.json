@@ -11189,7 +11189,6 @@
   },
   "networkFlows": {
     "tabFlows": "Flux",
-    "title": "Flux réseau",
     "setupDescription": "Activez la surveillance sFlow pour visualiser le trafic réseau entre les VMs, détecter les anomalies et analyser l'utilisation de la bande passante sur votre infrastructure.",
     "configuring": "Configuration de sFlow...",
     "enableSflow": "Activer la surveillance sFlow",
@@ -11219,9 +11218,6 @@
     "timeSeriesComingSoon": "Analyse de séries temporelles — disponible en Phase 2",
     "securityComingSoon": "Sécurité et détection d'anomalies — disponible en Phase 3",
     "infraComingSoon": "Vue du trafic infrastructure — disponible en Phase 4",
-    "subtitle": "Surveillance sFlow et analyse du trafic",
-    "noSshConnections": "Aucune connexion SSH activée",
-    "noSshConnectionsDesc": "Les flux réseau nécessitent SSH configuré sur vos connexions PVE pour communiquer avec Open vSwitch. Activez SSH dans Paramètres > Connexions.",
     "configureAll": "Configurer sFlow sur tous les nœuds",
     "active": "Actif",
     "notConfigured": "Non configuré",
@@ -14663,6 +14659,7 @@
         "constellationHint": "les zones en orbite autour du cluster, leurs flux en arcs (un double clic sur une zone met ses invités en orbite)"
       },
       "constellation": {
+        "inside": "{count, plural, one {# flux interne} other {# flux internes}}",
         "flows": "Flux entre les pastilles",
         "pause": "Arrêter la rotation",
         "play": "Reprendre la rotation"
@@ -14819,7 +14816,10 @@
         "liveStart": "Afficher les nouvelles lignes au fil de l'eau : une lecture toutes les {seconds} s, pendant {minutes} minutes",
         "liveStop": "Arrêter le direct",
         "liveExpired": "Direct arrêté au bout de {minutes} minutes.",
-        "liveResume": "Reprendre"
+        "liveResume": "Reprendre",
+        "hideNoise": "Masquer multicast et broadcast",
+        "hideNoiseTip": "Masque ce que le réseau envoie à toutes les VM (multicast, broadcast). Les {count} lignes les plus récentes sont lues une fois et filtrées dans le navigateur.",
+        "noiseShown": "{count, plural, =0 {Aucune ligne restante} one {# ligne restante} other {# lignes restantes}} sur les {scanned} plus récentes"
       }
     },
     "preflight": {

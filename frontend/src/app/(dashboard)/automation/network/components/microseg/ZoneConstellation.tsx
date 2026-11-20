@@ -90,20 +90,23 @@ const zoneRing = (color: string | undefined) => (isHex(color) ? color : 'divider
 /** What a click (or Enter) on a pastille does: it opens a zone, or selects a guest. */
 type StarAct = { zone: string } | { guest: string }
 /** `sub`: the line under the name (the members of a zone, the cluster of a guest on a shared policy); `tip`: what its tooltip says. */
-type StarLook = { size: number; ring: string; ringWidth: number; dashed?: boolean; icon: ReactNode; name: string; sub?: string; tip?: ReactNode; label: string; act?: StarAct; zoneId?: string; dimmed?: number }
+type StarLook = { size: number; ring: string; ringWidth: number; dashed?: boolean; icon: ReactNode; name: string; sub?: string; tip?: ReactNode; label: string; act?: StarAct; zoneId?: string; dimmed?: number; /** A third line under the name: the observed flows inside a zone, which no arc stands for. */ inside?: string }
 
 type StarT = (key: string, values?: Record<string, string | number>) => string
 
 /** What a pastille shows and does, from the node of the map it stands for. */
-function starLook(star: Star, tNode: StarT, tState: StarT, zoneColor: string): StarLook {
+function starLook(star: Star, tNode: StarT, tState: StarT, zoneColor: string, tScene: StarT): StarLook {
   const d = star.data
   const outer = star.shell === 'outer'
   if (d.kind === 'zone') {
     const members = d.members === null ? tNode('membersUnknown') : tNode('members', { count: d.members })
     const label = tNode('aria', { name: d.zone.name, state: tState(d.state), members })
+    // The observed flows between two members of the zone have no arc (both ends are the same pastille): the pastille counts them.
+    const inside = d.inside ? tScene('inside', { count: d.inside }) : undefined
     return {
-      // Like its circle on the Groups rendering: what it is, and how to enter it.
-      tip: `${label} · ${tNode('enterHint')}`,
+      // Like its circle on the Groups rendering: what it is, how to enter it, and what flows inside it.
+      tip: [label, d.inside ? tNode('inside', { count: d.inside }) : null, tNode('enterHint')].filter(Boolean).join(' · '),
+      inside,
       size: outer ? 40 : 48, ring: zoneRing(d.zone.color), ringWidth: 2, name: d.zone.name, sub: d.members === null ? undefined : members, zoneId: d.zone.id,
       dimmed: d.state === 'disabled' ? 0.65 : 1, label, act: { zone: d.zone.id },
       icon: <Shield color={d.zone.color} state={d.state} size={outer ? 18 : 20} />,
@@ -213,6 +216,7 @@ const Pastille = memo(function Pastille({ id, look, selected, target, register, 
       <Box className='constellation-name' sx={{ position: 'absolute', top: 0, left: 0, width: 'max-content', maxWidth: 150, px: 0.5, borderRadius: 0.5, bgcolor: 'background.paper', transform: `translate(-50%,${look.size / 2 + NAME_GAP}px)`, textAlign: 'center', pointerEvents: 'none' }}>
         <Typography noWrap sx={{ fontSize: '0.82rem', lineHeight: 1.3, fontWeight: 600, color: 'text.primary' }}>{look.name}</Typography>
         {look.sub && <Typography noWrap sx={{ fontSize: '0.72rem', lineHeight: 1.3, color: 'text.secondary' }}>{look.sub}</Typography>}
+        {look.inside && <Typography noWrap data-inside sx={{ fontSize: '0.72rem', lineHeight: 1.3, color: 'text.secondary' }}>{look.inside}</Typography>}
       </Box>
     </Box>
   )
@@ -257,6 +261,7 @@ export default function ZoneConstellation({ nodes, edges, onSelectZone, onEnterZ
   const t = useTranslations('microsegPilot.overview')
   const tNode = useTranslations('microsegPilot.overview.node') as unknown as StarT
   const tState = useTranslations('microsegPilot.policy.zone.state') as unknown as StarT
+  const tScene = useTranslations('microsegPilot.overview.constellation') as unknown as StarT
   const format = useFormatter()
   const reduced = useMediaQuery('(prefers-reduced-motion: reduce)')
   const [boxRef, size] = useBoxSize<HTMLDivElement>()
@@ -717,7 +722,7 @@ export default function ZoneConstellation({ nodes, edges, onSelectZone, onEnterZ
           <Pastille
             key={star.id}
             id={star.id}
-            look={starLook(star, tNode, tState, centreColor)}
+            look={starLook(star, tNode, tState, centreColor, tScene)}
             selected={!!star.node.selected}
             target={star.node.className === 'microseg-target'}
             register={register}

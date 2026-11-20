@@ -55,6 +55,8 @@ import { MicrosegPairStatus, ZoneEndpointCell, usePairActions } from './Microseg
 import TrafficByZoneStrip from './TrafficByZoneStrip'
 import { useGroupBy, useLensConnection, useTrafficLens } from './useTrafficLens'
 
+const NO_CONNECTIONS: never[] = []
+
 const SankeyChart = dynamic(() => import('./SankeyChart'), { ssr: false })
 
 
@@ -144,7 +146,11 @@ function FlowPanelEmptyState({ totalFlows, activeVMs }: { totalFlows: number; ac
   )
 }
 
-export default function FlowsTab() {
+/**
+ * The Network flows tab of Network Security. `connectionId` is the connection picked in the selector of the page: the
+ * zones of its policy group the pairs. Without it (rendered alone), the tab offers its own choice of connection.
+ */
+export default function FlowsTab({ connectionId }: Readonly<{ connectionId?: string }> = {}) {
   const t = useTranslations()
   const theme = useTheme()
   const [subTab, setSubTab] = useState(0)
@@ -203,7 +209,8 @@ export default function FlowsTab() {
   // Micro-segmentation lens (UA35): the pairs read through the zones of one connection.
   const [groupBy, setGroupBy] = useGroupBy()
   const lensConnection = useLensConnection()
-  const lensRead = useTrafficLens(lensConnection.connectionId, lensConnection.connections)
+  const lensConnectionId = connectionId || lensConnection.connectionId
+  const lensRead = useTrafficLens(lensConnectionId, lensConnection.connections)
   const lens = groupBy === 'zone' ? lensRead.lens : null
   // In Zone mode the reply direction of a pair is folded into it (the firewall is stateful): one row per connection.
   const lensRows = useMemo(() => (lens ? lens.rows(topPairs) : null), [lens, topPairs])
@@ -214,7 +221,7 @@ export default function FlowsTab() {
   // lens already read (no request of its own).
   const lensClusters = lensRead.lens?.policy.clusters
   const lensClusterIds = useMemo(() => (lensClusters ?? []).map(c => c.connection_id), [lensClusters])
-  const microsegAccess = useMicrosegAccess(lensConnection.connectionId ?? '', lensClusterIds)
+  const microsegAccess = useMicrosegAccess(lensConnectionId ?? '', lensClusterIds)
 
   // Sparkline data for top talkers (keyed by vmid)
   const [sparklineData, setSparklineData] = useState<Map<number, { time: number; total: number }[]>>(new Map())
@@ -542,8 +549,8 @@ export default function FlowsTab() {
         value={shownGroupBy}
         onChange={setGroupBy}
         lensState={lensRead.state}
-        connections={lensConnection.connections}
-        connectionId={lensConnection.connectionId}
+        connections={connectionId ? NO_CONNECTIONS : lensConnection.connections}
+        connectionId={lensConnectionId}
         onConnection={lensConnection.choose}
       />
       </Box>

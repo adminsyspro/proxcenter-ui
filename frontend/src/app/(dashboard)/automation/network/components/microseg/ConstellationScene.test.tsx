@@ -156,6 +156,18 @@ describe('the constellation scene with a size', () => {
     expect(h.onSelectZone).toHaveBeenCalledTimes(3)
   })
 
+  it('counts the observed flows inside a zone under its name and in its tooltip, no arc standing for them', async () => {
+    const input = demoInput()
+    input.suggestions.push(seen('in1', { src_zone_id: 'zd', src_ip: '10.0.4.1', dst_zone_id: 'zd', dst_ip: '10.0.4.2', dport: '5432' }))
+    input.suggestions.push(seen('in2', { src_zone_id: 'zd', src_ip: '10.0.4.3', dst_zone_id: 'zd', dst_ip: '10.0.4.2', dport: '22' }))
+    draw(buildConstellationGraph(input))
+    await waitFor(() => expect(placed('zone:zd')).toBe(true))
+    expect(star('zone:zd').querySelector('[data-inside]')?.textContent).toBe('2 internal flows')
+    expect(star('zone:zw').querySelector('[data-inside]')).toBeNull()
+    fireEvent.mouseOver(star('zone:zd').querySelector('.constellation-disc')!)
+    expect(await screen.findByText('Zone db, Observation, 4 members · 2 observed flows inside the zone · Double-click to show its inside')).toBeTruthy()
+  })
+
   it('lights the arcs a focus keeps, fades the stale ones, and names only the front of a crowded sphere', async () => {
     const graph = buildConstellationGraph(demoInput())
     const edges = graph.edges.map((e, i) => ({ ...e, className: ['microseg-dim', 'microseg-stale', undefined][i % 3] }))

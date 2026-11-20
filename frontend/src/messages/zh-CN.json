@@ -11188,7 +11188,6 @@
   },
   "networkFlows": {
     "tabFlows": "流量",
-    "title": "网络流量",
     "setupDescription": "启用 sFlow 监控，可视化 VM 之间的网络流量，检测异常并分析基础设施的带宽使用情况。",
     "configuring": "正在配置 sFlow...",
     "enableSflow": "启用 sFlow 监控",
@@ -11218,9 +11217,6 @@
     "timeSeriesComingSoon": "时间序列分析 — 第 2 阶段",
     "securityComingSoon": "安全与异常检测 — 第 3 阶段",
     "infraComingSoon": "基础设施流量视图 — 第 4 阶段",
-    "subtitle": "sFlow 监控和流量分析",
-    "noSshConnections": "没有启用 SSH 的连接",
-    "noSshConnectionsDesc": "网络流量需要在 PVE 连接上配置 SSH 以与 Open vSwitch 通信。请在设置 > 连接中启用 SSH。",
     "configureAll": "在所有节点上配置 sFlow",
     "active": "活跃",
     "notConfigured": "未配置",
@@ -14662,6 +14658,7 @@
         "constellationHint": "各区域环绕集群运行，流量以弧线显示（双击区域可让其客户机进入轨道）"
       },
       "constellation": {
+        "inside": "{count, plural, other {# 条内部流量}}",
         "flows": "圆点之间的流量",
         "pause": "停止旋转",
         "play": "继续旋转"
@@ -14818,7 +14815,10 @@
         "liveStart": "实时显示新行：每 {seconds} 秒读取一次，持续 {minutes} 分钟",
         "liveStop": "停止实时模式",
         "liveExpired": "实时模式已在 {minutes} 分钟后停止。",
-        "liveResume": "继续"
+        "liveResume": "继续",
+        "hideNoise": "隐藏组播和广播",
+        "hideNoiseTip": "隐藏网络发送给所有客户机的流量（组播、广播）。最新的 {count} 行只读取一次，并在浏览器中过滤。",
+        "noiseShown": "最新的 {scanned} 行中{count, plural, =0 {没有剩余的行} other {剩余 # 行}}"
       }
     },
     "preflight": {

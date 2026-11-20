@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import { buildConstellationGraph } from './constellationGraph'
 import {
-  clusterItemId, filterCentre, filterInput, filterItems, filterMarks, guestItemId, itemName, keepsFlow, mapFilter, matchesItem, nodeItemId, searchItems, trimMatrix, zoneItemId,
+  clusterItemId, filterCentre, filterInput, filterItems, filterMarks, guestItemId, itemName, itemsInView, keepsFlow, mapFilter, matchesItem, nodeItemId, searchItems, trimMatrix, zoneItemId,
   type FilterItem,
 } from './mapFilterModel'
 import { buildMatrix } from './matrixModel'
 import { demoInput, member, seen, zone } from './mapViewsTestKit'
 import { buildNodeView } from './nodeViewModel'
+import { mapViewGraph } from './mapViewGraph'
 import { MAX_OPTIONS, type TargetGuest } from './targetModel'
 import { EXTERNAL_ID, OUTSIDE_ID, UNZONED_ID, buildZoneGraph, pveNodeId, zoneNodeId, type MapInput } from './zoneGraph'
 
@@ -169,5 +170,25 @@ describe('the map reduced to what the filter keeps', () => {
     expect(filterCentre([byId(items, 'c1:qemu/100'), byId(items, zoneItemId('zd'))])).toBe('zd')
     expect(filterCentre([byId(items, nodeItemId('c1', 'pve1')), byId(items, 'c1:qemu/100')])).toBe('zw')
     expect(filterCentre([byId(items, 'c1:qemu/900')])).toBeNull()
+  })
+})
+
+describe('the list of the filter inside an entered zone', () => {
+  it('offers the zones drawn around it, its members and the guests drawn, and the nodes of those with their count', () => {
+    const input = demoInput()
+    const items = filterItems(input.zones, candidates(), [{ id: 'c1', name: 'PVE-DR' }])
+    const inView = itemsInView(items, mapViewGraph('inside', input, 'zc'), 'zc')
+    const zones = inView.filter(i => i.kind === 'zone').map(itemName)
+    // cache exchanges with app, admin, monitoring and db; web never talks to it.
+    expect(zones).toEqual(['admin', 'app', 'cache', 'db', 'monitoring'])
+    const guests = inView.filter(i => i.kind === 'guest').map(itemName)
+    expect(guests).toEqual(expect.arrayContaining(['cache-1', 'cache-2', 'cache-3', 'cache-4']))
+    expect(guests).not.toContain('web-1')
+    // The guests of the view are on pve2 only: pve1 (web) is not offered, pve2 counts them.
+    const nodes = inView.filter(i => i.kind === 'node')
+    expect(nodes.map(itemName)).toEqual(['pve2'])
+    expect(nodes[0].kind === 'node' && nodes[0].guests).toBe(guests.length)
+    const clusters = inView.filter(i => i.kind === 'cluster')
+    expect(clusters.map(i => (i.kind === 'cluster' ? i.guests : 0))).toEqual([guests.length])
   })
 })

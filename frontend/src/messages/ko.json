@@ -15311,7 +15311,7 @@
       "summary": {
         "title": "영역별 트래픽",
         "intra": "영역 내부",
-        "peers": "교환 대상 포함",
+        "between": "영역 간",
         "toOutside": "외부로",
         "fromUnknown": "알 수 없는 출발지에서",
         "bySourceZone": "출발 영역별 바이트"

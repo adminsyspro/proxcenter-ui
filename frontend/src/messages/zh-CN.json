@@ -15311,7 +15311,7 @@
       "summary": {
         "title": "按区域的流量",
         "intra": "区域内",
-        "peers": "包含其往来对象",
+        "between": "区域之间",
         "toOutside": "流向外部",
         "fromUnknown": "来自未知来源",
         "bySourceZone": "按源区域的字节数"

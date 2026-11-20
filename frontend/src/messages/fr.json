@@ -15312,7 +15312,7 @@
       "summary": {
         "title": "Trafic par zone",
         "intra": "Dans une zone",
-        "peers": "Avec leurs échanges",
+        "between": "Entre zones",
         "toOutside": "Vers l'extérieur",
         "fromUnknown": "Depuis l'inconnu",
         "bySourceZone": "Octets par zone source"

@@ -14882,7 +14882,7 @@
       "summary": {
         "title": "Datenverkehr nach Zone",
         "intra": "Innerhalb einer Zone",
-        "peers": "Mit ihrem Austausch",
+        "between": "Zwischen Zonen",
         "toOutside": "Nach außen",
         "fromUnknown": "Von unbekannt",
         "bySourceZone": "Bytes pro Quellzone"

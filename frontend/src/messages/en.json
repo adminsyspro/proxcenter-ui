@@ -15311,7 +15311,7 @@
       "summary": {
         "title": "Traffic by zone",
         "intra": "Intra-zone",
-        "peers": "With what they exchange with",
+        "between": "Between zones",
         "toOutside": "To outside",
         "fromUnknown": "From unknown",
         "bySourceZone": "Bytes per source zone"

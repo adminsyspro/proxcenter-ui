@@ -1,27 +1,37 @@
 import { describe, expect, it } from 'vitest'
 
-import { breakdownSegments, buildReportUrl, coverageLabel, FRAMEWORK_LOGOS, gaugeColor, nodeFailCount, scoreColor, sortNodeChecks } from './frameworksTab.helpers'
+import { breakdownSegments, coverageLabel, FRAMEWORK_LOGOS, gaugeColor, nodeFailCount, reportJobTask, reportJobTaskUrls, scoreColor, sortNodeChecks } from './frameworksTab.helpers'
 import type { NodeCheckResult } from '@/lib/compliance/nodeBreakdown'
 import { FRAMEWORK_IDS } from '@/lib/compliance/frameworks/types'
 
 describe('frameworksTab helpers', () => {
-  describe('buildReportUrl', () => {
-    it('builds an encoded report url', () => {
-      expect(buildReportUrl('nist-800-171-r2', 'c 1')).toBe(
-        '/api/v1/compliance/frameworks/nist-800-171-r2/report?connectionId=c%201',
-      )
+  describe('reportJobTaskUrls', () => {
+    it('points the taskbar row at the job and its PDF', () => {
+      expect(reportJobTaskUrls('3f2a')).toEqual({
+        statusUrl: '/api/v1/compliance/report-jobs/3f2a',
+        downloadUrl: '/api/v1/compliance/report-jobs/3f2a/download',
+      })
     })
 
-    it('encodes special characters in connectionId', () => {
-      expect(buildReportUrl('cmmc-l2', 'conn&id=x')).toBe(
-        '/api/v1/compliance/frameworks/cmmc-l2/report?connectionId=conn%26id%3Dx',
-      )
+    it('encodes the job id', () => {
+      expect(reportJobTaskUrls('a/b').statusUrl).toBe('/api/v1/compliance/report-jobs/a%2Fb')
     })
+  })
 
-    it('passes through a plain connectionId unchanged', () => {
-      expect(buildReportUrl('nist-800-53-r5', 'abc123')).toBe(
-        '/api/v1/compliance/frameworks/nist-800-53-r5/report?connectionId=abc123',
-      )
+  describe('reportJobTask', () => {
+    it('builds a running report row the watcher can follow', () => {
+      const task = reportJobTask('j1', 'NIST SP 800-53 report', 'PVE-PROD')
+      expect(task).toMatchObject({
+        id: 'report-j1',
+        type: 'report',
+        label: 'NIST SP 800-53 report',
+        detail: 'PVE-PROD',
+        status: 'running',
+        progress: 0,
+        statusUrl: '/api/v1/compliance/report-jobs/j1',
+        downloadUrl: '/api/v1/compliance/report-jobs/j1/download',
+      })
+      expect(typeof task.createdAt).toBe('number')
     })
   })
 

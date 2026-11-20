@@ -1,11 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import FrameworksTab from './FrameworksTab'
 import * as useFrameworkAssessmentsModule from '@/hooks/useFrameworkAssessments'
 
 vi.mock('next-intl', () => ({
-  useTranslations: () => (k: string) => k,
+  useTranslations: () => (k: string, v?: Record<string, unknown>) => (v ? `${k}:${JSON.stringify(v)}` : k),
+}))
+
+const { addTaskMock, toastInfoMock } = vi.hoisted(() => ({ addTaskMock: vi.fn(), toastInfoMock: vi.fn() }))
+
+vi.mock('@/contexts/ProxCenterTasksContext', () => ({
+  useProxCenterTasks: () => ({ addTask: addTaskMock }),
+}))
+
+vi.mock('@/contexts/ToastContext', () => ({
+  useToast: () => ({ info: toastInfoMock }),
 }))
 
 vi.mock('@/lib/compliance/frameworks', () => ({
@@ -195,5 +205,61 @@ describe('FrameworksTab with null score', () => {
   it('renders noAssessed label when score is null', () => {
     render(<FrameworksTab />)
     expect(screen.getByText('noAssessed')).toBeInTheDocument()
+  })
+})
+
+describe('FrameworksTab report download (background job)', () => {
+  const fetchMock = vi.fn()
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(useFrameworkAssessmentsModule.useFrameworkAssessments).mockReturnValue(TWO_NODES_RETURN)
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const clickDownload = () => fireEvent.click(screen.getAllByRole('button', { name: /downloadReport/ })[0])
+
+  it('starts a report job and hands it to the taskbar instead of waiting for the PDF', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ data: { id: 'job-1', status: 'running' } }), { status: 202 }))
+    render(<FrameworksTab />)
+
+    clickDownload()
+
+    await waitFor(() => expect(addTaskMock).toHaveBeenCalledTimes(1))
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/compliance/report-jobs', expect.objectContaining({ method: 'POST' }))
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ frameworkId: 'nist-800-171-r2', connectionId: 'conn-1' })
+    expect(addTaskMock.mock.calls[0][0]).toMatchObject({
+      id: 'report-job-1',
+      type: 'report',
+      status: 'running',
+      detail: 'Test Connection',
+      statusUrl: '/api/v1/compliance/report-jobs/job-1',
+      downloadUrl: '/api/v1/compliance/report-jobs/job-1/download',
+    })
+    expect(toastInfoMock).toHaveBeenCalledWith(expect.stringContaining('reportQueued'), 6000)
+  })
+
+  it('says so when too many reports are already being generated', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ code: 'E_TOO_MANY_REPORT_JOBS' }), { status: 429 }))
+    render(<FrameworksTab />)
+
+    clickDownload()
+
+    expect(await screen.findByText('tooManyReports')).toBeInTheDocument()
+    expect(addTaskMock).not.toHaveBeenCalled()
+  })
+
+  it('reports a generic failure otherwise', async () => {
+    fetchMock.mockResolvedValue(new Response('oops', { status: 500 }))
+    render(<FrameworksTab />)
+
+    clickDownload()
+
+    expect(await screen.findByText('reportFailed')).toBeInTheDocument()
+    expect(addTaskMock).not.toHaveBeenCalled()
   })
 })

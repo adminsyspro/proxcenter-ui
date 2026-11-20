@@ -10889,7 +10889,15 @@
         "cmmc-l2": "CMMC(Cybersecurity Maturity Model Certification)는 방위 산업 공급망 전반에서 CUI를 보호하기 위한 미국 국방부 프레임워크입니다. 레벨 2는 NIST SP 800-171 Rev 2의 110개 요구 사항과 일대일로 대응합니다.",
         "iso-27001-2022": "ISO/IEC 27001은 정보 보안 관리 체계(ISMS)에 대한 국제 표준입니다. 부속서 A에는 조직, 인적, 물리적, 기술적 영역에 걸쳐 93개의 통제 항목이 나열되어 있습니다.",
         "cis-controls-v8-1": "Center for Internet Security의 18개 컨트롤과 153개 세이프가드. 식별자와 짧은 제목만 포함하며, 점수는 기술적 통과율이지 CIS 인증이 아닙니다."
-      }
+      },
+      "reportQueued": "{framework} 보고서를 백그라운드에서 생성 중입니다. 준비되면 알려 드립니다.",
+      "reportTaskLabel": "{framework} 보고서",
+      "reportReady": "{report} 준비 완료",
+      "reportDownload": "다운로드",
+      "reportExpired": "보고서를 더 이상 사용할 수 없습니다 (만료되었거나 서버가 재시작됨).",
+      "tooManyReports": "생성 중인 보고서가 너무 많습니다. 하나가 끝날 때까지 기다리세요.",
+      "reportChip": "PDF 보고서",
+      "reportDismiss": "제거"
     },
     "loginLockouts": {
       "title": "잠긴 계정 및 IP",
@@ -10904,6 +10912,16 @@
       "lockedUntil": "잠금 종료",
       "unlock": "잠금 해제",
       "unlockFailed": "잠금을 해제하지 못했습니다. 다시 시도하세요."
+    },
+    "collection": {
+      "title": "컴플라이언스 데이터 수집",
+      "cacheMinutes": "수집 결과 재사용 시간",
+      "cacheMinutesHelper": "하드닝, 프레임워크, PDF 보고서가 클러스터 읽기 한 번을 공유합니다. 스캔 버튼은 항상 새로 수집합니다.",
+      "cacheNever": "사용 안 함 (매번 수집)",
+      "cacheMinutesValue": "{minutes}분",
+      "guestConcurrency": "동시에 읽는 게스트 수",
+      "guestConcurrencyHelper": "Proxmox VE API 동시 요청 최대 {requests}개",
+      "invalid": "재사용 시간은 0, 1, 5, 15, 30분 중 하나, 동시 게스트 수는 1~10이어야 합니다."
     }
   },
   "changes": {

@@ -10889,7 +10889,15 @@
         "cmmc-l2": "CMMC (Cybersecurity Maturity Model Certification) es el framework del Departamento de Defensa de EE. UU. para proteger CUI en toda la cadena de suministro de defensa. Level 2 se mapea uno a uno con los 110 requisitos de NIST SP 800-171 Rev 2.",
         "iso-27001-2022": "ISO/IEC 27001 es el estándar internacional para sistemas de gestión de seguridad de la información (ISMS). El Anexo A enumera 93 controles en ámbitos organizativos, de personas, físicos y tecnológicos.",
         "cis-controls-v8-1": "18 controles y 153 salvaguardas del Center for Internet Security. Solo identificadores y títulos breves; la puntuación es una tasa técnica de cumplimiento, no una certificación CIS."
-      }
+      },
+      "reportQueued": "Generando el informe {framework} en segundo plano: se le avisará cuando esté listo.",
+      "reportTaskLabel": "Informe {framework}",
+      "reportReady": "{report} listo",
+      "reportDownload": "Descargar",
+      "reportExpired": "El informe ya no está disponible (caducado o servidor reiniciado).",
+      "tooManyReports": "Hay demasiados informes en generación: espere a que termine uno.",
+      "reportChip": "Informe PDF",
+      "reportDismiss": "Quitar"
     },
     "loginLockouts": {
       "title": "Cuentas e IP bloqueadas",
@@ -10904,6 +10912,16 @@
       "lockedUntil": "Bloqueado hasta",
       "unlock": "Desbloquear",
       "unlockFailed": "No se pudo desbloquear, inténtelo de nuevo."
+    },
+    "collection": {
+      "title": "Recopilación de datos de cumplimiento",
+      "cacheMinutes": "Reutilizar una recopilación durante",
+      "cacheMinutesHelper": "Bastionado, Marcos y los informes PDF comparten una sola lectura del clúster. El botón de análisis siempre recopila de nuevo.",
+      "cacheNever": "Nunca (recopilar cada vez)",
+      "cacheMinutesValue": "{minutes} min",
+      "guestConcurrency": "Invitados leídos en paralelo",
+      "guestConcurrencyHelper": "Como máximo {requests} solicitudes simultáneas a la API de Proxmox VE",
+      "invalid": "La duración debe ser 0, 1, 5, 15 o 30 minutos, los invitados en paralelo entre 1 y 10."
     }
   },
   "changes": {

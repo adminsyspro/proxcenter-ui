@@ -260,3 +260,19 @@ describe('restoreTask', () => {
     expect(restored).toBe(false)
   })
 })
+
+describe('hydration after a reload', () => {
+  it('keeps a server-side job running so its watcher resumes, but marks a browser-only task interrupted', async () => {
+    sessionStorage.setItem('proxcenter-tasks', JSON.stringify([
+      baseTask({ id: 'report-j1', type: 'report', statusUrl: '/api/v1/compliance/report-jobs/j1', downloadUrl: '/api/v1/compliance/report-jobs/j1/download' }),
+      baseTask({ id: 'gen-1', type: 'generic' }),
+    ]))
+
+    renderProvider()
+    await act(async () => {})
+
+    const byId = Object.fromEntries(ctx.current.tasks.map(t => [t.id, t]))
+    expect(byId['report-j1']).toMatchObject({ status: 'running', statusUrl: '/api/v1/compliance/report-jobs/j1' })
+    expect(byId['gen-1']).toMatchObject({ status: 'error', error: 'Interrupted by page reload' })
+  })
+})

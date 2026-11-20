@@ -19,6 +19,7 @@ import Header from '@components/layout/horizontal/Header'
 import Navbar from '@components/layout/vertical/Navbar'
 import ScrollToTop from '@core/components/scroll-to-top'
 import TasksFooter from '@components/TasksFooter'
+import ReportJobsWatcher from '@/components/compliance/ReportJobsWatcher'
 import OnboardingGuard from '@components/OnboardingGuard'
 import SessionExpiryGuard from '@components/SessionExpiryGuard'
 import TopBannerStack from '@components/broadcast/TopBannerStack'
@@ -77,6 +78,7 @@ const Layout = async props => {
         }
       />
       <TasksFooter />
+      <ReportJobsWatcher />
       </RollingUpdateProvider>
       </ProxCenterTasksProvider>
       </TagColorProvider>

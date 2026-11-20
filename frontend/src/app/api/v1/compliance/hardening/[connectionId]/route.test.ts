@@ -98,8 +98,10 @@ function stubPveFetch() {
 // ---------------------------------------------------------------------------
 
 describe('GET /api/v1/compliance/hardening/[connectionId]', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
+    // The collection cache is process-wide: every test starts from an empty one.
+    ;(await import('@/lib/compliance/collectionCache')).resetCollectionCache()
     checkPermissionMock.mockResolvedValue(null)
     verifyConnectionOwnershipMock.mockResolvedValue(null)
     getConnectionByIdMock.mockResolvedValue({ id: 'conn-1', name: 'Test Cluster' })
@@ -126,6 +128,31 @@ describe('GET /api/v1/compliance/hardening/[connectionId]', () => {
     expect(Array.isArray(body.checks)).toBe(true)
     expect(typeof body.score).toBe('number')
     expect(body.sshStatus).toMatchObject({ enabled: false })
+  })
+
+  it('reuses the collection of a second read, and collects afresh on refresh=1', async () => {
+    const { GET } = await import('./route')
+    const collections = () => pveFetchMock.mock.calls.filter(c => c[1] === '/access/tfa').length
+
+    const first = await readJson<any>(await callRoute(GET, { params: { connectionId: 'conn-1' } }))
+    const second = await readJson<any>(await callRoute(GET, { params: { connectionId: 'conn-1' } }))
+    expect(collections()).toBe(1)
+    // The scan date is the date of the collection, not of the answer.
+    expect(second.scannedAt).toBe(first.scannedAt)
+
+    await callRoute(GET, { params: { connectionId: 'conn-1' }, searchParams: { refresh: '1' } })
+    expect(collections()).toBe(2)
+  })
+
+  it('collects again for another tenant even when one is cached', async () => {
+    const { GET } = await import('./route')
+    const collections = () => pveFetchMock.mock.calls.filter(c => c[1] === '/access/tfa').length
+
+    await callRoute(GET, { params: { connectionId: 'conn-1' } })
+    getCurrentTenantIdMock.mockResolvedValue('tenant-2')
+    await callRoute(GET, { params: { connectionId: 'conn-1' } })
+
+    expect(collections()).toBe(2)
   })
 
   it('returns 403 when permission check fails', async () => {

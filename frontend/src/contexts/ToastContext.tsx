@@ -5,15 +5,22 @@ import { createPortal } from 'react-dom'
 
 type Severity = 'success' | 'error' | 'warning' | 'info'
 
+/** A button in the toast (e.g. "Download" once a background report is ready). Clicking it closes the toast. */
+export interface ToastAction {
+  label: string
+  onClick: () => void
+}
+
 interface Toast {
   id: string
   message: string
   severity: Severity
   duration: number
+  action?: ToastAction
 }
 
 interface ToastContextType {
-  showToast: (message: string, severity?: Severity, duration?: number) => void
+  showToast: (message: string, severity?: Severity, duration?: number, action?: ToastAction) => void
   success: (message: string, duration?: number) => void
   error: (message: string, duration?: number) => void
   warning: (message: string, duration?: number) => void
@@ -57,6 +64,24 @@ function ToastItem({ toast, index, onClose }: { toast: Toast; index: number; onC
     >
       <i className={config.icon} style={{ fontSize: 20, flexShrink: 0 }} />
       <span style={{ flex: 1 }}>{toast.message}</span>
+      {toast.action && (
+        <button
+          onClick={() => { toast.action?.onClick(); onClose(toast.id) }}
+          style={{
+            background: 'rgba(255,255,255,0.18)',
+            border: 'none',
+            borderRadius: 6,
+            color: '#fff',
+            cursor: 'pointer',
+            padding: '4px 10px',
+            fontSize: 13,
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+        >
+          {toast.action.label}
+        </button>
+      )}
       <button
         onClick={() => onClose(toast.id)}
         style={{
@@ -80,9 +105,9 @@ function ToastItem({ toast, index, onClose }: { toast: Toast; index: number; onC
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  const showToast = useCallback((message: string, severity: Severity = 'info', duration = 4000) => {
+  const showToast = useCallback((message: string, severity: Severity = 'info', duration = 4000, action?: ToastAction) => {
     const id = Date.now().toString() + Math.random().toString(36).substr(2, 9)
-    setToasts(prev => [...prev, { id, message, severity, duration }])
+    setToasts(prev => [...prev, { id, message, severity, duration, action }])
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id))
     }, duration)

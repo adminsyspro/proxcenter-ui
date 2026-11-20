@@ -8,7 +8,7 @@ export type PCTaskStatus = 'running' | 'done' | 'error' | 'cancelled'
 
 export interface PCTask {
   id: string
-  type: 'upload' | 'download' | 'generic'
+  type: 'upload' | 'download' | 'generic' | 'report'
   label: string
   detail?: string
   progress: number        // 0–100
@@ -22,6 +22,17 @@ export interface PCTask {
    * transfer to Proxmox is not.
    */
   cancelUrl?: string
+  /**
+   * A job the server runs on its own (a compliance report): polled here until
+   * it ends, after a reload too, since the server side outlives the page.
+   */
+  statusUrl?: string
+  /** Where the finished result is downloaded from. */
+  downloadUrl?: string
+  /** When a server-side job ended (its result is kept for a limited time). */
+  finishedAt?: number
+  /** The user removed its notification from the bell; the taskbar row stays. */
+  dismissed?: boolean
 }
 
 interface ProxCenterTasksContextValue {
@@ -82,6 +93,8 @@ export function ProxCenterTasksProvider({ children }: { children: React.ReactNod
         if (t.status === 'running') {
           // We'll check server-side progress for uploads
           if (t.type === 'upload') return t // keep as running, will be checked below
+          // A server-side job is still running without the page: its watcher resumes polling.
+          if (t.statusUrl) return t
           return { ...t, status: 'error' as PCTaskStatus, error: 'Interrupted by page reload' }
         }
         return t

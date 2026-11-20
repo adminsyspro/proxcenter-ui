@@ -12,7 +12,7 @@ import { getProfile, getProfileChecks, getActiveProfile } from '@/lib/compliance
 import { getCurrentTenantId, verifyConnectionOwnership } from '@/lib/tenant'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getSessionPrisma } from "@/lib/tenant"
-import { collectHardeningData } from '@/lib/compliance/collectHardeningData'
+import { getHardeningData } from '@/lib/compliance/collectionCache'
 import { denyIaasTenant } from '@/lib/tenant/iaasGuard'
 
 export const runtime = 'nodejs'
@@ -47,6 +47,9 @@ export async function GET(
     const { searchParams } = new URL(req.url)
     const profileId = searchParams.get('profileId')
     const nodeFilter = searchParams.get('node') // If set, only check this specific node
+    // The scan button asks for a fresh collection; every other read may reuse
+    // the one the other compliance screens just made (lib/compliance/collectionCache).
+    const forceRefresh = searchParams.get('refresh') === '1'
 
     // Look up SSH setting for this connection
     const connectionRecord = await prisma.connection.findUnique({
@@ -54,12 +57,18 @@ export async function GET(
       select: { sshEnabled: true },
     })
 
-    const hardeningData: HardeningData = await collectHardeningData({
+    const tenantId = await getCurrentTenantId()
+
+    const collection = await getHardeningData({
+      tenantId,
       connectionId,
       conn,
       nodeFilter,
       sshEnabled: !!connectionRecord?.sshEnabled,
+      forceRefresh,
     })
+    const hardeningData: HardeningData = collection.data
+    const scannedAt = collection.collectedAt.toISOString()
 
     const sshAvailable = hardeningData.sshData ? hardeningData.sshData.nodes.filter(n => n.available).length : 0
     const sshTotal = hardeningData.sshData ? hardeningData.sshData.nodes.length : 0
@@ -67,8 +76,6 @@ export async function GET(
     // Determine check config: explicit profileId > active profile > all checks
     let checkConfig: CheckConfig[] | null = null
     let activeProfileId: string | null = null
-
-    const tenantId = await getCurrentTenantId()
 
     if (profileId) {
       const profile = await getProfile(profileId, tenantId)
@@ -121,7 +128,7 @@ export async function GET(
         summary,
         profileId: activeProfileId,
         sshStatus: { available: sshAvailable, total: sshTotal, enabled: !!hardeningData.sshData },
-        scannedAt: new Date().toISOString(),
+        scannedAt,
       })
     }
 
@@ -138,7 +145,7 @@ export async function GET(
       summary,
       profileId: null,
       sshStatus: { available: sshAvailable, total: sshTotal, enabled: !!hardeningData.sshData },
-      scannedAt: new Date().toISOString(),
+      scannedAt,
     })
   } catch (e: any) {
     console.error('Error running hardening checks:', e)

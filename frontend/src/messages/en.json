@@ -10889,7 +10889,15 @@
         "cmmc-l2": "CMMC (Cybersecurity Maturity Model Certification) is the U.S. Department of Defense framework for safeguarding CUI across the defense supply chain. Level 2 maps one-to-one to the 110 NIST SP 800-171 Rev 2 requirements.",
         "iso-27001-2022": "ISO/IEC 27001 is the international standard for information security management systems (ISMS). Annex A lists 93 controls across organizational, people, physical, and technological themes.",
         "cis-controls-v8-1": "18 controls and 153 safeguards from the Center for Internet Security. Identifiers and short titles only; the score is a technical pass rate, not a CIS certification."
-      }
+      },
+      "reportQueued": "Generating the {framework} report in the background: you will be notified when it is ready.",
+      "reportTaskLabel": "{framework} report",
+      "reportReady": "{report} is ready",
+      "reportDownload": "Download",
+      "reportExpired": "The report is no longer available (expired or server restarted).",
+      "tooManyReports": "Too many reports are being generated: wait for one to finish.",
+      "reportChip": "PDF report",
+      "reportDismiss": "Remove"
     },
     "loginLockouts": {
       "title": "Locked accounts and IPs",
@@ -10904,6 +10912,16 @@
       "lockedUntil": "Locked until",
       "unlock": "Unlock",
       "unlockFailed": "Could not unlock, please try again."
+    },
+    "collection": {
+      "title": "Compliance data collection",
+      "cacheMinutes": "Reuse a collection for",
+      "cacheMinutesHelper": "Hardening, Frameworks and PDF reports share one read of the cluster. The scan button always collects afresh.",
+      "cacheNever": "Never (collect every time)",
+      "cacheMinutesValue": "{minutes} min",
+      "guestConcurrency": "Guests read in parallel",
+      "guestConcurrencyHelper": "At most {requests} simultaneous Proxmox VE API requests",
+      "invalid": "Cache duration must be 0, 1, 5, 15 or 30 minutes, guests in parallel between 1 and 10."
     }
   },
   "changes": {

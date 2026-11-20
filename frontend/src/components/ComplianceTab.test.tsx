@@ -30,14 +30,19 @@ import {
   waitFor,
 } from '@/__tests__/setup/renderWithProviders'
 
-const { swrMock, mutateMock } = vi.hoisted(() => ({
+const { swrMock, mutateMock, fetcherMock } = vi.hoisted(() => ({
   swrMock: vi.fn(),
   mutateMock: vi.fn(),
+  fetcherMock: vi.fn(),
 }))
 
 vi.mock('@/hooks/useSWRFetch', () => ({
   useSWRFetch: (...args: unknown[]) => swrMock(...args),
+  fetcher: (...args: unknown[]) => fetcherMock(...args),
 }))
+
+// A collection reads the whole cluster: never repeated on focus or reconnect.
+const NO_AUTO_REFRESH = expect.objectContaining({ revalidateOnFocus: false, revalidateOnReconnect: false })
 
 import ComplianceTab from './ComplianceTab'
 
@@ -61,6 +66,7 @@ describe('ComplianceTab', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mutateMock.mockResolvedValue(undefined)
+    fetcherMock.mockResolvedValue(LOADED)
   })
 
   it('requests the hardening checks for the connection (and node) it is given', () => {
@@ -68,7 +74,7 @@ describe('ComplianceTab', () => {
 
     renderWithProviders(<ComplianceTab connectionId={CONN_ID} node="pve1" />)
 
-    expect(swrMock).toHaveBeenCalledWith(`/api/v1/compliance/hardening/${CONN_ID}?node=pve1`)
+    expect(swrMock).toHaveBeenCalledWith(`/api/v1/compliance/hardening/${CONN_ID}?node=pve1`, NO_AUTO_REFRESH)
   })
 
   it('shows the page spinner and no Run Scan button while the first scan is loading', () => {
@@ -103,14 +109,43 @@ describe('ComplianceTab', () => {
     expect(tip).toHaveTextContent('Run Scan')
   })
 
-  it('re-runs the scan (SWR mutate) when the Run Scan button is clicked', async () => {
+  it('asks the server for a fresh collection when the Run Scan button is clicked', async () => {
+    swrMock.mockReturnValue({ data: LOADED, isLoading: false, mutate: mutateMock })
+
+    renderWithProviders(<ComplianceTab connectionId={CONN_ID} node="pve1" />)
+
+    fireEvent.click(runScanButton())
+
+    await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1))
+    // Not a plain revalidation, which the server may answer from its cache.
+    expect(fetcherMock).toHaveBeenCalledWith(`/api/v1/compliance/hardening/${CONN_ID}?node=pve1&refresh=1`)
+    expect(mutateMock).toHaveBeenCalledWith(expect.any(Promise), { revalidate: false })
+  })
+
+  it('shows the scan in progress and keeps the button disabled until it ends', async () => {
+    let finish: (v: unknown) => void = () => {}
+    mutateMock.mockReturnValue(new Promise(resolve => { finish = resolve }))
     swrMock.mockReturnValue({ data: LOADED, isLoading: false, mutate: mutateMock })
 
     renderWithProviders(<ComplianceTab connectionId={CONN_ID} />)
 
     fireEvent.click(runScanButton())
 
-    await waitFor(() => expect(mutateMock).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(runScanButton()).toBeDisabled())
+    finish(undefined)
+    await waitFor(() => expect(runScanButton()).toBeEnabled())
+  })
+
+  it('keeps the previous result when a fresh scan fails', async () => {
+    mutateMock.mockRejectedValue(new Error('API error: 500'))
+    swrMock.mockReturnValue({ data: LOADED, isLoading: false, mutate: mutateMock })
+
+    renderWithProviders(<ComplianceTab connectionId={CONN_ID} />)
+
+    fireEvent.click(runScanButton())
+
+    await waitFor(() => expect(runScanButton()).toBeEnabled())
+    expect(screen.getByText('Root TFA')).toBeInTheDocument()
   })
 
   it('renders the loaded checks table', () => {
@@ -128,7 +163,7 @@ describe('ComplianceTab', () => {
 
     renderWithProviders(<ComplianceTab connectionId="" />)
 
-    expect(swrMock).toHaveBeenCalledWith(null)
+    expect(swrMock).toHaveBeenCalledWith(null, NO_AUTO_REFRESH)
     expect(screen.getByRole('alert')).toBeInTheDocument()
   })
 })

@@ -10836,7 +10836,15 @@
         "cmmc-l2": "CMMC (Cybersecurity Maturity Model Certification) ist das Rahmenwerk des US-Verteidigungsministeriums zum Schutz von CUI in der Lieferkette. Level 2 entspricht eins zu eins den 110 Anforderungen von NIST SP 800-171 Rev 2.",
         "iso-27001-2022": "ISO/IEC 27001 ist die internationale Norm für Informationssicherheits-Managementsysteme (ISMS). Anhang A umfasst 93 Maßnahmen in den Bereichen Organisation, Personal, Physisches und Technologie.",
         "cis-controls-v8-1": "18 Controls und 153 Safeguards des Center for Internet Security. Nur Kennungen und Kurztitel; der Wert ist eine technische Erfüllungsquote, keine CIS-Zertifizierung."
-      }
+      },
+      "reportQueued": "Der Bericht {framework} wird im Hintergrund erstellt: Sie werden benachrichtigt, sobald er bereit ist.",
+      "reportTaskLabel": "Bericht {framework}",
+      "reportReady": "{report} ist bereit",
+      "reportDownload": "Herunterladen",
+      "reportExpired": "Der Bericht ist nicht mehr verfügbar (abgelaufen oder Server neu gestartet).",
+      "tooManyReports": "Zu viele Berichte in Erstellung: Warten Sie, bis einer fertig ist.",
+      "reportChip": "PDF-Bericht",
+      "reportDismiss": "Entfernen"
     },
     "loginLockouts": {
       "title": "Gesperrte Konten und IPs",
@@ -10851,6 +10859,16 @@
       "lockedUntil": "Gesperrt bis",
       "unlock": "Entsperren",
       "unlockFailed": "Entsperren fehlgeschlagen, bitte erneut versuchen."
+    },
+    "collection": {
+      "title": "Erfassung der Compliance-Daten",
+      "cacheMinutes": "Erfassung wiederverwenden für",
+      "cacheMinutesHelper": "Härtung, Frameworks und PDF-Berichte teilen sich ein Auslesen des Clusters. Die Scan-Schaltfläche erfasst immer neu.",
+      "cacheNever": "Nie (jedes Mal neu erfassen)",
+      "cacheMinutesValue": "{minutes} Min.",
+      "guestConcurrency": "Parallel gelesene Gäste",
+      "guestConcurrencyHelper": "Höchstens {requests} gleichzeitige Anfragen an die Proxmox-VE-API",
+      "invalid": "Die Dauer muss 0, 1, 5, 15 oder 30 Minuten betragen, parallele Gäste zwischen 1 und 10."
     }
   },
   "changes": {

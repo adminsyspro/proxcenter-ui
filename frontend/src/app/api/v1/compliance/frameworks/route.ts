@@ -6,9 +6,9 @@ import { NextResponse } from 'next/server'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import { requireEnterprise } from '@/lib/auth/requireEnterprise'
-import { verifyConnectionOwnership, getSessionPrisma } from '@/lib/tenant'
+import { verifyConnectionOwnership, getSessionPrisma, getCurrentTenantId } from '@/lib/tenant'
 import { denyIaasTenant } from '@/lib/tenant/iaasGuard'
-import { collectHardeningData } from '@/lib/compliance/collectHardeningData'
+import { getHardeningData } from '@/lib/compliance/collectionCache'
 import { runAllChecks } from '@/lib/compliance/hardening'
 import { FRAMEWORKS, getCrosswalk } from '@/lib/compliance/frameworks'
 import { assessFramework } from '@/lib/compliance/frameworkAssessment'
@@ -55,8 +55,9 @@ export async function GET(req: Request) {
       select: { sshEnabled: true },
     })
 
-    // Collect raw data (mirrors hardening route lines 50-55)
-    const hardeningData = await collectHardeningData({
+    // Collect raw data, or reuse the collection another compliance screen just made
+    const { data: hardeningData, collectedAt } = await getHardeningData({
+      tenantId: await getCurrentTenantId(),
       connectionId,
       conn,
       sshEnabled: !!connectionRecord?.sshEnabled,
@@ -69,7 +70,7 @@ export async function GET(req: Request) {
     // Per-node breakdown: re-run checks for each node using a node-scoped slice
     const nodes = computeNodeBreakdown(hardeningData)
 
-    return NextResponse.json({ data: assessments, nodes })
+    return NextResponse.json({ data: assessments, nodes, collectedAt: collectedAt.toISOString() })
   } catch (e: any) {
     console.error('Error running framework assessments:', e?.message)
     return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: 500 })

@@ -14,17 +14,18 @@ import { useTheme } from '@mui/material/styles'
 import CircularGauge from '@/components/dashboard/widgets/CircularGauge'
 import { usePVEConnections } from '@/hooks/useConnections'
 import { useFrameworkAssessments } from '@/hooks/useFrameworkAssessments'
+import { useProxCenterTasks } from '@/contexts/ProxCenterTasksContext'
+import { useToast } from '@/contexts/ToastContext'
 import { getFramework } from '@/lib/compliance/frameworks'
 import type { NodeCheckResult } from '@/lib/compliance/nodeBreakdown'
 import {
   breakdownSegments,
-  buildReportUrl,
   FRAMEWORK_LOGOS,
   gaugeColor,
   nodeFailCount,
+  reportJobTask,
   scoreColor,
   sortNodeChecks,
-  triggerDownload,
 } from './frameworksTab.helpers'
 
 // Theme-aware tooltip overrides (mirrors InventoryTree.tsx tooltipSlotProps)
@@ -101,6 +102,8 @@ export default function FrameworksTab() {
   const [selectedConnection, setSelectedConnection] = useState<any>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [dlError, setDlError] = useState<string | null>(null)
+  const { addTask } = useProxCenterTasks()
+  const toast = useToast()
 
   // Auto-select first connection (mirrors HardeningTab lines ~270-274)
   useEffect(() => {
@@ -113,15 +116,27 @@ export default function FrameworksTab() {
     selectedConnection?.id ?? null,
   )
 
+  // The report is built in the background: the click only starts it, the
+  // taskbar follows it and ReportJobsWatcher announces it with a download
+  // button, so the user keeps working meanwhile.
   async function download(frameworkId: string) {
     const connId = selectedConnection?.id
     if (!connId) return
     setBusy(frameworkId)
     setDlError(null)
     try {
-      const res = await fetch(buildReportUrl(frameworkId, connId))
-      if (!res.ok) throw new Error(t('reportFailed'))
-      triggerDownload(await res.blob(), `${frameworkId}.pdf`)
+      const res = await fetch('/api/v1/compliance/report-jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ frameworkId, connectionId: connId }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.code === 'E_TOO_MANY_REPORT_JOBS' ? t('tooManyReports') : t('reportFailed'))
+
+      const job = json.data
+      const name = getFramework(frameworkId as any)?.name ?? frameworkId
+      addTask(reportJobTask(job.id, t('reportTaskLabel', { framework: name }), selectedConnection?.name))
+      toast.info(t('reportQueued', { framework: name }), 6000)
     } catch (e: any) {
       setDlError(e?.message || t('reportFailed'))
     } finally {

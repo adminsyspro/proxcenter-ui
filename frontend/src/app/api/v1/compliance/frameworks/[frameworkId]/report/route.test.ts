@@ -81,8 +81,10 @@ vi.mock('node:fs', () => ({
 // ---------------------------------------------------------------------------
 
 describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks()
+    // The collection cache is process-wide: every test starts from an empty one.
+    ;(await import('@/lib/compliance/collectionCache')).resetCollectionCache()
     brandingOwner = 'tenant-1'
     // Default: enterprise permitted, RBAC permitted, ownership OK
     requireEnterpriseMock.mockResolvedValue(null)

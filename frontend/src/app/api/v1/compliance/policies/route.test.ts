@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { callRoute, deniedPermissionResponse, readJson } from '@/__tests__/setup/route-test'
 
-const { checkPermissionMock, sessionMock, updateMock, getMock, auditMock } = vi.hoisted(() => ({
+const { checkPermissionMock, sessionMock, updateMock, getMock, auditMock, getCollectionMock, saveCollectionMock } = vi.hoisted(() => ({
   checkPermissionMock: vi.fn(),
   sessionMock: vi.fn(),
   updateMock: vi.fn(),
   getMock: vi.fn(),
   auditMock: vi.fn(),
+  getCollectionMock: vi.fn(),
+  saveCollectionMock: vi.fn(),
 }))
 
 vi.mock('next-auth', () => ({ getServerSession: () => sessionMock() }))
@@ -26,9 +28,16 @@ vi.mock('@/lib/compliance/policies', async (importOriginal) => {
   return { ...actual, getSecurityPolicies: getMock, updateSecurityPolicies: updateMock }
 })
 
+vi.mock('@/lib/compliance/collectionSettingsStore', () => ({
+  getCollectionSettings: getCollectionMock,
+  saveCollectionSettings: saveCollectionMock,
+}))
+
 import { GET, PUT } from './route'
 
 const saved = { id: 'default', audit_retention_days: 45, audit_auto_cleanup: true }
+// The compliance collection settings ride along with the policies.
+const collection = { compliance_cache_minutes: 5, compliance_guest_concurrency: 4 }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -36,6 +45,8 @@ beforeEach(() => {
   sessionMock.mockResolvedValue({ user: { id: 'u1' } })
   updateMock.mockResolvedValue(saved)
   getMock.mockResolvedValue(saved)
+  getCollectionMock.mockResolvedValue({ cacheMinutes: 5, guestConcurrency: 4 })
+  saveCollectionMock.mockImplementation(async (_t: string, patch: object) => ({ cacheMinutes: 5, guestConcurrency: 4, ...patch }))
 })
 
 afterEach(() => {
@@ -47,8 +58,9 @@ describe('PUT /api/v1/compliance/policies', () => {
     const res = await callRoute(PUT, { method: 'PUT', body: { audit_retention_days: 45 } })
 
     expect(res.status).toBe(200)
-    expect(await readJson(res)).toEqual({ data: saved })
+    expect(await readJson(res)).toEqual({ data: { ...saved, ...collection } })
     expect(updateMock).toHaveBeenCalledWith({ audit_retention_days: 45 }, 'u1', 'default')
+    expect(saveCollectionMock).not.toHaveBeenCalled()
     expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ action: 'update', category: 'security', details: { audit_retention_days: 45 } }))
   })
 
@@ -62,6 +74,24 @@ describe('PUT /api/v1/compliance/policies', () => {
       error: 'Audit retention must be a whole number of days, at least 30.',
       code: 'E_AUDIT_RETENTION_TOO_SHORT',
     })
+    expect(auditMock).not.toHaveBeenCalled()
+  })
+
+  it('saves the compliance collection settings of the tenant', async () => {
+    const res = await callRoute(PUT, { method: 'PUT', body: { compliance_cache_minutes: 15, compliance_guest_concurrency: 2 } })
+
+    expect(res.status).toBe(200)
+    expect(saveCollectionMock).toHaveBeenCalledWith('default', { cacheMinutes: 15, guestConcurrency: 2 })
+    expect(await readJson(res)).toEqual({ data: { ...saved, compliance_cache_minutes: 15, compliance_guest_concurrency: 2 } })
+  })
+
+  it('refuses collection settings out of bounds before writing anything', async () => {
+    const res = await callRoute(PUT, { method: 'PUT', body: { audit_retention_days: 45, compliance_guest_concurrency: 50 } })
+
+    expect(res.status).toBe(400)
+    expect((await readJson<{ code: string }>(res))?.code).toBe('E_COLLECTION_SETTINGS_INVALID')
+    expect(updateMock).not.toHaveBeenCalled()
+    expect(saveCollectionMock).not.toHaveBeenCalled()
     expect(auditMock).not.toHaveBeenCalled()
   })
 
@@ -106,7 +136,8 @@ describe('GET /api/v1/compliance/policies', () => {
     const res = await callRoute(GET)
 
     expect(res.status).toBe(200)
-    expect(await readJson(res)).toEqual({ data: saved })
+    expect(await readJson(res)).toEqual({ data: { ...saved, ...collection } })
     expect(getMock).toHaveBeenCalledWith('default')
+    expect(getCollectionMock).toHaveBeenCalledWith('default')
   })
 })

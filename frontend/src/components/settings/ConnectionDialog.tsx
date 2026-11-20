@@ -1201,7 +1201,7 @@ export default function ConnectionDialog({
                       onClick={() => {
                         const text = isPbs
                           ? `proxmox-backup-manager user create proxcenter@pbs --comment "ProxCenter service account"\nproxmox-backup-manager user generate-token proxcenter@pbs proxcenter\nproxmox-backup-manager acl update / Admin --auth-id proxcenter@pbs\nproxmox-backup-manager acl update / Admin --auth-id 'proxcenter@pbs!proxcenter'`
-                          : `pveum user add proxcenter@pve --comment "ProxCenter service account"\npveum user token add proxcenter@pve proxcenter-token --privsep=0\npveum aclmod / -user proxcenter@pve -role PVEAdmin\npveum role add ProxCenter -privs "Sys.Modify,Sys.PowerMgmt"\npveum aclmod / -user proxcenter@pve -role ProxCenter`
+                          : `pveum user add proxcenter@pve --comment "ProxCenter service account"\npveum user token add proxcenter@pve proxcenter-token --privsep=0\npveum aclmod / -user proxcenter@pve -role PVEAdmin\npveum role add ProxCenter -privs "Sys.Modify,Sys.PowerMgmt,Sys.Incoming"\npveum aclmod / -user proxcenter@pve -role ProxCenter`
                         void tokenSetupCopy.copy(text)
                       }}
                       sx={{
@@ -1241,7 +1241,7 @@ export default function ConnectionDialog({
                       <Box component="span" sx={{ color: 'grey.500' }}># {t('settings.pveStep3')}</Box>{'\n'}
                       pveum aclmod / -user proxcenter@pve -role PVEAdmin{'\n\n'}
                       <Box component="span" sx={{ color: 'grey.500' }}># {t('settings.pveStep4')}</Box>{'\n'}
-                      pveum role add ProxCenter -privs &quot;Sys.Modify,Sys.PowerMgmt&quot;{'\n'}
+                      pveum role add ProxCenter -privs &quot;Sys.Modify,Sys.PowerMgmt,Sys.Incoming&quot;{'\n'}
                       pveum aclmod / -user proxcenter@pve -role ProxCenter
                     </>
                   )}

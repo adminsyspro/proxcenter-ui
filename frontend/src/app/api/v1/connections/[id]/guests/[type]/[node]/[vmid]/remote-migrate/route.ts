@@ -359,7 +359,7 @@ async function handler(
     if (errorMessage.includes('no export formats')) {
       errorMessage = 'Cloud-init drives cannot be migrated. Please remove or reconfigure the cloud-init drive before migration.'
     } else if (errorMessage.includes('permission denied') || errorMessage.includes('401')) {
-      errorMessage = 'Permission denied on target cluster. Please verify the API token has sufficient permissions (VM.Migrate, Datastore.AllocateSpace, etc.)'
+      errorMessage = 'Permission denied on target cluster. Please verify the API token has sufficient permissions (Sys.Incoming on /, VM.Migrate, Datastore.AllocateSpace, etc.)'
     } else if (errorMessage.includes('storage') && errorMessage.includes('not found')) {
       errorMessage = `Target storage not found or not accessible. Verify the storage "${errorMessage}" exists and the API token has access.`
     }

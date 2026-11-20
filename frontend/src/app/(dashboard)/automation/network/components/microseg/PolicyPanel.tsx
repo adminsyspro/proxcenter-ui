@@ -5,7 +5,7 @@ import { Box, Button } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import type { MicrosegZone, ZoneState } from '@/lib/microseg/types'
-import { useMergedClusters } from '@/lib/microseg/useMerged'
+import { clustersToRead, useMergedClusters } from '@/lib/microseg/useMerged'
 import { useCachedMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 
 import AssignGuestsDialog from './AssignGuestsDialog'
@@ -42,7 +42,7 @@ const bareId = (id: string) => id
  * Every write carries the draft version; a VERSION_CONFLICT reloads the policy and keeps the dialog (and its input)
  * open. A zone state change starts a run, followed in the strip of the tab (it survives a switch of sub-tab).
  */
-export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan, onOpenPreflight, clusterIds, clusterName }: MicrosegSubTabProps) {
+export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSubTab, startRun, onOpenPlan, onOpenPreflight, anchor, clusterIds, clusterName }: MicrosegSubTabProps) {
   const t = useTranslations('microsegPilot.policy')
   const inSlot = useContext(MicrosegActionsSlot) !== null
   // The guests of every cluster sharing the policy (the connection alone until the group is known).
@@ -67,7 +67,9 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
   const flowEditor = useFlowEditor(edits)
   const egressChange = useEgressChange(edits)
   const { diff } = usePendingChanges(connectionId, policy)
-  const uncovered = useZoneUncovered(connectionId)
+  // Each cluster of a shared policy logs the traffic of its own guests: the history of every one of them is summed.
+  const trafficIds = useMemo(() => clustersToRead(connectionId, { anchor, clusterIds }), [connectionId, anchor, clusterIds])
+  const uncovered = useZoneUncovered(connectionId, trafficIds)
   // The details of a zone card show the zone panel of the map: they write through the same edits.
   const peers = useMemo(() => targetPeers(guests), [guests])
   const memberCluster = shared ? clusterName ?? bareId : undefined

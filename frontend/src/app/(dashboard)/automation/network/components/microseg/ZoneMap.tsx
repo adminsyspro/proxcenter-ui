@@ -35,10 +35,12 @@ import type { MicrosegSubTabProps } from './microsegTabTypes'
 import { useGroupGuests, withUnreachable } from './useGroupGuests'
 import { useZoneEdits } from './useZoneEdits'
 import ZoneCanvas from './ZoneCanvas'
+import ZoneConstellation from './ZoneConstellation'
 import ZoneMatrix from './ZoneMatrix'
 import ZoneSankey from './ZoneSankey'
 import TargetPanel from './TargetPanel'
 import TargetPicker from './TargetPicker'
+import { filterCentre, filterInput, filterMarks, trimMatrix, type FilterItem } from './mapFilterModel'
 import { targetFocus, targetRing, targetSankey, targetSuggestions, type TargetGuest } from './targetModel'
 import { useMapTarget } from './useMapTarget'
 import {
@@ -155,8 +157,6 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const zonesById = useMemo(() => new Map(zones.map(z => [z.id, z])), [zones])
   const insideZone = inside ? zonesById.get(inside) ?? null : null
   const shown: ShownView = insideZone ? 'inside' : view
-  const mapTarget = useMapTarget(guests, membersByZone, targetVm, shared)
-  const { target } = mapTarget
 
   // The flows of the draft that the last applied revision does not have (null: not known yet, nothing marked).
   const unapplied = useMemo<ReadonlySet<string> | null>(() => {
@@ -172,6 +172,10 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const clusters = useMemo(() => (clusterOf
     ? readIds.map(clusterOf).sort((a, b) => Number(b.id === connectionId) - Number(a.id === connectionId) || clusterNames.compare(a.name, b.name) || a.id.localeCompare(b.id))
     : null), [clusterOf, readIds, connectionId])
+  // What the map is filtered on (guests, zones, Proxmox nodes, clusters); one guest alone is its target.
+  const filterScope = useMemo(() => ({ zones, clusters }), [zones, clusters])
+  const mapTarget = useMapTarget(guests, membersByZone, targetVm, shared, filterScope)
+  const { target, filter: mapFilter } = mapTarget
   const networks = useNamedNetworks()
   const input = useMemo<MapInput>(() => {
     const drawn = membersKnown ? mapGuests(membersByZone, guests, clusterOf) : null
@@ -213,11 +217,21 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     return () => clearTimeout(timer)
   }, [targetKey, targetZone])
   // The matrix holds the pairs of the matrix and of the Sankey diagram (their flow panel).
-  const matrix = useMemo(() => (shown === 'matrix' || shown === 'sankey' ? buildMatrix(input) : null), [shown, input])
+  // A filter reduces the map to what it keeps, before any rendering lays it out; one guest alone is the target:
+  // the map stays whole, focused on it. The panels keep reading the whole policy.
+  const filtering = !!mapFilter && !mapFilter.single
+  const shownInput = useMemo(() => (mapFilter && filtering ? filterInput(input, mapFilter) : input), [input, mapFilter, filtering])
+  const matrix = useMemo(() => {
+    if (shown !== 'matrix' && shown !== 'sankey') return null
+    const built = buildMatrix(shownInput)
+    return filtering ? trimMatrix(built) : built
+  }, [shown, shownInput, filtering])
   // The Sankey diagram lays the pairs out itself, for the size of the map box.
   const sankey = shown === 'sankey' ? matrix : null
-  const drawnCentre = insideZone ? insideZone.id : centreId
-  const drawn = useMemo(() => mapViewGraph(shown, input, drawnCentre, addresses), [shown, input, drawnCentre, addresses])
+  // The guest view of a filtered map is centred on a zone the filter keeps.
+  const keptCentre = !filtering || shownInput.zones.some(z => z.id === centreId) ? centreId : shownInput.zones[0]?.id ?? null
+  const drawnCentre = insideZone ? insideZone.id : keptCentre
+  const drawn = useMemo(() => mapViewGraph(shown, shownInput, drawnCentre, addresses), [shown, shownInput, drawnCentre, addresses])
   // The circle of a Proxmox node counts the flows inside it for the kinds the checkboxes show.
   const graph = useMemo(() => (shown === 'nodes' ? applyInsideFilters(drawn, filters) : drawn), [shown, drawn, filters])
   const sankeyTarget = useMemo(
@@ -237,6 +251,12 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const focusId = hover ?? keyFocus ?? selectedFocus
   // A target locks the focus on its guest: the pointer, the keyboard and the selection do not move it.
   const lock = useMemo(() => targetFocus(graph, target), [graph, target])
+  // With what they exchange with on the map too, what was picked is ringed: it tells the picks from their peers.
+  const marks = useMemo(() => {
+    if (!mapFilter || !filtering || mapFilter.between) return null
+    const ringOf = (zoneId: string | null) => (zoneId ? zonesById.get(zoneId)?.color ?? '' : '')
+    return filterMarks(graph, mapFilter, ringOf)
+  }, [mapFilter, filtering, graph, zonesById])
   const lit = useMemo(() => lock ?? focusSets(graph, focusId), [lock, graph, focusId])
   // A selected zone or guest isolates its flows: the others are not drawn, so that a dense map reads zone by zone.
   const isolating = !lock && !!selectedNode && allFlowsFor !== selectedNode
@@ -282,6 +302,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     // The frame of a cluster on the node view is context: never lit, dimmed or faint.
     if ((n.data as unknown as MapNodeData).kind === 'pveCluster') return n
     if (lock && n.id === lock.node) return { ...n, selected: n.id === selectedNode, className: 'microseg-target', data: { ...n.data, target: targetColor } }
+    // A pick among its peers is ringed: a guest in the colour of its zone, a zone in its own.
+    if (marks?.has(n.id)) return { ...n, selected: n.id === selectedNode, className: 'microseg-target', data: { ...n.data, target: marks.get(n.id) } }
     const selected = n.id === selectedNode
     const dimmed = (!!lit && !lit.nodes.has(n.id)) || (!!isolated && !isolated.nodes.has(n.id))
     // A target keeps its zone and the zones of its pairs; the others are a faint outline.
@@ -290,7 +312,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     let className: string | undefined
     if (dimmed) className = faint ? 'microseg-faint' : 'microseg-dim'
     return { ...n, selected, className }
-  }), [graph.nodes, selectedNode, lit, isolated, lock, targetColor])
+  }), [graph.nodes, selectedNode, lit, isolated, lock, targetColor, marks])
 
   const services = useMemo(() => edgeServices(graph.edges), [graph.edges])
   const shownServices = useMemo(() => {
@@ -364,6 +386,22 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     setSelection(null)
     setResolved(null)
   }, [pick])
+  // The picks of the filter changed: like a target, a filter is followed on the map itself, and it replaces the open panel.
+  const { pickItems } = mapTarget
+  const changeFilter = useCallback((next: FilterItem[]) => {
+    pickItems(next)
+    if (next.length > 0) setInside(null)
+    // Like a target, a filter puts its zone in the centre of the guest view (the admin can still move it afterwards).
+    const zone = filterCentre(next)
+    if (zone) setCentre(zone)
+    setSelection(null)
+    setResolved(null)
+  }, [pickItems])
+  // The status of a Proxmox node, for its glyph in the filter: what the page read of the nodes of each cluster.
+  const nodeStatusOf = useCallback((cluster: string, node: string) => {
+    if (cluster === connectionId && pveNodeStatus?.[node]) return pveNodeStatus[node]
+    return connectionNodes[cluster]?.find(n => n.node === node)?.status
+  }, [connectionId, pveNodeStatus, connectionNodes])
   const showTarget = useCallback(() => { showPanel(); setSelection(null) }, [showPanel])
   // A guest of the node view has no edge of its own to isolate: a click targets it (its panel opens, the map locks on it).
   const { candidates } = mapTarget
@@ -394,7 +432,9 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   // The node view draws guests only: it says so when their list could not be read, or when there is none to draw.
   let nodesNote: 'unavailable' | 'none' | null = null
   if (shown === 'nodes' && guestsStatus === 'error') nodesNote = 'unavailable'
-  else if (shown === 'nodes' && membersKnown && graph.nodes.length === 0) nodesNote = 'none'
+  else if (shown === 'nodes' && membersKnown && graph.nodes.length === 0 && !filtering) nodesNote = 'none'
+  // A filter that keeps nothing of this rendering says so, instead of an empty box.
+  const filterEmpty = filtering && (matrix ? matrix.cells.size === 0 && shownInput.zones.length === 0 : graph.nodes.length === 0)
   const targetPanel = !!target && mapTarget.panelOpen && !selectedZone && !selectedEdge
   // A guest clicked on the views around a zone opens its panel (its firewall log); on the node view a click targets it.
   const guestNode = selection?.kind === 'guest' && shown !== 'nodes' ? graph.nodes.find(n => n.id === selection.id)?.data as unknown as MapNodeData | undefined : undefined
@@ -409,7 +449,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
           <MapToolbar
             view={insideZone ? null : view}
             onView={changeView}
-            lead={<TargetPicker candidates={mapTarget.candidates} zonesById={zonesById} target={target} onTarget={changeTarget} onShowPanel={showTarget} observedCount={targetFlowCount} clusterName={memberCluster} />}
+            lead={<TargetPicker items={mapTarget.items} picked={mapTarget.picked} onPicked={changeFilter} zonesById={zonesById} target={target} onShowPanel={showTarget} observedCount={targetFlowCount} peers={mapTarget.withPeers} onPeers={mapTarget.setWithPeers} clusterName={memberCluster} nodeStatus={nodeStatusOf} />}
             filters={filters}
             onFilters={setFilters}
             addresses={shown === 'guests' || shown === 'inside' ? addresses : undefined}
@@ -451,7 +491,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
         </Alert>
       )}
       {shown === 'guests' && (
-        <GuestViewBar zones={zones} suggestions={input.suggestions} centre={centreId} onCentre={changeCentre} />
+        <GuestViewBar zones={shownInput.zones} suggestions={input.suggestions} centre={keptCentre} onCentre={changeCentre} />
       )}
       <MapNamesContext.Provider value={names}>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch', flexWrap: { xs: 'wrap', lg: 'nowrap' }, flex: 1, minHeight: 560 }}>
@@ -505,12 +545,30 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
                 </Box>
               )}
             </Box>
+            {filterEmpty && (
+              <Typography data-testid='map-filter-empty' color='text.secondary' sx={{ position: 'absolute', inset: 0, zIndex: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, textAlign: 'center', pointerEvents: 'none' }}>
+                {t('target.empty')}
+              </Typography>
+            )}
             {nodesNote && (
               <Typography color='text.secondary' sx={{ position: 'absolute', inset: 0, zIndex: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, textAlign: 'center', pointerEvents: 'none' }}>
                 {t(`pve.${nodesNote}`)}
               </Typography>
             )}
-            {!matrix && (
+            {!matrix && view === 'constellation' && (
+              <ZoneConstellation
+                nodes={nodes}
+                edges={edges}
+                onSelectZone={selectZone}
+                onEnterZone={enterZone}
+                onSelectGuest={selectGuest}
+                onSelectEdge={selectEdge}
+                onHover={setHover}
+                onFocusNode={setKeyFocus}
+                onClear={clear}
+              />
+            )}
+            {!matrix && view !== 'constellation' && (
               <ZoneCanvas
                 nodes={nodes}
                 edges={edges}

@@ -14657,7 +14657,14 @@
         "sankey": "桑基图",
         "sankeyHint": "以条带显示观察到的流量，命中越多越宽",
         "nodes": "节点",
-        "nodesHint": "各 Proxmox 节点上的客户机，以及节点之间观察到的流量和例外（区域之间允许的流量仍在分组中显示）"
+        "nodesHint": "各 Proxmox 节点上的客户机，以及节点之间观察到的流量和例外（区域之间允许的流量仍在分组中显示）",
+        "constellation": "星座",
+        "constellationHint": "各区域环绕集群运行，流量以弧线显示（双击区域可让其客户机进入轨道）"
+      },
+      "constellation": {
+        "flows": "圆点之间的流量",
+        "pause": "停止旋转",
+        "play": "继续旋转"
       },
       "pve": {
         "aria": "Proxmox 节点 {name}，{guests}",
@@ -14698,12 +14705,12 @@
         "empty": "在这些筛选条件下没有可绘制的流。"
       },
       "target": {
-        "label": "定位虚拟机",
-        "placeholder": "名称、VMID 或 IP",
-        "noOptions": "没有匹配的运行中客户机",
-        "clear": "清除目标",
-        "openList": "显示客户机",
-        "closeList": "隐藏客户机",
+        "label": "筛选地图",
+        "placeholder": "虚拟机、区域、节点或 IP",
+        "noOptions": "无匹配项",
+        "clear": "清除筛选",
+        "openList": "显示列表",
+        "closeList": "隐藏列表",
         "noZone": "无区域",
         "option": "{name}，客户机 {vmid}，{zone}",
         "type": {
@@ -14713,6 +14720,20 @@
         "chip": "目标：{name}",
         "chipHint": "地图保持聚焦于 {name}：点击显示其面板，点击叉号清除目标",
         "cellMarker": "此单元格中 {name} 的观测流量",
+        "placeholderMore": "添加…",
+        "group": {
+          "zone": "区域",
+          "node": "Proxmox 节点",
+          "cluster": "集群",
+          "guest": "客户机"
+        },
+        "optionZone": "{name}，区域",
+        "optionNode": "{name}，Proxmox 节点，{count} 个运行中的客户机",
+        "optionCluster": "{name}，集群，{count} 个运行中的客户机",
+        "guests": "{count} 个客户机",
+        "peers": "包含其往来对象",
+        "peersHint": "同时显示所选项目的其他流量及其另一端",
+        "empty": "此视图中没有可为该筛选绘制的内容。",
         "panel": {
           "label": "客户机 {name}",
           "where": "{node} 上的{type} {vmid}",

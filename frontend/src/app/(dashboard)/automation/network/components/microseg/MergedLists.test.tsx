@@ -121,6 +121,72 @@ describe('zones of a shared policy when a cluster cannot be listed', () => {
   })
 })
 
+describe('uncovered traffic of a shared policy', () => {
+  const bucket = (zoneName: string, hits: number) => ({ at: '2026-11-03T09:00:00Z', zone: zoneName, src_zone: '', verdict: 'would_block', hits })
+  const traffic = (buckets: ReturnType<typeof bucket>[]) => reply(200, { step: 3600, from: '', to: '', buckets })
+
+  it('sums what each cluster logged into a zone, one history read per cluster, in the Policy table and the Observation banner', async () => {
+    window.localStorage.setItem('microseg.subTab', 'policy')
+    mock.routes['GET /clusters'] = () => reply(200, { clusters: [link('c1'), link('c2')], max: 8 })
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('zd', { name: 'db' }), zone('zw', { name: 'web' })], last_revision: REVISION_HEAD, clusters: [link('c1'), link('c2')] }))
+    mock.routes['GET /api/v1/vms?connId=c2'] = () => reply(200, { data: { vms: [] } })
+    mock.routes[`GET ${C2}/status`] = () => reply(200, status())
+    mock.routes['GET /traffic*'] = () => traffic([bucket('db', 2554)])
+    mock.routes[`GET ${C2}/traffic*`] = () => traffic([bucket('db', 737), bucket('web', 107)])
+    mock.routes['GET /suggestions*'] = () => reply(200, { suggestions: [], limit: 26, offset: 0 })
+    renderTab(<MicrosegTab connectionId='c1' connections={CONNECTIONS} />)
+    const t = await screen.findByRole('table', { name: 'Flows' })
+    const db = await within(within(t).getByRole('rowgroup', { name: 'db' })).findByRole('button', { name: 'Uncovered 24 h: 3,291 hits' })
+    expect(within(within(t).getByRole('rowgroup', { name: 'web' })).getByRole('button', { name: 'Uncovered 24 h: 107 hits' })).toBeTruthy()
+    const reads = fetchedUrls().filter(u => /\/traffic\?/.test(u))
+    expect(reads.some(u => u.includes('/microseg/c1/traffic?'))).toBe(true)
+    expect(reads.some(u => u.startsWith(`${C2}/traffic?`))).toBe(true)
+
+    fireEvent.click(db)
+    expect(await screen.findByText('Suggestions for zone db · 3,291 uncovered hits in 24 h')).toBeTruthy()
+  })
+
+  it('keeps the count of the clusters that answer when one history cannot be read', async () => {
+    window.localStorage.setItem('microseg.subTab', 'policy')
+    mock.routes['GET /clusters'] = () => reply(200, { clusters: [link('c1'), link('c2')], max: 8 })
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('zd', { name: 'db' })], last_revision: REVISION_HEAD, clusters: [link('c1'), link('c2')] }))
+    mock.routes['GET /api/v1/vms?connId=c2'] = () => reply(200, { data: { vms: [] } })
+    mock.routes[`GET ${C2}/status`] = () => reply(200, status())
+    mock.routes['GET /traffic*'] = () => traffic([bucket('db', 4)])
+    mock.routes[`GET ${C2}/traffic*`] = () => reply(503, { code: 'ORCHESTRATOR_UNREACHABLE', error: 'down' })
+    renderTab(<MicrosegTab connectionId='c1' connections={CONNECTIONS} />)
+    const t = await screen.findByRole('table', { name: 'Flows' })
+    expect(await within(within(t).getByRole('rowgroup', { name: 'db' })).findByRole('button', { name: 'Uncovered 24 h: 4 hits' })).toBeTruthy()
+  })
+})
+
+describe('the filter of the map of a shared policy', () => {
+  it('offers the clusters and names the cluster of each Proxmox node and guest; a cluster picked keeps its guests', async () => {
+    window.localStorage.setItem('microseg.subTab', 'overview')
+    mock.routes['GET /clusters'] = () => reply(200, { clusters: [link('c1'), link('c2')], max: 8 })
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('zd', { name: 'db' }), zone('zw', { name: 'web' })], last_revision: REVISION_HEAD, clusters: [link('c1'), link('c2')] }))
+    mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: [vm(100, 'db-prod', ['zone-db'], { node: 'pve1' })] } })
+    mock.routes['GET /api/v1/vms?connId=c2'] = () => reply(200, { data: { vms: [vm(200, 'web-dr', ['zone-web'], { node: 'pve1' })] } })
+    mock.routes[`GET ${C2}/status`] = () => reply(200, status())
+    mock.routes['GET /suggestions?status=pending&limit=200'] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
+    renderTab(<MicrosegTab connectionId='c1' connections={CONNECTIONS} />)
+    const field = await screen.findByRole('combobox', { name: 'Filter the map' })
+    await waitFor(() => expect(screen.queryByTestId('node-guest:zw:c2/qemu/200') ?? screen.queryByTestId('node-zone:zw')).toBeTruthy())
+    field.focus()
+    fireEvent.keyDown(field, { key: 'ArrowDown' })
+    const labels = async () => (await screen.findAllByRole('option')).map(o => o.getAttribute('aria-label'))
+    await waitFor(async () => expect(await labels()).toContain('PVE-DR, cluster, 1 running guest'))
+    expect(await labels()).toContain('PVE-PROD, cluster, 1 running guest')
+    // Two clusters may each have a "pve1": each option says its cluster.
+    const nodes = screen.getAllByRole('option').filter(o => (o.getAttribute('aria-label') ?? '').startsWith('pve1, Proxmox node'))
+    expect(nodes).toHaveLength(2)
+    expect(nodes.map(o => within(o).getByText(/^PVE-/).textContent).sort((a, b) => a!.localeCompare(b!))).toEqual(['PVE-DR', 'PVE-PROD'])
+    fireEvent.click(screen.getByRole('option', { name: 'PVE-DR, cluster, 1 running guest' }))
+    await waitFor(() => expect(screen.queryByTestId('node-zone:zd')).toBeNull())
+    expect(screen.getByTestId('node-zone:zw')).toBeTruthy()
+  })
+})
+
 describe('ignored drifts of a shared policy', () => {
   const same: MicrosegDrift = { kind: 'unzoned_running', guest: g(100) }
   const stored = (conn: string) => JSON.parse(window.localStorage.getItem(`microseg.ignoredDrifts.${conn}`) ?? '[]') as string[]

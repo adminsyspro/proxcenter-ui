@@ -1,4 +1,5 @@
 import { buildCompactGraph } from './compactGraph'
+import { buildConstellationGraph } from './constellationGraph'
 import { buildGuestView, buildZoneInside } from './guestViewModel'
 import type { MapView } from './MapToolbar'
 import { buildNodeView } from './nodeViewModel'
@@ -20,6 +21,7 @@ export function mapViewGraph(view: ShownView, input: MapInput, centre: string | 
   if (view === 'compact') return buildCompactGraph(input)
   if (view === 'guests') return centre ? buildGuestView({ ...input, centre, externalAddresses }) : EMPTY
   if (view === 'nodes') return buildNodeView(input)
+  if (view === 'constellation') return buildConstellationGraph(input)
   if (view === 'matrix' || view === 'sankey') return EMPTY
   return buildZoneGraph(input)
 }

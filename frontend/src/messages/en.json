@@ -14657,7 +14657,14 @@
         "sankey": "Sankey diagram",
         "sankeyHint": "the observed traffic as ribbons, wider with more hits",
         "nodes": "Nodes",
-        "nodesHint": "the guests on their Proxmox node, the observed flows and the exceptions from node to node (the allowed flows between zones stay in Groups)"
+        "nodesHint": "the guests on their Proxmox node, the observed flows and the exceptions from node to node (the allowed flows between zones stay in Groups)",
+        "constellation": "Constellation",
+        "constellationHint": "the zones in orbit around the cluster, their flows as arcs (a double click on a zone puts its guests in orbit)"
+      },
+      "constellation": {
+        "flows": "Flows between the pastilles",
+        "pause": "Stop the rotation",
+        "play": "Resume the rotation"
       },
       "pve": {
         "aria": "Proxmox node {name}, {guests}",
@@ -14698,12 +14705,12 @@
         "empty": "No flow to draw with these filters."
       },
       "target": {
-        "label": "Target a VM",
-        "placeholder": "Name, VMID or IP",
-        "noOptions": "No running guest matches",
-        "clear": "Clear the target",
-        "openList": "Show the guests",
-        "closeList": "Hide the guests",
+        "label": "Filter the map",
+        "placeholder": "VM, zone, node or IP",
+        "noOptions": "Nothing matches",
+        "clear": "Clear the filter",
+        "openList": "Show the list",
+        "closeList": "Hide the list",
         "noZone": "no zone",
         "option": "{name}, guest {vmid}, {zone}",
         "type": {
@@ -14713,6 +14720,20 @@
         "chip": "Targeting {name}",
         "chipHint": "The map stays focused on {name}: click to show its panel, the cross to clear the target",
         "cellMarker": "Observed flows of {name} in this cell",
+        "placeholderMore": "Add…",
+        "group": {
+          "zone": "Zones",
+          "node": "Proxmox nodes",
+          "cluster": "Clusters",
+          "guest": "Guests"
+        },
+        "optionZone": "{name}, zone",
+        "optionNode": "{name}, Proxmox node, {count, plural, one {# running guest} other {# running guests}}",
+        "optionCluster": "{name}, cluster, {count, plural, one {# running guest} other {# running guests}}",
+        "guests": "{count, plural, one {# guest} other {# guests}}",
+        "peers": "With what they exchange with",
+        "peersHint": "Also show the other flows of what is picked, with their other ends",
+        "empty": "Nothing to draw for this filter on this rendering.",
         "panel": {
           "label": "Guest {name}",
           "where": "{type} {vmid} on {node}",

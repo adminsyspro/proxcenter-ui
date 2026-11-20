@@ -69,7 +69,9 @@ describe('microsegPilot i18n parity across the 6 served locales', () => {
     // And one more with the "Cluster" filter of the observed flows of a shared policy: the same word in both languages
     // (in German too).
     // And one more with the "Cluster" line of the exception dialog of a shared policy, for the same reason (German too).
-    const ceilings: Record<string, number> = { fr: 26, de: 18, es: 5, ko: 3, 'zh-CN': 3 }
+    // And four more with the constellation rendering and the filter of the map: "Constellation", the headings "Zones" and
+    // "Clusters" of its list, and "{name}, zone" read out for a zone option, the same words in both languages.
+    const ceilings: Record<string, number> = { fr: 30, de: 18, es: 5, ko: 3, 'zh-CN': 3 }
     for (const [locale, ceiling] of Object.entries(ceilings)) {
       const flat = flatten(locales[locale].microsegPilot)
       // The names of the gateway services (DNS, NTP, Ping) are protocol names, the same everywhere.

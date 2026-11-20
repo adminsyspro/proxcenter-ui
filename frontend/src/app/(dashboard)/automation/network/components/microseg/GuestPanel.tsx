@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Box, Button, CircularProgress, IconButton, InputAdornment, TextField, ToggleButton, Tooltip, Typography } from '@mui/material'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel, IconButton, InputAdornment, TextField, ToggleButton, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
@@ -14,8 +14,52 @@ import PolicyPager, { PagedList } from './PolicyPager'
 import TruncatedText from './TruncatedText'
 import type { MapMember } from './zoneGraph'
 
-/** The lines of a page of the log. */
+/** The lines of a page of the log where the panel's height is not known. */
 export const LOG_PAGE_SIZE = 20
+/** A page fills the panel's height: one line is this tall, the pager under the lines takes the other height. */
+export const LOG_ROW_HEIGHT = 29
+const PAGER_HEIGHT = 44
+/** The line above the lines: the count of a search or of the filter. */
+const CAPTION_HEIGHT = 22
+const MIN_ROWS = 5
+const MAX_ROWS = 200
+
+/**
+ * The lines that fit in `available` pixels, the pager included and the caption above the lines when there is one;
+ * LOG_PAGE_SIZE when the height is not known.
+ */
+export function fitRows(available: number | null, caption = false): number {
+  if (available === null || !(available > 0)) return LOG_PAGE_SIZE
+  const room = available - PAGER_HEIGHT - (caption ? CAPTION_HEIGHT : 0)
+  return Math.min(MAX_ROWS, Math.max(MIN_ROWS, Math.floor(room / LOG_ROW_HEIGHT)))
+}
+
+/**
+ * The height of the panel's body under `anchor` (put right above the lines), 0 where it is not known. Null until
+ * measured, so the first read already asks for the lines that fit; a resize settles 300 ms before it counts, so a drag
+ * reads once.
+ */
+function useRoomBelow() {
+  const anchor = useRef<HTMLDivElement>(null)
+  const [room, setRoom] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    const el = anchor.current
+    const body = el?.closest<HTMLElement>('[data-testid="panel-body"]')
+    if (!el || !body) { setRoom(0); return }
+    // Under the anchor, down to the body's bottom padding.
+    const measure = () => {
+      const top = el.getBoundingClientRect().bottom - body.getBoundingClientRect().top + body.scrollTop
+      return body.clientHeight - top - Number.parseFloat(getComputedStyle(body).paddingBottom || '0')
+    }
+    setRoom(measure())
+    if (typeof ResizeObserver === 'undefined') return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const observer = new ResizeObserver(() => { clearTimeout(timer); timer = setTimeout(() => setRoom(measure()), 300) })
+    observer.observe(body)
+    return () => { observer.disconnect(); clearTimeout(timer) }
+  }, [])
+  return { anchor, room }
+}
 /** The newest lines the search reads, once, then filters in the browser. */
 export const SEARCH_LINES = 2000
 
@@ -34,8 +78,8 @@ type Props = {
   onClose: () => void
 }
 
-/** A read of the log: which page (or the search block) of which round, and what came back. */
-type Read = { page: number; round: number; data: GuestLogPage | null; error: string | null }
+/** A read of the log: which page (or the search block) of which size and round, and what came back. */
+type Read = { page: number; size: number; round: number; data: GuestLogPage | null; error: string | null }
 
 type Line = { key: number; parsed: ParsedLogLine | null; raw: string }
 
@@ -49,6 +93,29 @@ export function lineSummary(p: ParsedLogLine): string {
   const dst = p.dst ? `${p.dst}${p.dport === undefined ? '' : `:${p.dport}`}` : ''
   return [p.src && dst ? `${p.src} → ${dst}` : p.src || dst, p.proto?.toLowerCase()].filter(Boolean).join(' ')
 }
+
+const IPV4_RE = /^(\d{1,3})\.\d{1,3}\.\d{1,3}\.(\d{1,3})$/
+/** Destination MACs of a frame sent to many: IPv4 multicast, IPv6 multicast, broadcast. */
+const MANY_MAC_RE = /^(?:01:00:5e|33:33|ff:ff:ff:ff:ff:ff)/i
+
+/**
+ * A line of what the network sends to every guest of the bridge (multicast, broadcast), logged by each of them: VRRP,
+ * mDNS, NetBIOS, IPv6 neighbour discovery... A destination in 224.0.0.0/4 or ff00::/8, ending in .255, or a frame sent
+ * to a multicast or broadcast MAC. A line PVE wrote in another shape is kept.
+ */
+export function isNoise(p: ParsedLogLine | null): boolean {
+  if (!p) return false
+  if (MANY_MAC_RE.test(p.fields.MAC ?? '')) return true
+  const dst = p.dst?.toLowerCase() ?? ''
+  if (dst.startsWith('ff')) return true
+  const v4 = IPV4_RE.exec(dst)
+  if (!v4) return false
+  const first = Number(v4[1])
+  return (first >= 224 && first <= 239) || v4[2] === '255'
+}
+
+const keepAll: (l: Line) => boolean = () => true
+const keepSignal = (l: Line) => !isNoise(l.parsed)
 
 /** The lines holding every word of the search (any case), in the raw line PVE wrote. */
 export function matchLines(lines: Line[], query: string): Line[] {
@@ -64,15 +131,15 @@ export function matchLines(lines: Line[], query: string): Line[] {
 function useLogRead(conn: string, guest: MapMember, page: number, size: number, round: number, total: number | undefined, enabled: boolean) {
   const [read, setRead] = useState<Read | null>(null)
   // The answer of the read asked for, null while it is under way.
-  const current = read !== null && read.page === page && read.round === round ? read : null
+  const current = read !== null && read.page === page && read.size === size && read.round === round ? read : null
   const answered = current?.data != null
   useEffect(() => {
     // Asked again with an answer in hand (the search cleared then typed again): no new read.
     if (!enabled || answered) return
     let cancelled = false
     void getGuestLogPage(conn, guest, page, size, total).then(
-      data => { if (!cancelled) setRead({ page, round, data, error: null }) },
-      (e: unknown) => { if (!cancelled) setRead({ page, round, data: null, error: e instanceof Error ? e.message : String(e) }) },
+      data => { if (!cancelled) setRead({ page, size, round, data, error: null }) },
+      (e: unknown) => { if (!cancelled) setRead({ page, size, round, data: null, error: e instanceof Error ? e.message : String(e) }) },
     )
     return () => { cancelled = true }
     // `total` comes with the first page: a later read uses it, it never asks for a read itself.
@@ -81,21 +148,22 @@ function useLogRead(conn: string, guest: MapMember, page: number, size: number, 
   return current
 }
 
-type LiveState = { total: number; lines: Line[]; error: string | null }
+type LiveState = { from: Read; total: number; lines: Line[]; error: string | null }
 
 /**
  * The live mode: from the first page (`start`), every LIVE_EVERY_MS the lines written since the count held, one read at
  * a time (the next is planned once the last answered), none while the browser tab is hidden, until `until`; then
  * `onExpire`. A count below the one held means the log was rotated: the view starts over from the new file.
  */
-function useLiveLog(conn: string, guest: MapMember, start: Read | null, until: number, onExpire: () => void) {
+function useLiveLog(conn: string, guest: MapMember, start: Read | null, size: number, keep: (l: Line) => boolean, until: number, onExpire: () => void) {
   const [state, setState] = useState<LiveState | null>(null)
   useEffect(() => {
     if (!start?.data) return
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | undefined
     let after = start.data.total
-    let lines = newestFirst(start.data)
+    const from = start
+    let lines = newestFirst(start.data).filter(keep).slice(0, size)
     const plan = () => { timer = setTimeout(() => { void tick() }, LIVE_EVERY_MS) }
     const tick = async () => {
       if (cancelled) return
@@ -105,17 +173,17 @@ function useLiveLog(conn: string, guest: MapMember, start: Read | null, until: n
         const res = await getGuestLogAfter(conn, guest, after, LIVE_READ)
         if (cancelled) return
         if (res.total < after) {
-          after = Math.max(0, res.total - LOG_PAGE_SIZE)
+          after = Math.max(0, res.total - size)
           lines = []
         } else {
-          lines = [...newestFirst(res), ...lines].slice(0, LOG_PAGE_SIZE)
+          lines = [...newestFirst(res).filter(keep), ...lines].slice(0, size)
           // More lines came than one read brings: the next read starts from the newest ones.
-          after = Math.max(after + res.lines.length, res.total - LOG_PAGE_SIZE)
+          after = Math.max(after + res.lines.length, res.total - size)
         }
-        setState({ total: res.total, lines, error: null })
+        setState({ from, total: res.total, lines, error: null })
       } catch (e) {
         if (cancelled) return
-        setState(prev => ({ total: prev?.total ?? after, lines, error: e instanceof Error ? e.message : String(e) }))
+        setState(prev => ({ from, total: prev?.from === from ? prev.total : after, lines, error: e instanceof Error ? e.message : String(e) }))
       }
       plan()
     }
@@ -124,7 +192,8 @@ function useLiveLog(conn: string, guest: MapMember, start: Read | null, until: n
     // A new start (Refresh, live turned on again) starts the loop over; the rest is read when it starts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start])
-  return start?.data ? state : null
+  // The state of an earlier start (the other filter, a Refresh) is not shown.
+  return start?.data && state?.from === start ? state : null
 }
 
 function LogLine({ line }: { line: Line }) {
@@ -137,7 +206,7 @@ function LogLine({ line }: { line: Line }) {
   }
   return (
     <Tooltip title={raw} disableInteractive placement='left'>
-      <Box role='listitem' data-log-line sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, py: 0.5, borderBottom: 1, borderColor: 'divider' }}>
+      <Box role='listitem' data-log-line sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, height: LOG_ROW_HEIGHT, boxSizing: 'border-box', borderBottom: 1, borderColor: 'divider' }}>
         {parsed ? (
           <>
             <Typography variant='caption' color='text.secondary' noWrap sx={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
@@ -164,7 +233,9 @@ function LogLines({ lines, label }: { lines: Line[]; label: string }) {
  * of 20 at a time. Each page is read when it is shown, never in the background: the first costs two PVE reads (the
  * count, then its lines), each other one a single read, as the count of the first is handed back. The search reads the
  * 2000 newest lines once, at its first letter, and filters them in the browser while it is typed: no other read.
- * Refresh starts over from the newest lines.
+ * Hiding multicast and broadcast (on by default: the bridge hands them to every guest, so every log is full of the same
+ * lines) reads that same block of 2000 lines, in the same two PVE reads as a first page. Refresh starts over from the
+ * newest lines.
  */
 export default function GuestPanel({ guest, connectionId, onClose }: Readonly<Props>) {
   const t = useTranslations('microsegPilot.overview.guestPanel')
@@ -175,18 +246,26 @@ export default function GuestPanel({ guest, connectionId, onClose }: Readonly<Pr
   const [round, setRound] = useState(0)
   const [query, setQuery] = useState('')
   const searching = query.trim() !== ''
+  const [hideNoise, setHideNoise] = useState(true)
+  // The search and the filter read the newest block of lines and filter it in the browser; else a page at a time.
+  const blockMode = searching || hideNoise
   // The count of the first page, handed back to read the next pages (and the search) in one PVE read each.
   const [total, setTotal] = useState<number | undefined>(undefined)
 
-  const pageRead = useLogRead(conn, guest, page, LOG_PAGE_SIZE, round, page === 0 ? undefined : total, !searching)
-  const searchRead = useLogRead(conn, guest, 0, SEARCH_LINES, round, total, searching)
-  if (page === 0 && pageRead?.data && pageRead.data.total !== total) setTotal(pageRead.data.total)
+  const { anchor, room } = useRoomBelow()
+  // Rounded to the pixel: a sub-pixel change of the layout must not read the page again.
+  const size = fitRows(room === null ? null : Math.floor(room), blockMode)
+  const pageRead = useLogRead(conn, guest, page, size, round, page === 0 ? undefined : total, !blockMode && room !== null)
+  const searchRead = useLogRead(conn, guest, 0, SEARCH_LINES, round, total, blockMode)
+  const head = blockMode ? searchRead : pageRead
+  if ((blockMode || page === 0) && head?.data && head.data.total !== total) setTotal(head.data.total)
 
-  const block = useMemo(() => newestFirst(searchRead?.data ?? null), [searchRead])
+  const keep = hideNoise ? keepSignal : keepAll
+  const block = useMemo(() => newestFirst(searchRead?.data ?? null).filter(keep), [searchRead, keep])
   const found = useMemo(() => matchLines(block, query), [block, query])
 
   const refresh = useCallback(() => { setPage(0); setTotal(undefined); setRound(r => r + 1) }, [])
-  const shown = searching ? searchRead : pageRead
+  const shown = head
   const loading = shown === null
 
   // Live: on the first page only, outside the search; it stops by itself after LIVE_FOR_MS.
@@ -196,7 +275,8 @@ export default function GuestPanel({ guest, connectionId, onClose }: Readonly<Pr
   const startLive = () => { setPage(0); setLiveExpired(false); setLiveUntil(Date.now() + LIVE_FOR_MS) }
   const stopLive = useCallback(() => setLiveUntil(null), [])
   const expire = useCallback(() => { setLiveUntil(null); setLiveExpired(true) }, [])
-  const liveState = useLiveLog(conn, guest, live && page === 0 ? pageRead : null, liveUntil ?? 0, expire)
+  const liveStart = blockMode ? searchRead : pageRead
+  const liveState = useLiveLog(conn, guest, live && (blockMode || page === 0) ? liveStart : null, size, keep, liveUntil ?? 0, expire)
   const liveButton = (
     <Tooltip title={live ? t('liveStop') : t('liveStart', { seconds: LIVE_EVERY_MS / 1000, minutes: LIVE_FOR_MS / 60_000 })}>
       <span>
@@ -248,28 +328,38 @@ export default function GuestPanel({ guest, connectionId, onClose }: Readonly<Pr
             htmlInput: { 'aria-label': t('search') },
             input: { startAdornment: <InputAdornment position='start'><i className='ri-search-line' aria-hidden /></InputAdornment> },
           }}
-          sx={{ mb: 1 }}
+          sx={{ mb: 0.5 }}
         />
-        {loading && <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1 }}><CircularProgress size={16} /><Typography variant='body2' color='text.secondary'>{t(searching ? 'searchReading' : 'reading', { count: format.number(SEARCH_LINES) })}</Typography></Box>}
+        <Tooltip title={t('hideNoiseTip', { count: format.number(SEARCH_LINES) })} placement='left' disableInteractive describeChild>
+          <FormControlLabel
+            control={<Checkbox size='small' checked={hideNoise} onChange={e => setHideNoise(e.target.checked)} sx={{ py: 0.25 }} />}
+            label={<Typography variant='caption'>{t('hideNoise')}</Typography>}
+            sx={{ display: 'flex', mb: 0.5, mr: 0 }}
+          />
+        </Tooltip>
+        <div ref={anchor} />
+        {loading && <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1 }}><CircularProgress size={16} /><Typography variant='body2' color='text.secondary'>{t(blockMode ? 'searchReading' : 'reading', { count: format.number(SEARCH_LINES) })}</Typography></Box>}
         {shown !== null && shown.error !== null && <Alert severity='warning' sx={{ py: 0 }}>{t('error', { error: shown.error })}</Alert>}
-        {searching && searchRead?.data && (
+        {blockMode && searchRead?.data && !(live && liveState) && searchRead.data.lines.length === 0 && <Typography variant='body2' color='text.disabled'>{t('empty')}</Typography>}
+        {blockMode && searchRead?.data && !(live && liveState) && searchRead.data.lines.length > 0 && (
           <>
-            <Typography variant='caption' color='text.secondary' sx={{ display: 'block', mb: 0.5 }}>
-              {t('searchFound', { count: found.length, scanned: format.number(scanned) })}
+            <Typography variant='caption' color='text.secondary' noWrap sx={{ display: 'block', mb: 0.5 }}>
+              {t(searching ? 'searchFound' : 'noiseShown', { count: found.length, scanned: format.number(scanned) })}
             </Typography>
-            <PagedList items={found} size={LOG_PAGE_SIZE} render={rows => <LogLines lines={rows} label={t('logTitle')} />} />
+            <PagedList items={found} size={size} render={rows => <LogLines lines={rows} label={t('logTitle')} />} />
           </>
         )}
+        {blockMode && live && liveState && (liveState.lines.length === 0 ? <Typography variant='body2' color='text.disabled'>{t('empty')}</Typography> : <LogLines lines={liveState.lines} label={t('logTitle')} />)}
         {liveExpired && !live && (
           <Alert severity='info' sx={{ py: 0, mb: 1 }} action={<Button size='small' onClick={startLive}>{t('liveResume')}</Button>}>{t('liveExpired', { minutes: LIVE_FOR_MS / 60_000 })}</Alert>
         )}
         {live && liveState?.error && <Alert severity='warning' sx={{ py: 0, mb: 1 }}>{t('error', { error: liveState.error })}</Alert>}
-        {!searching && pageRead?.data && (
+        {!blockMode && pageRead?.data && (
           <>
             {pageRead.data.lines.length === 0 && !liveState?.lines.length && <Typography variant='body2' color='text.disabled'>{t('empty')}</Typography>}
             <LogLines lines={live && liveState ? liveState.lines : newestFirst(pageRead.data)} label={t('logTitle')} />
             {/* While live the newest lines come in at the top: the pages would move under the reader. */}
-            {!live && total !== undefined && <PolicyPager count={total} page={page} size={LOG_PAGE_SIZE} onPage={setPage} />}
+            {!live && total !== undefined && <PolicyPager count={total} page={page} size={size} onPage={setPage} />}
           </>
         )}
       </PanelSection>

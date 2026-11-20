@@ -14819,7 +14819,10 @@
         "liveStart": "Show the new lines as they come: a read every {seconds} s, for {minutes} minutes",
         "liveStop": "Stop the live mode",
         "liveExpired": "Live mode stopped after {minutes} minutes.",
-        "liveResume": "Resume"
+        "liveResume": "Resume",
+        "hideNoise": "Hide multicast and broadcast",
+        "hideNoiseTip": "Hides what the network sends to every guest (multicast, broadcast). The {count} newest lines are read once and filtered in the browser.",
+        "noiseShown": "{count, plural, =0 {No line left} one {# line left} other {# lines left}} of the {scanned} newest"
       }
     },
     "preflight": {

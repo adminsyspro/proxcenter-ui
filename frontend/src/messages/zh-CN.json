@@ -14819,7 +14819,10 @@
         "liveStart": "实时显示新行：每 {seconds} 秒读取一次，持续 {minutes} 分钟",
         "liveStop": "停止实时模式",
         "liveExpired": "实时模式已在 {minutes} 分钟后停止。",
-        "liveResume": "继续"
+        "liveResume": "继续",
+        "hideNoise": "隐藏组播和广播",
+        "hideNoiseTip": "隐藏网络发送给所有客户机的流量（组播、广播）。最新的 {count} 行只读取一次，并在浏览器中过滤。",
+        "noiseShown": "最新的 {scanned} 行中{count, plural, =0 {没有剩余的行} other {剩余 # 行}}"
       }
     },
     "preflight": {

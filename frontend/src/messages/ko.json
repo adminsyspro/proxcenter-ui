@@ -14819,7 +14819,10 @@
         "liveStart": "새 줄을 바로 표시: {seconds}초마다 한 번 읽기, {minutes}분 동안",
         "liveStop": "실시간 모드 중지",
         "liveExpired": "{minutes}분 후 실시간 모드가 중지되었습니다.",
-        "liveResume": "다시 시작"
+        "liveResume": "다시 시작",
+        "hideNoise": "멀티캐스트 및 브로드캐스트 숨기기",
+        "hideNoiseTip": "네트워크가 모든 게스트에 보내는 트래픽(멀티캐스트, 브로드캐스트)을 숨깁니다. 최신 {count}개 줄을 한 번 읽고 브라우저에서 필터링합니다.",
+        "noiseShown": "최신 {scanned}개 줄 중 {count, plural, =0 {남은 줄 없음} other {#개 줄 남음}}"
       }
     },
     "preflight": {

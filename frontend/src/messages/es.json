@@ -14819,7 +14819,10 @@
         "liveStart": "Mostrar las líneas nuevas a medida que llegan: una lectura cada {seconds} s, durante {minutes} minutos",
         "liveStop": "Detener el modo en directo",
         "liveExpired": "Modo en directo detenido tras {minutes} minutos.",
-        "liveResume": "Reanudar"
+        "liveResume": "Reanudar",
+        "hideNoise": "Ocultar multicast y broadcast",
+        "hideNoiseTip": "Oculta lo que la red envía a todos los invitados (multicast, broadcast). Las {count} líneas más recientes se leen una vez y se filtran en el navegador.",
+        "noiseShown": "{count, plural, =0 {Ninguna línea restante} one {# línea restante} other {# líneas restantes}} de las {scanned} más recientes"
       }
     },
     "preflight": {

@@ -14390,7 +14390,10 @@
         "liveStart": "Neue Zeilen laufend anzeigen: ein Lesevorgang alle {seconds} s, {minutes} Minuten lang",
         "liveStop": "Echtzeitmodus beenden",
         "liveExpired": "Echtzeitmodus nach {minutes} Minuten beendet.",
-        "liveResume": "Fortsetzen"
+        "liveResume": "Fortsetzen",
+        "hideNoise": "Multicast und Broadcast ausblenden",
+        "hideNoiseTip": "Blendet aus, was das Netzwerk an alle Gäste sendet (Multicast, Broadcast). Die {count} neuesten Zeilen werden einmal gelesen und im Browser gefiltert.",
+        "noiseShown": "{count, plural, =0 {Keine Zeile übrig} one {# Zeile übrig} other {# Zeilen übrig}} von den {scanned} neuesten"
       }
     },
     "preflight": {

@@ -90,3 +90,18 @@ describe('POST /api/v1/tenants vmidRange', () => {
     expect(res.status).toBe(409)
   })
 })
+
+describe('POST /api/v1/tenants provider switches', () => {
+  it('forwards the built-in catalogue and API self-service switches', async () => {
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { body: { slug: 'acme', name: 'Acme', builtInCatalog: false, apiSelfService: true } })
+    expect(res.status).toBe(201)
+    expect(createTenantMock).toHaveBeenCalledWith(expect.objectContaining({ builtInCatalog: false, apiSelfService: true }))
+  })
+
+  it('keeps the defaults when the switches are absent', async () => {
+    const { POST } = await import('./route')
+    await callRoute(POST, { body: { slug: 'acme', name: 'Acme' } })
+    expect(createTenantMock).toHaveBeenCalledWith(expect.objectContaining({ builtInCatalog: true, apiSelfService: false }))
+  })
+})

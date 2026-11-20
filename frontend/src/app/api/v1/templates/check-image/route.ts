@@ -5,6 +5,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { pveFetch } from "@/lib/proxmox/client"
 import { resolveBuiltInImage } from "@/lib/templates/catalogStore"
+import { BUILT_IN_CATALOG_HIDDEN, isBuiltInCatalogHidden } from "@/lib/templates/builtInCatalogAccess"
 import { customImageToCloudImage } from "@/lib/templates/cloudImages"
 import { findCustomImageForTenant } from "@/lib/templates/customImageScope"
 import { getCurrentTenantId } from "@/lib/tenant"
@@ -47,6 +48,9 @@ export async function GET(req: Request) {
     // shared catalogue entries, the same scope the catalogue and the deploy
     // route use, so a slug that deploys can always be probed here too.
     const builtIn = await resolveBuiltInImage(imageSlug)
+    if (builtIn && await isBuiltInCatalogHidden(tenantId)) {
+      return NextResponse.json({ error: BUILT_IN_CATALOG_HIDDEN }, { status: 403 })
+    }
     const customRow = builtIn ? null : await findCustomImageForTenant(tenantId, imageSlug)
     const image = builtIn ?? (customRow ? customImageToCloudImage(customRow) : null)
 

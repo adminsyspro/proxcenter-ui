@@ -28,7 +28,8 @@ export function mergeNetworkConfig(
     : (type === 'lxc' ? current.get('hwaddr') : current.get('macaddr') ?? (previousModel ? current.get(previousModel) : undefined))
 
   for (const key of editableFields) {
-    if (key === 'tag' && !permissions.canEditVlan) continue
+    // The VLAN of a NIC, tag and trunks alike, needs the VLAN right.
+    if ((key === 'tag' || key === 'trunks') && !permissions.canEditVlan) continue
     if (key === 'hwaddr' || key === 'macaddr') continue
     if (changes.has(key)) current.set(key, changes.get(key)!)
     else current.delete(key)

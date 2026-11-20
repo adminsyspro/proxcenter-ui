@@ -2802,6 +2802,14 @@
               "msp"
             ],
             "description": "iaas by default; set once"
+          },
+          "apiSelfService": {
+            "type": "boolean",
+            "description": "Off by default"
+          },
+          "builtInCatalog": {
+            "type": "boolean",
+            "description": "On by default"
           }
         }
       },
@@ -2841,6 +2849,10 @@
           "apiSelfService": {
             "type": "boolean",
             "description": "Lets the tenant's admins manage its service accounts and API tokens, within their own rights"
+          },
+          "builtInCatalog": {
+            "type": "boolean",
+            "description": "Shows the built-in image catalogue to the tenant; off, it only sees the provider's images granted to it and its own"
           }
         }
       },
@@ -6728,6 +6740,10 @@
                   "type": "boolean",
                   "description": "The tenant manages its own service accounts and API tokens"
                 },
+                "builtInCatalog": {
+                  "type": "boolean",
+                  "description": "The built-in image catalogue is shown to the tenant"
+                },
                 "settings": {
                   "type": [
                     "object",
@@ -6802,6 +6818,10 @@
               "apiSelfService": {
                 "type": "boolean",
                 "description": "The tenant manages its own service accounts and API tokens"
+              },
+              "builtInCatalog": {
+                "type": "boolean",
+                "description": "The built-in image catalogue is shown to the tenant"
               },
               "settings": {
                 "type": [
@@ -35035,6 +35055,10 @@
                             "type": "boolean",
                             "description": "The tenant manages its own service accounts and API tokens"
                           },
+                          "builtInCatalog": {
+                            "type": "boolean",
+                            "description": "The built-in image catalogue is shown to the tenant"
+                          },
                           "settings": {
                             "type": [
                               "object",
@@ -35164,6 +35188,14 @@
                       "msp"
                     ],
                     "description": "iaas by default; set once"
+                  },
+                  "apiSelfService": {
+                    "type": "boolean",
+                    "description": "Off by default"
+                  },
+                  "builtInCatalog": {
+                    "type": "boolean",
+                    "description": "On by default"
                   }
                 }
               }
@@ -35243,6 +35275,10 @@
                         "apiSelfService": {
                           "type": "boolean",
                           "description": "The tenant manages its own service accounts and API tokens"
+                        },
+                        "builtInCatalog": {
+                          "type": "boolean",
+                          "description": "The built-in image catalogue is shown to the tenant"
                         },
                         "settings": {
                           "type": [
@@ -35424,6 +35460,10 @@
                           "type": "boolean",
                           "description": "The tenant manages its own service accounts and API tokens"
                         },
+                        "builtInCatalog": {
+                          "type": "boolean",
+                          "description": "The built-in image catalogue is shown to the tenant"
+                        },
                         "settings": {
                           "type": [
                             "object",
@@ -35558,6 +35598,10 @@
                   "apiSelfService": {
                     "type": "boolean",
                     "description": "Lets the tenant's admins manage its service accounts and API tokens, within their own rights"
+                  },
+                  "builtInCatalog": {
+                    "type": "boolean",
+                    "description": "Shows the built-in image catalogue to the tenant; off, it only sees the provider's images granted to it and its own"
                   }
                 }
               }
@@ -35637,6 +35681,10 @@
                         "apiSelfService": {
                           "type": "boolean",
                           "description": "The tenant manages its own service accounts and API tokens"
+                        },
+                        "builtInCatalog": {
+                          "type": "boolean",
+                          "description": "The built-in image catalogue is shown to the tenant"
                         },
                         "settings": {
                           "type": [

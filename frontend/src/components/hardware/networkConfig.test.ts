@@ -26,4 +26,14 @@ describe('network edit preserves protected identity', () => {
     expect(mergeNetworkConfig('virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0,tag=42,trunks=10;20', 'virtio,bridge=vmbr0', 'qemu', fields, { canEditMac: false, canEditVlan: true }))
       .toBe('virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0,trunks=10;20')
   })
+  it('applies a trunks change only with the VLAN right', () => {
+    const editable = [...fields, 'trunks']
+    const raw = 'virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0,trunks=10;20'
+    expect(mergeNetworkConfig(raw, 'virtio,bridge=vmbr0,trunks=225;230', 'qemu', editable, { canEditMac: false, canEditVlan: true }))
+      .toBe('virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0,trunks=225;230')
+    expect(mergeNetworkConfig(raw, 'virtio,bridge=vmbr0,trunks=225;230', 'qemu', editable, { canEditMac: false, canEditVlan: false }))
+      .toBe(raw)
+    expect(mergeNetworkConfig(raw, 'virtio,bridge=vmbr0', 'qemu', editable, { canEditMac: false, canEditVlan: true }))
+      .toBe('virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0')
+  })
 })

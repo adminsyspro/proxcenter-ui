@@ -38,3 +38,16 @@ describe('createTenant operating_model default', () => {
     )
   })
 })
+
+describe('createTenant provider switches', () => {
+  it('keeps the built-in catalogue on and API self-service off by default', async () => {
+    const tenant = await createTenant({ slug: 'acme', name: 'Acme' })
+    expect(tenantCreateMock.mock.calls[0][0].data).toMatchObject({ builtInCatalog: true, apiSelfService: false })
+    expect(tenant).toMatchObject({ builtInCatalog: true, apiSelfService: false })
+  })
+
+  it('applies both switches of the create dialog', async () => {
+    await createTenant({ slug: 'acme', name: 'Acme', builtInCatalog: false, apiSelfService: true })
+    expect(tenantCreateMock.mock.calls[0][0].data).toMatchObject({ builtInCatalog: false, apiSelfService: true })
+  })
+})

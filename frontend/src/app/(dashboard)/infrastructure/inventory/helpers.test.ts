@@ -13,6 +13,7 @@ import {
   safeJson,
   asArray,
   parseTags,
+  parseGuestNic,
   pct,
   cpuPct,
   formatBps,
@@ -1939,5 +1940,34 @@ describe('memoryChipLabel', () => {
     expect(memoryChipLabel(1536)).toBe('1.5 GB')
     expect(memoryChipLabel(0)).toBe('0 MB')
     expect(memoryChipLabel(Number.NaN)).toBe('0 MB')
+  })
+})
+
+describe('parseGuestNic', () => {
+  it('reads the VLAN trunks of a QEMU NIC in the Proxmox VE syntax', () => {
+    const nic = parseGuestNic('net1', 'virtio=BC:24:11:D0:12:A9,bridge=vmbr0,trunks=225;230;605;606')
+    expect(nic).toMatchObject({
+      id: 'net1',
+      model: 'virtio',
+      macaddr: 'BC:24:11:D0:12:A9',
+      bridge: 'vmbr0',
+      trunks: '225;230;605;606',
+      rawValue: 'virtio=BC:24:11:D0:12:A9,bridge=vmbr0,trunks=225;230;605;606',
+    })
+    expect(nic.tag).toBeUndefined()
+  })
+
+  it('keeps a tag and trunk ranges side by side', () => {
+    const nic = parseGuestNic('net0', 'e1000=BC:24:11:00:00:01,bridge=vmbr1,tag=10,trunks=20-25;30,firewall=1,link_down=1,rate=50,mtu=9000,queues=4')
+    expect(nic).toMatchObject({ tag: 10, trunks: '20-25;30', firewall: true, linkDown: true, rate: 50, mtu: 9000, queues: 4, model: 'e1000' })
+  })
+
+  it('reads an LXC NIC, trunks included', () => {
+    const nic = parseGuestNic('net0', 'name=eth0,bridge=vmbr0,hwaddr=BC:24:11:00:00:02,ip=dhcp,gw=10.0.0.1,ip6=auto,gw6=fe80::1,host-managed=1,trunks=100;200')
+    expect(nic).toMatchObject({ name: 'eth0', macaddr: 'BC:24:11:00:00:02', ip: 'dhcp', gw: '10.0.0.1', ip6: 'auto', gw6: 'fe80::1', hostmanaged: true, trunks: '100;200' })
+  })
+
+  it('leaves trunks unset on an access NIC', () => {
+    expect(parseGuestNic('net0', 'virtio=BC:24:11:00:00:03,bridge=vmbr0').trunks).toBeUndefined()
   })
 })

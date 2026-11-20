@@ -32,6 +32,7 @@ const TENANT = {
     vmidRangeStart: NULLABLE_INT,
     vmidRangeEnd: NULLABLE_INT,
     apiSelfService: { type: "boolean", description: "The tenant manages its own service accounts and API tokens" },
+    builtInCatalog: { type: "boolean", description: "The built-in image catalogue is shown to the tenant" },
     settings: { type: ["object", "null"], additionalProperties: true },
     createdBy: NULLABLE_STRING,
     createdAt: DATE,

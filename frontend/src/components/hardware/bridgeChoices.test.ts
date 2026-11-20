@@ -167,3 +167,18 @@ describe('migrationBridgeOption', () => {
       .toEqual({ iface: 'vmbr0', label: 'vmbr0', icon: 'ri-router-line' })
   })
 })
+
+describe('toBridgeEntries: VLAN trunks of a bridge', () => {
+  it('carries whether the bridge accepts trunks and its VLAN list, and leaves them out when unknown', () => {
+    const trunkVlans = [{ value: '200', source: 'sdn', label: 'DMZ' }]
+    expect(toBridgeEntries([
+      { kind: 'bridge', name: 'vmbr9', vlanAware: true, trunkVlans },
+      { kind: 'bridge', name: 'vmbr0', vlanAware: false, trunkVlans: [] },
+      { kind: 'vnet', name: 'h1', displayName: 'lan' },
+    ])).toEqual([
+      { iface: 'vmbr0', label: 'vmbr0', kind: 'bridge', vlanAware: false, trunkVlans: [] },
+      { iface: 'vmbr9', label: 'vmbr9', kind: 'bridge', vlanAware: true, trunkVlans },
+      { iface: 'h1', label: 'lan', kind: 'vnet' },
+    ])
+  })
+})

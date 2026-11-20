@@ -74,6 +74,10 @@ async function handlePost(req: Request) {
       operatingModel: body.operatingModel,
       vmidRangeStart: vmidRange?.start ?? null,
       vmidRangeEnd: vmidRange?.end ?? null,
+      // The API self-service and built-in catalogue switches of the create
+      // dialog, applied from the start instead of after an edit.
+      apiSelfService: body.apiSelfService === true,
+      builtInCatalog: body.builtInCatalog !== false,
     })
 
     // Service-desk roles published to all tenants reach the new one (ui#1336).

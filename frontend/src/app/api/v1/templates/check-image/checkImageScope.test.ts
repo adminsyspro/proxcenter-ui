@@ -15,6 +15,7 @@ const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getCurrentTenantIdMock = vi.fn<() => Promise<string>>()
 const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
 const findCustomImageForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
+const isBuiltInCatalogHiddenMock = vi.fn<(tenantId: string) => Promise<boolean>>()
 
 vi.mock("@/lib/rbac", () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
@@ -38,6 +39,10 @@ vi.mock("@/lib/templates/customImageScope", () => ({
 vi.mock("@/lib/templates/cloudImages", () => ({
   customImageToCloudImage: (row: any) => ({ slug: row.slug, downloadUrl: "https://img.test/custom.qcow2" }),
 }))
+vi.mock("@/lib/templates/builtInCatalogAccess", () => ({
+  BUILT_IN_CATALOG_HIDDEN: "The built-in image catalogue is not available to this tenant",
+  isBuiltInCatalogHidden: (tenantId: string) => isBuiltInCatalogHiddenMock(tenantId),
+}))
 vi.mock("@/lib/tenant/infraScope", () => ({
   getTenantInfrastructureScope: (...a: any[]) => getTenantInfrastructureScopeMock(...a),
 }))
@@ -59,6 +64,7 @@ beforeEach(() => {
   getCurrentTenantIdMock.mockReset().mockResolvedValue("default")
   getTenantInfrastructureScopeMock.mockReset().mockResolvedValue({ kind: "provider" })
   findCustomImageForTenantMock.mockReset().mockResolvedValue(null)
+  isBuiltInCatalogHiddenMock.mockReset().mockResolvedValue(false)
 })
 
 describe("GET /api/v1/templates/check-image -- storage scope guard (Task 13)", () => {
@@ -156,5 +162,31 @@ describe("GET /api/v1/templates/check-image -- custom image resolution", () => {
 
     expect(res.status).toBe(200)
     expect(findCustomImageForTenantMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("GET /api/v1/templates/check-image -- built-in catalogue turned off", () => {
+  it("refuses a built-in slug with 403 before any PVE call", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-1")
+    isBuiltInCatalogHiddenMock.mockResolvedValue(true)
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, {
+      searchParams: { connectionId: "conn-1", node: "node1", storage: "any-storage", imageSlug: "ubuntu-2404" },
+    })
+    expect(res.status).toBe(403)
+    expect((await readJson<{ error: string }>(res))?.error).toMatch(/built-in image catalogue/)
+    expect(isBuiltInCatalogHiddenMock).toHaveBeenCalledWith("tenant-1")
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it("still probes the tenant's custom images", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("tenant-1")
+    isBuiltInCatalogHiddenMock.mockResolvedValue(true)
+    findCustomImageForTenantMock.mockResolvedValue({ slug: "custom-golden" })
+    const { GET } = await import("./route")
+    const res = await callRoute(GET, {
+      searchParams: { connectionId: "conn-1", node: "node1", storage: "any-storage", imageSlug: "custom-golden" },
+    })
+    expect(res.status).toBe(200)
   })
 })

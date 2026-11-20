@@ -80,3 +80,56 @@ describe('AddNetworkDialog bridge loading', () => {
     await waitFor(() => expect(props.onSave).toHaveBeenCalledWith({ net1: 'virtio,bridge=h9,firewall=1' }))
   })
 })
+
+describe('AddNetworkDialog VLAN trunks', () => {
+  afterEach(cleanup)
+  const choices = (data: unknown[]) => server.use(http.get(`*/api/v1/connections/${CONN_ID}/network-choices`, () => HttpResponse.json({ data })))
+  const VMBR9 = { kind: 'bridge', name: 'vmbr9', type: 'bridge', vlanAware: true, trunkVlans: [
+    { value: '200', source: 'sdn', label: 'DMZ' }, { value: '100-199', source: 'vdc', label: 'Acme vDC' },
+  ] }
+
+  it('writes the trunks typed with commas and spaces in the Proxmox VE syntax', async () => {
+    choices([VMBR9])
+    const props = makeProps()
+    renderWithProviders(<AddNetworkDialog {...props} />)
+    await waitFor(() => expect(screen.getByDisplayValue('vmbr9')).toBeTruthy())
+    await userEvent.type(screen.getByLabelText('VLAN trunks'), '225, 230 605-606{enter}')
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(props.onSave).toHaveBeenCalledWith({ net1: 'virtio,bridge=vmbr9,trunks=225;230;605-606,firewall=1' }))
+  })
+
+  it('offers the VLANs known on the bridge, grouped by source with their names', async () => {
+    choices([VMBR9])
+    const props = makeProps()
+    renderWithProviders(<AddNetworkDialog {...props} />)
+    await waitFor(() => expect(screen.getByDisplayValue('vmbr9')).toBeTruthy())
+    fireEvent.mouseDown(screen.getByLabelText('VLAN trunks'))
+    expect(await screen.findByText('SDN VLAN networks')).toBeTruthy()
+    expect(screen.getByText('vDC VLAN pools')).toBeTruthy()
+    expect(screen.getByText('Acme vDC')).toBeTruthy()
+    fireEvent.click(screen.getByText('DMZ'))
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(props.onSave).toHaveBeenCalledWith({ net1: 'virtio,bridge=vmbr9,trunks=200,firewall=1' }))
+  })
+
+  it('refuses an id outside 1-4094 and keeps Add disabled', async () => {
+    choices([VMBR9])
+    const props = makeProps()
+    renderWithProviders(<AddNetworkDialog {...props} />)
+    await waitFor(() => expect(screen.getByDisplayValue('vmbr9')).toBeTruthy())
+    await userEvent.type(screen.getByLabelText('VLAN trunks'), '5000{enter}')
+    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled()
+    expect(screen.getByText(/1-4094/)).toBeTruthy()
+    expect(props.onSave).not.toHaveBeenCalled()
+  })
+
+  it('disables trunks on a Linux bridge that is not VLAN aware, where Proxmox VE would not start the guest', async () => {
+    choices([{ kind: 'bridge', name: 'vmbr0', type: 'bridge', vlanAware: false, trunkVlans: [] }])
+    const props = makeProps()
+    renderWithProviders(<AddNetworkDialog {...props} />)
+    await waitFor(() => expect(screen.getByDisplayValue('vmbr0')).toBeTruthy())
+    expect(screen.getByLabelText('VLAN trunks')).toBeDisabled()
+    expect(screen.getByText('vmbr0 is not VLAN aware')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Add' })).not.toBeDisabled()
+  })
+})

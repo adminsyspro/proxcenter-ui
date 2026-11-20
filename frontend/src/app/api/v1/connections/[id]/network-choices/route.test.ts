@@ -36,7 +36,7 @@ vi.mock("@/lib/rbac", () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
   guestPerimeterAllows: (...a: any[]) => guestPerimeterAllowsMock(...a),
   buildNodeResourceId: (id: string, node: string) => `${id}/${node}`,
-  PERMISSIONS: { CONNECTION_VIEW: "connection.view" },
+  PERMISSIONS: { CONNECTION_VIEW: "connection.view", ADMIN_SETTINGS_VIEW: "admin.settings.view" },
 }))
 vi.mock("@/lib/connections/getConnection", () => ({
   getConnectionById: (...a: any[]) => getConnectionByIdMock(...a),
@@ -88,6 +88,7 @@ beforeEach(() => {
   connectionFindUniqueMock.mockReset().mockResolvedValue({ tenantId: "provider-tenant" })
   vdcVnetFindManyMock.mockReset().mockResolvedValue([])
   vdcSharedBridgeFindManyMock.mockReset().mockResolvedValue([])
+  vdcVlanPoolFindManyMock.mockReset().mockResolvedValue([])
 })
 
 describe("GET /api/v1/connections/[id]/network-choices", () => {
@@ -97,7 +98,7 @@ describe("GET /api/v1/connections/[id]/network-choices", () => {
     const json = await res.json()
 
     expect(res.status).toBe(200)
-    expect(json.data).toEqual([{ kind: "bridge", name: "vmbr0", type: "bridge" }])
+    expect(json.data).toEqual([{ kind: "bridge", name: "vmbr0", type: "bridge", vlanAware: false, trunkVlans: [] }])
     // Permission granted, so the guest-derived fallback is never consulted.
     expect(guestPerimeterAllowsMock).not.toHaveBeenCalled()
   })
@@ -110,7 +111,7 @@ describe("GET /api/v1/connections/[id]/network-choices", () => {
     const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
     const json = await (await callRoute(GET, { params: PARAMS, searchParams: QUERY })).json()
 
-    expect(json.data).toEqual([{ kind: "bridge", name: "vmbr0", type: "bridge", mtu: 9000 }])
+    expect(json.data).toEqual([{ kind: "bridge", name: "vmbr0", type: "bridge", mtu: 9000, vlanAware: false, trunkVlans: [] }])
   })
 
   it("returns the RBAC denial without calling PVE when no guest opens the perimeter", async () => {
@@ -134,8 +135,80 @@ describe("GET /api/v1/connections/[id]/network-choices", () => {
     const json = await res.json()
 
     expect(res.status).toBe(200)
-    expect(json.data).toEqual([{ kind: "bridge", name: "vmbr0", type: "bridge" }])
+    expect(json.data).toEqual([{ kind: "bridge", name: "vmbr0", type: "bridge", vlanAware: false, trunkVlans: [] }])
     expect(guestPerimeterAllowsMock).toHaveBeenCalledWith("conn-1", "connection.view")
+  })
+})
+
+describe("GET /api/v1/connections/[id]/network-choices: VLAN trunks of a bridge", () => {
+  const network = [
+    { iface: "vmbr0", type: "bridge" },
+    { iface: "vmbr9", type: "bridge", bridge_vlan_aware: 1, bridge_vids: "2-4094" },
+    { iface: "vmbr9.300", type: "vlan", "vlan-id": "300", "vlan-raw-device": "vmbr9" },
+    { iface: "vmbr1", type: "OVSBridge" },
+  ]
+  const answer = (path: string) => {
+    if (path.endsWith("/network")) return network
+    if (path === "/cluster/sdn/zones") return [{ zone: "zv9", type: "vlan", bridge: "vmbr9" }]
+    if (path === "/cluster/sdn/vnets") return [{ vnet: "dmz", zone: "zv9", tag: 200, alias: "DMZ" }]
+    return []
+  }
+
+  it("tells which bridges accept trunks and lists their VLANs, vDC pools with the vDC name for the provider", async () => {
+    pveFetchMock.mockImplementation((_c: any, path: string) => Promise.resolve(answer(path)))
+    vdcVlanPoolFindManyMock.mockResolvedValue([{ bridge: "vmbr9", rangeStart: 100, rangeEnd: 199, vdc: { name: "Acme vDC" } }])
+
+    const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
+    const json = await (await callRoute(GET, { params: PARAMS, searchParams: QUERY })).json()
+    const bridges = Object.fromEntries(json.data.filter((c: any) => c.kind === "bridge").map((c: any) => [c.name, c]))
+
+    expect(bridges.vmbr0).toMatchObject({ vlanAware: false, trunkVlans: [] })
+    expect(bridges.vmbr1).toMatchObject({ vlanAware: true })
+    expect(bridges.vmbr9).toMatchObject({
+      vlanAware: true,
+      trunkVlans: [
+        { value: "2-4094", source: "bridge" },
+        { value: "300", source: "iface", label: "vmbr9.300" },
+        { value: "200", source: "sdn", label: "DMZ" },
+        { value: "100-199", source: "vdc", label: "Acme vDC" },
+      ],
+    })
+    expect(vdcVlanPoolFindManyMock).toHaveBeenCalledWith(expect.objectContaining({ where: { vdc: { connectionId: "conn-1" } } }))
+  })
+
+  it("never reads the vDC pools, nor their names, for an MSP on its own cluster", async () => {
+    pveFetchMock.mockImplementation((_c: any, path: string) => Promise.resolve(answer(path)))
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: "msp", connectionIds: new Set(["conn-1"]) })
+
+    const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
+    const json = await (await callRoute(GET, { params: PARAMS, searchParams: QUERY })).json()
+
+    expect(vdcVlanPoolFindManyMock).not.toHaveBeenCalled()
+    expect(json.data.find((c: any) => c.name === "vmbr9").trunkVlans.map((v: any) => v.source)).toEqual(["bridge", "iface", "sdn"])
+  })
+
+  it("never reads the vDC pools for a provider user who may not list the vDCs", async () => {
+    pveFetchMock.mockImplementation((_c: any, path: string) => Promise.resolve(answer(path)))
+    checkPermissionMock.mockImplementation(async (perm: string) =>
+      perm === "admin.settings.view" ? Response.json({ error: "forbidden" }, { status: 403 }) : null)
+
+    const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
+    const json = await (await callRoute(GET, { params: PARAMS, searchParams: QUERY })).json()
+
+    expect(vdcVlanPoolFindManyMock).not.toHaveBeenCalled()
+    expect(json.data.find((c: any) => c.name === "vmbr9").trunkVlans.map((v: any) => v.source)).toEqual(["bridge", "iface", "sdn"])
+  })
+
+  it("still answers when the SDN zones cannot be read", async () => {
+    pveFetchMock.mockImplementation((_c: any, path: string) =>
+      path === "/cluster/sdn/zones" ? Promise.reject(new Error("sdn off")) : Promise.resolve(answer(path)))
+
+    const GET = (await import("./route")).GET as Parameters<typeof callRoute>[0]
+    const res = await callRoute(GET, { params: PARAMS, searchParams: QUERY })
+    const json = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(json.data.find((c: any) => c.name === "vmbr9").trunkVlans.map((v: any) => v.source)).toEqual(["bridge", "iface"])
   })
 })
 
@@ -189,7 +262,11 @@ describe("GET /api/v1/connections/[id]/network-choices: iaas tenant slice", () =
         kind: "vnet", name: "vlan100", displayName: "vlan100", vdc: "acme-paris", vdcId: "vdc-1", zone: "vlanvmbr0",
         subnet: { subnetId: "s2", cidr: "192.0.2.0/24", gateway: "192.0.2.1", dnsServers: [] },
       },
-      { kind: "shared", name: "vmbr1", label: "DMZ", vlanRanges: [[100, 199], [300, 310]] },
+      {
+        kind: "shared", name: "vmbr1", label: "DMZ", vlanRanges: [[100, 199], [300, 310]],
+        // A tenant's trunks are offered inside its own pools only.
+        trunkVlans: [{ value: "100-199", source: "vdc" }, { value: "300-310", source: "vdc" }],
+      },
     ])
     expect(vdcVlanPoolFindManyMock).toHaveBeenCalledWith(expect.objectContaining({
       where: { vdcId: { in: ["vdc-1"] }, bridge: { in: ["vmbr1"] } },
@@ -207,7 +284,7 @@ describe("GET /api/v1/connections/[id]/network-choices: iaas tenant slice", () =
     const json = await res.json()
 
     expect(res.status).toBe(200)
-    expect(json.data).toEqual([{ kind: "shared", name: "vmbr1", label: null, vlanRanges: [] }])
+    expect(json.data).toEqual([{ kind: "shared", name: "vmbr1", label: null, vlanRanges: [], trunkVlans: [] }])
     expect(vdcVlanPoolFindManyMock).not.toHaveBeenCalled()
   })
 

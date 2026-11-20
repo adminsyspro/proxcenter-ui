@@ -8413,6 +8413,14 @@
     "loadNodesError": "노드 목록을 불러올 수 없습니다",
     "nicMacPermissionRequired": "MAC 주소를 변경하려면 공급자의 권한이 필요합니다.",
     "nicVlanPermissionRequired": "VLAN 설정을 변경하려면 공급자의 권한이 필요합니다.",
+    "nicVlanTrunksInvalid": "1-4094, 예: 10;20-25",
+    "nicTrunksNotVlanAware": "{bridge}은(는) VLAN aware가 아닙니다",
+    "nicTrunkSource": {
+      "sdn": "SDN VLAN 네트워크",
+      "iface": "호스트 VLAN 인터페이스",
+      "vdc": "vDC VLAN 풀",
+      "bridge": "브리지의 VLAN"
+    },
     "nicOriginalUnavailable": "저장하기 전에 네트워크 구성을 다시 불러오세요.",
     "snapshotMigration": {
       "title": "스냅샷 때문에 이 마이그레이션을 진행할 수 없습니다",
@@ -11135,6 +11143,8 @@
     "lockedHint": "테넌트 사용자는 UI 접근 권한을 잃습니다. Proxmox 리소스, 백업, IPAM은 유지되며 이 작업은 되돌릴 수 있습니다.",
     "apiSelfService": "테넌트가 서비스 계정과 API 토큰을 직접 관리",
     "apiSelfServiceHelp": "관리자는 자신의 권한 범위 내에서만 만들 수 있으며 제공자 범위는 사용할 수 없습니다. 제공자는 계속 보고 해지할 수 있습니다.",
+    "builtInCatalog": "기본 제공 이미지 카탈로그",
+    "builtInCatalogHelp": "이 테넌트에 ProxCenter 이미지(Ubuntu, Debian…)를 표시합니다. 끄면 공유되거나 부여된 귀하의 이미지와 테넌트 자체 이미지만 표시됩니다. ISO에서 VM을 생성하는 기능에는 영향이 없습니다.",
     "users": "사용자",
     "addUser": "사용자 추가",
     "searchUser": "이름 또는 이메일로 검색...",

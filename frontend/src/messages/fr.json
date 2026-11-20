@@ -8015,6 +8015,8 @@
     "bulkPartial": "{description} - {success} OK, {errors} erreurs",
     "bulkFailed": "{description} - {errors} erreurs",
     "migrateStillRunning": "Toujours en cours quand ProxCenter a cessé de la suivre, voir le journal de la tâche",
+    "moveDiskBeforeMigrate": "déplacement de {disk} vers {storage} avant la migration",
+    "migrateAfterMoveRefused": "Disques déplacés, mais l'étape suivante a été refusée : {error}",
     "migrateGuestFailed": "{name} : échec de la migration : {reason}",
     "bulkStillRunning": "{count} encore en cours dans Proxmox"
   },
@@ -8369,6 +8371,22 @@
     "cloneHaLocal": "Exige un stockage partagé : le stockage cible est local à son nœud.",
     "sharedDisksStay": "Les disques sur un stockage partagé restent où ils sont",
     "targetStorageLocalOnly": "Ne concerne que les disques locaux",
+    "targetStoragePlan": {
+      "moveFirst": "Invité HA : disques déplacés vers {storage} avant la migration",
+      "haIgnoresStorage": "PVE ignore le stockage cible d'une migration HA. L'invité reste sous HA.",
+      "blocked": {
+        "ha-target-not-shared": "Invité HA : {storage} n'est pas un stockage partagé du nœud source",
+        "ha-running-container": "Conteneur HA : volumes non déplaçables tant qu'il tourne",
+        "ha-tpm-running": "VM HA : état TPM non déplaçable tant que la VM tourne",
+        "replicated": "Les disques répliqués restent sur leur stockage"
+      },
+      "remedy": {
+        "ha-target-not-shared": "Choisissez un stockage partagé, ou retirez l'invité du HA.",
+        "ha-running-container": "Arrêtez le conteneur, ou retirez-le du HA.",
+        "ha-tpm-running": "Arrêtez la VM, ou retirez-la du HA.",
+        "replicated": "PVE réutilise la réplique de la cible. Supprimez le job pour changer de stockage."
+      }
+    },
     "tpmMoveWhileRunning": "L'état TPM ne peut pas être déplacé tant que la VM tourne. Arrêtez d'abord la VM.",
     "gpuContingent": {
       "gpu_via_my_vdc": "Les GPU s'ajoutent depuis la section GPU de Mon datacenter.",

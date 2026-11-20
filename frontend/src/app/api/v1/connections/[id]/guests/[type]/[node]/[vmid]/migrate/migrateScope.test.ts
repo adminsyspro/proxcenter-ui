@@ -49,7 +49,7 @@ vi.mock("@/lib/schemas", () => ({
   migrateVmSchema: {
     safeParse: (b: any) => ({
       success: true,
-      data: { target: b?.target ?? "pve2", online: true, targetstorage: null, withLocalDisks: false },
+      data: { target: b?.target ?? "pve2", online: true, targetstorage: b?.targetstorage ?? null, withLocalDisks: false },
     }),
   },
 }))
@@ -176,5 +176,84 @@ describe("POST .../migrate — snapshot guard (#1027)", () => {
     const res = await callRoute(POST, { method: "POST", params: PARAMS, body: { target: "pve2" } })
 
     expect(res.status).toBe(200)
+  })
+})
+
+describe("POST .../migrate — target storage guard (#1402)", () => {
+  function pve(routes: Record<string, any>) {
+    pveFetchMock.mockImplementation(async (_conn: any, path: string) => {
+      if (path in routes) return routes[path]
+      if (path.endsWith("/migrate")) return "UPID:pve1:0:0:migrate:100:root@pam:"
+      throw new Error(`unexpected PVE call ${path}`)
+    })
+  }
+
+  const GUEST = {
+    "/nodes/pve1/qemu/100/snapshot": [{ name: "current" }],
+    "/nodes/pve1/qemu/100/config": { scsi0: "ZFS-Pool:vm-100-disk-0,size=32G" },
+    "/nodes/pve1/qemu/100/status/current": { status: "running" },
+    "/storage": [{ storage: "ZFS-Pool", type: "zfspool" }, { storage: "ceph", type: "rbd" }],
+    "/cluster/ha/resources": [],
+    "/cluster/replication": [],
+  }
+
+  const migrateCalls = () => pveFetchMock.mock.calls.filter(c => String(c[1]).endsWith("/migrate"))
+
+  async function post(body: Record<string, unknown>) {
+    getInfraMock.mockResolvedValue({ kind: "provider" })
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+
+    return callRoute(POST, { method: "POST", params: PARAMS, body })
+  }
+
+  it("sends the target storage to PVE for a plain guest", async () => {
+    pve(GUEST)
+
+    const res = await post({ target: "pve2", targetstorage: "ceph" })
+
+    expect(res.status).toBe(200)
+    expect(String(migrateCalls()[0][2].body)).toContain("targetstorage=ceph")
+  })
+
+  it("refuses an HA-managed guest and says which disks to move first, before calling PVE", async () => {
+    pve({ ...GUEST, "/cluster/ha/resources": [{ sid: "vm:100" }] })
+
+    const res = await post({ target: "pve2", targetstorage: "ceph" })
+    const json = await res.json()
+
+    expect(res.status).toBe(409)
+    expect(json.code).toBe("TARGET_STORAGE_NEEDS_DISK_MOVE")
+    expect(json.plan).toEqual({ kind: "move-first", disks: [{ id: "scsi0", volid: "ZFS-Pool:vm-100-disk-0" }] })
+    expect(json.error).toContain("scsi0")
+    expect(migrateCalls()).toHaveLength(0)
+  })
+
+  it("refuses the disks replicated to the target node", async () => {
+    pve({ ...GUEST, "/cluster/replication": [{ guest: 100, target: "pve2" }] })
+
+    const res = await post({ target: "pve2", targetstorage: "ceph" })
+    const json = await res.json()
+
+    expect(res.status).toBe(409)
+    expect(json.code).toBe("TARGET_STORAGE_NOT_APPLICABLE")
+    expect(json.error).toContain("ZFS-Pool:vm-100-disk-0")
+    expect(migrateCalls()).toHaveLength(0)
+  })
+
+  it("migrates an HA-managed guest that keeps its storage, without reading more from PVE", async () => {
+    pve({ "/nodes/pve1/qemu/100/snapshot": [{ name: "current" }] })
+
+    const res = await post({ target: "pve2" })
+
+    expect(res.status).toBe(200)
+  })
+
+  it("leaves the verdict to PVE when the check itself fails", async () => {
+    pve({ "/nodes/pve1/qemu/100/snapshot": [{ name: "current" }] })
+
+    const res = await post({ target: "pve2", targetstorage: "ceph" })
+
+    expect(res.status).toBe(200)
+    expect(migrateCalls()).toHaveLength(1)
   })
 })

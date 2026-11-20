@@ -6,6 +6,7 @@ import type { CcmPrereqCapture, CcmRestorePlan, HaResourceCapture, ReplicationJo
 import { storageSupportsReplication } from '@/lib/migration/ccm-prereqs.types'
 import { isSharedStorage } from '@/lib/proxmox/storage'
 import { snapshotsToClear, type SnapshotMigrationBlocker } from '@/lib/migration/snapshotMigrationBlockers'
+import type { TargetStoragePlan } from '@/lib/migration/targetStoragePlan'
 import { DiskSnapshotRefsAlert } from '@/components/hardware/DiskSnapshotRefsAlert'
 import PendingChangesWarning from '@/components/migration/PendingChangesWarning'
 import { computeNegativeAffinityConflicts, getAffinityPeers, type AffinityPeer, type HaRule, type HaStatusEntry } from '@/lib/proxmox/haAffinity'
@@ -129,7 +130,8 @@ type RemoteConnection = {
 type MigrateVmDialogProps = {
   open: boolean
   onClose: () => void
-  onMigrate: (targetNode: string, online: boolean, targetStorage?: string, withLocalDisks?: boolean) => Promise<void>
+  /** `moveFirst`: disks to move to `targetStorage` before migrating (#1402), HA-managed guests. */
+  onMigrate: (targetNode: string, online: boolean, targetStorage?: string, withLocalDisks?: boolean, moveFirst?: ReadonlyArray<string>) => Promise<void>
   onCrossClusterMigrate?: (params: CrossClusterMigrateParams) => Promise<void>
   connId: string
   currentNode: string
@@ -940,6 +942,36 @@ export function MigrateVmDialog({
     return getRecommendedNode(pool).node === node.node
   }
   
+  // ========== LOCAL MIGRATION: what PVE does with the target storage (#1402) ==========
+  // PVE drops a target storage without a word for an HA-managed guest and for
+  // replicated volumes. Asked only once a storage other than the current one is
+  // picked. The answer is stored with the request it belongs to; until it
+  // lands the migration waits, and a failed check leaves it to the route.
+  const storagePlanUrl = open && activeTab === 0 && connId && selectedNode && effectiveTargetStorage
+    ? `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vmType}/${encodeURIComponent(currentNode)}/${encodeURIComponent(vmid)}/migrate/storage-check?target=${encodeURIComponent(selectedNode)}&targetstorage=${encodeURIComponent(effectiveTargetStorage)}`
+    : null
+  const [storagePlanAnswer, setStoragePlanAnswer] = useState<{ url: string; plan: TargetStoragePlan | null } | null>(null)
+
+  useEffect(() => {
+    if (!storagePlanUrl) return
+
+    let cancelled = false
+
+    void fetch(storagePlanUrl)
+      .then(async res => (res.ok ? (await res.json())?.data ?? null : null))
+      .catch(() => null)
+      .then((plan: TargetStoragePlan | null) => {
+        if (!cancelled) setStoragePlanAnswer({ url: storagePlanUrl, plan })
+      })
+
+    return () => { cancelled = true }
+  }, [storagePlanUrl])
+
+  const storagePlanPending = !!storagePlanUrl && storagePlanAnswer?.url !== storagePlanUrl
+  const storagePlan: TargetStoragePlan | null =
+    storagePlanUrl && storagePlanAnswer?.url === storagePlanUrl ? storagePlanAnswer.plan : null
+  const storagePlanBlocked = storagePlan?.kind === 'blocked'
+
   // Handle local migration
   const handleLocalMigrate = async () => {
     if (!selectedNode) {
@@ -951,7 +983,13 @@ export function MigrateVmDialog({
     setError(null)
     
     try {
-      await onMigrate(selectedNode, onlineMigration, effectiveTargetStorage, hasLocalDisks)
+      await onMigrate(
+        selectedNode,
+        onlineMigration,
+        effectiveTargetStorage,
+        hasLocalDisks,
+        storagePlan?.kind === 'move-first' ? storagePlan.disks.map(d => d.id) : undefined,
+      )
       onClose()
     } catch (e: any) {
       setError(e.message || t('hardware.migrationError'))
@@ -1776,6 +1814,38 @@ export function MigrateVmDialog({
               </>
             )}
 
+            {/* #1402: PVE drops the target storage for an HA-managed guest and for replicated volumes */}
+            {storagePlan?.kind === 'move-first' && effectiveTargetStorage && (
+              <Alert severity="info" icon={<i className="ri-shield-check-line" />} data-testid="migrate-storage-move-first">
+                <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                  {t('hardware.targetStoragePlan.moveFirst', { storage: effectiveTargetStorage })}
+                </Typography>
+                {storagePlan.disks.map(disk => (
+                  <Typography key={disk.id} variant="caption" component="div" sx={{ opacity: 0.9 }}>
+                    {disk.id}: {disk.volid}
+                  </Typography>
+                ))}
+                <Typography variant="caption" component="div" sx={{ opacity: 0.9, mt: 0.5 }}>
+                  {t('hardware.targetStoragePlan.haIgnoresStorage')}
+                </Typography>
+              </Alert>
+            )}
+            {storagePlan?.kind === 'blocked' && effectiveTargetStorage && (
+              <Alert severity="error" data-testid="migrate-storage-blocked">
+                <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                  {t(`hardware.targetStoragePlan.blocked.${storagePlan.reason}`, { storage: effectiveTargetStorage })}
+                </Typography>
+                {storagePlan.volids.map(volid => (
+                  <Typography key={volid} variant="caption" component="div" sx={{ opacity: 0.9 }}>
+                    {volid}
+                  </Typography>
+                ))}
+                <Typography variant="caption" component="div" sx={{ opacity: 0.9, mt: 0.5 }}>
+                  {t(`hardware.targetStoragePlan.remedy.${storagePlan.reason}`)}
+                </Typography>
+              </Alert>
+            )}
+
             {/* #926: changes waiting for a restart may make PVE fail the live migration */}
             {open && activeTab === 0 && isVmRunning && (
               <PendingChangesWarning guests={[{ connId, node: currentNode, type: vmType, vmid, name: vmName }]} />
@@ -2304,7 +2374,7 @@ export function MigrateVmDialog({
           <Button 
             variant="contained" 
             onClick={handleLocalMigrate} 
-            disabled={migrating || !selectedNode || nodes.length === 0 || selectedNodeBlocked || snapshotBlockers.length > 0}
+            disabled={migrating || !selectedNode || nodes.length === 0 || selectedNodeBlocked || snapshotBlockers.length > 0 || storagePlanPending || storagePlanBlocked}
             startIcon={migrating ? <CircularProgress size={16} /> : <i className="ri-swap-box-line" />}
           >
             {migrating ? t('hardware.migrating') : t('hardware.migrate')}

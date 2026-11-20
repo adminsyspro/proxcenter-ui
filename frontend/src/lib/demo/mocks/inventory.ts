@@ -1120,6 +1120,8 @@ const GET_ROUTES: [RegExp, Handler][] = [
   [/^\/api\/v1\/connections\/[^/]+\/guests\/(?:qemu|lxc)\/[^/]+\/\d+\/migrate\/pending-check$/, () => ({ data: { changes: [] } })],
   // Guests sit on shared Ceph: snapshots never block a live or offline migration.
   [/^\/api\/v1\/connections\/[^/]+\/guests\/(?:qemu|lxc)\/[^/]+\/\d+\/migrate\/snapshot-check$/, () => ({ data: { live: [], offline: [] } })],
+  // No demo guest is HA-managed with local disks: PVE applies the target storage itself.
+  [/^\/api\/v1\/connections\/[^/]+\/guests\/(?:qemu|lxc)\/[^/]+\/\d+\/migrate\/storage-check$/, () => ({ data: { kind: 'direct' } })],
   // InventoryDetails reads the lock state of the selected guest.
   [/^\/api\/v1\/connections\/[^/]+\/guests\/(?:qemu|lxc)\/[^/]+\/\d+\/unlock$/, () => ({ data: { locked: false, lockType: null } })],
   // MigrateVmDialog (cross-cluster tab): flat prerequisites of the source guest.

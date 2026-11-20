@@ -8015,6 +8015,8 @@
     "bulkPartial": "{description} - {success} 个成功，{errors} 个错误",
     "bulkFailed": "{description} - {errors} 个错误",
     "migrateStillRunning": "ProxCenter 停止跟踪时仍在运行，请查看任务日志",
+    "moveDiskBeforeMigrate": "迁移前将 {disk} 移动到 {storage}",
+    "migrateAfterMoveRefused": "磁盘已移动，但下一步被拒绝：{error}",
     "migrateGuestFailed": "{name}：迁移失败：{reason}",
     "bulkStillRunning": "{count} 个仍在 Proxmox 中运行"
   },
@@ -8369,6 +8371,22 @@
     "cloneHaLocal": "需要共享存储：目标存储是节点本地存储。",
     "sharedDisksStay": "共享存储上的磁盘保留在原位置",
     "targetStorageLocalOnly": "仅适用于本地磁盘",
+    "targetStoragePlan": {
+      "moveFirst": "HA 来宾：迁移前先将磁盘移动到 {storage}",
+      "haIgnoresStorage": "PVE 会忽略 HA 迁移的目标存储。来宾始终处于 HA 管理之下。",
+      "blocked": {
+        "ha-target-not-shared": "HA 来宾：{storage} 不是源节点上的共享存储",
+        "ha-running-container": "HA 容器：运行期间无法移动卷",
+        "ha-tpm-running": "HA 虚拟机：运行期间无法移动 TPM 状态",
+        "replicated": "已复制的磁盘保留在原存储上"
+      },
+      "remedy": {
+        "ha-target-not-shared": "请选择共享存储，或将来宾从 HA 中移除。",
+        "ha-running-container": "请停止容器，或将其从 HA 中移除。",
+        "ha-tpm-running": "请关闭虚拟机，或将其从 HA 中移除。",
+        "replicated": "PVE 会复用目标上的副本。如需更换存储，请先删除复制任务。"
+      }
+    },
     "tpmMoveWhileRunning": "虚拟机运行时无法移动 TPM 状态。请先关闭虚拟机。",
     "gpuContingent": {
       "gpu_via_my_vdc": "GPU 需通过我的数据中心的 GPU 部分添加。",

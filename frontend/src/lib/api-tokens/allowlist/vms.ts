@@ -151,7 +151,7 @@ export const VM_ENTRIES: AllowlistEntry[] = [
     pattern: `${GUEST}/migrate`,
     requiredScopes: ["vms:migrate"],
     summary: "Migrate a guest to another node of its cluster",
-    description: "Intra-cluster migration to `target`. Refused while snapshots block the migration.",
+    description: "Intra-cluster migration to `target`. Refused while snapshots block the migration, and with a `targetstorage` that Proxmox VE would silently drop: an HA-managed guest (409 `TARGET_STORAGE_NEEDS_DISK_MOVE` names the disks to move first with the disk move endpoint) or volumes held by a replication job (409 `TARGET_STORAGE_NOT_APPLICABLE`).",
     requestSchemaRef: "VmMigrateRequest",
     responseSchemaRef: "VmSuccessTaskResponse",
   }),

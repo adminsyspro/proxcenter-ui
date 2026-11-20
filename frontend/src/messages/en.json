@@ -8015,6 +8015,8 @@
     "bulkPartial": "{description} - {success} OK, {errors} errors",
     "bulkFailed": "{description} - {errors} errors",
     "migrateStillRunning": "Still running when ProxCenter stopped following it, see the task log",
+    "moveDiskBeforeMigrate": "move {disk} to {storage} before migrating",
+    "migrateAfterMoveRefused": "Disks moved, but the next step was refused: {error}",
     "migrateGuestFailed": "{name}: migration failed: {reason}",
     "bulkStillRunning": "{count} still running in Proxmox"
   },
@@ -8369,6 +8371,22 @@
     "cloneHaLocal": "Needs shared storage: the target storage is local to its node.",
     "sharedDisksStay": "Disks on shared storage stay where they are",
     "targetStorageLocalOnly": "Applies to the local disks only",
+    "targetStoragePlan": {
+      "moveFirst": "HA guest: disks moved to {storage} before the migration",
+      "haIgnoresStorage": "PVE drops the target storage of an HA migration. The guest stays under HA.",
+      "blocked": {
+        "ha-target-not-shared": "HA guest: {storage} is not a shared storage of the source node",
+        "ha-running-container": "HA container: volumes cannot be moved while it runs",
+        "ha-tpm-running": "HA VM: the TPM state cannot be moved while the VM runs",
+        "replicated": "Replicated disks stay on their storage"
+      },
+      "remedy": {
+        "ha-target-not-shared": "Pick a shared storage, or remove the guest from HA.",
+        "ha-running-container": "Stop the container, or remove it from HA.",
+        "ha-tpm-running": "Shut the VM down, or remove it from HA.",
+        "replicated": "PVE re-uses the replica on the target. Remove the job to change storage."
+      }
+    },
     "tpmMoveWhileRunning": "The TPM state cannot be moved while the VM is running. Shut the VM down first.",
     "gpuContingent": {
       "gpu_via_my_vdc": "GPUs are added from the GPU section of My Datacenter.",

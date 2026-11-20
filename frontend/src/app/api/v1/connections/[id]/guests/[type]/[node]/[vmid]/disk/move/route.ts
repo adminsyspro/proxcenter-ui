@@ -110,16 +110,18 @@ async function handler(
     }
 
     // Construire les paramètres
-    const moveParams: Record<string, any> = {
-      disk,
-      storage,
-    }
+    // #1402: PVE names the volume "disk" for a VM (move_disk) and "volume" for
+    // a container (move_volume), whose schema refuses any other property
+    // ("disk ... not defined in schema"), a format included.
+    const moveParams: Record<string, any> = resourceTypePve === 'qemu'
+      ? { disk, storage }
+      : { volume: disk, storage }
 
     if (deleteSource) {
       moveParams.delete = 1
     }
 
-    if (format) {
+    if (format && resourceTypePve === 'qemu') {
       moveParams.format = format
     }
 

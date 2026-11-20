@@ -315,6 +315,106 @@ describe('MigrateVmDialog - target storage applies to local disks only (roadmap#
   })
 })
 
+describe('MigrateVmDialog - target storage PVE would drop (#1402)', () => {
+  const STORAGE_CHECK_URL = `*/api/v1/connections/${CONN_ID}/guests/qemu/${CURRENT_NODE}/${VMID}/migrate/storage-check`
+
+  /** An HA-managed VM with one local disk, and the storage check answering `plan`. */
+  function seedPlan(plan: unknown, status = 200) {
+    const asked: string[] = []
+    seedHandlers({ haResources: [{ sid: 'vm:100', state: 'started' }] })
+    server.use(
+      http.get(`*/api/v1/connections/${CONN_ID}/guests/qemu/${CURRENT_NODE}/${VMID}/config`, () =>
+        HttpResponse.json({ data: { scsi1: 'local-lvm:vm-100-disk-3,size=20G', cpu: 'x86-64-v2-AES' } }),
+      ),
+      http.get(STORAGE_CHECK_URL, ({ request }) => {
+        asked.push(new URL(request.url).search)
+        return status === 200 ? HttpResponse.json({ data: plan }) : HttpResponse.json({ error: 'pve down' }, { status })
+      }),
+    )
+    return asked
+  }
+
+  async function pickCeph() {
+    await screen.findByText('Target storage:')
+    fireEvent.mouseDown(await screen.findByRole('combobox'))
+    fireEvent.click(await screen.findByRole('option', { name: /ceph/ }))
+  }
+
+  it('asks nothing while the disks keep their storage', async () => {
+    const asked = seedPlan({ kind: 'direct' })
+    renderWithProviders(<MigrateVmDialog {...makeProps()} />)
+    await waitForNodesLoaded()
+    await screen.findByText('Target storage:')
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /migrate/i })).not.toBeDisabled())
+    expect(asked).toEqual([])
+  })
+
+  it('says the disks are moved first for an HA guest, and hands them to the migration', async () => {
+    const asked = seedPlan({ kind: 'move-first', disks: [{ id: 'scsi1', volid: 'local-lvm:vm-100-disk-3' }] })
+    const props = makeProps()
+    renderWithProviders(<MigrateVmDialog {...props} />)
+    await waitForNodesLoaded()
+    await pickCeph()
+
+    const notice = await screen.findByTestId('migrate-storage-move-first')
+    expect(within(notice).getByText('HA guest: disks moved to ceph before the migration')).toBeInTheDocument()
+    expect(within(notice).getByText('scsi1: local-lvm:vm-100-disk-3')).toBeInTheDocument()
+    expect(asked).toEqual(['?target=pve2&targetstorage=ceph'])
+
+    const migrate = screen.getByRole('button', { name: /migrate/i })
+    await waitFor(() => expect(migrate).not.toBeDisabled())
+    fireEvent.click(migrate)
+
+    await waitFor(() => expect(props.onMigrate).toHaveBeenCalled())
+    expect(props.onMigrate.mock.calls[0]).toEqual(['pve2', true, 'ceph', true, ['scsi1']])
+  })
+
+  it('refuses the migration with the reason when the storage cannot be honoured', async () => {
+    seedPlan({ kind: 'blocked', reason: 'replicated', volids: ['local-lvm:vm-100-disk-3'] })
+    renderWithProviders(<MigrateVmDialog {...makeProps()} />)
+    await waitForNodesLoaded()
+    await pickCeph()
+
+    const notice = await screen.findByTestId('migrate-storage-blocked')
+    expect(within(notice).getByText('Replicated disks stay on their storage')).toBeInTheDocument()
+    expect(within(notice).getByText('local-lvm:vm-100-disk-3')).toBeInTheDocument()
+    expect(within(notice).getByText(/Remove the job to change storage/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /migrate/i })).toBeDisabled()
+  })
+
+  it('migrates as asked when PVE applies the storage itself', async () => {
+    seedPlan({ kind: 'direct' })
+    const props = makeProps()
+    renderWithProviders(<MigrateVmDialog {...props} />)
+    await waitForNodesLoaded()
+    await pickCeph()
+
+    const migrate = screen.getByRole('button', { name: /migrate/i })
+    await waitFor(() => expect(migrate).not.toBeDisabled())
+    fireEvent.click(migrate)
+
+    await waitFor(() => expect(props.onMigrate).toHaveBeenCalled())
+    expect(props.onMigrate.mock.calls[0]).toEqual(['pve2', true, 'ceph', true, undefined])
+    expect(screen.queryByTestId('migrate-storage-move-first')).not.toBeInTheDocument()
+  })
+
+  it('leaves the verdict to the migrate route when the check fails', async () => {
+    seedPlan(null, 500)
+    const props = makeProps()
+    renderWithProviders(<MigrateVmDialog {...props} />)
+    await waitForNodesLoaded()
+    await pickCeph()
+
+    const migrate = screen.getByRole('button', { name: /migrate/i })
+    await waitFor(() => expect(migrate).not.toBeDisabled())
+    fireEvent.click(migrate)
+
+    await waitFor(() => expect(props.onMigrate).toHaveBeenCalled())
+    expect(props.onMigrate.mock.calls[0][4]).toBeUndefined()
+  })
+})
+
 
 const REMOTE_CONN_ID = 'conn-2'
 const REMOTE_MIGRATE_URL = `*/api/v1/connections/${CONN_ID}/guests/qemu/${CURRENT_NODE}/${VMID}/remote-migrate`

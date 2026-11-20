@@ -134,7 +134,6 @@
     "src/app/api/v1/rbac/roles/[id]/route.ts": 1,
     "src/app/api/v1/rbac/roles/route.test.ts": 3,
     "src/app/api/v1/rbac/roles/route.ts": 1,
-    "src/app/api/v1/settings/api-tokens/route.ts": 1,
     "src/app/api/v1/settings/branding/uploads/[filename]/route.test.ts": 1,
     "src/app/api/v1/settings/login-background/serve/[filename]/route.test.ts": 1,
     "src/app/api/v1/settings/tls/acme/order/route.test.ts": 1,

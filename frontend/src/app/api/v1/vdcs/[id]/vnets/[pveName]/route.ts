@@ -2,10 +2,9 @@ import { NextResponse } from "next/server"
 
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import type { Principal } from "@/lib/auth/principal"
-import { getCurrentTenantId } from "@/lib/tenant"
 import { prisma } from "@/lib/db/prisma"
 import { updateVnetForTenant, deleteVnetForTenant } from "@/lib/vdc/vnets"
-import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
+import { checkVnetPermission, resolveVnetTenant } from "@/lib/vdc/vnetPermission"
 import { PERMISSIONS } from "@/lib/rbac"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -30,7 +29,7 @@ async function getHandler(_req: Request, ctx: RouteContext) {
     const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_VIEW)
     if (denied) return denied
 
-    const tenantId = await getCurrentTenantId()
+    const tenantId = await resolveVnetTenant(vdcId)
     const row = await prisma.vdcVnet.findFirst({
       where: { vdcId, displayName, vdc: { tenantId } },
       include: { subnet: true },
@@ -106,7 +105,7 @@ async function putHandler(req: Request, ctx: RouteContext) {
       if (Object.keys(s).length > 0) patch.subnet = s
     }
 
-    const tenantId = await getCurrentTenantId()
+    const tenantId = await resolveVnetTenant(vdcId)
 
     try {
       const vnet = await updateVnetForTenant(vdcId, tenantId, displayName, patch)
@@ -138,7 +137,7 @@ async function deleteHandler(_req: Request, ctx: RouteContext) {
     const denied = await checkVnetPermission(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_DELETE)
     if (denied) return denied
 
-    const tenantId = await getCurrentTenantId()
+    const tenantId = await resolveVnetTenant(vdcId)
 
     try {
       const result = await deleteVnetForTenant(vdcId, tenantId, displayName)

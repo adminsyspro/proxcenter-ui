@@ -182,6 +182,53 @@ describe('getPrincipal, method check (step 4)', () => {
 })
 
 describe('getPrincipal, token validation (steps 5-7)', () => {
+  describe('a service account token (#1404)', () => {
+    async function seedAccount(opts: { enabled?: boolean; serviceAccount?: boolean } = {}) {
+      const now = new Date()
+      await prismaTest.user.create({ data: { id: 'human', email: 'human@example.com', createdAt: now, updatedAt: now } })
+      await prismaTest.user.create({
+        data: {
+          id: 'sa1', email: 'sa1@service-account.invalid', name: 'ci', createdAt: now, updatedAt: now,
+          serviceAccount: opts.serviceAccount ?? true, enabled: opts.enabled ?? true, password: null,
+        },
+      })
+      return seedApiToken({ createdByUserId: 'human', serviceAccountId: 'sa1' })
+    }
+
+    it('takes the rights of its service account, not of its creator', async () => {
+      const { secret } = await seedAccount()
+      setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+      const { principal } = await getPrincipal()
+      expect(principal?.creatorUserId).toBe('sa1')
+      expect(principal?.serviceAccountId).toBe('sa1')
+    })
+
+    it('stops at once when its service account is disabled: 401 like an unknown token', async () => {
+      const { secret } = await seedAccount({ enabled: false })
+      setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+      const result = await getPrincipal()
+      expect(result.ok).toBe(false)
+      expect(result.rejection?.status).toBe(401)
+      expect(result.rejection?.body).toEqual({ error: 'Invalid or expired API token' })
+    })
+
+    it('is refused when the account it names is not a service account', async () => {
+      const { secret } = await seedAccount({ serviceAccount: false })
+      setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+      expect((await getPrincipal()).rejection?.status).toBe(401)
+    })
+
+    it('keeps a human-created token on its creator, with no service account', async () => {
+      const now = new Date()
+      await prismaTest.user.create({ data: { id: 'u2', email: 'u2@example.com', createdAt: now, updatedAt: now } })
+      const { secret } = await seedApiToken({ createdByUserId: 'u2' })
+      setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+      const { principal } = await getPrincipal()
+      expect(principal?.creatorUserId).toBe('u2')
+      expect(principal?.serviceAccountId).toBeNull()
+    })
+  })
+
   it('resolves a valid token into a token principal with expanded scopes', async () => {
     const { id, secret } = await seedApiToken({ scopes: ['vms:read', 'nodes:read'], connectionIds: ['conn-a'] })
     setHeaders(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))

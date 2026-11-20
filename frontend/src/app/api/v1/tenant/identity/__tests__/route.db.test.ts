@@ -22,6 +22,8 @@ vi.mock("@/lib/rbac", async () => {
   return { ...actual, checkPermission: checkPermissionMock }
 })
 vi.mock("@/lib/tenant/providerGuard", () => ({ requireProviderAdmin: requireProviderAdminMock }))
+// API token guard: pass-through, these tests drive the session path.
+vi.mock("@/lib/api-tokens/routeGuard", () => ({ withPublicApiGuard: (_entryId: string, handler: any) => handler }))
 vi.mock("@/lib/audit", () => ({ audit: auditMock }))
 vi.mock("@/lib/crypto/secret", () => ({
   encryptSecret: (v: string) => `enc(${v})`,

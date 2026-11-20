@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server"
 
-import { getCurrentTenantId } from "@/lib/tenant"
 import { PERMISSIONS } from "@/lib/rbac"
 import type { Principal } from "@/lib/auth/principal"
-import { checkVnetReadForCaller } from "@/lib/vdc/vnetPermission"
+import { checkVnetReadForCaller, resolveVnetTenant } from "@/lib/vdc/vnetPermission"
 import { prisma } from "@/lib/db/prisma"
 import { listAllocationsForSubnet } from "@/lib/vdc/ipam"
 import { parseCidr } from "@/lib/vdc/network"
@@ -33,9 +32,9 @@ async function handleGet(_req: Request, ctx: RouteContext) {
     const denied = await checkVnetReadForCaller(ctx.principal, vdcId, PERMISSIONS.SDN_VNET_VIEW)
     if (denied) return denied
 
-    const tenantId = await getCurrentTenantId()
+    const tenantId = await resolveVnetTenant(vdcId)
 
-    // Resolve the VNet → subnet, scoped to the caller's tenant. We pull
+    // Resolve the VNet → subnet, scoped to the tenant the caller acts in. We pull
     // both rows in one query so we can fail-fast on a missing/foreign vDC.
     const vnetRow = await prisma.vdcVnet.findFirst({
       where: { vdcId, displayName, vdc: { tenantId } },

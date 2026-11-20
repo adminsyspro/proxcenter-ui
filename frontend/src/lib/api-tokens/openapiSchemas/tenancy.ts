@@ -31,6 +31,7 @@ const TENANT = {
     operatingModel: { type: "string", enum: ["iaas", "msp"], description: "iaas: vDC tenant; msp: runs its own clusters" },
     vmidRangeStart: NULLABLE_INT,
     vmidRangeEnd: NULLABLE_INT,
+    apiSelfService: { type: "boolean", description: "The tenant manages its own service accounts and API tokens" },
     settings: { type: ["object", "null"], additionalProperties: true },
     createdBy: NULLABLE_STRING,
     createdAt: DATE,

@@ -86,7 +86,9 @@ describe('GET /api/v1/settings/api-tokens', () => {
     expect(body.data[0].tenant).toEqual({ name: 'Provider' })
   })
 
-  it('non super admin sees only the current tenant', async () => {
+  // Issue #1404: the provider reaches every tenant's tokens; a customer
+  // tenant its own, once the provider opened self-service.
+  it('a provider tenant caller who is not super admin sees every tenant\'s tokens', async () => {
     getRBACContextMock.mockResolvedValue({ userId: 'u1', isAdmin: false, tenantId: 'default' })
     const now = new Date()
     await prismaTest.tenant.create({ data: { id: 't2', slug: 't2', name: 'T2', operatingModel: 'msp', createdAt: now, updatedAt: now } })
@@ -94,8 +96,33 @@ describe('GET /api/v1/settings/api-tokens', () => {
     await seedApiToken({ tenantId: 't2' })
     const { GET } = await import('./route')
     const body = await readJson<any>(await callRoute(GET))
-    expect(body.data).toHaveLength(1)
-    expect(body.data[0].tenantId).toBe('default')
+    expect(body.data.map((t: any) => t.tenantId).sort()).toEqual(['default', 't2'])
+  })
+
+  it('a customer tenant caller sees its own tokens once self-service is open, and is refused before', async () => {
+    getRBACContextMock.mockResolvedValue({ userId: 'u1', isAdmin: false, tenantId: 't2' })
+    getCurrentTenantIdMock.mockResolvedValue('t2')
+    const now = new Date()
+    await prismaTest.tenant.create({ data: { id: 't2', slug: 't2', name: 'T2', operatingModel: 'msp', createdAt: now, updatedAt: now } })
+    await seedApiToken({ tenantId: 'default' })
+    await seedApiToken({ tenantId: 't2' })
+    const { GET } = await import('./route')
+    const closed = await callRoute(GET)
+    expect(closed.status).toBe(403)
+    expect(await readJson<any>(closed)).toEqual({ error: "The provider manages this tenant's service accounts and API tokens" })
+
+    await prismaTest.tenant.update({ where: { id: 't2' }, data: { apiSelfService: true } })
+    const body = await readJson<any>(await callRoute(GET))
+    expect(body.data.map((t: any) => t.tenantId)).toEqual(['t2'])
+  })
+
+  it('never mints a provider-only scope on a customer tenant token', async () => {
+    const now = new Date()
+    await prismaTest.tenant.create({ data: { id: 't2', slug: 't2', name: 'T2', operatingModel: 'msp', createdAt: now, updatedAt: now } })
+    const { POST } = await import('./route')
+    const res = await callRoute(POST, { method: 'POST', body: { name: 'x', scopes: ['tenants:read'], tenantId: 't2' } })
+    expect(res.status).toBe(400)
+    expect(await readJson<any>(res)).toMatchObject({ scope: 'tenants:read' })
   })
 
   // _shared.ts's requireApiTokenAdmin: the permission check can pass while
@@ -403,10 +430,12 @@ describe('DELETE /api/v1/settings/api-tokens/{id}', () => {
     )
   })
 
-  it('404 on a token invisible to a non-admin of another tenant', async () => {
-    getRBACContextMock.mockResolvedValue({ userId: 'u1', isAdmin: false, tenantId: 'default' })
+  it('404 on a token of another tenant for a customer tenant caller', async () => {
+    getRBACContextMock.mockResolvedValue({ userId: 'u1', isAdmin: false, tenantId: 't3' })
+    getCurrentTenantIdMock.mockResolvedValue('t3')
     const now = new Date()
     await prismaTest.tenant.create({ data: { id: 't2', slug: 't2', name: 'T2', operatingModel: 'msp', createdAt: now, updatedAt: now } })
+    await prismaTest.tenant.create({ data: { id: 't3', slug: 't3', name: 'T3', operatingModel: 'msp', apiSelfService: true, createdAt: now, updatedAt: now } })
     const { id } = await seedApiToken({ tenantId: 't2' })
     const { DELETE } = await import('./[id]/route')
     expect((await callRoute(DELETE, { method: 'DELETE', params: { id } })).status).toBe(404)
@@ -523,11 +552,13 @@ describe('POST /api/v1/settings/api-tokens/{id}/rotate', () => {
     expect((await prismaTest.apiToken.findUnique({ where: { id } }))!.tokenPrefix).toBe(prefix)
   })
 
-  it('404 on an unknown token and on a token of another tenant for a non-admin', async () => {
+  it('404 on an unknown token and on a token of another tenant for a customer tenant caller', async () => {
     expect((await rotate('nope')).status).toBe(404)
-    getRBACContextMock.mockResolvedValue({ userId: 'admin-1', isAdmin: false, tenantId: 'default' })
+    getRBACContextMock.mockResolvedValue({ userId: 'admin-1', isAdmin: false, tenantId: 't3' })
+    getCurrentTenantIdMock.mockResolvedValue('t3')
     const now = new Date()
     await prismaTest.tenant.create({ data: { id: 't2', slug: 't2', name: 'T2', operatingModel: 'msp', createdAt: now, updatedAt: now } })
+    await prismaTest.tenant.create({ data: { id: 't3', slug: 't3', name: 'T3', operatingModel: 'msp', apiSelfService: true, createdAt: now, updatedAt: now } })
     const { id, prefix } = await seedApiToken({ tenantId: 't2' })
     expect((await rotate(id)).status).toBe(404)
     expect((await prismaTest.apiToken.findUnique({ where: { id } }))!.tokenPrefix).toBe(prefix)
@@ -570,6 +601,22 @@ describe('POST /api/v1/settings/api-tokens/{id}/rotate', () => {
       expect(await readJson<any>(res)).toEqual({ error: 'Unable to verify the scopes you can grant' })
       expect((await prismaTest.apiToken.findUnique({ where: { id } }))!.tokenPrefix).toBe(prefix)
       errSpy.mockRestore()
+    })
+
+    it('a provider user never rotates the token of a tenant they are not a member of, even a read-only one', async () => {
+      asUser()
+      const now = new Date()
+      await prismaTest.tenant.create({ data: { id: 't2', slug: 't2', name: 'T2', operatingModel: 'msp', createdAt: now, updatedAt: now } })
+      const { id, prefix } = await seedApiToken({ tenantId: 't2', scopes: ['vms:read'] })
+      userHasAccessToTenantMock.mockResolvedValue(false)
+      const res = await rotate(id)
+      expect(res.status).toBe(403)
+      expect(await readJson<any>(res)).toEqual({ error: 'Tenant not accessible' })
+      expect((await prismaTest.apiToken.findUnique({ where: { id } }))!.tokenPrefix).toBe(prefix)
+      expect(userHasAccessToTenantMock).toHaveBeenCalledWith('admin-1', 't2')
+
+      userHasAccessToTenantMock.mockResolvedValue(true)
+      expect((await rotate(id)).status).toBe(200)
     })
 
     it('fails closed for a non-admin without a user id, but lets read-only scopes through with no creator', async () => {

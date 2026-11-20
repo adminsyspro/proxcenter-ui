@@ -91,7 +91,11 @@ export const TENANCY_WRITE_REQUEST_SCHEMAS: Record<string, Record<string, unknow
   TenantUpdateRequest: {
     type: "object",
     description: "Only the given fields change.",
-    properties: { ...TENANT_INPUT, enabled: { type: "boolean" } },
+    properties: {
+      ...TENANT_INPUT,
+      enabled: { type: "boolean" },
+      apiSelfService: { type: "boolean", description: "Lets the tenant's admins manage its service accounts and API tokens, within their own rights" },
+    },
   },
   TenantUserAddRequest: {
     type: "object",

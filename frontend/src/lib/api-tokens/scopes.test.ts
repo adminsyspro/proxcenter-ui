@@ -31,13 +31,14 @@ describe('scope to permission resolver (spec section 7)', () => {
     expect(SCOPE_DEFINITIONS['ipam:read']).toEqual(['sdn.vnet.view'])
     expect(SCOPE_DEFINITIONS['rbac:read']).toEqual(['admin.rbac.view'])
     expect(SCOPE_DEFINITIONS['users:read']).toEqual(['admin.users.view'])
-    expect(READ_SCOPE_IDS).toHaveLength(12)
+    expect(SCOPE_DEFINITIONS['identity:read']).toEqual(['admin.apitokens.view', 'admin.settings.view'])
+    expect(READ_SCOPE_IDS).toHaveLength(13)
     expect(Object.keys(READ_SCOPE_DEFINITIONS)).toEqual(READ_SCOPE_IDS)
   })
 
-  it('offers 29 scopes: 12 read and 17 write', () => {
-    expect(ALL_SCOPE_IDS).toHaveLength(29)
-    expect(WRITE_SCOPE_IDS).toHaveLength(17)
+  it('offers 31 scopes: 13 read and 18 write', () => {
+    expect(ALL_SCOPE_IDS).toHaveLength(31)
+    expect(WRITE_SCOPE_IDS).toHaveLength(18)
     expect(ALL_SCOPE_IDS).toEqual([...READ_SCOPE_IDS, ...WRITE_SCOPE_IDS])
     expect(Object.keys(SCOPE_DEFINITIONS)).toEqual(ALL_SCOPE_IDS)
   })
@@ -45,7 +46,7 @@ describe('scope to permission resolver (spec section 7)', () => {
   // Issue #1360: the admin reads are creator-checked like a write scope, and
   // map only the read-only children of the admin rights.
   it('checks the creator of exactly the admin read scopes, and of every write scope', () => {
-    expect(CREATOR_CHECKED_READ_SCOPE_IDS).toEqual(['tenants:read', 'vdcs:read', 'ipam:read', 'rbac:read', 'users:read'])
+    expect(CREATOR_CHECKED_READ_SCOPE_IDS).toEqual(['tenants:read', 'vdcs:read', 'ipam:read', 'rbac:read', 'users:read', 'identity:read'])
     for (const id of CREATOR_CHECKED_READ_SCOPE_IDS) expect(isCreatorCheckedScope(id), id).toBe(true)
     for (const id of WRITE_SCOPE_IDS) expect(isCreatorCheckedScope(id), id).toBe(true)
     for (const id of ['vms:read', 'nodes:read', 'reports:read']) expect(isCreatorCheckedScope(id), id).toBe(false)
@@ -138,6 +139,7 @@ describe('scope to permission resolver (spec section 7)', () => {
       'tenants:write': ['admin.tenants.view', 'admin.tenants'],
       'users:write': ['admin.users.view', 'admin.users'],
       'rbac:write': ['admin.rbac.view', 'admin.rbac'],
+      'identity:write': ['admin.apitokens.view', 'admin.apitokens', 'admin.settings.view', 'admin.settings.identity'],
     })
   })
 
@@ -150,6 +152,8 @@ describe('scope to permission resolver (spec section 7)', () => {
       'tenants:write': ['admin.tenants.view', 'admin.tenants'],
       'users:write': ['admin.users.view', 'admin.users'],
       'rbac:write': ['admin.rbac.view', 'admin.rbac'],
+      // Service accounts, their tokens and the tenant IdP connections (issue #1404).
+      'identity:write': ['admin.apitokens.view', 'admin.apitokens', 'admin.settings.view', 'admin.settings.identity'],
     }
     expect(Object.keys(ADMIN_KEYS)).toEqual([...ADMIN_WRITE_SCOPE_IDS])
     const allowedAdmin = (scope: string, key: string) => (ADMIN_KEYS[scope] ?? []).includes(key)
@@ -186,7 +190,7 @@ describe('scope to permission resolver (spec section 7)', () => {
   })
 
   it('the admin write scopes are the fleet scopes, and readsAdminData covers them with the admin read scopes', () => {
-    expect([...ADMIN_WRITE_SCOPE_IDS]).toEqual(['vdcs:write', 'tenants:write', 'users:write', 'rbac:write'])
+    expect([...ADMIN_WRITE_SCOPE_IDS]).toEqual(['vdcs:write', 'tenants:write', 'users:write', 'rbac:write', 'identity:write'])
     expect([...FLEET_SCOPE_IDS]).toEqual([...ADMIN_WRITE_SCOPE_IDS])
     for (const id of ADMIN_WRITE_SCOPE_IDS) {
       expect(isWriteScope(id), id).toBe(true)

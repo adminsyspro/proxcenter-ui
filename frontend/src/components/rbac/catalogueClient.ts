@@ -10,6 +10,7 @@ import {
   type PublishableRole,
   type RoleAudience,
 } from '@/lib/rbac/rolePublication'
+import { TENANT_FORBIDDEN_ROLE_IDS } from '@/lib/rbac/roleIds'
 
 export type RoleWire = {
   id: string
@@ -42,6 +43,16 @@ export function isAssignableFromDialog(role: RoleWire, tenantId: string): boolea
 
 export function isServiceDeskRole(role: RoleWire | null | undefined): boolean {
   return role?.audience === 'service_desk'
+}
+
+/**
+ * Roles the ordinary assignment routes accept in `tenantId` (assignmentGuards):
+ * no provider-only nor protected role in a customer tenant, no service desk
+ * role, and only roles assignable there (its own, or published to it).
+ */
+export function isOfferedInTenant(role: RoleWire, tenantId: string): boolean {
+  if (tenantId !== 'default' && TENANT_FORBIDDEN_ROLE_IDS.includes(role.id)) return false
+  return !isServiceDeskRole(role) && isAssignableFromDialog(role, tenantId)
 }
 
 /** The tenants a service-desk role is published to, as options (all customer tenants when published to all). */

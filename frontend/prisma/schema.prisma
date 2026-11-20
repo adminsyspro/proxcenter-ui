@@ -475,6 +475,10 @@ model User {
   // OIDC or LDAP. Set by a super admin, or kept for the last super admin.
   localLoginAllowed Boolean @default(false) @map("local_login_allowed")
   enabled      Boolean   @default(true)
+  // A service account (issue #1404): no password, no interactive login, only
+  // API tokens, which take its roles instead of their creator's.
+  serviceAccount Boolean @default(false) @map("service_account")
+  description  String?
   lastLoginAt  DateTime? @map("last_login_at")
   createdAt    DateTime  @map("created_at")
   updatedAt    DateTime  @map("updated_at")
@@ -492,7 +496,8 @@ model User {
   rolesGranted        RbacUserRole[]       @relation("RbacUserRoleGrantedBy")
   permissionsAssigned RbacUserPermission[] @relation("RbacUserPermissionUser")
   permissionsGranted  RbacUserPermission[] @relation("RbacUserPermissionGrantedBy")
-  apiTokens           ApiToken[]
+  apiTokens           ApiToken[]           @relation("ApiTokenCreator")
+  serviceAccountTokens ApiToken[]          @relation("ApiTokenServiceAccount")
   serviceDeskAssignments        RbacServiceDeskAssignment[] @relation("RbacServiceDeskAssignmentUser")
   serviceDeskAssignmentsGranted RbacServiceDeskAssignment[] @relation("RbacServiceDeskAssignmentGrantedBy")
 
@@ -623,10 +628,16 @@ model ApiToken {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  creator User?  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  // The service account the token acts as (issue #1404): its roles bound the
+  // token instead of the creator's. Deleting the account deletes its tokens.
+  serviceAccountId String?  @map("service_account_id")
+
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creator        User?  @relation("ApiTokenCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  serviceAccount User?  @relation("ApiTokenServiceAccount", fields: [serviceAccountId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+  @@index([serviceAccountId])
   // Offboarding lists "tokens created by this user" (#632).
   @@index([createdByUserId])
   @@map("api_tokens")
@@ -747,6 +758,9 @@ model Tenant {
   // The provider lets this tenant's admins manage the tenant's own OIDC
   // connection (issue #1289). Off by default.
   oidcSelfService Boolean @default(false) @map("oidc_self_service")
+  // The tenant manages its own service accounts and API tokens (issue #1404),
+  // within its admins' rights; the provider opens it per tenant.
+  apiSelfService Boolean @default(false) @map("api_self_service")
   createdBy   String?  @map("created_by")
   createdAt   DateTime @map("created_at")
   updatedAt   DateTime @map("updated_at")

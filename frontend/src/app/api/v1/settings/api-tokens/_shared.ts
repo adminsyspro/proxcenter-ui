@@ -9,6 +9,8 @@ import { NextResponse } from "next/server"
 
 import { checkPermission, getRBACContext, PERMISSIONS } from "@/lib/rbac"
 import { getCurrentTenantId } from "@/lib/tenant"
+import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
+import { apiSelfServiceRefusal } from "@/lib/api-tokens/selfService"
 
 export const TOKEN_VIEW_SELECT = {
   id: true,
@@ -35,6 +37,10 @@ export const TOKEN_VIEW_SELECT = {
   // "who minted this credential" on its own -- and the audit row only
   // answers it for as long as audit retention keeps it.
   createdByEmail: true,
+  // The service account the token acts as (issue #1404): the grid names it
+  // instead of the person who minted it.
+  serviceAccountId: true,
+  serviceAccount: { select: { name: true } },
   createdAt: true,
 } as const
 
@@ -64,11 +70,20 @@ export async function requireApiTokenAdmin(): Promise<AdminGuardResult> {
     return { ok: false, response: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) }
   }
 
+  // A customer tenant manages its tokens once the provider opened it (issue #1404).
+  const closed = await apiSelfServiceRefusal(await getCurrentTenantId())
+  if (closed) return { ok: false, response: closed as NextResponse }
+
   return { ok: true, ctx }
 }
 
-/** Whether a row belonging to `tenantId` is visible to this caller: super admins see every tenant, everyone else only their own. */
+/** Whether the caller reaches every tenant's tokens: a super admin, or anyone in the provider tenant (issue #1404). */
+export async function seesEveryTenant(ctx: ApiTokenRbacContext): Promise<boolean> {
+  return ctx.isAdmin || (await getCurrentTenantId()) === DEFAULT_TENANT_ID
+}
+
+/** Whether a row belonging to `tenantId` is visible to this caller: the provider sees every tenant, a customer tenant its own. */
 export async function tenantVisibleToCaller(ctx: ApiTokenRbacContext, tenantId: string): Promise<boolean> {
-  if (ctx.isAdmin) return true
+  if (await seesEveryTenant(ctx)) return true
   return tenantId === (await getCurrentTenantId())
 }

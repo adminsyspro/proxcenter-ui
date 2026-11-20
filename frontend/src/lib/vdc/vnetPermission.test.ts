@@ -11,7 +11,7 @@ vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: getCurrentTenantIdMock }))
 vi.mock('@/lib/db/prisma', () => ({ prisma: { vdc: { findUnique: vdcFindUniqueMock } } }))
 vi.mock('@/lib/api-tokens/scope', () => ({ resolveVisibleConnectionIds: vi.fn() }))
 
-import { checkVnetPermission, checkVnetReadForCaller } from './vnetPermission'
+import { checkVnetPermission, checkVnetReadForCaller, resolveVnetTenant } from './vnetPermission'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -59,5 +59,28 @@ describe('checkVnetReadForCaller', () => {
 
     expect(response?.status).toBe(404)
     expect(checkPermissionMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('resolveVnetTenant', () => {
+  it('answers the caller tenant without looking up the vDC', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('tenant-a')
+
+    await expect(resolveVnetTenant('vdc-b')).resolves.toBe('tenant-a')
+    expect(vdcFindUniqueMock).not.toHaveBeenCalled()
+  })
+
+  it('answers the tenant that owns the vDC to a provider caller', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('default')
+    vdcFindUniqueMock.mockResolvedValue({ tenantId: 'tenant-b' })
+
+    await expect(resolveVnetTenant('vdc-b')).resolves.toBe('tenant-b')
+  })
+
+  it('keeps the provider tenant on an unknown vDC, so the lookup that follows answers its 404', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('default')
+    vdcFindUniqueMock.mockResolvedValue(null)
+
+    await expect(resolveVnetTenant('vdc-none')).resolves.toBe('default')
   })
 })

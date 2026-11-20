@@ -239,3 +239,20 @@ describe('deleteTokensCreatedBy', () => {
     expect(await prismaTest.apiToken.count()).toBe(7)
   })
 })
+
+describe('a token minted for a service account (#1404)', () => {
+  beforeEach(async () => {
+    const now = new Date()
+    await prismaTest.user.create({
+      data: { id: 'sa-ci', email: 'sa-ci@service-account.invalid', serviceAccount: true, createdAt: now, updatedAt: now },
+    })
+    await seedToken({ id: 'sa-token', createdByUserId: 'u-leaver' })
+    await prismaTest.apiToken.update({ where: { id: 'sa-token' }, data: { serviceAccountId: 'sa-ci' } })
+  })
+
+  it('is not the leaving creator\'s to offboard: it lives with its account', async () => {
+    expect((await listActiveTokensCreatedBy('u-leaver')).map(r => r.id)).not.toContain('sa-token')
+    await deleteTokensCreatedBy('u-leaver')
+    expect(await exists('sa-token')).toBe(true)
+  })
+})

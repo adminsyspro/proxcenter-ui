@@ -6,6 +6,21 @@ import { holdsBroadPermission } from "@/lib/rbac"
 
 import { isCreatorCheckedScope, SCOPE_DEFINITIONS } from "./scopes"
 
+/** Whether `userId` holds every permission key of the known scope `scopeId`, read or write. */
+export async function holdsScope(
+  userId: string,
+  tenantId: string,
+  scopeId: string,
+  connectionIds: string[] | null,
+): Promise<boolean> {
+  const keys = Object.hasOwn(SCOPE_DEFINITIONS, scopeId) ? SCOPE_DEFINITIONS[scopeId] : null
+  if (!keys) return false
+  for (const key of keys) {
+    if (!(await holdsBroadPermission(userId, tenantId, key, connectionIds))) return false
+  }
+  return true
+}
+
 /** Whether `userId` holds every permission key of the creator-checked scope `scopeId`. */
 export async function holdsWriteScope(
   userId: string,
@@ -13,13 +28,7 @@ export async function holdsWriteScope(
   scopeId: string,
   connectionIds: string[] | null,
 ): Promise<boolean> {
-  if (!isCreatorCheckedScope(scopeId)) return false
-  const keys = SCOPE_DEFINITIONS[scopeId]
-  if (!keys) return false
-  for (const key of keys) {
-    if (!(await holdsBroadPermission(userId, tenantId, key, connectionIds))) return false
-  }
-  return true
+  return isCreatorCheckedScope(scopeId) && holdsScope(userId, tenantId, scopeId, connectionIds)
 }
 
 /** The first requested creator-checked scope the user cannot grant, or null. */

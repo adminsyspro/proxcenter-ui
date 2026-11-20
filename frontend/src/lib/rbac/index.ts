@@ -611,6 +611,10 @@ export const PERMISSIONS = {
   ADMIN_COMPLIANCE: "admin.compliance",
   ADMIN_TENANTS: "admin.tenants",
   ADMIN_APITOKENS: "admin.apitokens",
+  // Read-only child of admin.apitokens and the provider's right on a customer
+  // tenant's IdP connection, both mapped by the identity:* scopes (issue #1404).
+  ADMIN_APITOKENS_VIEW: "admin.apitokens.view",
+  ADMIN_SETTINGS_IDENTITY: "admin.settings.identity",
   // A tenant manages its own identity provider (issue #1289).
   ADMIN_IDENTITY: "admin.identity",
 

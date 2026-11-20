@@ -12,7 +12,7 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
 export type ApiTag =
   | "Monitoring" | "VMs" | "Snapshots" | "Backups" | "Storage"
   | "HA" | "Pools" | "Network" | "Firewall" | "Tasks"
-  | "Tenants" | "vDCs" | "RBAC" | "Users"
+  | "Tenants" | "vDCs" | "RBAC" | "Users" | "Identity"
 
 export type BodyOrQueryField = { source: "body" | "query"; field: string }
 

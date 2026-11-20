@@ -27,8 +27,14 @@ export type Principal = {
   userId?: string
   userEmail?: string
   tokenId?: string
-  /** User who created the token (token principals only); null once that user is deleted. */
+  /**
+   * User whose rights bound the token (token principals only): its service
+   * account (issue #1404), else the user who created it; null once that user
+   * is deleted.
+   */
   creatorUserId?: string | null
+  /** Service account the token acts as (token principals only), else null. */
+  serviceAccountId?: string | null
   permissions?: Set<string>
   /** Raw scope ids as granted (token principals only): the metrics endpoint
    * filters series families on these, not on the expanded permissions. */
@@ -140,7 +146,10 @@ async function resolvePrincipal(options: GetPrincipalOptions): Promise<Principal
   const secret = authorization.slice("Bearer ".length)
   const prefix = extractTokenPrefix(secret)
   if (!prefix) return reject(INVALID_TOKEN)
-  const token = await prisma.apiToken.findUnique({ where: { tokenPrefix: prefix } })
+  const token = await prisma.apiToken.findUnique({
+    where: { tokenPrefix: prefix },
+    include: { serviceAccount: { select: { enabled: true, serviceAccount: true } } },
+  })
 
   // 6. Constant-time hash compare; missing row, revoked or expired: identical
   //    401 (no oracle distinguishing the cases).
@@ -150,6 +159,12 @@ async function resolvePrincipal(options: GetPrincipalOptions): Promise<Principal
     token.revokedAt !== null ||
     (token.expiresAt !== null && token.expiresAt.getTime() <= Date.now())
   ) {
+    return reject(INVALID_TOKEN)
+  }
+
+  // 6b. A service account token dies with its account (issue #1404): a
+  //     disabled account is refused at once, like a revoked token.
+  if (token.serviceAccountId && !(token.serviceAccount?.serviceAccount && token.serviceAccount.enabled)) {
     return reject(INVALID_TOKEN)
   }
 
@@ -224,7 +239,8 @@ async function resolvePrincipal(options: GetPrincipalOptions): Promise<Principal
     principal: {
       kind: "token",
       tokenId: token.id,
-      creatorUserId: token.createdByUserId,
+      creatorUserId: token.serviceAccountId ?? token.createdByUserId,
+      serviceAccountId: token.serviceAccountId ?? null,
       tenantId: token.tenantId,
       permissions: expandScopes(scopes),
       scopes,

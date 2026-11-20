@@ -6,10 +6,9 @@
 
 import { NextResponse } from "next/server"
 
-import { getCurrentTenantId } from "@/lib/tenant"
 import { PERMISSIONS } from "@/lib/rbac"
 import type { Principal } from "@/lib/auth/principal"
-import { checkVnetReadForCaller } from "@/lib/vdc/vnetPermission"
+import { checkVnetReadForCaller, resolveVnetTenant } from "@/lib/vdc/vnetPermission"
 import { listAllocationsForSubnet } from "@/lib/vdc/ipam"
 import { scanUsedIpsForSubnet, scannedToIntSet } from "@/lib/vdc/ipamScan"
 import { generatePveMacAddress } from "@/lib/vdc/sdn"
@@ -37,7 +36,7 @@ async function handleGet(req: Request, ctx: RouteContext) {
 
     // `?targetVdcId=` (provider only, equal to the path vDC): preview the IP
     // a provider deploying into that tenant vDC will reserve (roadmap#65).
-    const scopeTenant = await resolveScopeTenant(req, null, getCurrentTenantId)
+    const scopeTenant = await resolveScopeTenant(req, null, () => resolveVnetTenant(vdcId))
     if (scopeTenant.response) return scopeTenant.response
     if (scopeTenant.target && scopeTenant.target.vdcId !== vdcId) {
       return NextResponse.json({ error: "VNet not found" }, { status: 404 })

@@ -68,6 +68,13 @@ export async function guardRoleAssignment(input: RoleAssignmentGuardInput): Prom
     return refuse("This role can only be assigned in the provider tenant (default)", 400)
   }
 
+  // A service account is never a super admin (issue #1404): its tokens would
+  // pass every live rights check.
+  if (roleId === "role_super_admin" && targetUserId) {
+    const target = await prisma.user.findUnique({ where: { id: targetUserId }, select: { serviceAccount: true } })
+    if (target?.serviceAccount) return refuse("A service account cannot be a super admin", 400)
+  }
+
   const callerIsSuperAdmin = await isUserSuperAdmin(callerUserId)
   if (!callerIsSuperAdmin) {
     if ((PROTECTED_ROLE_IDS as readonly string[]).includes(roleId)) return refuse("Role not found", 404)

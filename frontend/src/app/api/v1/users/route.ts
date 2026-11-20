@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { nanoid } from "nanoid"
 
 import { prisma } from "@/lib/db/prisma"
+import { isServiceAccountEmail } from "@/lib/service-accounts"
 import { hashPassword } from "@/lib/auth/password"
 import { getActingSession } from "@/lib/auth/actingUser"
 import { checkPermission, PERMISSIONS, isUserSuperAdmin, PROTECTED_ROLE_IDS } from "@/lib/rbac"
@@ -58,12 +59,14 @@ async function handleGet() {
     // memberships, matching the historical behaviour.
     const visibleUsers = isProviderView
       ? await prisma.user.findMany({
-          where: protectedIds.size > 0 ? { id: { notIn: Array.from(protectedIds) } } : undefined,
+          // Service accounts live in Settings > API, never in the user list (issue #1404).
+          where: { serviceAccount: false, ...(protectedIds.size > 0 ? { id: { notIn: Array.from(protectedIds) } } : {}) },
           orderBy: { createdAt: "desc" },
         })
       : (await prisma.userTenant.findMany({
           where: {
             tenantId,
+            user: { serviceAccount: false },
             ...(protectedIds.size > 0 ? { userId: { notIn: Array.from(protectedIds) } } : {}),
           },
           include: { user: true },
@@ -189,6 +192,9 @@ async function handlePost(req: Request) {
     }
 
     const normalisedEmail = email.toLowerCase().trim()
+    if (isServiceAccountEmail(normalisedEmail)) {
+      return NextResponse.json({ error: "This address is reserved for service accounts" }, { status: 400 })
+    }
 
     // Vérifier si l'email existe déjà
     const existing = await prisma.user.findUnique({

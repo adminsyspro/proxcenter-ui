@@ -9,6 +9,14 @@ export type AuditActorRow = {
   api_token_id?: string | null
   api_token_name?: string | null
   api_token_prefix?: string | null
+  /** The service account a token row acted as (issue #1404), while it exists. */
+  service_account_name?: string | null
+}
+
+const SERVICE_ACCOUNT_DOMAIN = '@service-account.invalid'
+
+function isServiceAccountRow(row: AuditActorRow): boolean {
+  return !!row.api_token_id && !!row.user_email?.toLowerCase().endsWith(SERVICE_ACCOUNT_DOMAIN)
 }
 
 type ActorLabels = { deletedToken: string; system: string }
@@ -21,7 +29,8 @@ type ActorLabels = { deletedToken: string; system: string }
  */
 export function auditActorText(row: AuditActorRow, labels: ActorLabels): string {
   if (row.api_token_id) {
-    return row.api_token_name ? `${row.api_token_name} (${row.api_token_prefix})` : labels.deletedToken
+    const token = row.api_token_name ? `${row.api_token_name} (${row.api_token_prefix})` : labels.deletedToken
+    return isServiceAccountRow(row) ? `${row.service_account_name || row.user_email} · ${token}` : token
   }
   return row.user_email || labels.system
 }
@@ -41,7 +50,7 @@ export default function AuditActorCell({ row }: { row: AuditActorRow }) {
   if (row.api_token_id) {
     return (
       <Stack direction='row' alignItems='center' spacing={1} sx={{ minWidth: 0 }}>
-        <i className='ri-key-2-line' />
+        <i className={isServiceAccountRow(row) ? 'ri-robot-2-line' : 'ri-key-2-line'} />
         <Typography variant='body2' noWrap sx={{ opacity: row.api_token_name ? 1 : 0.5 }}>{text}</Typography>
       </Stack>
     )

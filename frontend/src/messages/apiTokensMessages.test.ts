@@ -40,7 +40,7 @@ describe('settings.apiTokens i18n parity across the 6 served locales', () => {
       // reference warning and the audit actor of a gone token.
       'dialog.access.none', 'dialog.access.read', 'dialog.access.write',
       'dialog.domains.vms', 'dialog.domains.backups', 'dialog.domains.storage', 'dialog.domains.nodes',
-      'dialog.domains.automation', 'dialog.domains.alerts', 'dialog.domains.reports',
+      'dialog.domains.automation', 'dialog.domains.alerts', 'dialog.domains.reports', 'dialog.domains.identity',
       'dialog.subScopes.vmsPower', 'dialog.subScopes.vmsWrite', 'dialog.subScopes.vmsSnapshot',
       'dialog.subScopes.vmsMigrate', 'dialog.subScopes.vmsDelete', 'dialog.subScopes.backupsWrite',
       'dialog.subScopes.backupsRestore', 'dialog.subScopes.backupsDelete', 'dialog.subScopes.haWrite',

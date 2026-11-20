@@ -24,7 +24,7 @@ async function seedRow(id: string, minutesAgo: number, fields: Record<string, un
 }
 
 beforeEach(async () => {
-  await truncate(['audit_logs', 'api_tokens', 'tenants'])
+  await truncate(['audit_logs', 'api_tokens', 'users', 'tenants'])
   await seedDefaultTenant()
 })
 
@@ -64,5 +64,23 @@ describe('getAuditLogs, token actors', () => {
     expect(data).toHaveLength(1)
     expect(findMany).not.toHaveBeenCalled()
     findMany.mockRestore()
+  })
+})
+
+describe('getAuditLogs, service account actors (#1404)', () => {
+  it('names the service account behind a token row, and falls back to its address once it is deleted', async () => {
+    const now = new Date()
+    await prismaTest.user.create({
+      data: { id: 'sa1', email: 'sa1@service-account.invalid', name: 'ci-onboarding', serviceAccount: true, createdAt: now, updatedAt: now },
+    })
+    const token = await seedApiToken({ serviceAccountId: 'sa1' })
+    await seedRow('row-sa', 1, { apiTokenId: token.id, userId: 'sa1', userEmail: 'sa1@service-account.invalid' })
+    await seedRow('row-sa-gone', 2, { apiTokenId: 'tok_gone', userId: 'sa-gone', userEmail: 'sa-gone@service-account.invalid' })
+    await seedRow('row-user', 3, { userId: 'user-1', userEmail: 'admin@example.com', action: 'login', category: 'auth' })
+
+    const byId = Object.fromEntries((await getAuditLogs({ tenantId: 'default' })).data.map(row => [row.id, row]))
+    expect(byId['row-sa']).toMatchObject({ service_account_name: 'ci-onboarding', user_email: 'sa1@service-account.invalid' })
+    expect(byId['row-sa-gone']).toMatchObject({ service_account_name: null, user_email: 'sa-gone@service-account.invalid' })
+    expect(byId['row-user']).toMatchObject({ service_account_name: null })
   })
 })

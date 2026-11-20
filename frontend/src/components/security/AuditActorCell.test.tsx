@@ -62,3 +62,18 @@ describe('auditActorValueGetter', () => {
     ])
   })
 })
+
+describe('AuditActorCell, a service account (#1404)', () => {
+  it('names the account first, then its token, with the robot icon', () => {
+    const { container } = renderWithProviders(
+      <AuditActorCell row={{ user_email: 'sa1@service-account.invalid', service_account_name: 'ci-onboarding', api_token_id: 'tok-1', api_token_name: 'terraform', api_token_prefix: PREFIX }} />,
+    )
+    expect(screen.getByText('ci-onboarding · terraform (pxc_Ab12Cd34)')).toBeInTheDocument()
+    expect(container.querySelector('i.ri-robot-2-line')).not.toBeNull()
+  })
+
+  it('keeps the account address when the account is gone, and the deleted label for its token', () => {
+    expect(auditActorText({ user_email: 'sa-gone@service-account.invalid', api_token_id: 'tok-gone' }, LABELS))
+      .toBe(`sa-gone@service-account.invalid · ${LABELS.deletedToken}`)
+  })
+})

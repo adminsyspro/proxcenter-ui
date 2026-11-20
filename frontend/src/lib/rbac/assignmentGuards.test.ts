@@ -6,7 +6,12 @@ const { isSuperAdminMock, isProtectedMock, roleFindUniqueMock } = vi.hoisted(() 
   roleFindUniqueMock: vi.fn(),
 }))
 
-vi.mock("@/lib/db/prisma", () => ({ prisma: { rbacRole: { findUnique: (...a: any[]) => roleFindUniqueMock(...a) } } }))
+vi.mock("@/lib/db/prisma", () => ({
+  prisma: {
+    rbacRole: { findUnique: (...a: any[]) => roleFindUniqueMock(...a) },
+    user: { findUnique: async ({ where }: any) => ({ serviceAccount: where.id === "svc" }) },
+  },
+}))
 vi.mock("@/lib/rbac", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/rbac")>()
   return {
@@ -53,6 +58,14 @@ describe("guardRoleAssignment", () => {
     expect(await body(await guardRoleAssignment(input({ roleId: "role_provider_admin" })))).toMatchObject({ status: 404, error: "Role not found" })
     isProtectedMock.mockResolvedValue(true)
     expect(await body(await guardRoleAssignment(input()))).toMatchObject({ status: 404, error: "User not found" })
+  })
+
+  it("never makes a service account a super admin, even from a super admin (#1404)", async () => {
+    isSuperAdminMock.mockResolvedValue(true)
+    expect(await body(await guardRoleAssignment(input({ roleId: "role_super_admin", targetUserId: "svc" }))))
+      .toMatchObject({ status: 400, error: "A service account cannot be a super admin" })
+    expect((await guardRoleAssignment(input({ roleId: "role_super_admin", targetUserId: "human" }))).ok).toBe(true)
+    expect((await guardRoleAssignment(input({ roleId: "role_provider_admin", targetUserId: "svc" }))).ok).toBe(true)
   })
 
   it("skips the protected-target rule when no target is named", async () => {

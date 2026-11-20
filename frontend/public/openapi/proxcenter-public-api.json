@@ -62,6 +62,9 @@
     },
     {
       "name": "Users"
+    },
+    {
+      "name": "Identity"
     }
   ],
   "components": {
@@ -2834,6 +2837,10 @@
           },
           "enabled": {
             "type": "boolean"
+          },
+          "apiSelfService": {
+            "type": "boolean",
+            "description": "Lets the tenant's admins manage its service accounts and API tokens, within their own rights"
           }
         }
       },
@@ -3607,6 +3614,204 @@
               "type": "string"
             },
             "description": "Every vDC of the tenant that must carry the network; at least one"
+          }
+        }
+      },
+      "TenantOidcConnectionUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "provider_name": {
+            "type": "string",
+            "description": "Label of the sign-in button"
+          },
+          "issuer_url": {
+            "type": "string",
+            "description": "OpenID Connect issuer; discovery is read from it"
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "string",
+            "description": "Space separated"
+          },
+          "authorization_url": {
+            "type": "string",
+            "description": "Override of the discovered endpoint"
+          },
+          "token_url": {
+            "type": "string",
+            "description": "Override of the discovered endpoint"
+          },
+          "userinfo_url": {
+            "type": "string",
+            "description": "Override of the discovered endpoint"
+          },
+          "claim_email": {
+            "type": "string"
+          },
+          "claim_name": {
+            "type": "string"
+          },
+          "claim_groups": {
+            "type": "string"
+          },
+          "auto_provision": {
+            "type": "boolean",
+            "description": "Create the account on first sign-in"
+          },
+          "default_role": {
+            "type": "string",
+            "description": "A role assignable in the tenant"
+          },
+          "show_local_login": {
+            "type": "boolean"
+          },
+          "force_sso_redirect": {
+            "type": "boolean"
+          },
+          "group_mapping_strategy": {
+            "type": "string"
+          },
+          "allowed_domains": {
+            "type": "string",
+            "description": "Comma separated e-mail domains; empty = any"
+          },
+          "self_service": {
+            "type": "boolean",
+            "description": "Lets the tenant's own admins manage this connection"
+          },
+          "proxy_url": {
+            "type": "string"
+          },
+          "proxy_username": {
+            "type": "string"
+          },
+          "proxy_bypass": {
+            "type": "string"
+          },
+          "client_secret": {
+            "type": "string",
+            "description": "Omitted: the stored secret is kept"
+          },
+          "proxy_password": {
+            "type": "string",
+            "description": "Omitted: the stored one is kept"
+          },
+          "group_role_mapping": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "group": {
+                  "type": "string"
+                },
+                "tenant": {
+                  "type": "string"
+                },
+                "vdc": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "IdP group to role, within this tenant"
+          },
+          "trusted_endpoints": {
+            "type": "boolean",
+            "description": "Session only: a token cannot turn it on (403)"
+          }
+        }
+      },
+      "ServiceAccountCreateRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Unique in its tenant"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "Provider tenant only: the tenant of the account; the token's own tenant by default"
+          }
+        }
+      },
+      "ServiceAccountUpdateRequest": {
+        "type": "object",
+        "description": "Only the given fields change.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "false stops every token of the account at once"
+          }
+        }
+      },
+      "ServiceAccountTokenCreateRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "scopes"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Scope ids, each held by the service account"
+          },
+          "connectionIds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Connections of the account's tenant the token is restricted to; null = all"
+          },
+          "expiresInDays": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Days until expiry; null = no expiry"
+          },
+          "rateLimitPerMin": {
+            "type": "integer"
+          },
+          "writeRateLimitPerMin": {
+            "type": "integer"
           }
         }
       },
@@ -6519,6 +6724,10 @@
                     "null"
                   ]
                 },
+                "apiSelfService": {
+                  "type": "boolean",
+                  "description": "The tenant manages its own service accounts and API tokens"
+                },
                 "settings": {
                   "type": [
                     "object",
@@ -6589,6 +6798,10 @@
                   "integer",
                   "null"
                 ]
+              },
+              "apiSelfService": {
+                "type": "boolean",
+                "description": "The tenant manages its own service accounts and API tokens"
               },
               "settings": {
                 "type": [
@@ -9214,6 +9427,453 @@
             }
           }
         }
+      },
+      "TenantOidcConnectionResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "tenant_id": {
+                "type": "string"
+              },
+              "configured": {
+                "type": "boolean"
+              },
+              "trusted_endpoints": {
+                "type": "boolean"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "provider_name": {
+                "type": "string",
+                "description": "Label of the sign-in button"
+              },
+              "issuer_url": {
+                "type": "string",
+                "description": "OpenID Connect issuer; discovery is read from it"
+              },
+              "client_id": {
+                "type": "string"
+              },
+              "scopes": {
+                "type": "string",
+                "description": "Space separated"
+              },
+              "authorization_url": {
+                "type": "string",
+                "description": "Override of the discovered endpoint"
+              },
+              "token_url": {
+                "type": "string",
+                "description": "Override of the discovered endpoint"
+              },
+              "userinfo_url": {
+                "type": "string",
+                "description": "Override of the discovered endpoint"
+              },
+              "claim_email": {
+                "type": "string"
+              },
+              "claim_name": {
+                "type": "string"
+              },
+              "claim_groups": {
+                "type": "string"
+              },
+              "auto_provision": {
+                "type": "boolean",
+                "description": "Create the account on first sign-in"
+              },
+              "default_role": {
+                "type": "string",
+                "description": "A role assignable in the tenant"
+              },
+              "show_local_login": {
+                "type": "boolean"
+              },
+              "force_sso_redirect": {
+                "type": "boolean"
+              },
+              "group_mapping_strategy": {
+                "type": "string"
+              },
+              "allowed_domains": {
+                "type": "string",
+                "description": "Comma separated e-mail domains; empty = any"
+              },
+              "self_service": {
+                "type": "boolean",
+                "description": "Lets the tenant's own admins manage this connection"
+              },
+              "proxy_url": {
+                "type": "string"
+              },
+              "proxy_username": {
+                "type": "string"
+              },
+              "proxy_bypass": {
+                "type": "string"
+              },
+              "group_role_mapping": {
+                "type": "string",
+                "description": "JSON array of { group, tenant, vdc, role }"
+              },
+              "hasClientSecret": {
+                "type": "boolean",
+                "description": "Whether a secret is stored; never the secret"
+              },
+              "callback_url": {
+                "type": "string",
+                "description": "Redirect URI to register at the IdP"
+              },
+              "login_url": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ServiceAccountListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Also the user_id its role assignments name"
+                },
+                "tenantId": {
+                  "type": "string"
+                },
+                "tenantName": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "roles": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "The role assignment id"
+                      },
+                      "roleId": {
+                        "type": "string"
+                      },
+                      "roleName": {
+                        "type": "string"
+                      },
+                      "color": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "scopeType": {
+                        "type": "string"
+                      },
+                      "scopeTarget": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "tokenCount": {
+                  "type": "integer"
+                },
+                "lastUsedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time",
+                  "description": "Last use of any of its tokens"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ServiceAccountResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Also the user_id its role assignments name"
+              },
+              "tenantId": {
+                "type": "string"
+              },
+              "tenantName": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "roles": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "The role assignment id"
+                    },
+                    "roleId": {
+                      "type": "string"
+                    },
+                    "roleName": {
+                      "type": "string"
+                    },
+                    "color": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "scopeType": {
+                      "type": "string"
+                    },
+                    "scopeTarget": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "tokenCount": {
+                "type": "integer"
+              },
+              "lastUsedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time",
+                "description": "Last use of any of its tokens"
+              }
+            }
+          }
+        }
+      },
+      "ServiceAccountDeleteResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "deleted": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "ServiceAccountTokenListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "Never the secret, nor its hash",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "tenantId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "tokenPrefix": {
+                  "type": "string"
+                },
+                "scopes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "connectionIds": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "expiresAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "lastUsedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "rateLimitPerMin": {
+                  "type": "integer"
+                },
+                "writeRateLimitPerMin": {
+                  "type": "integer"
+                },
+                "createdByEmail": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ServiceAccountTokenCreateResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "token": {
+                "type": "object",
+                "description": "Never the secret, nor its hash",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "tenantId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "tokenPrefix": {
+                    "type": "string"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "connectionIds": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "expiresAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "lastUsedAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "rateLimitPerMin": {
+                    "type": "integer"
+                  },
+                  "writeRateLimitPerMin": {
+                    "type": "integer"
+                  },
+                  "createdByEmail": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              },
+              "secret": {
+                "type": "string",
+                "description": "The pxc_ secret, returned once and never again"
+              }
+            }
+          }
+        }
       }
     },
     "x-scopes": {
@@ -9258,6 +9918,10 @@
       ],
       "users:read": [
         "admin.users.view"
+      ],
+      "identity:read": [
+        "admin.apitokens.view",
+        "admin.settings.view"
       ],
       "vms:power": [
         "vm.view",
@@ -9361,6 +10025,12 @@
       "rbac:write": [
         "admin.rbac.view",
         "admin.rbac"
+      ],
+      "identity:write": [
+        "admin.apitokens.view",
+        "admin.apitokens",
+        "admin.settings.view",
+        "admin.settings.identity"
       ]
     }
   },
@@ -14908,7 +15578,7 @@
       "get": {
         "operationId": "task-status",
         "summary": "Status of a Proxmox task",
-        "description": "Status, progress and log of the task {upid} started on {node}, as returned by every write that answers with a UPID. Poll it until `status` is `stopped`, then read `exitstatus` (`OK` on success) and `failureReason`. Any write scope opens it. A vDC tenant token only reads the tasks of its own guests.\n\nRequired scope: `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete` or `backups:write` or `backups:restore` or `backups:delete` or `storage:write` or `ha:write` or `pools:write` or `network:write` or `firewall:write` or `vdcs:write` or `tenants:write` or `users:write` or `rbac:write`",
+        "description": "Status, progress and log of the task {upid} started on {node}, as returned by every write that answers with a UPID. Poll it until `status` is `stopped`, then read `exitstatus` (`OK` on success) and `failureReason`. Any write scope opens it. A vDC tenant token only reads the tasks of its own guests.\n\nRequired scope: `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete` or `backups:write` or `backups:restore` or `backups:delete` or `storage:write` or `ha:write` or `pools:write` or `network:write` or `firewall:write` or `vdcs:write` or `tenants:write` or `users:write` or `rbac:write` or `identity:write`",
         "tags": [
           "Tasks"
         ],
@@ -14929,7 +15599,8 @@
           "vdcs:write",
           "tenants:write",
           "users:write",
-          "rbac:write"
+          "rbac:write",
+          "identity:write"
         ],
         "parameters": [
           {
@@ -34360,6 +35031,10 @@
                               "null"
                             ]
                           },
+                          "apiSelfService": {
+                            "type": "boolean",
+                            "description": "The tenant manages its own service accounts and API tokens"
+                          },
                           "settings": {
                             "type": [
                               "object",
@@ -34565,6 +35240,10 @@
                             "null"
                           ]
                         },
+                        "apiSelfService": {
+                          "type": "boolean",
+                          "description": "The tenant manages its own service accounts and API tokens"
+                        },
                         "settings": {
                           "type": [
                             "object",
@@ -34741,6 +35420,10 @@
                             "null"
                           ]
                         },
+                        "apiSelfService": {
+                          "type": "boolean",
+                          "description": "The tenant manages its own service accounts and API tokens"
+                        },
                         "settings": {
                           "type": [
                             "object",
@@ -34871,6 +35554,10 @@
                   },
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "apiSelfService": {
+                    "type": "boolean",
+                    "description": "Lets the tenant's admins manage its service accounts and API tokens, within their own rights"
                   }
                 }
               }
@@ -34946,6 +35633,10 @@
                             "integer",
                             "null"
                           ]
+                        },
+                        "apiSelfService": {
+                          "type": "boolean",
+                          "description": "The tenant manages its own service accounts and API tokens"
                         },
                         "settings": {
                           "type": [
@@ -43419,6 +44110,2168 @@
                 "example": {
                   "error": "Route not available to API tokens",
                   "route": "/api/v1/vdcs/{id}/evpn-networks/{networkId}"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-accounts": {
+      "get": {
+        "operationId": "service-accounts-list",
+        "summary": "Service accounts",
+        "description": "The service accounts with their tenant, roles, number of tokens and last use. Needs admin.apitokens.view (scope identity:read or identity:write). The provider tenant reaches every tenant's service accounts, another tenant its own; another tenant's account answers 404.\n\nRequired scope: `identity:read` or `identity:write`",
+        "tags": [
+          "Identity"
+        ],
+        "x-required-scopes": [
+          "identity:read",
+          "identity:write"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "description": "Also the user_id its role assignments name"
+                          },
+                          "tenantId": {
+                            "type": "string"
+                          },
+                          "tenantName": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "roles": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "description": "The role assignment id"
+                                },
+                                "roleId": {
+                                  "type": "string"
+                                },
+                                "roleName": {
+                                  "type": "string"
+                                },
+                                "color": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "scopeType": {
+                                  "type": "string"
+                                },
+                                "scopeTarget": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          "tokenCount": {
+                            "type": "integer"
+                          },
+                          "lastUsedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time",
+                            "description": "Last use of any of its tokens"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/service-accounts"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "service-account-create",
+        "summary": "Create a service account",
+        "description": "Creates a service account: an identity with no password and no interactive login that only authenticates with its API tokens. It holds no role until one is assigned (POST /api/v1/rbac/assignments with its id as `user_id`, scope rbac:write). Answers 201; 409 when the name is taken in the tenant. Needs admin.apitokens (scope identity:write). The provider tenant reaches every tenant's service accounts, another tenant its own. A token restricted to some connections gets 403.\n\nRequired scope: `identity:write`",
+        "tags": [
+          "Identity"
+        ],
+        "x-required-scopes": [
+          "identity:write"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "Unique in its tenant"
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "tenantId": {
+                    "type": "string",
+                    "description": "Provider tenant only: the tenant of the account; the token's own tenant by default"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Also the user_id its role assignments name"
+                        },
+                        "tenantId": {
+                          "type": "string"
+                        },
+                        "tenantName": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "roles": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "description": "The role assignment id"
+                              },
+                              "roleId": {
+                                "type": "string"
+                              },
+                              "roleName": {
+                                "type": "string"
+                              },
+                              "color": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "scopeType": {
+                                "type": "string"
+                              },
+                              "scopeTarget": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        "tokenCount": {
+                          "type": "integer"
+                        },
+                        "lastUsedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time",
+                          "description": "Last use of any of its tokens"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/service-accounts"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-accounts/{id}": {
+      "get": {
+        "operationId": "service-account-get",
+        "summary": "Service account",
+        "description": "The service account {id}. Needs admin.apitokens.view (scope identity:read or identity:write). The provider tenant reaches every tenant's service accounts, another tenant its own; another tenant's account answers 404.\n\nRequired scope: `identity:read` or `identity:write`",
+        "tags": [
+          "Identity"
+        ],
+        "x-required-scopes": [
+          "identity:read",
+          "identity:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Also the user_id its role assignments name"
+                        },
+                        "tenantId": {
+                          "type": "string"
+                        },
+                        "tenantName": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "roles": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "description": "The role assignment id"
+                              },
+                              "roleId": {
+                                "type": "string"
+                              },
+                              "roleName": {
+                                "type": "string"
+                              },
+                              "color": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "scopeType": {
+                                "type": "string"
+                              },
+                              "scopeTarget": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        "tokenCount": {
+                          "type": "integer"
+                        },
+                        "lastUsedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time",
+                          "description": "Last use of any of its tokens"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/service-accounts/{id}"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "service-account-update",
+        "summary": "Update a service account",
+        "description": "Changes the name, the description or the enabled state of the service account {id}. A disabled account's tokens are refused at once. A token cannot change the account it acts as (403). Needs admin.apitokens (scope identity:write). The provider tenant reaches every tenant's service accounts, another tenant its own. A token restricted to some connections gets 403.\n\nRequired scope: `identity:write`",
+        "tags": [
+          "Identity"
+        ],
+        "x-required-scopes": [
+          "identity:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Only the given fields change.",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  "description": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 500
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "false stops every token of the account at once"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Also the user_id its role assignments name"
+                        },
+                        "tenantId": {
+                          "type": "string"
+                        },
+                        "tenantName": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "roles": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "description": "The role assignment id"
+                              },
+                              "roleId": {
+                                "type": "string"
+                              },
+                              "roleName": {
+                                "type": "string"
+                              },
+                              "color": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "scopeType": {
+                                "type": "string"
+                              },
+                              "scopeTarget": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        "tokenCount": {
+                          "type": "integer"
+                        },
+                        "lastUsedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time",
+                          "description": "Last use of any of its tokens"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/service-accounts/{id}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "service-account-delete",
+        "summary": "Delete a service account",
+        "description": "Deletes the service account {id} with its tokens and role assignments. A token cannot delete the account it acts as (403). Needs admin.apitokens (scope identity:write). The provider tenant reaches every tenant's service accounts, another tenant its own. A token restricted to some connections gets 403.\n\nRequired scope: `identity:write`",
+        "tags": [
+          "Identity"
+        ],
+        "x-required-scopes": [
+          "identity:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "deleted": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/service-accounts/{id}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-accounts/{id}/tokens": {
+      "get": {
+        "operationId": "service-account-tokens-list",
+        "summary": "Tokens of a service account",
+        "description": "The API tokens of the service account {id}, never their secret. Needs admin.apitokens.view (scope identity:read or identity:write). The provider tenant reaches every tenant's service accounts, another tenant its own; another tenant's account answers 404.\n\nRequired scope: `identity:read` or `identity:write`",
+        "tags": [
+          "Identity"
+        ],
+        "x-required-scopes": [
+          "identity:read",
+          "identity:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "description": "Never the secret, nor its hash",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "tenantId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "tokenPrefix": {
+                            "type": "string"
+                          },
+                          "scopes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "connectionIds": {
+                            "type": [
+                              "array",
+                              "null"
+                            ],
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "expiresAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "lastUsedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "rateLimitPerMin": {
+                            "type": "integer"
+                          },
+                          "writeRateLimitPerMin": {
+                            "type": "integer"
+                          },
+                          "createdByEmail": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/service-accounts/{id}/tokens"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "service-account-token-create",
+        "summary": "Create a token for a service account",
+        "description": "Creates an API token acting as the service account {id}: on every call it is bound by the account's roles, never by its creator's, and it stops when the account is disabled or deleted. The secret is returned once. Refused when the account is disabled (409), when it does not hold one of the scopes (400), when the caller could not grant one (403), and, for a token, when it does not carry one itself (403). Needs admin.apitokens (scope identity:write). The provider tenant reaches every tenant's service accounts, another tenant its own. A token restricted to some connections gets 403.\n\nRequired scope: `identity:write`",
+        "tags": [
+          "Identity"
+        ],
+        "x-required-scopes": [
+          "identity:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "scopes"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Scope ids, each held by the service account"
+                  },
+                  "connectionIds": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Connections of the account's tenant the token is restricted to; null = all"
+                  },
+                  "expiresInDays": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "Days until expiry; null = no expiry"
+                  },
+                  "rateLimitPerMin": {
+                    "type": "integer"
+                  },
+                  "writeRateLimitPerMin": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "token": {
+                          "type": "object",
+                          "description": "Never the secret, nor its hash",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "tenantId": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "tokenPrefix": {
+                              "type": "string"
+                            },
+                            "scopes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "connectionIds": {
+                              "type": [
+                                "array",
+                                "null"
+                              ],
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "expiresAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "date-time"
+                            },
+                            "lastUsedAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "date-time"
+                            },
+                            "rateLimitPerMin": {
+                              "type": "integer"
+                            },
+                            "writeRateLimitPerMin": {
+                              "type": "integer"
+                            },
+                            "createdByEmail": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          }
+                        },
+                        "secret": {
+                          "type": "string",
+                          "description": "The pxc_ secret, returned once and never again"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/service-accounts/{id}/tokens"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-accounts/{id}/tokens/{tokenId}": {
+      "delete": {
+        "operationId": "service-account-token-delete",
+        "summary": "Revoke a token of a service account",
+        "description": "Deletes the token {tokenId} of the service account {id}; 404 when it belongs to another account. Needs admin.apitokens (scope identity:write). The provider tenant reaches every tenant's service accounts, another tenant its own. A token restricted to some connections gets 403.\n\nRequired scope: `identity:write`",
+        "tags": [
+          "Identity"
+        ],
+        "x-required-scopes": [
+          "identity:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "tokenId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "deleted": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/service-accounts/{id}/tokens/{tokenId}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-accounts/{id}/tokens/{tokenId}/rotate": {
+      "post": {
+        "operationId": "service-account-token-rotate",
+        "summary": "Rotate a token of a service account",
+        "description": "Gives the token {tokenId} of the service account {id} a new secret, returned once: its id, name, scopes, connections, expiry and rate limits stay, and the old secret stops authenticating at once. Follows the rules of creation: refused when the account is disabled (409), when it no longer holds one of the token's scopes (400), when the caller could not grant one (403), and, for a token, when it does not carry one itself (403). A token may rotate itself. Needs admin.apitokens (scope identity:write). The provider tenant reaches every tenant's service accounts, another tenant its own. A token restricted to some connections gets 403.\n\nRequired scope: `identity:write`",
+        "tags": [
+          "Identity"
+        ],
+        "x-required-scopes": [
+          "identity:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "tokenId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "token": {
+                          "type": "object",
+                          "description": "Never the secret, nor its hash",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "tenantId": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "description": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "tokenPrefix": {
+                              "type": "string"
+                            },
+                            "scopes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "connectionIds": {
+                              "type": [
+                                "array",
+                                "null"
+                              ],
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "expiresAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "date-time"
+                            },
+                            "lastUsedAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "format": "date-time"
+                            },
+                            "rateLimitPerMin": {
+                              "type": "integer"
+                            },
+                            "writeRateLimitPerMin": {
+                              "type": "integer"
+                            },
+                            "createdByEmail": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          }
+                        },
+                        "secret": {
+                          "type": "string",
+                          "description": "The pxc_ secret, returned once and never again"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/service-accounts/{id}/tokens/{tokenId}/rotate"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/oidc/connections/{tenantId}": {
+      "get": {
+        "operationId": "tenant-oidc-connection-get",
+        "summary": "OIDC connection of a tenant",
+        "description": "The OIDC connection of the customer tenant {tenantId}: issuer, client id, scopes, claims, default role, allowed domains and group mapping; `has_client_secret` says whether a secret is stored, never the secret. Needs admin.settings.view (scope identity:read or identity:write). Provider tenant only: another tenant's token gets 403; `default` (the provider IdP) answers 400.\n\nRequired scope: `identity:read` or `identity:write`",
+        "tags": [
+          "Identity"
+        ],
+        "x-required-scopes": [
+          "identity:read",
+          "identity:write"
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "tenant_id": {
+                          "type": "string"
+                        },
+                        "configured": {
+                          "type": "boolean"
+                        },
+                        "trusted_endpoints": {
+                          "type": "boolean"
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "provider_name": {
+                          "type": "string",
+                          "description": "Label of the sign-in button"
+                        },
+                        "issuer_url": {
+                          "type": "string",
+                          "description": "OpenID Connect issuer; discovery is read from it"
+                        },
+                        "client_id": {
+                          "type": "string"
+                        },
+                        "scopes": {
+                          "type": "string",
+                          "description": "Space separated"
+                        },
+                        "authorization_url": {
+                          "type": "string",
+                          "description": "Override of the discovered endpoint"
+                        },
+                        "token_url": {
+                          "type": "string",
+                          "description": "Override of the discovered endpoint"
+                        },
+                        "userinfo_url": {
+                          "type": "string",
+                          "description": "Override of the discovered endpoint"
+                        },
+                        "claim_email": {
+                          "type": "string"
+                        },
+                        "claim_name": {
+                          "type": "string"
+                        },
+                        "claim_groups": {
+                          "type": "string"
+                        },
+                        "auto_provision": {
+                          "type": "boolean",
+                          "description": "Create the account on first sign-in"
+                        },
+                        "default_role": {
+                          "type": "string",
+                          "description": "A role assignable in the tenant"
+                        },
+                        "show_local_login": {
+                          "type": "boolean"
+                        },
+                        "force_sso_redirect": {
+                          "type": "boolean"
+                        },
+                        "group_mapping_strategy": {
+                          "type": "string"
+                        },
+                        "allowed_domains": {
+                          "type": "string",
+                          "description": "Comma separated e-mail domains; empty = any"
+                        },
+                        "self_service": {
+                          "type": "boolean",
+                          "description": "Lets the tenant's own admins manage this connection"
+                        },
+                        "proxy_url": {
+                          "type": "string"
+                        },
+                        "proxy_username": {
+                          "type": "string"
+                        },
+                        "proxy_bypass": {
+                          "type": "string"
+                        },
+                        "group_role_mapping": {
+                          "type": "string",
+                          "description": "JSON array of { group, tenant, vdc, role }"
+                        },
+                        "hasClientSecret": {
+                          "type": "boolean",
+                          "description": "Whether a secret is stored; never the secret"
+                        },
+                        "callback_url": {
+                          "type": "string",
+                          "description": "Redirect URI to register at the IdP"
+                        },
+                        "login_url": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/auth/oidc/connections/{tenantId}"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "tenant-oidc-connection-update",
+        "summary": "Configure the OIDC connection of a tenant",
+        "description": "Creates or replaces the OIDC connection of the customer tenant {tenantId}. An omitted `client_secret` keeps the stored one. The issuer is checked against private and internal addresses unless the provider trusts the tenant's endpoints. Needs admin.settings.identity (scope identity:write). Provider tenant only: another tenant's token gets 403; `default` (the provider IdP) answers 400. A token restricted to some connections gets 403.\n\nRequired scope: `identity:write`",
+        "tags": [
+          "Identity"
+        ],
+        "x-required-scopes": [
+          "identity:write"
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "provider_name": {
+                    "type": "string",
+                    "description": "Label of the sign-in button"
+                  },
+                  "issuer_url": {
+                    "type": "string",
+                    "description": "OpenID Connect issuer; discovery is read from it"
+                  },
+                  "client_id": {
+                    "type": "string"
+                  },
+                  "scopes": {
+                    "type": "string",
+                    "description": "Space separated"
+                  },
+                  "authorization_url": {
+                    "type": "string",
+                    "description": "Override of the discovered endpoint"
+                  },
+                  "token_url": {
+                    "type": "string",
+                    "description": "Override of the discovered endpoint"
+                  },
+                  "userinfo_url": {
+                    "type": "string",
+                    "description": "Override of the discovered endpoint"
+                  },
+                  "claim_email": {
+                    "type": "string"
+                  },
+                  "claim_name": {
+                    "type": "string"
+                  },
+                  "claim_groups": {
+                    "type": "string"
+                  },
+                  "auto_provision": {
+                    "type": "boolean",
+                    "description": "Create the account on first sign-in"
+                  },
+                  "default_role": {
+                    "type": "string",
+                    "description": "A role assignable in the tenant"
+                  },
+                  "show_local_login": {
+                    "type": "boolean"
+                  },
+                  "force_sso_redirect": {
+                    "type": "boolean"
+                  },
+                  "group_mapping_strategy": {
+                    "type": "string"
+                  },
+                  "allowed_domains": {
+                    "type": "string",
+                    "description": "Comma separated e-mail domains; empty = any"
+                  },
+                  "self_service": {
+                    "type": "boolean",
+                    "description": "Lets the tenant's own admins manage this connection"
+                  },
+                  "proxy_url": {
+                    "type": "string"
+                  },
+                  "proxy_username": {
+                    "type": "string"
+                  },
+                  "proxy_bypass": {
+                    "type": "string"
+                  },
+                  "client_secret": {
+                    "type": "string",
+                    "description": "Omitted: the stored secret is kept"
+                  },
+                  "proxy_password": {
+                    "type": "string",
+                    "description": "Omitted: the stored one is kept"
+                  },
+                  "group_role_mapping": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "group": {
+                          "type": "string"
+                        },
+                        "tenant": {
+                          "type": "string"
+                        },
+                        "vdc": {
+                          "type": "string"
+                        },
+                        "role": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "description": "IdP group to role, within this tenant"
+                  },
+                  "trusted_endpoints": {
+                    "type": "boolean",
+                    "description": "Session only: a token cannot turn it on (403)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/auth/oidc/connections/{tenantId}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "tenant-oidc-connection-delete",
+        "summary": "Remove the OIDC connection of a tenant",
+        "description": "Removes the OIDC connection of the customer tenant {tenantId}; its users keep their accounts. Needs admin.settings.identity (scope identity:write). Provider tenant only: another tenant's token gets 403; `default` (the provider IdP) answers 400. A token restricted to some connections gets 403.\n\nRequired scope: `identity:write`",
+        "tags": [
+          "Identity"
+        ],
+        "x-required-scopes": [
+          "identity:write"
+        ],
+        "parameters": [
+          {
+            "name": "tenantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/auth/oidc/connections/{tenantId}"
+                    }
+                  },
+                  "fleet": {
+                    "value": {
+                      "error": "This operation reaches every connection: it needs a token not restricted to connections"
+                    }
+                  }
                 }
               }
             }

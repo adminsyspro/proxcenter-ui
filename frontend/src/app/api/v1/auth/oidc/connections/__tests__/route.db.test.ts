@@ -14,6 +14,9 @@ const { requireProviderAdminMock, auditMock } = vi.hoisted(() => ({
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: prismaTest }))
 vi.mock("@/lib/tenant/providerGuard", () => ({ requireProviderAdmin: requireProviderAdminMock }))
+// API token guard: pass-through, these tests drive the session path (token
+// paths: service-accounts/serviceAccountRoutes.db.test.ts).
+vi.mock("@/lib/api-tokens/routeGuard", () => ({ withPublicApiGuard: (_entryId: string, handler: any) => handler }))
 vi.mock("@/lib/audit", () => ({ audit: auditMock }))
 vi.mock("@/lib/crypto/secret", () => ({
   encryptSecret: (v: string) => `enc(${v})`,
@@ -80,6 +83,17 @@ describe("provider gate", () => {
     expect((await put(T, body())).status).toBe(403)
     expect((await callRoute(one.DELETE as any, { method: "DELETE", params: { tenantId: T } })).status).toBe(403)
     expect(await prismaTest.oidcConfig.count()).toBe(0)
+  })
+})
+
+describe("rights (#1404)", () => {
+  it("reads with admin.settings.view, writes with admin.settings.identity, both implied by admin.settings", async () => {
+    await getOne(T)
+    expect(requireProviderAdminMock).toHaveBeenLastCalledWith("admin.settings.view")
+    await put(T, body())
+    expect(requireProviderAdminMock).toHaveBeenLastCalledWith("admin.settings.identity")
+    await callRoute(one.DELETE as any, { method: "DELETE", params: { tenantId: T } })
+    expect(requireProviderAdminMock).toHaveBeenLastCalledWith("admin.settings.identity")
   })
 })
 

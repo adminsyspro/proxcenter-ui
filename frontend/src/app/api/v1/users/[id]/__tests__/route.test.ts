@@ -76,3 +76,30 @@ describe("PATCH /users/[id] — external-IdP password guard", () => {
     },
   )
 })
+
+describe("/users/[id] never reaches a service account (#1404)", () => {
+  const SA = { id: "sa1", email: "sa1@service-account.invalid", authProvider: "service_account", serviceAccount: true, enabled: true }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getServerSessionMock.mockResolvedValue({ user: { id: "admin", email: "admin@example.com" } })
+    checkPermissionMock.mockResolvedValue(null)
+    isUserProtectedMock.mockResolvedValue(false)
+    isUserSuperAdminMock.mockResolvedValue(true)
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    userFindUniqueMock.mockResolvedValue(SA)
+  })
+
+  it.each([
+    ["PATCH", { enabled: false }],
+    ["PATCH", { password: "longenoughpw" }],
+    ["DELETE", undefined],
+    ["GET", undefined],
+  ] as const)("%s answers 404 like a missing user and writes nothing", async (method, body) => {
+    const mod: any = await import("../route")
+    const res = await callRoute(mod[method], { method, params: { id: "sa1" }, ...(body ? { body: body as any } : {}) })
+    expect(res.status).toBe(404)
+    expect(userUpdateMock).not.toHaveBeenCalled()
+    expect(hashPasswordMock).not.toHaveBeenCalled()
+  })
+})

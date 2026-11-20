@@ -417,3 +417,39 @@ describe("GET /api/v1/users, the tenants field", () => {
     expect(userTenantFindManyMock.mock.calls[1][0].where).toEqual({ userId: { in: ["u1"] }, tenantId: "t1" })
   })
 })
+
+describe("/api/v1/users keeps service accounts out (#1404)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    checkPermissionMock.mockResolvedValue(null)
+    isUserSuperAdminMock.mockResolvedValue(true)
+    rbacUserRoleFindManyMock.mockResolvedValue([])
+    sessionGroupByMock.mockResolvedValue([])
+    userTenantFindManyMock.mockResolvedValue([])
+    userFindManyMock.mockResolvedValue([])
+    userFindUniqueMock.mockResolvedValue(null)
+    getServerLicenseMock.mockResolvedValue({ enterprise: true, edition: "enterprise", licensed: true, features: [], resolved: true })
+  })
+
+  it("never lists a service account in the provider view", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    const GET = await importGET()
+    await callRoute(GET as any, { method: "GET" })
+    expect(userFindManyMock.mock.calls[0][0].where).toMatchObject({ serviceAccount: false })
+  })
+
+  it("never lists a service account among the members of a tenant", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("t1")
+    const GET = await importGET()
+    await callRoute(GET as any, { method: "GET" })
+    expect(userTenantFindManyMock.mock.calls[0][0].where).toMatchObject({ tenantId: "t1", user: { serviceAccount: false } })
+  })
+
+  it("refuses to create a user on the service account domain", async () => {
+    getCurrentTenantIdMock.mockResolvedValue("default")
+    const res = await createUser({ email: "someone@service-account.invalid" })
+    expect(res.status).toBe(400)
+    expect((await readJson<any>(res))?.error).toBe("This address is reserved for service accounts")
+    expect(userCreateMock).not.toHaveBeenCalled()
+  })
+})

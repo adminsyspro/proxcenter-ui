@@ -195,33 +195,46 @@ describe('vDC VNets with an API token of tenant A', () => {
   })
 })
 
-describe('vDC VNets with a provider token, as with a provider session', () => {
+describe('vDC VNets of a tenant vDC, reached by a provider token (#1404)', () => {
   beforeEach(() => {
     h.getPrincipal.mockResolvedValue({ ok: true, principal: { ...TOKEN_A, tenantId: 'default' } })
     h.currentTenant.mockResolvedValue('default')
     h.infra.mockResolvedValue({ kind: 'provider' })
-    // The library resolves the vDC within the caller's tenant (resolveVdcForVnet).
-    const ownVdcOnly = async (vdcId: string, tenantId: string) => {
-      if ([VDC_A, VDC_B].find(v => v.id === vdcId)?.tenantId !== tenantId) throw new Error('vDC not found')
-      return { id: 'vnet-1' }
-    }
-    h.updateVnet.mockImplementation(ownVdcOnly)
-    h.deleteVnet.mockImplementation(ownVdcOnly)
   })
 
-  it.each([
-    ['GET', () => GET(tokenRequest('GET', 'vdc-b', true), itemParams('vdc-b'))],
-    ['PUT', () => PUT(tokenRequest('PUT', 'vdc-b', true), itemParams('vdc-b'))],
-    ['DELETE', () => DELETE(tokenRequest('DELETE', 'vdc-b', true), itemParams('vdc-b'))],
-  ] as const)('%s on a VNet of a tenant vDC: 404, looked up in the provider tenant', async (method, call) => {
-    const res = await call()
+  it('POST creates the VNet in the tenant that owns the vDC', async () => {
+    const res = await CREATE(tokenRequest('POST', 'vdc-b', false), listParams('vdc-b'))
 
-    expect(res.status).toBe(404)
-    if (method === 'GET') {
-      expect(h.vnetFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { vdcId: 'vdc-b', displayName: 'lan', vdc: { tenantId: 'default' } } }))
-    } else {
-      expect(method === 'PUT' ? h.updateVnet : h.deleteVnet).toHaveBeenCalledWith('vdc-b', 'default', 'lan', ...(method === 'PUT' ? [expect.anything()] : []))
-    }
+    expect(res.status).toBe(201)
+    expect(h.checkPermission).toHaveBeenCalledWith('sdn.vnet.create', 'connection', 'c1')
+    expect(h.createVnet).toHaveBeenCalledWith(expect.objectContaining({ vdcId: 'vdc-b', tenantId: 'tenant-b', createdBy: null }))
+  })
+
+  it('PUT updates the VNet in the tenant that owns the vDC', async () => {
+    await PUT(tokenRequest('PUT', 'vdc-b', true), itemParams('vdc-b'))
+
+    expect(h.updateVnet).toHaveBeenCalledWith('vdc-b', 'tenant-b', 'lan', expect.anything())
+  })
+
+  it('DELETE removes the VNet in the tenant that owns the vDC', async () => {
+    await DELETE(tokenRequest('DELETE', 'vdc-b', true), itemParams('vdc-b'))
+
+    expect(h.deleteVnet).toHaveBeenCalledWith('vdc-b', 'tenant-b', 'lan')
+  })
+
+  it('GET looks the VNet up in the tenant that owns the vDC', async () => {
+    await GET(tokenRequest('GET', 'vdc-b', true), itemParams('vdc-b'))
+
+    expect(h.vnetFindFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { vdcId: 'vdc-b', displayName: 'lan', vdc: { tenantId: 'tenant-b' } } }))
+  })
+
+  it('stays inside its connection perimeter: a tenant vDC on another connection is refused', async () => {
+    h.getPrincipal.mockResolvedValue({ ok: true, principal: { ...TOKEN_A, tenantId: 'default', connectionIds: ['c2'] } })
+
+    const res = await CREATE(tokenRequest('POST', 'vdc-b', false), listParams('vdc-b'))
+
+    expect(res.status).toBe(403)
+    expect(h.createVnet).not.toHaveBeenCalled()
   })
 })
 
@@ -300,6 +313,29 @@ describe('vDC VNets with a session', () => {
     // getCurrentTenantId only answers 'default' to a real provider member now
     // (roadmap#79): no second membership lookup here.
     expect(h.tenantMember).not.toHaveBeenCalled()
+  })
+
+  it('a provider session writes on a tenant vDC in the tenant that owns it (#1404)', async () => {
+    h.getPrincipal.mockResolvedValue({ ok: true, principal: { ...SESSION, tenantId: 'default' } })
+    h.currentTenant.mockResolvedValue('default')
+
+    expect((await CREATE(new Request('http://test.local/x', json('POST')), listParams('vdc-b'))).status).toBe(201)
+    expect(h.createVnet).toHaveBeenCalledWith(expect.objectContaining({ vdcId: 'vdc-b', tenantId: 'tenant-b', createdBy: 'u-1' }))
+    await PUT(new Request('http://test.local/x', json('PUT')), itemParams('vdc-b'))
+    expect(h.updateVnet).toHaveBeenCalledWith('vdc-b', 'tenant-b', 'lan', expect.anything())
+    await DELETE(new Request('http://test.local/x', { method: 'DELETE' }), itemParams('vdc-b'))
+    expect(h.deleteVnet).toHaveBeenCalledWith('vdc-b', 'tenant-b', 'lan')
+  })
+
+  it('a provider session on an unknown vDC stays in its own tenant: the library answers its 404', async () => {
+    h.getPrincipal.mockResolvedValue({ ok: true, principal: { ...SESSION, tenantId: 'default' } })
+    h.currentTenant.mockResolvedValue('default')
+    h.deleteVnet.mockRejectedValue(new Error('vDC not found'))
+
+    const res = await DELETE(new Request('http://test.local/x', { method: 'DELETE' }), itemParams('vdc-none'))
+
+    expect(res.status).toBe(404)
+    expect(h.deleteVnet).toHaveBeenCalledWith('vdc-none', 'default', 'lan')
   })
 
   it.each(SESSION_CALLS)('%s of a session whose tenant is refused (disabled, stale): 503, nothing read or written', async (_name, call) => {

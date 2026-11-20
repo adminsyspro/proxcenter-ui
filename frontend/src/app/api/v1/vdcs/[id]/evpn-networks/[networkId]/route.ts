@@ -4,10 +4,9 @@ import type { Principal } from "@/lib/auth/principal"
 import { withAudit } from "@/lib/audit/withAudit"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { PERMISSIONS } from "@/lib/rbac"
-import { getCurrentTenantId } from "@/lib/tenant"
 import { evpnContextForVdc, setEvpnNetworkPresence } from "@/lib/vdc/evpnNetworks"
 import { mapTenantNetworkError } from "@/lib/vdc/httpErrors"
-import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
+import { checkVnetPermission, resolveVnetTenant } from "@/lib/vdc/vnetPermission"
 
 export const runtime = "nodejs"
 
@@ -35,7 +34,7 @@ async function putHandler(req: Request, ctx: RouteContext) {
     if (!Array.isArray(body?.vdcIds)) return NextResponse.json({ error: "vdcIds must be an array" }, { status: 400 })
     const vdcIds: string[] = [...new Set<string>(body.vdcIds.filter((x: unknown) => typeof x === "string"))].slice(0, 200)
 
-    const tenantId = await getCurrentTenantId()
+    const tenantId = await resolveVnetTenant(vdcId)
     try {
       // The caller must hold the right on every vDC it changes, not only on
       // the one in the URL.

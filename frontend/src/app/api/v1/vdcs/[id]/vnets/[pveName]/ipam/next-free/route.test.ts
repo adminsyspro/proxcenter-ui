@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { callRoute } from '@/__tests__/setup/route-test'
 
-const { checkPermissionMock, getCurrentTenantIdMock, resolveScopeTenantMock, vdcVnetFindFirstMock } = vi.hoisted(() => ({
+const { checkPermissionMock, resolveVnetTenantMock, resolveScopeTenantMock, vdcVnetFindFirstMock } = vi.hoisted(() => ({
   checkPermissionMock: vi.fn(),
-  getCurrentTenantIdMock: vi.fn(),
+  resolveVnetTenantMock: vi.fn(),
   resolveScopeTenantMock: vi.fn(),
   vdcVnetFindFirstMock: vi.fn(),
 }))
@@ -13,8 +13,10 @@ const { checkPermissionMock, getCurrentTenantIdMock, resolveScopeTenantMock, vdc
 // paths: routeGuard.test.ts, tenancyTokenScope.test.ts).
 vi.mock("@/lib/api-tokens/routeGuard", () => ({ withPublicApiGuard: (_entryId: string, handler: any) => handler }))
 vi.mock('@/lib/rbac', () => ({ checkPermission: (...a: any[]) => checkPermissionMock(...a), PERMISSIONS: { SDN_VNET_VIEW: 'sdn.vnet.view' } }))
-vi.mock('@/lib/vdc/vnetPermission', () => ({ checkVnetReadForCaller: (_p: unknown, _id: string, perm: string) => checkPermissionMock(perm) }))
-vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: (...a: any[]) => getCurrentTenantIdMock(...a) }))
+vi.mock('@/lib/vdc/vnetPermission', () => ({
+  checkVnetReadForCaller: (_p: unknown, _id: string, perm: string) => checkPermissionMock(perm),
+  resolveVnetTenant: (...a: any[]) => resolveVnetTenantMock(...a),
+}))
 vi.mock('@/lib/vdc/providerTarget', () => ({ resolveScopeTenant: (...a: any[]) => resolveScopeTenantMock(...a) }))
 vi.mock('@/lib/db/prisma', () => ({ prisma: { vdcVnet: { findFirst: (...a: any[]) => vdcVnetFindFirstMock(...a) } } }))
 vi.mock('@/lib/vdc/ipam', () => ({ listAllocationsForSubnet: vi.fn(async () => []) }))
@@ -32,7 +34,7 @@ async function get(searchParams?: Record<string, string>) {
 
 beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
-  getCurrentTenantIdMock.mockReset().mockResolvedValue('tenant-caller')
+  resolveVnetTenantMock.mockReset().mockResolvedValue('tenant-caller')
   vdcVnetFindFirstMock.mockReset().mockResolvedValue(null)
   resolveScopeTenantMock.mockReset().mockImplementation(async (_req: any, _id: any, current: () => Promise<string>) => ({ ok: true, tenantId: await current(), target: null }))
 })
@@ -43,6 +45,13 @@ describe('GET vnets/[pveName]/ipam/next-free: provider target (roadmap#65)', () 
     expect(res.status).toBe(404)
     expect(resolveScopeTenantMock.mock.calls[0]?.[1]).toBeNull()
     expect(vdcVnetFindFirstMock.mock.calls[0]?.[0].where).toEqual({ vdcId: 'vdc-t', displayName: 'web', vdc: { tenantId: 'tenant-caller' } })
+  })
+
+  it('queries the vnet under the tenant that owns the vDC for a provider caller without a target (#1404)', async () => {
+    resolveVnetTenantMock.mockResolvedValue('tenant-owner')
+    await get()
+    expect(resolveVnetTenantMock).toHaveBeenCalledWith('vdc-t')
+    expect(vdcVnetFindFirstMock.mock.calls[0]?.[0].where).toEqual({ vdcId: 'vdc-t', displayName: 'web', vdc: { tenantId: 'tenant-owner' } })
   })
 
   it('queries the vnet under the target tenant when the target is the path vDC', async () => {

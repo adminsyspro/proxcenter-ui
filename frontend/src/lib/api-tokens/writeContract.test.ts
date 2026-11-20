@@ -63,6 +63,12 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
   tenants: ['tenant-create', 'tenant-update', 'tenant-delete', 'tenant-user-add', 'tenant-user-remove'],
   users: ['user-create', 'user-update', 'user-delete'],
   rbac: ['rbac-assignment-create', 'rbac-assignment-update', 'rbac-assignment-delete'],
+  // Service accounts and their tokens (issue #1404): identity:write, fleet perimeter.
+  identity: [
+    'service-account-create', 'service-account-update', 'service-account-delete',
+    'service-account-token-create', 'service-account-token-delete', 'service-account-token-rotate',
+    'tenant-oidc-connection-update', 'tenant-oidc-connection-delete',
+  ],
   firewall: [
     'fw-alias-create', 'fw-alias-update', 'fw-alias-delete',
     'fw-cluster-options-update', 'fw-cluster-rule-add', 'fw-cluster-rule-create', 'fw-cluster-rule-update', 'fw-cluster-rule-delete',
@@ -320,8 +326,8 @@ describe('write contract: a read-only token is refused every write (getPrincipal
     await seedDefaultTenant()
   })
 
-  it('(e) a token with the 12 read scopes gets 403 on each write entry', async () => {
-    expect(READ_SCOPE_IDS).toHaveLength(12)
+  it('(e) a token with the 13 read scopes gets 403 on each write entry', async () => {
+    expect(READ_SCOPE_IDS).toHaveLength(13)
     const { secret } = await seedApiToken({ scopes: [...READ_SCOPE_IDS] })
     for (const entry of writeEntries) {
       const sample = samplePath(entry)

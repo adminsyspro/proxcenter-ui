@@ -43,7 +43,8 @@ async function handleGet(req: Request, { params }: { params: Promise<{ id: strin
       ? await prisma.user.findUnique({ where: { id } })
       : await findUserInTenant(id, tenantId)
 
-    if (!user) {
+    // A service account is managed in Settings > API, never as a user (issue #1404).
+    if (!user || user.serviceAccount) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
@@ -125,7 +126,8 @@ async function handlePatch(req: Request, { params }: { params: Promise<{ id: str
     const user = isProviderView
       ? await prisma.user.findUnique({ where: { id } })
       : await findUserInTenant(id, tenantId)
-    if (!user) {
+    // A service account is managed in Settings > API, never as a user (issue #1404).
+    if (!user || user.serviceAccount) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
@@ -523,7 +525,8 @@ async function handleDelete(req: Request, { params }: { params: Promise<{ id: st
     const user = isProviderView
       ? await prisma.user.findUnique({ where: { id } })
       : await findUserInTenant(id, tenantId)
-    if (!user) {
+    // A service account is managed in Settings > API, never as a user (issue #1404).
+    if (!user || user.serviceAccount) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 

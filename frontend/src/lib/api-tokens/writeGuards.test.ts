@@ -537,6 +537,40 @@ describe('runTokenEntryGuards', () => {
       })
     })
 
+    // Issue #1404: a service account token never exceeds its account, reads included.
+    describe('a service account token', () => {
+      const saPrincipal = (scopes: string[]): Principal => ({
+        ...principal, creatorUserId: 'sa-1', serviceAccountId: 'sa-1', scopes, permissions: expandScopes(scopes),
+      })
+
+      it('checks an older read scope too, naming the account in the token it hands over', async () => {
+        setForwarded('GET')
+        creatorMock.mockResolvedValue(false)
+        const e = getEntry({ id: 'test-read', requiredScopes: ['nodes:read', 'network:write'], connectionSegment: undefined })
+        const res = await runTokenEntryGuards(e, saPrincipal(['nodes:read']), new Request('http://t/api/v1/x'), {})
+        expect(res?.status).toBe(403)
+        expect(await res?.json()).toEqual({ error: 'Token creator no longer holds this right', scope: 'nodes:read' })
+        expect(creatorMock).toHaveBeenCalledWith(
+          { tokenId: 'tok-1', tenantId: 'tenant-x', creatorUserId: 'sa-1', serviceAccountId: 'sa-1', connectionIds: ['conn-a'] },
+          'nodes:read',
+        )
+      })
+
+      it('checks every scope it carries that opens the read entry', async () => {
+        setForwarded('GET')
+        const e = getEntry({ id: 'test-read', requiredScopes: ['nodes:read', 'network:write'], connectionSegment: undefined })
+        expect(await runTokenEntryGuards(e, saPrincipal(['nodes:read', 'network:write', 'vms:read']), new Request('http://t/api/v1/x'), {})).toBeNull()
+        expect(creatorMock.mock.calls.map(c => c[1])).toEqual(['nodes:read', 'network:write'])
+      })
+
+      it('a health-like entry (no scope) checks nothing', async () => {
+        setForwarded('GET')
+        const e = getEntry({ id: 'test-health', requiredScopes: [], connectionSegment: undefined })
+        expect(await runTokenEntryGuards(e, saPrincipal(['vms:read']), new Request('http://t/api/v1/x'), {})).toBeNull()
+        expect(creatorMock).not.toHaveBeenCalled()
+      })
+    })
+
     describe('secondary permissions the token holds (Ruling 35)', () => {
       const creatorToken = { tokenId: 'tok-1', tenantId: 'tenant-x', creatorUserId: 'user-1', connectionIds: ['conn-a'] }
       const withScopes = (...scopes: string[]): Principal => ({ ...principal, scopes, permissions: expandScopes(scopes) })

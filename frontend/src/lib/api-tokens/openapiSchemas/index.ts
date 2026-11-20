@@ -4,6 +4,7 @@
 import { BACKUP_REQUEST_SCHEMAS, BACKUP_RESPONSE_SCHEMAS } from "./backups"
 import { FIREWALL_REQUEST_SCHEMAS, FIREWALL_RESPONSE_SCHEMAS } from "./firewall"
 import { HA_REQUEST_SCHEMAS, HA_RESPONSE_SCHEMAS } from "./ha"
+import { IDENTITY_REQUEST_SCHEMAS, IDENTITY_RESPONSE_SCHEMAS } from "./identity"
 import { MONITORING_RESPONSE_SCHEMAS } from "./monitoring"
 import { NETWORK_REQUEST_SCHEMAS, NETWORK_RESPONSE_SCHEMAS } from "./network"
 import { POOLS_REQUEST_SCHEMAS, POOLS_RESPONSE_SCHEMAS } from "./pools"
@@ -23,6 +24,7 @@ export const REQUEST_SCHEMAS: Record<string, Record<string, unknown>> = {
   ...NETWORK_REQUEST_SCHEMAS,
   ...FIREWALL_REQUEST_SCHEMAS,
   ...TENANCY_WRITE_REQUEST_SCHEMAS,
+  ...IDENTITY_REQUEST_SCHEMAS,
 }
 
 export const RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
@@ -36,4 +38,5 @@ export const RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
   ...FIREWALL_RESPONSE_SCHEMAS,
   ...TENANCY_RESPONSE_SCHEMAS,
   ...TENANCY_WRITE_RESPONSE_SCHEMAS,
+  ...IDENTITY_RESPONSE_SCHEMAS,
 }

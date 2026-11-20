@@ -73,12 +73,12 @@ function ZoneOf({ zone, none }: { zone: MicrosegZone | undefined; none: string }
 }
 
 /** The glyph of a cluster (or standalone node), from what the page read of the connection. */
-function ClusterGlyph({ connectionId }: { connectionId: string }) {
+function ClusterGlyph({ connectionId }: Readonly<{ connectionId: string }>) {
   return <ConnectionGlyph kind={useConnectionKind(connectionId)} />
 }
 
 /** The glyph of an item, the same in its option and in its chip: every row and every pick starts with it. */
-function ItemGlyph({ item, nodeStatus }: { item: FilterItem; nodeStatus?: Props['nodeStatus'] }) {
+function ItemGlyph({ item, nodeStatus }: Readonly<{ item: FilterItem; nodeStatus?: Props['nodeStatus'] }>) {
   const theme = useTheme()
   if (item.kind === 'guest') return <StatusIcon type='vm' vmType={item.guest.type} status={item.guest.status} />
   if (item.kind === 'zone') return <ZoneShield color={item.zone.color || 'currentColor'} state={item.zone.state} />
@@ -94,7 +94,7 @@ function ItemGlyph({ item, nodeStatus }: { item: FilterItem; nodeStatus?: Props[
  * with" adds the rest of their flows. One guest alone is the target the map always had: the map stays whole, the
  * "Targeting" chip beside the field reminds the lock and shows the panel of the guest again on a click.
  */
-export default function TargetPicker({ items, picked, onPicked, zonesById, target, onShowPanel, observedCount, peers, onPeers, clusterName, nodeStatus }: Props) {
+export default function TargetPicker({ items, picked, onPicked, zonesById, target, onShowPanel, observedCount, peers, onPeers, clusterName, nodeStatus }: Readonly<Props>) {
   const t = useTranslations('microsegPilot.overview.target')
   const zoneName = (c: TargetGuest) => (c.zoneId ? zonesById.get(c.zoneId)?.name : undefined) ?? t('noZone')
   const [query, setQuery] = useState('')

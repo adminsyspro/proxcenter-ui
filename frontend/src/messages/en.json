@@ -14662,6 +14662,7 @@
         "constellationHint": "the zones in orbit around the cluster, their flows as arcs (a double click on a zone puts its guests in orbit)"
       },
       "constellation": {
+        "flows": "Flows between the pastilles",
         "pause": "Stop the rotation",
         "play": "Resume the rotation"
       },

@@ -38,6 +38,8 @@ const OPACITY_STEPS = 24
 const DEPTH_STEPS = 64
 const SIZE_STEPS = 48
 const RING_STEPS = 72
+/** The two orbits drawn, in the order of `rings`. */
+const ORBITS = ['sphere', 'outer'] as const
 const DRAG_START = 4
 const DOUBLE_CLICK_MS = 600
 /** The labels of the arcs are all drawn up to this many arcs; past it only the arc under the pointer says its services. */
@@ -72,7 +74,7 @@ function discSx(size: number, ring: string, width: number, dashed = false) {
 }
 
 /** The glyph of a zone, as on the other renderings: a shield in its colour with the dot of its state at its corner. */
-function Shield({ color, state, size }: { color: string; state: keyof typeof STATE_DOT; size: number }) {
+function Shield({ color, state, size }: Readonly<{ color: string; state: keyof typeof STATE_DOT; size: number }>) {
   return (
     <Box component='span' sx={{ position: 'relative', display: 'inline-flex', width: size, height: size }}>
       <i className='ri-shield-fill' style={{ fontSize: size, lineHeight: 1, color: color || 'currentColor' }} />
@@ -168,7 +170,7 @@ type PastilleProps = {
  * of the theme. The primary colour only rings it under the pointer, when selected or targeted. The frame loop moves
  * it; React draws what it says.
  */
-const Pastille = memo(function Pastille({ id, look, selected, target, register, onAct, onHover, onFocusNode }: PastilleProps) {
+const Pastille = memo(function Pastille({ id, look, selected, target, register, onAct, onHover, onFocusNode }: Readonly<PastilleProps>) {
   const theme = useTheme()
   const ref = useCallback((el: HTMLDivElement | null) => register(id, el), [register, id])
   const act = look.act
@@ -236,7 +238,8 @@ const boxOf = (x: number, y: number, halfW: number, top: number, bottom: number)
 /** The observed arcs a point rides: the busiest ones still seen (not faded, not dimmed), a few of them only. */
 function ridersOf(arcs: readonly Pick<Arc, 'id' | 'data' | 'edge' | 'fade'>[]): Set<string> {
   const live = arcs.filter(a => a.data.hits !== null && a.fade === 1 && a.edge.className !== 'microseg-stale')
-  return new Set(live.sort((a, b) => (b.data.hits ?? 0) - (a.data.hits ?? 0) || a.id.localeCompare(b.id)).slice(0, MAX_RIDERS).map(a => a.id))
+  live.sort((a, b) => (b.data.hits ?? 0) - (a.data.hits ?? 0) || a.id.localeCompare(b.id))
+  return new Set(live.slice(0, MAX_RIDERS).map(a => a.id))
 }
 
 /**
@@ -249,7 +252,7 @@ function ridersOf(arcs: readonly Pick<Arc, 'id' | 'data' | 'edge' | 'fade'>[]): 
  * under the pointer, turns with a drag, zooms with the wheel; with `prefers-reduced-motion` nothing moves on its own.
  * It draws the graph it is given: no request of its own.
  */
-export default function ZoneConstellation({ nodes, edges, onSelectZone, onEnterZone, onSelectGuest, onSelectEdge, onHover, onFocusNode, onClear }: Props) {
+export default function ZoneConstellation({ nodes, edges, onSelectZone, onEnterZone, onSelectGuest, onSelectEdge, onHover, onFocusNode, onClear }: Readonly<Props>) {
   const theme = useTheme()
   const t = useTranslations('microsegPilot.overview')
   const tNode = useTranslations('microsegPilot.overview.node') as unknown as StarT
@@ -632,7 +635,7 @@ export default function ZoneConstellation({ nodes, edges, onSelectZone, onEnterZ
       }}
     >
       <Box className='constellation-layer' key={scene.centre?.id ?? 'cluster'}>
-        <svg width='100%' height='100%' style={{ position: 'absolute', inset: 0, zIndex: 50, overflow: 'visible', pointerEvents: 'none' }}>
+        <svg role='group' aria-label={t('constellation.flows')} width='100%' height='100%' style={{ position: 'absolute', inset: 0, zIndex: 50, overflow: 'visible', pointerEvents: 'none' }}>
           <defs>
             {Object.entries(EDGE_COLORS).map(([kind, color]) => (
               <marker key={kind} id={`constellation-arrow-${kind}`} viewBox='0 0 10 10' refX='8' refY='5' markerWidth='7' markerHeight='7' markerUnits='userSpaceOnUse' orient='auto'>
@@ -642,7 +645,7 @@ export default function ZoneConstellation({ nodes, edges, onSelectZone, onEnterZ
           </defs>
           {/* The two orbits, in the divider colour of the theme. */}
           <Box component='g' aria-hidden sx={{ color: 'divider' }}>
-            {rings.map((_, i) => <path key={i} ref={el => { ringEls.current[i] = el }} className='constellation-orbit' />)}
+            {ORBITS.map((orbit, i) => <path key={orbit} ref={el => { ringEls.current[i] = el }} className='constellation-orbit' />)}
           </Box>
           {arcs.map(arc => {
             const style = arc.edge.style ?? {}

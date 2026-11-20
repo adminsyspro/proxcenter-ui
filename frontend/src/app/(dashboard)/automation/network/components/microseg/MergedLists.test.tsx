@@ -160,6 +160,33 @@ describe('uncovered traffic of a shared policy', () => {
   })
 })
 
+describe('the filter of the map of a shared policy', () => {
+  it('offers the clusters and names the cluster of each Proxmox node and guest; a cluster picked keeps its guests', async () => {
+    window.localStorage.setItem('microseg.subTab', 'overview')
+    mock.routes['GET /clusters'] = () => reply(200, { clusters: [link('c1'), link('c2')], max: 8 })
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('zd', { name: 'db' }), zone('zw', { name: 'web' })], last_revision: REVISION_HEAD, clusters: [link('c1'), link('c2')] }))
+    mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: [vm(100, 'db-prod', ['zone-db'], { node: 'pve1' })] } })
+    mock.routes['GET /api/v1/vms?connId=c2'] = () => reply(200, { data: { vms: [vm(200, 'web-dr', ['zone-web'], { node: 'pve1' })] } })
+    mock.routes[`GET ${C2}/status`] = () => reply(200, status())
+    mock.routes['GET /suggestions?status=pending&limit=200'] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
+    renderTab(<MicrosegTab connectionId='c1' connections={CONNECTIONS} />)
+    const field = await screen.findByRole('combobox', { name: 'Filter the map' })
+    await waitFor(() => expect(screen.queryByTestId('node-guest:zw:c2/qemu/200') ?? screen.queryByTestId('node-zone:zw')).toBeTruthy())
+    field.focus()
+    fireEvent.keyDown(field, { key: 'ArrowDown' })
+    const labels = async () => (await screen.findAllByRole('option')).map(o => o.getAttribute('aria-label'))
+    await waitFor(async () => expect(await labels()).toContain('PVE-DR, cluster, 1 running guest'))
+    expect(await labels()).toContain('PVE-PROD, cluster, 1 running guest')
+    // Two clusters may each have a "pve1": each option says its cluster.
+    const nodes = screen.getAllByRole('option').filter(o => (o.getAttribute('aria-label') ?? '').startsWith('pve1, Proxmox node'))
+    expect(nodes).toHaveLength(2)
+    expect(nodes.map(o => within(o).getByText(/^PVE-/).textContent).sort((a, b) => a!.localeCompare(b!))).toEqual(['PVE-DR', 'PVE-PROD'])
+    fireEvent.click(screen.getByRole('option', { name: 'PVE-DR, cluster, 1 running guest' }))
+    await waitFor(() => expect(screen.queryByTestId('node-zone:zd')).toBeNull())
+    expect(screen.getByTestId('node-zone:zw')).toBeTruthy()
+  })
+})
+
 describe('ignored drifts of a shared policy', () => {
   const same: MicrosegDrift = { kind: 'unzoned_running', guest: g(100) }
   const stored = (conn: string) => JSON.parse(window.localStorage.getItem(`microseg.ignoredDrifts.${conn}`) ?? '[]') as string[]

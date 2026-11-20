@@ -18,6 +18,7 @@ import { findCustomImageForTenant, isProviderImageSlug } from "@/lib/templates/c
 import { findBlueprintForTenant, CATALOG_NOT_GRANTED_IMAGE, CATALOG_NOT_GRANTED_BLUEPRINT } from "@/lib/templates/catalogGrants"
 import { authorizeImageVolume, imageSourceForConnection, SourceVolumeError, type ImageVolumeSource } from '@/lib/templates/sourceVolume'
 import { resolveBuiltInImage } from "@/lib/templates/catalogStore"
+import { BUILT_IN_CATALOG_HIDDEN, isBuiltInCatalogHidden } from "@/lib/templates/builtInCatalogAccess"
 import { supportsVmDisks } from "@/lib/proxmox/storage"
 import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { validateCpuAgainstPolicy, isPolicyRestrictive, resolveAllowedCpuModels, pickPolicyDefaultModel, parseCpuProperty } from "@/lib/vdc/computePolicy"
@@ -146,6 +147,11 @@ async function handlePost(req: Request) {
     // "Unknown image slug"; a provider slug outside the grants is a 403, so a
     // revoked entry is refused here and not only hidden from the list.
     let image = (await resolveBuiltInImage(body.imageSlug)) as any
+    // The catalogue the caller picked from: a tenant the provider removed the
+    // built-in catalogue from cannot deploy one of its images through the API.
+    if (image && await isBuiltInCatalogHidden(callerTenantId)) {
+      return NextResponse.json({ error: BUILT_IN_CATALOG_HIDDEN }, { status: 403 })
+    }
     let isCustom = false
     // Built-in and provider catalogue images are provider content; a tenant's
     // own image is not, which narrows where it may be staged (#1120).

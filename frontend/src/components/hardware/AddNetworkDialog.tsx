@@ -27,11 +27,16 @@ import {
 
 import AppDialogTitle from '@/components/ui/AppDialogTitle'
 import { useNicIdentityPermissions } from '@/hooks/useNicIdentityPermissions'
+import { normalizeVlanTrunks, trunksHelper } from './vlanTrunks'
+import VlanTrunksPicker from './VlanTrunksPicker'
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
 import BridgePicker from './BridgePicker'
 import { FALLBACK_BRIDGES, bridgeEntryOption, toBridgeEntries, type BridgeEntry } from './bridgeChoices'
 
 // ==================== ADD NETWORK DIALOG ====================
+/** A checkbox row of the NIC dialogs: the box sits on the left edge of its column. */
+const CHECKBOX_ROW_SX = { m: 0, '& .MuiCheckbox-root': { ml: '-5px' } } as const
+
 type AddNetworkDialogProps = {
   open: boolean
   onClose: () => void
@@ -63,6 +68,8 @@ export function AddNetworkDialog({ open, onClose, onSave, connId, node, vmid, vm
   const [netIndex, setNetIndex] = useState(0)
   const [bridge, setBridge] = useState('vmbr0')
   const [vlanTag, setVlanTag] = useState('')
+  const [vlanTrunks, setVlanTrunks] = useState('')
+  const trunks = normalizeVlanTrunks(vlanTrunks)
   const [macAddress, setMacAddress] = useState('')
   const [firewall, setFirewall] = useState(true)
   const [disconnect, setDisconnect] = useState(false)
@@ -147,6 +154,12 @@ return match ? Number.parseInt(match[1]) : -1
     setNetIndex(nextIndex)
   }, [open, existingNets])
 
+  // Proxmox VE refuses to start a guest with trunks on a Linux bridge that is
+  // not VLAN aware: such trunks are refused here instead.
+  const trunksUnsupported = bridges.find(b => b.iface === bridge)?.vlanAware === false
+  // Only someone who may change the trunks is held to it.
+  const trunksBlocked = canEditVlan && trunksUnsupported && trunks.value !== ''
+
   const handleSave = async () => {
     setSaving(true)
     setError(null)
@@ -162,6 +175,7 @@ return match ? Number.parseInt(match[1]) : -1
         parts.push(`bridge=${bridge}`)
         if (canEditMac && macAddress) parts.push(`hwaddr=${macAddress}`)
         if (canEditVlan && vlanTag) parts.push(`tag=${vlanTag}`)
+        if (canEditVlan && trunks.value) parts.push(`trunks=${trunks.value}`)
         parts.push(`firewall=${firewall ? 1 : 0}`)
         if (ipv4Mode === 'dhcp') {
           parts.push('ip=dhcp')
@@ -186,6 +200,7 @@ return match ? Number.parseInt(match[1]) : -1
         netConfig = `${model},bridge=${bridge}`
         if (canEditMac && macAddress) netConfig += `,macaddr=${macAddress}`
         if (canEditVlan && vlanTag) netConfig += `,tag=${vlanTag}`
+        if (canEditVlan && trunks.value) netConfig += `,trunks=${trunks.value}`
         if (firewall) netConfig += ',firewall=1'
         if (disconnect) netConfig += ',link_down=1'
         if (rateLimit) netConfig += `,rate=${rateLimit}`
@@ -253,8 +268,8 @@ return match ? Number.parseInt(match[1]) : -1
             <BridgePicker options={bridgeOptions} value={bridge} onChange={setBridge} label="Bridge" disabled={bridgesLoading} />
           )}
 
-          {/* VLAN & MAC (QEMU) / VLAN alone (LXC) */}
-          {isLxc ? (
+          {/* One line: VLAN tag and trunks, then the MAC (QEMU only, the LXC MAC sits above) */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: isLxc ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))', gap: 2 }}>
             <TextField
               size="small"
               label="VLAN Tag"
@@ -265,21 +280,16 @@ return match ? Number.parseInt(match[1]) : -1
               onChange={(e) => setVlanTag(e.target.value)}
               type="number"
               inputProps={{ min: 1, max: 4094 }}
-              fullWidth
             />
-          ) : (
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-              <TextField
-                size="small"
-                label="VLAN Tag"
-                placeholder="no VLAN"
-                value={canEditVlan ? vlanTag : ''}
-                disabled={!canEditVlan}
-                helperText={!canEditVlan ? t('hardware.nicVlanPermissionRequired') : undefined}
-                onChange={(e) => setVlanTag(e.target.value)}
-                type="number"
-                inputProps={{ min: 1, max: 4094 }}
-              />
+            <VlanTrunksPicker
+              value={canEditVlan ? vlanTrunks : ''}
+              onChange={setVlanTrunks}
+              choices={bridges.find(b => b.iface === bridge)?.trunkVlans}
+              disabled={!canEditVlan || (trunksUnsupported && !vlanTrunks)}
+              error={!trunks.valid || trunksBlocked}
+              helperText={trunksHelper(t, trunks.valid, trunksUnsupported, bridge)}
+            />
+            {!isLxc && (
               <TextField
                 size="small"
                 label="MAC address"
@@ -289,8 +299,8 @@ return match ? Number.parseInt(match[1]) : -1
                 helperText={!canEditMac ? t('hardware.nicMacPermissionRequired') : undefined}
                 onChange={(e) => setMacAddress(e.target.value)}
               />
-            </Box>
-          )}
+            )}
+          </Box>
 
           {/* LXC: IPv4 + IPv6 sections */}
           {isLxc && (
@@ -362,23 +372,26 @@ return match ? Number.parseInt(match[1]) : -1
             </>
           )}
 
-          {/* Checkboxes */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+          {/* Checkboxes: on the columns of the fields above, each box on the
+              left edge of its column (no MUI negative margin, the Stack resets
+              it on some children only). */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: isLxc ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))', columnGap: 2, rowGap: 0.5 }}>
             <FormControlLabel
+              sx={CHECKBOX_ROW_SX}
               control={<Checkbox checked={firewall} onChange={(e) => setFirewall(e.target.checked)} size="small" />}
               label="Firewall"
             />
             <FormControlLabel
+              sx={CHECKBOX_ROW_SX}
               control={<Checkbox checked={disconnect} onChange={(e) => setDisconnect(e.target.checked)} size="small" />}
               label="Disconnect"
             />
+            <FormControlLabel
+              sx={CHECKBOX_ROW_SX}
+              control={<Checkbox checked={showAdvanced} onChange={(e) => setShowAdvanced(e.target.checked)} size="small" />}
+              label="Advanced"
+            />
           </Box>
-
-          {/* Advanced toggle */}
-          <FormControlLabel
-            control={<Checkbox checked={showAdvanced} onChange={(e) => setShowAdvanced(e.target.checked)} size="small" />}
-            label="Advanced"
-          />
 
           {showAdvanced && (
             <>
@@ -425,7 +438,7 @@ return match ? Number.parseInt(match[1]) : -1
 
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={saving}>{t('common.cancel')}</Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving || nicPermissionsLoading}>
+        <Button variant="contained" onClick={handleSave} disabled={saving || nicPermissionsLoading || !trunks.valid || trunksBlocked}>
           {saving ? <CircularProgress size={20} /> : t('common.add')}
         </Button>
       </DialogActions>

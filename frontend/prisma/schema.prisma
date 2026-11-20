@@ -761,6 +761,9 @@ model Tenant {
   // The tenant manages its own service accounts and API tokens (issue #1404),
   // within its admins' rights; the provider opens it per tenant.
   apiSelfService Boolean @default(false) @map("api_self_service")
+  // The built-in image catalogue (Ubuntu, Debian...) is shown to this tenant.
+  // The provider turns it off to leave only its own images and the tenant's.
+  builtInCatalog Boolean @default(true) @map("built_in_catalog")
   createdBy   String?  @map("created_by")
   createdAt   DateTime @map("created_at")
   updatedAt   DateTime @map("updated_at")

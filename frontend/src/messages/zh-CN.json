@@ -8413,6 +8413,14 @@
     "loadNodesError": "无法加载节点列表",
     "nicMacPermissionRequired": "更改 MAC 地址需要提供商授权。",
     "nicVlanPermissionRequired": "更改 VLAN 设置需要提供商授权。",
+    "nicVlanTrunksInvalid": "1-4094，例如 10;20-25",
+    "nicTrunksNotVlanAware": "{bridge} 未启用 VLAN aware",
+    "nicTrunkSource": {
+      "sdn": "SDN VLAN 网络",
+      "iface": "主机 VLAN 接口",
+      "vdc": "vDC VLAN 池",
+      "bridge": "网桥的 VLAN"
+    },
     "nicOriginalUnavailable": "保存前请重新加载网络配置。",
     "snapshotMigration": {
       "title": "快照阻止了此次迁移",
@@ -11135,6 +11143,8 @@
     "lockedHint": "租户用户将失去 UI 访问权限。Proxmox 资源、备份和 IPAM 均保留，且操作可逆。",
     "apiSelfService": "租户自行管理其服务帐户和 API 令牌",
     "apiSelfServiceHelp": "其管理员只能在自身权限范围内创建，不能使用提供商范围。您仍可查看和撤销它们。",
+    "builtInCatalog": "内置镜像目录",
+    "builtInCatalogHelp": "向此租户显示 ProxCenter 镜像（Ubuntu、Debian…）。关闭后，它只能看到您共享或授予它的镜像以及它自己的镜像。从 ISO 创建虚拟机不受影响。",
     "users": "用户",
     "addUser": "添加用户",
     "searchUser": "按名称或邮箱搜索...",

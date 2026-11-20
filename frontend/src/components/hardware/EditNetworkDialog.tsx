@@ -34,8 +34,13 @@ import { mergeNetworkConfig } from './networkConfig'
 import BridgePicker from './BridgePicker'
 import { FALLBACK_BRIDGES, bridgeEntryOption, toBridgeEntries, type BridgeEntry } from './bridgeChoices'
 import { QEMU_NIC_MODELS } from '@/lib/rbac/nicPermissions'
+import { normalizeVlanTrunks, trunksHelper } from './vlanTrunks'
+import VlanTrunksPicker from './VlanTrunksPicker'
 
 // ==================== EDIT NETWORK DIALOG ====================
+/** A checkbox row of the NIC dialogs: the box sits on the left edge of its column. */
+const CHECKBOX_ROW_SX = { m: 0, '& .MuiCheckbox-root': { ml: '-5px' } } as const
+
 type EditNetworkDialogProps = {
   open: boolean
   onClose: () => void
@@ -53,6 +58,8 @@ type EditNetworkDialogProps = {
     rawValue?: string
     tag?: number
     vlan?: number
+    /** VLAN trunks in the Proxmox VE syntax ('225;230;605-606'). */
+    trunks?: string
     firewall?: boolean
     linkDown?: boolean
     rate?: number
@@ -107,6 +114,7 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
   // Network config — common
   const [bridge, setBridge] = useState('vmbr0')
   const [vlanTag, setVlanTag] = useState('')
+  const [vlanTrunks, setVlanTrunks] = useState('')
   const [macAddress, setMacAddress] = useState('')
   const [firewall, setFirewall] = useState(true)
   const [disconnect, setDisconnect] = useState(false)
@@ -157,6 +165,10 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
       setBridge(network.bridge || 'vmbr0')
       setModel(network.model || network.rawValue?.split(',').map(part => part.split('=')[0]).find(key => QEMU_NIC_MODELS.has(key)) || 'virtio')
       setVlanTag((network.tag ?? network.vlan) ? String(network.tag ?? network.vlan) : '')
+      // From rawValue when the caller does not pass it: an empty field saved
+      // with the VLAN right removes the trunks, so it must never start blank
+      // on a trunk NIC.
+      setVlanTrunks(network.trunks ?? network.rawValue?.split(',').find(part => part.startsWith('trunks='))?.slice('trunks='.length) ?? '')
       // QEMU parser stores the MAC in `macaddr`, LXC parser in `macaddr` too,
       // but old callers may still pass `mac`.
       setMacAddress(network.macaddr || network.mac || '')
@@ -184,6 +196,13 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
     }
   }, [open, network])
 
+  const trunks = normalizeVlanTrunks(vlanTrunks)
+  // Proxmox VE refuses to start a guest with trunks on a Linux bridge that is
+  // not VLAN aware: such trunks are refused here instead.
+  const trunksUnsupported = bridges.find(b => b.iface === bridge)?.vlanAware === false
+  // Only someone who may change the trunks is held to it.
+  const trunksBlocked = canEditVlan && trunksUnsupported && trunks.value !== ''
+
   const handleSave = async () => {
     if (!network) return
 
@@ -208,6 +227,7 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
         parts.push(`bridge=${bridge}`)
         if (macAddress) parts.push(`hwaddr=${macAddress}`)
         if (!isSdnVnet && vlanTag) parts.push(`tag=${vlanTag}`)
+        if (!isSdnVnet && trunks.value) parts.push(`trunks=${trunks.value}`)
         parts.push(`firewall=${firewall ? 1 : 0}`)
         // IPv4
         if (ipv4Mode === 'dhcp') {
@@ -235,6 +255,7 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
         netConfig = `${model},bridge=${bridge}`
         if (macAddress) netConfig += `,macaddr=${macAddress}`
         if (!isSdnVnet && vlanTag) netConfig += `,tag=${vlanTag}`
+        if (!isSdnVnet && trunks.value) netConfig += `,trunks=${trunks.value}`
         if (firewall) netConfig += ',firewall=1'
         if (disconnect) netConfig += ',link_down=1'
         if (rateLimit) netConfig += `,rate=${rateLimit}`
@@ -245,7 +266,7 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
       const original = network.rawValue
       if (!original) throw new Error(t('hardware.nicOriginalUnavailable'))
       netConfig = mergeNetworkConfig(original, netConfig, vmType, [
-        'bridge', 'tag', 'firewall', 'link_down', 'rate', 'mtu',
+        'bridge', 'tag', 'trunks', 'firewall', 'link_down', 'rate', 'mtu',
         ...(isLxc ? ['name', 'ip', 'gw', 'ip6', 'gw6', 'host-managed'] : ['queues']),
       ], nicPermissions)
       await onSave({ [network.id]: netConfig })
@@ -348,43 +369,46 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
                 type="number"
                 disabled={isSdnVnet || !canEditVlan}
                 helperText={!canEditVlan ? t('hardware.nicVlanPermissionRequired') : isSdnVnet ? 'Use a separate VNet to segment traffic' : undefined}
-                fullWidth={isLxc}
+                fullWidth
               />
             )
-            if (isLxc) {
-              return isSdnVnet ? (
-                <Tooltip
-                  arrow
-                  placement="top"
-                  title="VLAN tagging on a NIC isn't supported on VXLAN SDN VNets — each VNet is already its own isolated L2 domain (VNI). To split traffic, create a second VNet instead of tagging a NIC here."
-                >
-                  <span>{tagField}</span>
-                </Tooltip>
-              ) : (
-                tagField
-              )
-            }
+            const trunksField = (
+              <VlanTrunksPicker
+                value={isSdnVnet ? '' : vlanTrunks}
+                onChange={setVlanTrunks}
+                choices={selectedBridge?.trunkVlans}
+                disabled={isSdnVnet || !canEditVlan || (trunksUnsupported && !vlanTrunks)}
+                error={!trunks.valid || trunksBlocked}
+                helperText={trunksHelper(t, trunks.valid, trunksUnsupported, bridge)}
+              />
+            )
+            const tagCell = isSdnVnet ? (
+              <Tooltip
+                arrow
+                placement="top"
+                title="VLAN tagging on a NIC isn't supported on VXLAN SDN VNets — each VNet is already its own isolated L2 domain (VNI). To split traffic, create a second VNet instead of tagging a NIC here."
+              >
+                <span style={{ display: 'block' }}>{tagField}</span>
+              </Tooltip>
+            ) : (
+              tagField
+            )
+            // One line: tag and trunks side by side, then the MAC (QEMU only,
+            // the LXC MAC sits on the first line).
             return (
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-                {isSdnVnet ? (
-                  <Tooltip
-                    arrow
-                    placement="top"
-                    title="VLAN tagging on a NIC isn't supported on VXLAN SDN VNets — each VNet is already its own isolated L2 domain (VNI). To split traffic, create a second VNet instead of tagging a NIC here."
-                  >
-                    <span>{tagField}</span>
-                  </Tooltip>
-                ) : (
-                  tagField
+              <Box sx={{ display: 'grid', gridTemplateColumns: isLxc ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))', gap: 2 }}>
+                {tagCell}
+                {trunksField}
+                {!isLxc && (
+                  <TextField
+                    size="small"
+                    label="MAC address"
+                    value={macAddress}
+                    disabled={!canEditMac}
+                    helperText={!canEditMac ? t('hardware.nicMacPermissionRequired') : undefined}
+                    onChange={(e) => setMacAddress(e.target.value)}
+                  />
                 )}
-                <TextField
-                  size="small"
-                  label="MAC address"
-                  value={macAddress}
-                  disabled={!canEditMac}
-                  helperText={!canEditMac ? t('hardware.nicMacPermissionRequired') : undefined}
-                  onChange={(e) => setMacAddress(e.target.value)}
-                />
               </Box>
             )
           })()}
@@ -459,23 +483,26 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
             </>
           )}
 
-          {/* Checkboxes */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+          {/* Checkboxes: on the columns of the fields above, each box on the
+              left edge of its column (no MUI negative margin, the Stack resets
+              it on some children only). */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: isLxc ? 'repeat(2, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))', columnGap: 2, rowGap: 0.5 }}>
             <FormControlLabel
+              sx={CHECKBOX_ROW_SX}
               control={<Checkbox checked={firewall} onChange={(e) => setFirewall(e.target.checked)} size="small" />}
               label="Firewall"
             />
             <FormControlLabel
+              sx={CHECKBOX_ROW_SX}
               control={<Checkbox checked={disconnect} onChange={(e) => setDisconnect(e.target.checked)} size="small" />}
               label="Disconnect"
             />
+            <FormControlLabel
+              sx={CHECKBOX_ROW_SX}
+              control={<Checkbox checked={showAdvanced} onChange={(e) => setShowAdvanced(e.target.checked)} size="small" />}
+              label="Advanced"
+            />
           </Box>
-
-          {/* Advanced */}
-          <FormControlLabel
-            control={<Checkbox checked={showAdvanced} onChange={(e) => setShowAdvanced(e.target.checked)} size="small" />}
-            label="Advanced"
-          />
 
           {showAdvanced && (
             <>
@@ -528,7 +555,7 @@ export function EditNetworkDialog({ open, onClose, onSave, onDelete, connId, nod
         </Button>
         <Box>
           <Button onClick={onClose} disabled={saving || deleting} sx={{ mr: 1 }}>{t('common.cancel')}</Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving || deleting || nicPermissions.loading || !network.rawValue}>
+          <Button variant="contained" onClick={handleSave} disabled={saving || deleting || nicPermissions.loading || !network.rawValue || !trunks.valid || trunksBlocked}>
             {saving ? <CircularProgress size={20} /> : t('common.save')}
           </Button>
         </Box>

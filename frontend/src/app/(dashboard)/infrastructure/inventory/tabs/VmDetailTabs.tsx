@@ -1762,6 +1762,7 @@ export default function VmDetailTabs(props: any) {
                                         mac: net.macaddr,
                                         macaddr: net.macaddr,
                                         vlan: net.tag,
+                                        trunks: net.trunks,
                                         firewall: net.firewall,
                                         linkDown: net.linkDown,
                                         rate: net.rate,
@@ -1812,6 +1813,7 @@ export default function VmDetailTabs(props: any) {
                                       <Typography variant="caption" color="text.secondary">
                                         Bridge: {net.bridge}
                                         {net.tag && ` • VLAN: ${net.tag}`}
+                                        {net.trunks && ` • Trunks: ${net.trunks}`}
                                         {net.rate && ` • Limit: ${net.rate} MB/s`}
                                         {net.macaddr && (
                                           <>

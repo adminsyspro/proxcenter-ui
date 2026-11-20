@@ -7,6 +7,7 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { prisma } from "@/lib/db/prisma"
 import { resolveScopeTenant, scopeTenantInfrastructure } from "@/lib/vdc/providerTarget"
+import { bridgeAcceptsTrunks, trunkVlanChoices, type TrunkVlanChoice } from "@/lib/network/trunkVlanChoices"
 
 export const runtime = "nodejs"
 
@@ -90,40 +91,67 @@ export async function GET(req: Request, ctx: RouteContext) {
 
     type Choice =
       | { kind: "vnet"; name: string; displayName: string; vdc: string; vdcId: string | null; zone: string; subnet: SubnetInfo | null }
-      | { kind: "shared"; name: string; label: string | null; vlanRanges: [number, number][] }
-      | { kind: "bridge"; name: string; type: string; mtu?: number }
+      | { kind: "shared"; name: string; label: string | null; vlanRanges: [number, number][]; trunkVlans: TrunkVlanChoice[] }
+      | { kind: "bridge"; name: string; type: string; mtu?: number; vlanAware?: boolean; trunkVlans: TrunkVlanChoice[] }
 
     const choices: Choice[] = []
 
     if (scope === null) {
-      // Super admin or tenant without vDC - return all physical bridges + all VNets
-      const ifaces = await pveFetch<any[]>(pveConn, `/nodes/${encodeURIComponent(node)}/network`)
+      // vDC names and pools are read by whoever may list the vDCs (the
+      // provider's vDC admin, as /api/v1/admin/vdcs): another caller of this
+      // branch (an MSP on its own cluster, a narrowly scoped provider user)
+      // gets the bridge and SDN VLANs only.
+      const seesVdcPools = infra.kind === 'provider' && !(await checkPermission(PERMISSIONS.ADMIN_SETTINGS_VIEW))
+      // Super admin or tenant without vDC - return all physical bridges + all VNets.
+      // The SDN zones and the vDC VLAN pools only feed the trunk VLAN list of
+      // each bridge: one more light GET per dialog opening, read in parallel.
+      const [ifaces, vnets, zones, pools] = await Promise.all([
+        pveFetch<any[]>(pveConn, `/nodes/${encodeURIComponent(node)}/network`),
+        pveFetch<any[]>(pveConn, "/cluster/sdn/vnets").catch(() => null),
+        pveFetch<any[]>(pveConn, "/cluster/sdn/zones").catch(() => []),
+        !seesVdcPools ? Promise.resolve([]) : prisma.vdcVlanPool.findMany({
+          where: { vdc: { connectionId: connId } },
+          select: { bridge: true, rangeStart: true, rangeEnd: true, vdc: { select: { name: true } } },
+          orderBy: { rangeStart: 'asc' },
+        }).catch(() => []),
+      ])
+      const trunkSources = {
+        ifaces: ifaces || [],
+        zones: zones || [],
+        vnets: vnets || [],
+        pools: (pools || []).map(p => ({ bridge: p.bridge, rangeStart: p.rangeStart, rangeEnd: p.rangeEnd, vdcName: p.vdc?.name ?? null })),
+      }
       for (const ifc of ifaces || []) {
         if (ifc.type !== "bridge" && ifc.type !== "OVSBridge") continue
         // PVE only reports an MTU declared in /etc/network/interfaces (#1194).
         const mtu = Number(ifc.mtu)
-        choices.push({ kind: "bridge", name: ifc.iface, type: ifc.type, ...(mtu > 0 ? { mtu } : {}) })
+        const vlanAware = bridgeAcceptsTrunks(ifc)
+        choices.push({
+          kind: "bridge",
+          name: ifc.iface,
+          type: ifc.type,
+          ...(mtu > 0 ? { mtu } : {}),
+          ...(vlanAware === undefined ? {} : { vlanAware }),
+          trunkVlans: trunkVlanChoices(ifc.iface, trunkSources),
+        })
       }
-      try {
-        const vnets = await pveFetch<any[]>(pveConn, "/cluster/sdn/vnets")
-        for (const v of vnets || []) {
-          // PVE returns alias when set (we set it to display_name on create);
-          // fall back to the bare ID for legacy/externally-managed VNets.
-          choices.push({
-            kind: "vnet",
-            name: v.vnet,
-            displayName: v.alias ?? v.vnet,
-            vdc: "*",
-            // Super-admin (no scope filter) sees PVE VNets directly —
-            // the matching ProxCenter vDC isn't always 1-to-1, so we
-            // leave vdcId null. Endpoints that need a specific vDC
-            // shouldn't be reachable via this path anyway.
-            vdcId: null,
-            zone: v.zone,
-            subnet: subnetByPveName.get(v.vnet) ?? null,
-          })
-        }
-      } catch {}
+      for (const v of vnets || []) {
+        // PVE returns alias when set (we set it to display_name on create);
+        // fall back to the bare ID for legacy/externally-managed VNets.
+        choices.push({
+          kind: "vnet",
+          name: v.vnet,
+          displayName: v.alias ?? v.vnet,
+          vdc: "*",
+          // Super-admin (no scope filter) sees PVE VNets directly —
+          // the matching ProxCenter vDC isn't always 1-to-1, so we
+          // leave vdcId null. Endpoints that need a specific vDC
+          // shouldn't be reachable via this path anyway.
+          vdcId: null,
+          zone: v.zone,
+          subnet: subnetByPveName.get(v.vnet) ?? null,
+        })
+      }
     } else {
       // Tenant with vDC(s) on this connection
       const allowedVnets = scope.vnetsByConnection.get(connId) ?? new Set<string>()
@@ -185,7 +213,10 @@ export async function GET(req: Request, ctx: RouteContext) {
           arr.push([p.rangeStart, p.rangeEnd])
         }
         for (const bridge of allowedShared) {
-          choices.push({ kind: "shared", name: bridge, label: labelMap.get(bridge) ?? null, vlanRanges: rangesByBridge.get(bridge) ?? [] })
+          const vlanRanges = rangesByBridge.get(bridge) ?? []
+          // A tenant's trunks stay inside its own pools (validateNetAgainstScope).
+          const trunkVlans = vlanRanges.map(([start, end]) => ({ value: start === end ? String(start) : `${start}-${end}`, source: 'vdc' as const }))
+          choices.push({ kind: "shared", name: bridge, label: labelMap.get(bridge) ?? null, vlanRanges, trunkVlans })
         }
       }
     }

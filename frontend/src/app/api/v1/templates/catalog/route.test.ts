@@ -4,6 +4,7 @@ const checkPermissionMock = vi.fn<(...a: any[]) => Promise<any>>()
 const getCurrentTenantIdMock = vi.fn<() => Promise<string>>()
 const findManyMock = vi.fn<(...a: any[]) => Promise<any[]>>()
 const getEffectiveCatalogMock = vi.fn<() => Promise<any>>()
+const isBuiltInCatalogHiddenMock = vi.fn<(tenantId: string) => Promise<boolean>>()
 
 vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
@@ -18,6 +19,15 @@ vi.mock('@/lib/db/prisma', () => ({
 }))
 vi.mock('@/lib/templates/catalogStore', () => ({
   getEffectiveCatalog: () => getEffectiveCatalogMock(),
+}))
+
+// A tenant's custom rows go through its vDC grants first; none here.
+vi.mock('@/lib/templates/catalogGrants', async (io) => ({
+  ...(await io<typeof import('@/lib/templates/catalogGrants')>()),
+  granteeVdcIds: async () => [],
+}))
+vi.mock('@/lib/templates/builtInCatalogAccess', () => ({
+  isBuiltInCatalogHidden: (tenantId: string) => isBuiltInCatalogHiddenMock(tenantId),
 }))
 
 import { GET } from './route'
@@ -37,6 +47,7 @@ beforeEach(() => {
   checkPermissionMock.mockReset().mockResolvedValue(null)
   getCurrentTenantIdMock.mockReset().mockResolvedValue('default')
   findManyMock.mockReset().mockResolvedValue([])
+  isBuiltInCatalogHiddenMock.mockReset().mockResolvedValue(false)
   getEffectiveCatalogMock.mockReset().mockResolvedValue({
     images: [img('ubuntu-2404', 'ubuntu'), img('debian-13', 'debian')],
     vendors: [{ id: 'ubuntu', name: 'Ubuntu', icon: 'ri-ubuntu-fill' }, { id: 'debian', name: 'Debian', icon: 'ri-debian-fill' }],
@@ -100,5 +111,32 @@ describe('GET /api/v1/templates/catalog', () => {
     checkPermissionMock.mockResolvedValue(denied)
     const res = await GET(new Request('http://localhost/api/v1/templates/catalog'))
     expect(res.status).toBe(403)
+  })
+})
+
+describe('GET /api/v1/templates/catalog: built-in catalogue turned off for a tenant', () => {
+  const customRow = {
+    slug: 'custom-fortigate', name: 'Fortigate', vendor: 'debian', version: '', arch: 'amd64', format: 'qcow2', sourceType: 'volume',
+    downloadUrl: '', checksumUrl: null, volumeId: 'nfs:import/fortios.qcow2', defaultDiskSize: '20G',
+    minMemory: 512, recommendedMemory: 2048, minCores: 1, recommendedCores: 2, ostype: 'l26', tags: null, isShared: true, tenantId: 'default',
+  }
+
+  it('lists only the provider and tenant images, with their vendors and no catalogue meta', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('tenant-1')
+    isBuiltInCatalogHiddenMock.mockResolvedValue(true)
+    findManyMock.mockResolvedValue([customRow, { ...customRow, slug: 'custom-win', vendor: 'windows', tenantId: 'tenant-1' }])
+    const body = await (await GET(new Request('http://localhost/api/v1/templates/catalog'))).json()
+    expect(isBuiltInCatalogHiddenMock).toHaveBeenCalledWith('tenant-1')
+    expect(body.data.images.map((i: any) => i.slug)).toEqual(['custom-fortigate', 'custom-win'])
+    // debian survives as the vendor of a custom image, ubuntu is gone, windows is appended.
+    expect(body.data.vendors.map((v: any) => v.id)).toEqual(['debian', 'windows'])
+    expect(body.data.meta).toBeNull()
+  })
+
+  it('keeps the catalogue for a tenant where it is on', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('tenant-1')
+    const body = await (await GET(new Request('http://localhost/api/v1/templates/catalog'))).json()
+    expect(body.data.images.map((i: any) => i.slug)).toEqual(['ubuntu-2404', 'debian-13'])
+    expect(body.data.meta).not.toBeNull()
   })
 })

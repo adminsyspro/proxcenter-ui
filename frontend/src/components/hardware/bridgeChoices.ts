@@ -2,6 +2,8 @@
 // (NIC add/edit, create VM/CT, template deploy, migration review). Pure: no
 // React, no fetch, so every dialog sorts and labels the same way (#195).
 
+import type { TrunkVlanChoice } from '@/lib/network/trunkVlanChoices'
+
 /** One row of a bridge picker, already shaped for display and search. */
 export type BridgePickerOption = {
   /** Value written into the NIC config (`bridge=<iface>`). */
@@ -19,7 +21,15 @@ export type BridgePickerOption = {
 }
 
 /** Entry kept by the NIC add/edit and create CT dialogs. */
-export type BridgeEntry = { iface: string; label: string; kind: 'vnet' | 'shared' | 'bridge' }
+export type BridgeEntry = {
+  iface: string
+  label: string
+  kind: 'vnet' | 'shared' | 'bridge'
+  /** false: a Linux bridge that is not VLAN aware, where PVE refuses trunks. Absent: unknown. */
+  vlanAware?: boolean
+  /** VLANs offered in the trunks picker for this bridge. */
+  trunkVlans?: TrunkVlanChoice[]
+}
 
 /** Offered when the node's network list cannot be read. */
 export const FALLBACK_BRIDGES: readonly BridgeEntry[] = [
@@ -82,6 +92,8 @@ export function toBridgeEntries(data: unknown): BridgeEntry[] {
       iface: str(c.name),
       label: networkChoiceLabel(c),
       kind: c.kind === 'vnet' || c.kind === 'shared' ? c.kind : 'bridge',
+      ...(typeof c.vlanAware === 'boolean' ? { vlanAware: c.vlanAware } : {}),
+      ...(Array.isArray(c.trunkVlans) ? { trunkVlans: c.trunkVlans as TrunkVlanChoice[] } : {}),
     }))
 }
 

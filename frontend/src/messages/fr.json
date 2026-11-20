@@ -8413,6 +8413,14 @@
     "loadNodesError": "Impossible de charger la liste des nodes",
     "nicMacPermissionRequired": "La modification de l’adresse MAC nécessite l’autorisation du fournisseur.",
     "nicVlanPermissionRequired": "La modification du VLAN nécessite l’autorisation du fournisseur.",
+    "nicVlanTrunksInvalid": "1-4094, ex. 10;20-25",
+    "nicTrunksNotVlanAware": "{bridge} n'est pas VLAN aware",
+    "nicTrunkSource": {
+      "sdn": "Réseaux VLAN SDN",
+      "iface": "Interfaces VLAN de l'hôte",
+      "vdc": "Pools VLAN des vDC",
+      "bridge": "VLAN du bridge"
+    },
     "nicOriginalUnavailable": "Rechargez la configuration réseau avant d’enregistrer.",
     "snapshotMigration": {
       "title": "Des snapshots bloquent cette migration",
@@ -11136,6 +11144,8 @@
     "lockedHint": "Les utilisateurs du tenant n'ont plus accès à l'UI. Ressources Proxmox, sauvegardes et IPAM préservés et réversibles.",
     "apiSelfService": "Le tenant gère ses comptes de service et jetons d'API",
     "apiSelfServiceHelp": "Ses administrateurs les créent dans la limite de leurs droits, jamais avec un scope fournisseur. Vous continuez de les voir et de les révoquer.",
+    "builtInCatalog": "Catalogue d'images intégré",
+    "builtInCatalogHelp": "Affiche les images ProxCenter (Ubuntu, Debian…) à ce tenant. Désactivé, il ne voit que vos images partagées ou accordées et les siennes. La création d'une VM depuis un ISO n'est pas concernée.",
     "users": "Utilisateurs",
     "addUser": "Ajouter un utilisateur",
     "searchUser": "Rechercher par nom ou email...",

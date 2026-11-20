@@ -86,7 +86,12 @@ export const TENANCY_WRITE_REQUEST_SCHEMAS: Record<string, Record<string, unknow
   TenantCreateRequest: {
     type: "object",
     required: ["name", "slug"],
-    properties: { ...TENANT_INPUT, operatingModel: { type: "string", enum: ["iaas", "msp"], description: "iaas by default; set once" } },
+    properties: {
+      ...TENANT_INPUT,
+      operatingModel: { type: "string", enum: ["iaas", "msp"], description: "iaas by default; set once" },
+      apiSelfService: { type: "boolean", description: "Off by default" },
+      builtInCatalog: { type: "boolean", description: "On by default" },
+    },
   },
   TenantUpdateRequest: {
     type: "object",
@@ -95,6 +100,7 @@ export const TENANCY_WRITE_REQUEST_SCHEMAS: Record<string, Record<string, unknow
       ...TENANT_INPUT,
       enabled: { type: "boolean" },
       apiSelfService: { type: "boolean", description: "Lets the tenant's admins manage its service accounts and API tokens, within their own rights" },
+      builtInCatalog: { type: "boolean", description: "Shows the built-in image catalogue to the tenant; off, it only sees the provider's images granted to it and its own" },
     },
   },
   TenantUserAddRequest: {

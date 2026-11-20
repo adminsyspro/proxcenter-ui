@@ -49,6 +49,11 @@ vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 const getImageBySlugMock = vi.fn<(...args: any[]) => any>()
 vi.mock('@/lib/templates/cloudImages', () => ({ customImageToCloudImage: vi.fn() }))
 vi.mock('@/lib/templates/catalogStore', () => ({ resolveBuiltInImage: getImageBySlugMock }))
+const isBuiltInCatalogHiddenMock = vi.fn<(tenantId: string) => Promise<boolean>>()
+vi.mock('@/lib/templates/builtInCatalogAccess', () => ({
+  BUILT_IN_CATALOG_HIDDEN: 'The built-in image catalogue is not available to this tenant',
+  isBuiltInCatalogHidden: (tenantId: string) => isBuiltInCatalogHiddenMock(tenantId),
+}))
 vi.mock('@/lib/templates/customImageScope', () => ({
   findCustomImageForTenant: findCustomImageForTenantMock,
   isProviderImageSlug: (...a: any[]) => isProviderImageSlugMock(...a),
@@ -136,6 +141,7 @@ beforeEach(async () => {
   getAllowedNetworksForTenantMock.mockReset().mockResolvedValue(null)
   getVdcScopeMock.mockReset().mockResolvedValue(null)
   getImageBySlugMock.mockReset().mockReturnValue(undefined)
+  isBuiltInCatalogHiddenMock.mockReset().mockResolvedValue(false)
   resolveVdcForTenantMock.mockReset().mockResolvedValue(null)
   checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })
   getCurrentTenantIdMock.mockReset().mockResolvedValue('tenant-1')
@@ -1314,5 +1320,34 @@ describe('POST templates/deploy: firmware, disk bus and HA (#181)', () => {
     await runAfters()
 
     expect(new URLSearchParams(haCalls()[0][2].body).get('state')).toBe('stopped')
+  })
+})
+
+describe('POST templates/deploy: built-in catalogue turned off for the tenant', () => {
+  const vdc = { vdcId: 'vdc-1', poolName: 'pool-a', quota: null }
+
+  it('403: a built-in image is refused through the API, before PVE', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    getImageBySlugMock.mockReturnValue({ slug: 'ubuntu-22.04', format: 'qcow2', url: 'https://img.test/u.qcow2' })
+    isBuiltInCatalogHiddenMock.mockResolvedValue(true)
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: baseBody })
+    expect(res.status).toBe(403)
+    expect((await readJson<{ error: string }>(res))?.error).toMatch(/built-in image catalogue/)
+    // The catalogue is the caller's: judged on the caller's tenant.
+    expect(isBuiltInCatalogHiddenMock).toHaveBeenCalledWith('tenant-1')
+    expect(pveFetchMock).not.toHaveBeenCalled()
+  })
+
+  it('a custom image of the tenant is not judged on the catalogue switch', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(vdc)
+    isBuiltInCatalogHiddenMock.mockResolvedValue(true)
+    findCustomImageForTenantMock.mockResolvedValue({
+      tenantId: 'default', slug: 'custom-fortigate', isShared: true, sourceType: 'volume', volumeId: 'nfs:import/fortios.qcow2',
+    })
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: { ...baseBody, imageSlug: 'custom-fortigate' } })
+    expect((await readJson<{ error: string }>(res))?.error).not.toMatch(/built-in image catalogue/)
+    expect(isBuiltInCatalogHiddenMock).not.toHaveBeenCalled()
   })
 })

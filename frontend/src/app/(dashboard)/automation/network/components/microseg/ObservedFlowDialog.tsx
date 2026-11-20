@@ -24,6 +24,8 @@ const CELL_SX = { py: 0.5, px: 1, whiteSpace: 'nowrap' } as const
 
 type Props = {
   connectionId: string
+  /** The clusters of a shared policy (the connection alone without it): the history of each one is summed. */
+  clusterIds?: readonly string[]
   suggestion: MicrosegSuggestion
   zones: Map<string, MicrosegZone>
   /** What the table calls the two ends (a zone, an address or "Unknown"). */
@@ -80,6 +82,7 @@ function Section({ title, aside, children }: Readonly<{ title: string; aside?: s
 
 type SectionProps = Readonly<{
   connectionId: string
+  clusterIds?: readonly string[]
   suggestion: MicrosegSuggestion
   ends: Ends
   srcZone: string
@@ -87,10 +90,10 @@ type SectionProps = Readonly<{
 }>
 
 /** The traffic between the two zones over the last 24 hours, one bar per hour (the history the tab already read). */
-function TrafficSection({ connectionId, suggestion: s, ends }: SectionProps) {
+function TrafficSection({ connectionId, clusterIds, suggestion: s, ends }: SectionProps) {
   const t = useTranslations('microsegPilot.observation')
   const format = useFormatter()
-  const { traffic, failed } = useZoneUncovered(connectionId)
+  const { traffic, failed } = useZoneUncovered(connectionId, clusterIds)
   if (failed) return null
 
   const series = traffic ? flowTrafficSeries(traffic, ends.guestZone, ends.otherZone, s.kind, s.direction === 'out' ? 'out' : 'in') : null
@@ -171,7 +174,7 @@ function RecentSection({ connectionId, suggestion: s, ends, srcZone, dstZone, gu
  * dialog opens, no Proxmox call), and the actions of a pending flow, "allow this flow only" among them when the flow
  * is between two known guests.
  */
-export default function ObservedFlowDialog({ connectionId, suggestion: s, zones, source, destination, busy, onResolve, guestName, exception, onClose }: Readonly<Props>) {
+export default function ObservedFlowDialog({ connectionId, clusterIds, suggestion: s, zones, source, destination, busy, onResolve, guestName, exception, onClose }: Readonly<Props>) {
   const t = useTranslations('microsegPilot.observation')
   const format = useFormatter()
   const when = (iso: string) => formatWhen(format, iso)
@@ -181,7 +184,7 @@ export default function ObservedFlowDialog({ connectionId, suggestion: s, zones,
   const service = serviceLabel(s.proto, s.dport)
   const outbound = s.direction === 'out'
   const ends = endsOf(t, outbound, srcZone, dstZone)
-  const sectionProps = { connectionId, suggestion: s, ends, srcZone, dstZone }
+  const sectionProps = { connectionId, clusterIds, suggestion: s, ends, srcZone, dstZone }
 
   return (
     <Dialog open onClose={onClose} maxWidth='md' fullWidth aria-labelledby='microseg-flow-title'>

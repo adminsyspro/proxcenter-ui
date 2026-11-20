@@ -3,6 +3,7 @@ import useSWR, { unstable_serialize, useSWRConfig } from 'swr'
 
 import { MicrosegApiError, microsegApi, microsegBaseUrl } from '@/lib/microseg/api'
 import type { MicrosegTraffic } from '@/lib/microseg/types'
+import { useMergedClusters, type ClusterRead } from '@/lib/microseg/useMerged'
 
 const HOUR_MS = 3_600_000
 
@@ -34,12 +35,6 @@ export function uncoveredByZone(traffic: Pick<MicrosegTraffic, 'buckets'>): Map<
   return zones
 }
 
-/**
- * The uncovered traffic of the last 24 hours per destination zone, from the persisted history (the engine's database,
- * no Proxmox call): ONE read for the whole tab (the Observation zone banner reuses it), refreshed every 5 minutes while
- * the page is visible. A failure (an
- * older orchestrator, a follower) is not retried: the table shows no count.
- */
 /** The hourly hits of each zone over the window, oldest first, plus where the window starts and its step. */
 export type UncoveredSeries = {
   from: number
@@ -81,7 +76,8 @@ export function uncoveredSeriesOf(series: UncoveredSeries, name: string, previou
   return Array.from({ length: series.size }, (_, i) => rows.reduce((sum, row) => sum + (row?.[i] ?? 0), 0))
 }
 
-export function useZoneUncovered(connId: string | null): { byZone: Map<string, number> | null; series: UncoveredSeries | null; traffic: MicrosegTraffic | null; failed: boolean } {
+/** The 24-hour history of one cluster, refreshed every minute while the page is visible (one SWR read per cluster). */
+function useClusterTraffic(connId: string | null, refreshMs = UNCOVERED_REFRESH_MS): ClusterRead<MicrosegTraffic> {
   const api = useMemo(() => (connId ? microsegApi(connId) : null), [connId])
   const key = connId ? [`${microsegBaseUrl(connId)}/traffic`, 'zone-uncovered-24h'] : null
   // A held answer serves a new reader (the Observation banner after the Policy table) until the next refresh.
@@ -93,11 +89,48 @@ export function useZoneUncovered(connId: string | null): { byZone: Map<string, n
       const { from, to } = hitsWindow(Date.now())
       return api!.getMicrosegTraffic({ from: new Date(from).toISOString(), to: new Date(to).toISOString(), step: HOUR_MS / 1000 })
     },
-    { refreshInterval: UNCOVERED_REFRESH_MS, refreshWhenHidden: false, revalidateOnFocus: false, revalidateOnMount: !held, shouldRetryOnError: false },
+    { refreshInterval: refreshMs, refreshWhenHidden: false, revalidateOnFocus: false, revalidateOnMount: !held, shouldRetryOnError: false },
+  )
+  return { data, error, loading: !!key && data === undefined && error === undefined }
+}
+
+/**
+ * The histories of the clusters of a shared policy as one: every bucket in the window of the latest answer (each read
+ * takes the window of its own time, an hour apart at most), the zones by name. Null without any answer.
+ */
+export function mergeTraffic(answers: readonly MicrosegTraffic[]): MicrosegTraffic | null {
+  if (answers.length === 0) return null
+  if (answers.length === 1) return answers[0]
+  const latest = answers.reduce((a, b) => (Date.parse(b.to) > Date.parse(a.to) ? b : a), answers[0])
+  const from = Date.parse(latest.from)
+  const to = Date.parse(latest.to)
+  // A window that cannot be read cuts nothing.
+  const inWindow = (at: number) => !Number.isFinite(from) || !Number.isFinite(to) || (at >= from && at < to)
+  const buckets = answers.flatMap(a => a.buckets.filter(b => inWindow(Date.parse(b.at))))
+  return { ...latest, buckets }
+}
+
+/**
+ * The uncovered traffic of the last 24 hours per destination zone, from the persisted history (the engine's database,
+ * no Proxmox call). On a policy shared by several clusters, each cluster logs the traffic of its own guests: the
+ * history of every cluster of the group (`clusterIds`, the connection alone without it) is read, one read per cluster,
+ * and summed by zone name. Every screen reads the same keys (the Policy table, the Observation zone banner, the
+ * observed flow dialog). A cluster whose read fails is left out; the table shows no count only when every read fails.
+ */
+export function useZoneUncovered(connId: string | null, clusterIds?: readonly string[]): { byZone: Map<string, number> | null; series: UncoveredSeries | null; traffic: MicrosegTraffic | null; failed: boolean } {
+  const ids = useMemo(() => {
+    if (clusterIds?.length) return [...clusterIds]
+    return connId ? [connId] : []
+  }, [clusterIds, connId])
+  const { byCluster, errors } = useMergedClusters(ids, useClusterTraffic, UNCOVERED_REFRESH_MS)
+  const data = useMemo(
+    () => mergeTraffic(ids.flatMap(id => { const answer = byCluster[id]; return answer ? [answer] : [] })),
+    [ids, byCluster],
   )
   const byZone = useMemo(() => (data ? uncoveredByZone(data) : null), [data])
   const series = useMemo(() => (data ? uncoveredSeriesByZone(data) : null), [data])
-  return { byZone, series, traffic: data ?? null, failed: !!error && !data }
+  const failed = !data && ids.length > 0 && ids.every(id => id in errors)
+  return { byZone, series, traffic: data, failed }
 }
 
 /**

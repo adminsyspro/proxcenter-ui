@@ -14228,7 +14228,13 @@
         "sankey": "Sankey-Diagramm",
         "sankeyHint": "der beobachtete Verkehr als Bänder, breiter mit mehr Treffern",
         "nodes": "Knoten",
-        "nodesHint": "die Gäste auf ihrem Proxmox-Knoten, die beobachteten Flüsse und die Ausnahmen von Knoten zu Knoten (die erlaubten Flüsse zwischen Zonen bleiben in Gruppen)"
+        "nodesHint": "die Gäste auf ihrem Proxmox-Knoten, die beobachteten Flüsse und die Ausnahmen von Knoten zu Knoten (die erlaubten Flüsse zwischen Zonen bleiben in Gruppen)",
+        "constellation": "Konstellation",
+        "constellationHint": "die Zonen im Orbit um den Cluster, ihre Flüsse als Bögen (ein Doppelklick auf eine Zone bringt ihre Gäste in den Orbit)"
+      },
+      "constellation": {
+        "pause": "Drehung anhalten",
+        "play": "Drehung fortsetzen"
       },
       "pve": {
         "aria": "Proxmox-Knoten {name}, {guests}",
@@ -14269,12 +14275,12 @@
         "empty": "Mit diesen Filtern gibt es keinen Fluss zu zeichnen."
       },
       "target": {
-        "label": "VM anvisieren",
-        "placeholder": "Name, VMID oder IP",
-        "noOptions": "Kein laufender Gast passt",
-        "clear": "Ziel entfernen",
-        "openList": "Gäste anzeigen",
-        "closeList": "Gäste ausblenden",
+        "label": "Karte filtern",
+        "placeholder": "VM, Zone, Knoten oder IP",
+        "noOptions": "Keine Treffer",
+        "clear": "Filter löschen",
+        "openList": "Liste anzeigen",
+        "closeList": "Liste ausblenden",
         "noZone": "keine Zone",
         "option": "{name}, Gast {vmid}, {zone}",
         "type": {
@@ -14284,6 +14290,20 @@
         "chip": "Ziel: {name}",
         "chipHint": "Die Karte bleibt auf {name} fokussiert: Klicken zeigt sein Panel, das Kreuz entfernt das Ziel",
         "cellMarker": "Beobachtete Flüsse von {name} in dieser Zelle",
+        "placeholderMore": "Hinzufügen…",
+        "group": {
+          "zone": "Zonen",
+          "node": "Proxmox-Knoten",
+          "cluster": "Cluster",
+          "guest": "Gäste"
+        },
+        "optionZone": "{name}, Zone",
+        "optionNode": "{name}, Proxmox-Knoten, {count, plural, one {# laufender Gast} other {# laufende Gäste}}",
+        "optionCluster": "{name}, Cluster, {count, plural, one {# laufender Gast} other {# laufende Gäste}}",
+        "guests": "{count, plural, one {# Gast} other {# Gäste}}",
+        "peers": "Mit ihrem Austausch",
+        "peersHint": "Auch die übrigen Flüsse der gewählten Elemente mit ihren anderen Enden anzeigen",
+        "empty": "Für diesen Filter gibt es in dieser Darstellung nichts zu zeichnen.",
         "panel": {
           "label": "Gast {name}",
           "where": "{type} {vmid} auf {node}",
@@ -14862,7 +14882,7 @@
       "summary": {
         "title": "Datenverkehr nach Zone",
         "intra": "Innerhalb einer Zone",
-        "between": "Zwischen Zonen",
+        "peers": "Mit ihrem Austausch",
         "toOutside": "Nach außen",
         "fromUnknown": "Von unbekannt",
         "bySourceZone": "Bytes pro Quellzone"

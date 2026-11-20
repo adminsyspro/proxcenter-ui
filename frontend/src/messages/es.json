@@ -14657,7 +14657,13 @@
         "sankey": "Diagrama de Sankey",
         "sankeyHint": "el tráfico observado como cintas, más anchas con más impactos",
         "nodes": "Nodos",
-        "nodesHint": "los invitados en su nodo Proxmox, los flujos observados y las excepciones de nodo a nodo (los flujos permitidos entre zonas siguen en Grupos)"
+        "nodesHint": "los invitados en su nodo Proxmox, los flujos observados y las excepciones de nodo a nodo (los flujos permitidos entre zonas siguen en Grupos)",
+        "constellation": "Constelación",
+        "constellationHint": "las zonas en órbita alrededor del clúster, sus flujos como arcos (un doble clic en una zona pone sus invitados en órbita)"
+      },
+      "constellation": {
+        "pause": "Detener la rotación",
+        "play": "Reanudar la rotación"
       },
       "pve": {
         "aria": "Nodo Proxmox {name}, {guests}",
@@ -14698,12 +14704,12 @@
         "empty": "Ningún flujo que dibujar con estos filtros."
       },
       "target": {
-        "label": "Apuntar a una VM",
-        "placeholder": "Nombre, VMID o IP",
-        "noOptions": "Ningún invitado en ejecución coincide",
-        "clear": "Quitar el objetivo",
-        "openList": "Mostrar los invitados",
-        "closeList": "Ocultar los invitados",
+        "label": "Filtrar el mapa",
+        "placeholder": "VM, zona, nodo o IP",
+        "noOptions": "Sin resultados",
+        "clear": "Borrar el filtro",
+        "openList": "Mostrar la lista",
+        "closeList": "Ocultar la lista",
         "noZone": "sin zona",
         "option": "{name}, invitado {vmid}, {zone}",
         "type": {
@@ -14713,6 +14719,20 @@
         "chip": "Objetivo: {name}",
         "chipHint": "El mapa sigue centrado en {name}: haga clic para ver su panel, en la cruz para quitar el objetivo",
         "cellMarker": "Flujos observados de {name} en esta celda",
+        "placeholderMore": "Añadir…",
+        "group": {
+          "zone": "Zonas",
+          "node": "Nodos Proxmox",
+          "cluster": "Clústeres",
+          "guest": "Invitados"
+        },
+        "optionZone": "{name}, zona",
+        "optionNode": "{name}, nodo Proxmox, {count, plural, one {# invitado en ejecución} other {# invitados en ejecución}}",
+        "optionCluster": "{name}, clúster, {count, plural, one {# invitado en ejecución} other {# invitados en ejecución}}",
+        "guests": "{count, plural, one {# invitado} other {# invitados}}",
+        "peers": "Con sus intercambios",
+        "peersHint": "Mostrar también los demás flujos de lo elegido, con sus otros extremos",
+        "empty": "No hay nada que dibujar para este filtro en esta vista.",
         "panel": {
           "label": "Invitado {name}",
           "where": "{type} {vmid} en {node}",
@@ -15291,7 +15311,7 @@
       "summary": {
         "title": "Tráfico por zona",
         "intra": "Dentro de una zona",
-        "between": "Entre zonas",
+        "peers": "Con sus intercambios",
         "toOutside": "Hacia el exterior",
         "fromUnknown": "Desde lo desconocido",
         "bySourceZone": "Bytes por zona de origen"

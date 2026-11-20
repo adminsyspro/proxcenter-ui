@@ -14657,7 +14657,13 @@
         "sankey": "생키 다이어그램",
         "sankeyHint": "관찰된 트래픽을 띠로 표시, 히트가 많을수록 넓게",
         "nodes": "노드",
-        "nodesHint": "Proxmox 노드별 게스트, 노드 간 관찰된 흐름과 예외(영역 간 허용된 흐름은 그룹에 남습니다)"
+        "nodesHint": "Proxmox 노드별 게스트, 노드 간 관찰된 흐름과 예외(영역 간 허용된 흐름은 그룹에 남습니다)",
+        "constellation": "별자리",
+        "constellationHint": "클러스터 주위를 도는 영역과 호로 표시된 흐름(영역을 두 번 클릭하면 해당 게스트가 궤도에 표시됩니다)"
+      },
+      "constellation": {
+        "pause": "회전 정지",
+        "play": "회전 재개"
       },
       "pve": {
         "aria": "Proxmox 노드 {name}, {guests}",
@@ -14698,12 +14704,12 @@
         "empty": "이 필터로 그릴 흐름이 없습니다."
       },
       "target": {
-        "label": "VM 지정",
-        "placeholder": "이름, VMID 또는 IP",
-        "noOptions": "일치하는 실행 중인 게스트가 없습니다",
-        "clear": "대상 지우기",
-        "openList": "게스트 보기",
-        "closeList": "게스트 숨기기",
+        "label": "맵 필터",
+        "placeholder": "VM, 영역, 노드 또는 IP",
+        "noOptions": "일치하는 항목 없음",
+        "clear": "필터 지우기",
+        "openList": "목록 표시",
+        "closeList": "목록 숨기기",
         "noZone": "영역 없음",
         "option": "{name}, 게스트 {vmid}, {zone}",
         "type": {
@@ -14713,6 +14719,20 @@
         "chip": "대상: {name}",
         "chipHint": "지도가 {name}에 고정됩니다. 클릭하면 패널이 열리고, X를 누르면 대상이 지워집니다",
         "cellMarker": "이 셀의 {name} 관찰 흐름",
+        "placeholderMore": "추가…",
+        "group": {
+          "zone": "영역",
+          "node": "Proxmox 노드",
+          "cluster": "클러스터",
+          "guest": "게스트"
+        },
+        "optionZone": "{name}, 영역",
+        "optionNode": "{name}, Proxmox 노드, 실행 중인 게스트 {count}개",
+        "optionCluster": "{name}, 클러스터, 실행 중인 게스트 {count}개",
+        "guests": "게스트 {count}개",
+        "peers": "교환 대상 포함",
+        "peersHint": "선택한 항목의 다른 흐름과 그 상대편도 표시합니다",
+        "empty": "이 보기에서는 이 필터로 표시할 항목이 없습니다.",
         "panel": {
           "label": "게스트 {name}",
           "where": "{node}의 {type} {vmid}",
@@ -15291,7 +15311,7 @@
       "summary": {
         "title": "영역별 트래픽",
         "intra": "영역 내부",
-        "between": "영역 간",
+        "peers": "교환 대상 포함",
         "toOutside": "외부로",
         "fromUnknown": "알 수 없는 출발지에서",
         "bySourceZone": "출발 영역별 바이트"

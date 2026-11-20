@@ -65,9 +65,9 @@ type Resolved = { action: SuggestionAction; count: number }
  * The zone the list is filtered on, with its uncovered hits of the last 24 hours (the same history read and count as
  * the Policy zone group it was opened from): suggestions and hits are two datasets, shown side by side.
  */
-function ZoneFilterBanner({ connectionId, policy, zoneId }: { connectionId: string; policy: MicrosegSubTabProps['policy']; zoneId: string }) {
+function ZoneFilterBanner({ connectionId, clusterIds, policy, zoneId }: { connectionId: string; clusterIds: readonly string[]; policy: MicrosegSubTabProps['policy']; zoneId: string }) {
   const t = useTranslations('microsegPilot.observation')
-  const { byZone } = useZoneUncovered(connectionId)
+  const { byZone } = useZoneUncovered(connectionId, clusterIds)
   const { diff } = usePendingChanges(connectionId, policy)
   const zone = policy.zones.find(z => z.id === zoneId)
   if (!zone) return null
@@ -237,7 +237,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, s
   return (
     <Box sx={{ px: 3, pb: 3 }}>
       <ObservationFilters values={filters} zones={policy.zones} onChange={changeFilters} clusters={clusterOptions} />
-      {filters.zone && <ZoneFilterBanner connectionId={connectionId} policy={policy} zoneId={filters.zone} />}
+      {filters.zone && <ZoneFilterBanner connectionId={connectionId} clusterIds={ids} policy={policy} zoneId={filters.zone} />}
       {service && <FocusBanner testId='observation-service-filter' text={t('serviceBanner', { service: service.label, ports: service.tokens.join(', ') })} clearText={t('serviceBannerClear')} onClear={clearService} />}
       {unknownSource && <FocusBanner testId='observation-source-filter' text={t('sourceBanner')} clearText={t('sourceBannerClear')} onClear={clearUnknownSource} />}
 
@@ -297,6 +297,7 @@ export default function ObservationPanel({ connectionId, policy, reloadPolicy, s
       {detail && (
         <ObservedFlowDialog
           connectionId={connectionId}
+          clusterIds={ids}
           suggestion={detail}
           zones={zonesById}
           source={endName(detail.src_zone_id, detail.src_ip)}

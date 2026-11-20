@@ -5,7 +5,7 @@ import { buildGuestView } from './guestViewModel'
 import { buildMatrix } from './matrixModel'
 import { demoInput, flow, seen, zone } from './mapViewsTestKit'
 import {
-  filterTargets, involvesTarget, matchesTarget, targetCandidates, targetFocus, targetNodeId, targetPeers, targetRibbons, targetRing, targetSankey, targetSuggestions,
+  involvesTarget, matchesTarget, targetCandidates, targetFocus, targetNodeId, targetPeers, targetRibbons, targetRing, targetSankey, targetSuggestions,
   type TargetGuest,
 } from './targetModel'
 import { buildNodeView } from './nodeViewModel'
@@ -62,11 +62,6 @@ describe('the guests a VM target can pick', () => {
     expect(matchesTarget(t, 'db')).toBe(false)
   })
 
-  it('filters the list and caps it', () => {
-    const many = Array.from({ length: 80 }, (_, i) => target({ key: `qemu/${i}`, vmid: i, name: `vm-${i}` }))
-    expect(filterTargets(many, 'vm-7').map(c => c.vmid)).toEqual([7, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79])
-    expect(filterTargets(many, '')).toHaveLength(50)
-  })
 })
 
 describe('the observed flows of a targeted guest', () => {

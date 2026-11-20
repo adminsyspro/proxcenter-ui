@@ -35,7 +35,7 @@ describe('the rendering selector', () => {
     demo()
     await node('zone:zw')
     const group = screen.getByRole('group', { name: 'Map rendering' })
-    expect(within(group).getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual(['Groups', 'Compact zones', 'Matrix', 'Guest view', 'Sankey diagram', 'Nodes'])
+    expect(within(group).getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual(['Groups', 'Constellation', 'Compact zones', 'Matrix', 'Guest view', 'Sankey diagram', 'Nodes'])
     expect(pressed('Groups')).toBe('true')
   })
 

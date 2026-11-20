@@ -8,7 +8,7 @@ import { byText } from './zoneLayout'
 import { mapKey } from './mapClusters'
 import { byGuestName, guestId, memberId, type PolicyGuest, type ZoneMember } from './zoneModel'
 
-/** The most guests the target picker lists for one search: typing narrows it. */
+/** The most guests the filter of the map lists for one search: typing narrows it. */
 export const MAX_OPTIONS = 50
 
 /** A running guest the map can be focused on, with the zone it belongs to (null: in no zone). */
@@ -60,11 +60,6 @@ export function matchesTarget(t: TargetGuest, query: string): boolean {
   if (!q) return true
   if (t.name.toLowerCase().includes(q) || String(t.vmid).startsWith(q)) return true
   return t.ips.some(ip => ip.toLowerCase().startsWith(q) || bareIp(ip).startsWith(q))
-}
-
-/** The options of the picker for a search, in their order, at most MAX_OPTIONS. */
-export function filterTargets(candidates: TargetGuest[], query: string): TargetGuest[] {
-  return candidates.filter(c => matchesTarget(c, query)).slice(0, MAX_OPTIONS)
 }
 
 /** The addresses of a guest in their canonical form: read once per guest, then matched against many flows. */
@@ -122,7 +117,8 @@ export function targetPeers(guests: PolicyGuest[]): Map<string, string> {
 }
 
 /**
- * The node of the guest on a canvas: its glyph, else the "+N" of its circle, else the circle (or box) of its zone; on
+ * The node of the guest on a canvas: its glyph, else the "+N" of its circle, else the circle (or box) of its zone (the
+ * node of the guests in no zone for one of them); on
  * the node view, its glyph in the circle of its Proxmox node (of its own cluster on a shared policy), else the "+N"
  * of that circle, else the circle.
  */
@@ -130,7 +126,8 @@ export function targetNodeId(graph: ZoneGraph, t: TargetGuest): string | null {
   const ids = new Set(graph.nodes.map(n => n.id))
   const group = t.zoneId ?? UNZONED_ID
   const onNode = (pve: string) => [guestNodeId(pve, t.key), moreNodeId(pve), pve]
-  const tries = [guestNodeId(group, t.key), moreNodeId(group), t.zoneId ? zoneNodeId(t.zoneId) : null, ...onNode(pveNodeId(t.node)), ...onNode(pveNodeId(t.node, t.connectionId))]
+  // A guest in no zone is, last, the node of the guests in no zone (the constellation draws them as one pastille).
+  const tries = [guestNodeId(group, t.key), moreNodeId(group), t.zoneId ? zoneNodeId(t.zoneId) : UNZONED_ID, ...onNode(pveNodeId(t.node)), ...onNode(pveNodeId(t.node, t.connectionId))]
   return tries.find(id => !!id && ids.has(id)) ?? null
 }
 

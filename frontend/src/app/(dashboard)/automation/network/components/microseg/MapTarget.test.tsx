@@ -1,7 +1,7 @@
 /**
- * Overview, "Target a VM" (UA43): the search of the toolbar, the focus it locks on each rendering (Groups, Compact,
- * Matrix, Guest view, Sankey), the guest panel with its observed and allowed flows, and how the lock lives with the
- * zone and edge panels.
+ * Overview, one guest picked in "Filter the map" (UA43, the target): the search of the toolbar, the focus it locks on
+ * each rendering (Groups, Compact, Matrix, Guest view, Sankey), the guest panel with its observed and allowed flows,
+ * and how the lock lives with the zone and edge panels. Several picks are mapFilter.test.tsx's.
  */
 
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -31,7 +31,7 @@ const observed = [
 ]
 const demo = () => setup({ vms: guests, flows: [flowOf('f1')], suggestions: observed })
 
-const search = () => screen.getByRole('combobox', { name: 'Target a VM' })
+const search = () => screen.getByRole('combobox', { name: 'Filter the map' })
 // The change that opens the list shows every option (MUI): open it first, then type.
 function open() {
   search().focus()
@@ -42,6 +42,10 @@ async function expectOptions(text: string, expected: string[]) {
   open()
   fireEvent.change(search(), { target: { value: text } })
   await waitFor(() => expect(options()).toEqual(expected))
+}
+/** Clears the target from its chip (the filter then holds nothing). */
+function clearTarget() {
+  fireEvent.click((screen.getByText(/^Targeting /).closest('.MuiChip-root') as HTMLElement).querySelector('.MuiChip-deleteIcon')!)
 }
 async function target(name: string) {
   open()
@@ -55,11 +59,11 @@ describe('the target search', () => {
   it('lists the running guests by name, VMID or address, one line each with their zone', async () => {
     demo()
     await node('guest:zw:qemu/100')
-    await expectOptions('db', ['db-1, guest 200, db'])
+    await expectOptions('db', ['db, zone', 'db-1, guest 200, db'])
     await expectOptions('10.0.0.3', ['web-2, guest 101, web'])
     await expectOptions('30', ['lost, guest 300, no zone'])
     await expectOptions('old', [])
-    expect(screen.getByText('No running guest matches')).toBeTruthy()
+    expect(screen.getByText('Nothing matches')).toBeTruthy()
   })
 
   it('locks the map on the guest picked, says so in a chip, and clears it from the chip', async () => {
@@ -255,6 +259,8 @@ describe('the guest panel', () => {
     fireEvent.click(within(aside).getByTestId('section-guest.zoneRules'))
     expect(within(aside).getByText('This guest is in no zone: no allowed flow applies to it.')).toBeTruthy()
     expect(within(aside).getAllByRole('listitem').map(r => r.getAttribute('aria-label'))).toEqual(['Outgoing, to db-1'])
+    // A second guest is added to the filter: it is the target once the first one is cleared.
+    clearTarget()
     await target('bare')
     expect(within(await panel('Guest bare')).getByText('No IP address known: the observed flows cannot be matched to this guest.')).toBeTruthy()
   })
@@ -360,7 +366,7 @@ describe('the target search of a user who cannot read the inventory (D9)', () =>
   it('lists the running guests of the coverage rows, with their zone from the tags, and targets one', async () => {
     viewer(() => reply(200, { total: 5, measured: 5, computing: false, guests: guests.map(row) }))
     await node('guest:zw:qemu/100')
-    await expectOptions('db', ['db-1, guest 200, db'])
+    await expectOptions('db', ['db, zone', 'db-1, guest 200, db'])
     await expectOptions('old', [])
     await target('web-1')
     expect(screen.getByText(/^Targeting web-1 ·/)).toBeTruthy()

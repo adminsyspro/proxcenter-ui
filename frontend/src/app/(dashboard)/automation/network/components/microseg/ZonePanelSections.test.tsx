@@ -370,7 +370,7 @@ describe('guest panel: Observed traffic', () => {
     })
     window.localStorage.setItem('microseg.subTab', 'overview')
     setup({ vms: [vm(101, 'db1', ['zone-db'], { ips: ['10.0.0.2'] })] })
-    const search = await screen.findByRole('combobox', { name: 'Target a VM' })
+    const search = await screen.findByRole('combobox', { name: 'Filter the map' })
     search.focus()
     fireEvent.keyDown(search, { key: 'ArrowDown' })
     fireEvent.change(search, { target: { value: 'db1' } })
@@ -389,7 +389,7 @@ describe('guest panel: nothing in memory', () => {
   it('says the memory holds nothing for the guest and offers no verdict to pick', async () => {
     mock.routes['GET /events?limit=500'] = () => reply(200, { events: [event('web', { vmid: 999 })], truncated: false, oldest: null })
     setup({ vms: [vm(101, 'db1', ['zone-db'], { ips: ['10.0.0.2'] })] })
-    const search = await screen.findByRole('combobox', { name: 'Target a VM' })
+    const search = await screen.findByRole('combobox', { name: 'Filter the map' })
     search.focus()
     fireEvent.keyDown(search, { key: 'ArrowDown' })
     fireEvent.change(search, { target: { value: 'db1' } })

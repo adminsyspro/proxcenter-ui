@@ -8,6 +8,7 @@ import { customImageToCloudImage } from "@/lib/templates/cloudImages"
 import { getEffectiveCatalog } from "@/lib/templates/catalogStore"
 import { customImageScopeWhere } from "@/lib/templates/customImageScope"
 import { granteeVdcIds, loadGrantSummaries } from "@/lib/templates/catalogGrants"
+import { isBuiltInCatalogHidden } from "@/lib/templates/builtInCatalogAccess"
 
 export const runtime = "nodejs"
 
@@ -22,9 +23,12 @@ export async function GET(req: Request) {
     const vendor = searchParams.get("vendor")
 
     // Built-in images: the remote catalog when a valid one is stored, the
-    // embedded document otherwise. Always shared with every tenant.
+    // embedded document otherwise. Shared with every tenant, unless the
+    // provider turned the catalogue off for this one.
     const effective = await getEffectiveCatalog()
-    const builtIn = vendor ? effective.images.filter(img => img.vendor === vendor) : effective.images
+    const builtInHidden = await isBuiltInCatalogHidden(tenantId)
+    const catalogImages = builtInHidden ? [] : effective.images
+    const builtIn = vendor ? catalogImages.filter(img => img.vendor === vendor) : catalogImages
     const builtInWithFlag = builtIn.map(img => ({ ...img, isCustom: false, isShared: true }))
 
     // Custom images visible to the caller:
@@ -64,19 +68,24 @@ export async function GET(req: Request) {
     const extraVendors = [...customVendorIds]
       .filter(v => !effective.vendors.some(bv => bv.id === v))
       .map(v => ({ id: v, name: v.charAt(0).toUpperCase() + v.slice(1), icon: 'ri-image-line' }))
+    // Without the catalogue, only the vendors of the images left are filters.
+    const builtInVendors = builtInHidden
+      ? effective.vendors.filter(v => customVendorIds.has(v.id))
+      : effective.vendors
 
     // meta carries the mirror URL, and lastError embeds that URL on an HTTP
     // failure. TEMPLATE_CATALOG_URL can point at an internal mirror with a
     // signed token, so both are provider-only. Tenants keep source, dates and
     // lastResult, which is everything the tab renders for them.
-    const meta = isProvider
-      ? effective.meta
-      : { ...effective.meta, url: null, lastError: null }
+    // Without the catalogue, its freshness means nothing to the tenant.
+    let meta: typeof effective.meta | null = null
+    if (isProvider) meta = effective.meta
+    else if (!builtInHidden) meta = { ...effective.meta, url: null, lastError: null }
 
     return NextResponse.json({
       data: {
         images,
-        vendors: [...effective.vendors, ...extraVendors],
+        vendors: [...builtInVendors, ...extraVendors],
         meta,
       },
     })

@@ -26,6 +26,8 @@ export interface Tenant {
   vmidRangeEnd: number | null
   /** The tenant manages its own service accounts and API tokens (issue #1404). */
   apiSelfService: boolean
+  /** The built-in image catalogue is shown to the tenant (true by default). */
+  builtInCatalog: boolean
   settings: Record<string, any> | null
   createdBy: string | null
   createdAt: string
@@ -42,6 +44,7 @@ function rowToTenant(row: {
   vmidRangeStart: number | null
   vmidRangeEnd: number | null
   apiSelfService?: boolean | null
+  builtInCatalog?: boolean | null
   settings: Prisma.JsonValue | null
   createdBy: string | null
   createdAt: Date
@@ -57,6 +60,7 @@ function rowToTenant(row: {
     vmidRangeStart: row.vmidRangeStart,
     vmidRangeEnd: row.vmidRangeEnd,
     apiSelfService: row.apiSelfService === true,
+    builtInCatalog: row.builtInCatalog !== false,
     settings:
       row.settings && typeof row.settings === "object" && !Array.isArray(row.settings)
         ? (row.settings as Record<string, any>)
@@ -452,6 +456,8 @@ export async function createTenant(data: {
   operatingModel?: 'iaas' | 'msp'
   vmidRangeStart?: number | null
   vmidRangeEnd?: number | null
+  apiSelfService?: boolean
+  builtInCatalog?: boolean
 }): Promise<Tenant> {
   const id = crypto.randomUUID()
   const now = new Date()
@@ -466,6 +472,8 @@ export async function createTenant(data: {
       operatingModel: data.operatingModel ?? 'iaas',
       vmidRangeStart: data.vmidRangeStart ?? null,
       vmidRangeEnd: data.vmidRangeEnd ?? null,
+      apiSelfService: data.apiSelfService === true,
+      builtInCatalog: data.builtInCatalog !== false,
       createdBy: data.createdBy || null,
       createdAt: now,
       updatedAt: now,
@@ -515,6 +523,7 @@ export async function updateTenant(
     vmidRangeStart?: number | null
     vmidRangeEnd?: number | null
     apiSelfService?: boolean
+    builtInCatalog?: boolean
   },
 ): Promise<Tenant | null> {
   const existing = await prisma.tenant.findUnique({ where: { id } })
@@ -530,6 +539,7 @@ export async function updateTenant(
       vmidRangeStart: data.vmidRangeStart !== undefined ? data.vmidRangeStart : existing.vmidRangeStart,
       vmidRangeEnd: data.vmidRangeEnd !== undefined ? data.vmidRangeEnd : existing.vmidRangeEnd,
       apiSelfService: typeof data.apiSelfService === "boolean" ? data.apiSelfService : existing.apiSelfService,
+      builtInCatalog: typeof data.builtInCatalog === "boolean" ? data.builtInCatalog : existing.builtInCatalog,
       updatedAt: new Date(),
     },
   })

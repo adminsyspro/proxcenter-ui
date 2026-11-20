@@ -8413,6 +8413,14 @@
     "loadNodesError": "Unable to load the node list",
     "nicMacPermissionRequired": "Changing the MAC address requires provider permission.",
     "nicVlanPermissionRequired": "Changing VLAN settings requires provider permission.",
+    "nicVlanTrunksInvalid": "1-4094, e.g. 10;20-25",
+    "nicTrunksNotVlanAware": "{bridge} is not VLAN aware",
+    "nicTrunkSource": {
+      "sdn": "SDN VLAN networks",
+      "iface": "Host VLAN interfaces",
+      "vdc": "vDC VLAN pools",
+      "bridge": "VLANs of the bridge"
+    },
     "nicOriginalUnavailable": "Reload the network configuration before saving.",
     "snapshotMigration": {
       "title": "Snapshots block this migration",
@@ -11153,6 +11161,8 @@
     "lockedHint": "Tenant users lose UI access. Proxmox resources, backups and IPAM are preserved and the action is reversible.",
     "apiSelfService": "Tenant manages its service accounts and API tokens",
     "apiSelfServiceHelp": "Its admins create them within their own rights, never a provider scope. You keep seeing and revoking them.",
+    "builtInCatalog": "Built-in image catalogue",
+    "builtInCatalogHelp": "Shows the ProxCenter images (Ubuntu, Debian…) to this tenant. Off, it only sees your images shared or granted to it and its own. Creating a VM from an ISO is not affected.",
     "users": "Users",
     "addUser": "Add user",
     "searchUser": "Search by name or email...",

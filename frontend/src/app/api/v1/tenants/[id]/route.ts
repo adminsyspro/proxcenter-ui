@@ -38,6 +38,8 @@ async function handleGet(_req: Request, ctx: Ctx) {
       operatingModel: row.operatingModel,
       vmidRangeStart: row.vmidRangeStart,
       vmidRangeEnd: row.vmidRangeEnd,
+      apiSelfService: row.apiSelfService,
+      builtInCatalog: row.builtInCatalog,
       createdBy: row.createdBy,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),

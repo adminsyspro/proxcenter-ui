@@ -8389,6 +8389,14 @@
     "loadNodesError": "Node-Liste konnte nicht geladen werden",
     "nicMacPermissionRequired": "Zum Ändern der MAC-Adresse ist eine Freigabe des Anbieters erforderlich.",
     "nicVlanPermissionRequired": "Zum Ändern der VLAN-Einstellungen ist eine Freigabe des Anbieters erforderlich.",
+    "nicVlanTrunksInvalid": "1-4094, z. B. 10;20-25",
+    "nicTrunksNotVlanAware": "{bridge} ist nicht VLAN-aware",
+    "nicTrunkSource": {
+      "sdn": "SDN-VLAN-Netze",
+      "iface": "VLAN-Schnittstellen des Hosts",
+      "vdc": "VLAN-Pools der vDCs",
+      "bridge": "VLANs der Bridge"
+    },
     "nicOriginalUnavailable": "Laden Sie die Netzwerkkonfiguration vor dem Speichern neu.",
     "snapshotMigration": {
       "title": "Snapshots blockieren diese Migration",
@@ -11100,6 +11108,8 @@
     "lockedHint": "Tenant-Benutzer verlieren den UI-Zugang. Proxmox-Ressourcen, Backups und IPAM bleiben erhalten und die Aktion ist umkehrbar.",
     "apiSelfService": "Mandant verwaltet seine Dienstkonten und API-Tokens",
     "apiSelfServiceHelp": "Seine Administratoren erstellen sie im Rahmen ihrer eigenen Rechte, nie mit einem Anbieter-Scope. Sie sehen und widerrufen sie weiterhin.",
+    "builtInCatalog": "Integrierter Image-Katalog",
+    "builtInCatalogHelp": "Zeigt diesem Mandanten die ProxCenter-Images (Ubuntu, Debian…). Deaktiviert sieht er nur Ihre für ihn freigegebenen oder zugewiesenen Images und seine eigenen. Das Erstellen einer VM aus einem ISO ist nicht betroffen.",
     "users": "Benutzer",
     "addUser": "hinzufügen user",
     "searchUser": "suchen by name or E-Mail...",

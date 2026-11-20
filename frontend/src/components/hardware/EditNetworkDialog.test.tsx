@@ -54,3 +54,21 @@ describe('NIC edit bridge picker', () => {
     await waitFor(() => expect(onSave).toHaveBeenCalledWith({ net0: expect.stringContaining('bridge=h2553') }))
   })
 })
+
+describe('NIC edit VLAN trunks', () => {
+  const vlanRights = () => server.use(http.get('*/api/v1/connections/conn-1/network-choices', () => HttpResponse.json({ data: [{ name: 'vmbr0' }] })))
+
+  it('shows the trunks read from the config, without the VLAN right, and keeps them on save', async () => {
+    vlanRights()
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    renderWithProviders(<EditNetworkDialog open onClose={() => {}} onSave={onSave} onDelete={async () => {}} connId="conn-1" node="pve1" network={{
+      id: 'net1', model: 'virtio', bridge: 'vmbr0', macaddr: 'AA:BB:CC:DD:EE:FF',
+      rawValue: 'virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0,trunks=225;230',
+    }} />)
+    expect(screen.getByLabelText('VLAN trunks')).toBeDisabled()
+    expect(screen.getByText('225')).toBeTruthy()
+    expect(screen.getByText('230')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith({ net1: 'virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0,trunks=225;230' }))
+  })
+})

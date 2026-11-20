@@ -37,6 +37,7 @@ const EXISTING = {
   vmidRangeStart: 100,
   vmidRangeEnd: 200,
   apiSelfService: false,
+  builtInCatalog: true,
   settings: null,
   createdBy: 'u1',
   createdAt: new Date('2026-01-01T00:00:00Z'),
@@ -71,6 +72,17 @@ describe('updateTenant', () => {
     tenantFindUniqueMock.mockResolvedValue({ ...EXISTING, apiSelfService: true })
     await updateTenant('t1', { name: 'Renamed' })
     expect(tenantUpdateMock.mock.calls[1][0].data.apiSelfService).toBe(true)
+  })
+
+  it('turns the built-in catalogue off and on, and keeps it when the field is absent', async () => {
+    expect((await updateTenant('t1', { builtInCatalog: false }))?.builtInCatalog).toBe(false)
+    expect(tenantUpdateMock.mock.calls[0][0].data.builtInCatalog).toBe(false)
+    tenantFindUniqueMock.mockResolvedValue({ ...EXISTING, builtInCatalog: false })
+    await updateTenant('t1', { name: 'Renamed' })
+    expect(tenantUpdateMock.mock.calls[1][0].data.builtInCatalog).toBe(false)
+    await updateTenant('t1', { builtInCatalog: 'no' as any })
+    expect(tenantUpdateMock.mock.calls[2][0].data.builtInCatalog).toBe(false)
+    expect((await updateTenant('t1', { builtInCatalog: true }))?.builtInCatalog).toBe(true)
   })
 
   it('ignores a non boolean apiSelfService', async () => {

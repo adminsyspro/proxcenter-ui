@@ -49,6 +49,7 @@ interface Tenant {
   vmidRangeStart?: number | null
   vmidRangeEnd?: number | null
   apiSelfService?: boolean
+  builtInCatalog?: boolean
 }
 
 interface TenantUser {
@@ -77,6 +78,28 @@ interface Connection {
 }
 
 const MEMBER_CHIP_SX = { height: 18, fontSize: '0.6rem' }
+
+/** One provider switch of a customer tenant, on a single line; its help is the info tooltip. */
+function TenantSwitchRow({ checked, onChange, label, help }: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  label: string
+  help: string
+}) {
+  return (
+    <FormControlLabel
+      control={<Switch checked={checked} onChange={(e) => onChange(e.target.checked)} />}
+      label={
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Typography variant="body2" noWrap>{label}</Typography>
+          <Tooltip title={help}>
+            <i className="ri-information-line" aria-label={help} style={{ fontSize: 16, opacity: 0.6 }} />
+          </Tooltip>
+        </Box>
+      }
+    />
+  )
+}
 
 /**
  * Effective RBAC roles of a tenant member, never the legacy users.role column:
@@ -120,6 +143,7 @@ export default function TenantsTab() {
     vmidRangeStart: '',
     vmidRangeEnd: '',
     apiSelfService: false,
+    builtInCatalog: true,
   })
   const [saving, setSaving] = useState(false)
 
@@ -214,6 +238,7 @@ export default function TenantsTab() {
       vmidRangeStart: '',
       vmidRangeEnd: '',
       apiSelfService: false,
+      builtInCatalog: true,
     })
     setTenantUsers([])
     setAllUsers([])
@@ -235,6 +260,7 @@ export default function TenantsTab() {
       vmidRangeStart: tenant.vmidRangeStart != null ? String(tenant.vmidRangeStart) : '',
       vmidRangeEnd: tenant.vmidRangeEnd != null ? String(tenant.vmidRangeEnd) : '',
       apiSelfService: tenant.apiSelfService === true,
+      builtInCatalog: tenant.builtInCatalog !== false,
     })
     setSelectedUser(null)
     setSelectedConnection('')
@@ -289,6 +315,9 @@ export default function TenantsTab() {
       // The provider decides whether a customer tenant manages its own
       // service accounts and API tokens (issue #1404).
       if (supportsVmidRange) body.apiSelfService = form.apiSelfService
+      // The provider may keep its built-in image catalogue from a customer
+      // tenant, leaving its own images and the tenant's.
+      if (supportsVmidRange) body.builtInCatalog = form.builtInCatalog
 
       // operatingModel only sent on create (immutable after creation)
       if (!editingTenant) {
@@ -713,21 +742,20 @@ export default function TenantsTab() {
           )}
 
           {supportsVmidRange && (
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={form.apiSelfService}
-                  onChange={(e) => setForm((f) => ({ ...f, apiSelfService: e.target.checked }))}
-                />
-              }
-              label={
-                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                  <Typography variant="body2">{t('tenants.apiSelfService')}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                    {t('tenants.apiSelfServiceHelp')}
-                  </Typography>
-                </Box>
-              }
+            <TenantSwitchRow
+              checked={form.apiSelfService}
+              onChange={(checked) => setForm((f) => ({ ...f, apiSelfService: checked }))}
+              label={t('tenants.apiSelfService')}
+              help={t('tenants.apiSelfServiceHelp')}
+            />
+          )}
+
+          {supportsVmidRange && (
+            <TenantSwitchRow
+              checked={form.builtInCatalog}
+              onChange={(checked) => setForm((f) => ({ ...f, builtInCatalog: checked }))}
+              label={t('tenants.builtInCatalog')}
+              help={t('tenants.builtInCatalogHelp')}
             />
           )}
 

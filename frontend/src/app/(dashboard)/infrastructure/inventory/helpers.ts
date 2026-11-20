@@ -1006,6 +1006,44 @@ export function migrationSourceApiPrefix(type: string | null | undefined): strin
 }
 
 /**
+ * One `netN` entry of a QEMU or LXC config, as the Hardware tab lists it.
+ * `trunks` keeps the Proxmox VE syntax ("225;230;605-606"): the VLANs a trunk
+ * NIC carries, shown next to the bridge and the VLAN tag.
+ */
+export function parseGuestNic(id: string, netStr: unknown): Record<string, any> {
+  const netInfoItem: Record<string, any> = { id, rawValue: String(netStr) }
+
+  for (const part of String(netStr).split(',')) {
+    const [k, v] = part.split('=')
+
+    // Common to QEMU and LXC
+    if (k === 'bridge') netInfoItem.bridge = v
+    else if (k === 'tag') netInfoItem.tag = Number(v)
+    else if (k === 'trunks') netInfoItem.trunks = v
+    else if (k === 'firewall') netInfoItem.firewall = v === '1'
+    else if (k === 'link_down') netInfoItem.linkDown = v === '1'
+    else if (k === 'rate') netInfoItem.rate = Number(v)
+    else if (k === 'mtu') netInfoItem.mtu = Number(v)
+    // QEMU-only
+    else if (k === 'queues') netInfoItem.queues = Number(v)
+    else if (QEMU_NIC_MODELS.has(k)) {
+      netInfoItem.model = k
+      netInfoItem.macaddr = v
+    }
+    // LXC-only
+    else if (k === 'name') netInfoItem.name = v
+    else if (k === 'hwaddr') netInfoItem.macaddr = v
+    else if (k === 'ip') netInfoItem.ip = v
+    else if (k === 'gw') netInfoItem.gw = v
+    else if (k === 'ip6') netInfoItem.ip6 = v
+    else if (k === 'gw6') netInfoItem.gw6 = v
+    else if (k === 'host-managed') netInfoItem.hostmanaged = v === '1'
+  }
+
+  return netInfoItem
+}
+
+/**
  * Detail payload of one inventory selection. `signal` cancels every request
  * of the load, including the follow-up ones it has not sent yet, once the
  * selection it was started for is no longer the current one.
@@ -1613,36 +1651,7 @@ return Number.isFinite(num) ? num.toFixed(2) : String(v)
 
         Object.keys(config).forEach(key => {
           if (key.match(/^net\d+$/)) {
-            const netStr = config[key]
-
-            const parts = String(netStr).split(',')
-            const netInfoItem: any = { id: key, rawValue: String(netStr) }
-
-            parts.forEach(part => {
-              const [k, v] = part.split('=')
-
-              // Common to QEMU and LXC
-              if (k === 'bridge') netInfoItem.bridge = v
-              else if (k === 'tag') netInfoItem.tag = Number(v)
-              else if (k === 'firewall') netInfoItem.firewall = v === '1'
-              else if (k === 'link_down') netInfoItem.linkDown = v === '1'
-              else if (k === 'rate') netInfoItem.rate = Number(v)
-              else if (k === 'mtu') netInfoItem.mtu = Number(v)
-              // QEMU-only
-              else if (k === 'queues') netInfoItem.queues = Number(v)
-              else if (QEMU_NIC_MODELS.has(k)) {
-                netInfoItem.model = k
-                netInfoItem.macaddr = v
-              }
-              // LXC-only
-              else if (k === 'name') netInfoItem.name = v
-              else if (k === 'hwaddr') netInfoItem.macaddr = v
-              else if (k === 'ip') netInfoItem.ip = v
-              else if (k === 'gw') netInfoItem.gw = v
-              else if (k === 'ip6') netInfoItem.ip6 = v
-              else if (k === 'gw6') netInfoItem.gw6 = v
-              else if (k === 'host-managed') netInfoItem.hostmanaged = v === '1'
-            })
+            const netInfoItem = parseGuestNic(key, config[key])
 
             networkInfo.push(netInfoItem)
           }

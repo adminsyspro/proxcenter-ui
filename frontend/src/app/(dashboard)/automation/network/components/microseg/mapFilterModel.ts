@@ -216,3 +216,36 @@ export function filterCentre(items: readonly FilterItem[]): string | null {
   for (const item of items) if (item.kind === 'guest' && item.guest.zoneId) return item.guest.zoneId
   return null
 }
+
+/**
+ * What the list of the filter offers inside an entered zone: what the map draws around it. The zones drawn (the entered
+ * one and those it exchanges with), the guests drawn on their own and every member of the entered zone (those past
+ * the ones drawn are in its "+N"), then the Proxmox nodes and the clusters of those guests, each with the count of
+ * them it holds. `graph` is the map of the
+ * entered zone, before any filter, so that a pick never hides what can still be added. Pure.
+ */
+export function itemsInView(items: readonly FilterItem[], graph: ZoneGraph, entered: string): FilterItem[] {
+  const zones = new Set<string>([entered])
+  const keys = new Set<string>()
+  for (const n of graph.nodes) {
+    const d = n.data as { kind?: string; zone?: { id: string }; member?: { key: string } }
+    if (d.kind === 'zone' && d.zone) zones.add(d.zone.id)
+    else if (d.kind === 'guest' && d.member) keys.add(d.member.key)
+  }
+  const guests = items.flatMap(i => (i.kind === 'guest' && (keys.has(i.guest.key) || i.guest.zoneId === entered) ? [i.guest] : []))
+  // A node or a cluster counts the guests of the view it holds.
+  const nodes = new Map<string, number>()
+  const clusters = new Map<string, number>()
+  for (const g of guests) {
+    const node = nodeItemId(g.connectionId, g.node)
+    nodes.set(node, (nodes.get(node) ?? 0) + 1)
+    clusters.set(g.connectionId, (clusters.get(g.connectionId) ?? 0) + 1)
+  }
+  const ids = new Set(guests.map(g => g.id))
+  return items.flatMap((i): FilterItem[] => {
+    if (i.kind === 'zone') return zones.has(i.zone.id) ? [i] : []
+    if (i.kind === 'guest') return ids.has(i.guest.id) ? [i] : []
+    if (i.kind === 'node') return nodes.has(i.id) ? [{ ...i, guests: nodes.get(i.id)! }] : []
+    return clusters.has(i.cluster.id) ? [{ ...i, guests: clusters.get(i.cluster.id)! }] : []
+  })
+}

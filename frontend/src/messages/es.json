@@ -14662,6 +14662,7 @@
         "constellationHint": "las zonas en órbita alrededor del clúster, sus flujos como arcos (un doble clic en una zona pone sus invitados en órbita)"
       },
       "constellation": {
+        "inside": "{count, plural, one {# flujo interno} other {# flujos internos}}",
         "flows": "Flujos entre las pastillas",
         "pause": "Detener la rotación",
         "play": "Reanudar la rotación"

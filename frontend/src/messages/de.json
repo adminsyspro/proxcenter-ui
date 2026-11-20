@@ -14233,6 +14233,7 @@
         "constellationHint": "die Zonen im Orbit um den Cluster, ihre Flüsse als Bögen (ein Doppelklick auf eine Zone bringt ihre Gäste in den Orbit)"
       },
       "constellation": {
+        "inside": "{count, plural, one {# interner Fluss} other {# interne Flüsse}}",
         "flows": "Flüsse zwischen den Kreisen",
         "pause": "Drehung anhalten",
         "play": "Drehung fortsetzen"

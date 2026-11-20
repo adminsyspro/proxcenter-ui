@@ -14662,6 +14662,7 @@
         "constellationHint": "各区域环绕集群运行，流量以弧线显示（双击区域可让其客户机进入轨道）"
       },
       "constellation": {
+        "inside": "{count, plural, other {# 条内部流量}}",
         "flows": "圆点之间的流量",
         "pause": "停止旋转",
         "play": "继续旋转"

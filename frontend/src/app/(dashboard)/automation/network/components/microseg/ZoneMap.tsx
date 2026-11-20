@@ -40,7 +40,7 @@ import ZoneMatrix from './ZoneMatrix'
 import ZoneSankey from './ZoneSankey'
 import TargetPanel from './TargetPanel'
 import TargetPicker from './TargetPicker'
-import { filterCentre, filterInput, filterMarks, trimMatrix, type FilterItem } from './mapFilterModel'
+import { filterCentre, filterInput, filterMarks, itemsInView, trimMatrix, type FilterItem } from './mapFilterModel'
 import { targetFocus, targetRing, targetSankey, targetSuggestions, type TargetGuest } from './targetModel'
 import { useMapTarget } from './useMapTarget'
 import {
@@ -237,6 +237,13 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const sankeyTarget = useMemo(
     () => (target && matrix && sankey ? targetSankey(matrix, filters, target) : null),
     [target, matrix, sankey, filters],
+  )
+
+  // Inside an entered zone, the list of the filter offers what the map draws around it (the map of the zone before any
+  // filter: a pick never hides what can still be added); on the whole map, everything.
+  const filterOptions = useMemo(
+    () => (insideZone ? itemsInView(mapTarget.items, mapViewGraph('inside', input, insideZone.id, addresses), insideZone.id) : mapTarget.items),
+    [insideZone, mapTarget.items, input, addresses],
   )
 
   // A zone deleted from the draft (or an edge gone after a reload) simply closes its panel.
@@ -449,7 +456,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
           <MapToolbar
             view={insideZone ? null : view}
             onView={changeView}
-            lead={<TargetPicker items={mapTarget.items} picked={mapTarget.picked} onPicked={changeFilter} zonesById={zonesById} target={target} onShowPanel={showTarget} observedCount={targetFlowCount} peers={mapTarget.withPeers} onPeers={mapTarget.setWithPeers} clusterName={memberCluster} nodeStatus={nodeStatusOf} />}
+            lead={<TargetPicker items={filterOptions} picked={mapTarget.picked} onPicked={changeFilter} zonesById={zonesById} target={target} onShowPanel={showTarget} observedCount={targetFlowCount} peers={mapTarget.withPeers} onPeers={mapTarget.setWithPeers} clusterName={memberCluster} nodeStatus={nodeStatusOf} />}
             filters={filters}
             onFilters={setFilters}
             addresses={shown === 'guests' || shown === 'inside' ? addresses : undefined}

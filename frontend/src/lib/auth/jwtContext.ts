@@ -51,6 +51,8 @@ export async function loadJwtContext(userId: string, sid: string | null): Promis
     where: { id: userId },
     select: {
       enabled: true,
+      // A service account never holds a session (issue #1404).
+      serviceAccount: true,
       totpEnabled: true,
       require2faEnrollment: true,
       tenants: MEMBERSHIPS,
@@ -67,7 +69,7 @@ export async function loadJwtContext(userId: string, sid: string | null): Promis
   const session = (sid ? ((row as any).sessions?.[0] ?? null) : null) as SessionRow | null
 
   return {
-    enabled: row.enabled,
+    enabled: row.enabled && !row.serviceAccount,
     tenantId,
     tenantEnabled,
     mustEnroll2fa: await resolveMustEnroll(userId, row.totpEnabled, row.require2faEnrollment),

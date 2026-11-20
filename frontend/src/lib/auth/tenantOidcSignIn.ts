@@ -19,6 +19,7 @@ import { syncProviderGrants, type ProviderGrantRow } from "./roleSync"
 import { confineTenantGrants, isEmailDomainAllowed, TENANT_DEFAULT_ROLE_ID, tenantRoleRefSelect, tenantRoleRefusal } from "./tenantOidc"
 import { loadVdcScopes, toProviderGrantRows } from "./vdcScope"
 import { isSessionTenantDisabled } from "./jwtContext"
+import { isServiceAccountEmail } from "@/lib/service-accounts"
 
 /** The NextAuth user object the callback fills in for the JWT. */
 type SignInUser = { id: string; email?: string | null; name?: string | null; role?: unknown; authProvider?: unknown }
@@ -89,6 +90,7 @@ export async function signInWithTenantConnection(params: {
   const email = String(profile[config.claimEmail] || profile.email || "").toLowerCase().trim()
   const name = String(profile[config.claimName] || profile.name || email)
   if (!sub || !email) return false
+  if (isServiceAccountEmail(email)) return refuse(email, "service_account", tenantId)
 
   const { groups, groupsClaimIsArray } = readGroupsClaim(profile, config.claimGroups)
   const refs = await loadReferences(config)

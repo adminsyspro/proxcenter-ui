@@ -48,6 +48,7 @@ interface Tenant {
   operatingModel?: string | null
   vmidRangeStart?: number | null
   vmidRangeEnd?: number | null
+  apiSelfService?: boolean
 }
 
 interface TenantUser {
@@ -118,6 +119,7 @@ export default function TenantsTab() {
     operatingModel: 'iaas',
     vmidRangeStart: '',
     vmidRangeEnd: '',
+    apiSelfService: false,
   })
   const [saving, setSaving] = useState(false)
 
@@ -211,6 +213,7 @@ export default function TenantsTab() {
       operatingModel: 'iaas',
       vmidRangeStart: '',
       vmidRangeEnd: '',
+      apiSelfService: false,
     })
     setTenantUsers([])
     setAllUsers([])
@@ -231,6 +234,7 @@ export default function TenantsTab() {
       operatingModel: tenant.operatingModel || 'iaas',
       vmidRangeStart: tenant.vmidRangeStart != null ? String(tenant.vmidRangeStart) : '',
       vmidRangeEnd: tenant.vmidRangeEnd != null ? String(tenant.vmidRangeEnd) : '',
+      apiSelfService: tenant.apiSelfService === true,
     })
     setSelectedUser(null)
     setSelectedConnection('')
@@ -281,6 +285,10 @@ export default function TenantsTab() {
         description: form.description,
         enabled: form.enabled,
       }
+
+      // The provider decides whether a customer tenant manages its own
+      // service accounts and API tokens (issue #1404).
+      if (supportsVmidRange) body.apiSelfService = form.apiSelfService
 
       // operatingModel only sent on create (immutable after creation)
       if (!editingTenant) {
@@ -702,6 +710,25 @@ export default function TenantsTab() {
                 {vmidRangeError ?? t('tenants.vmidRangeHelp')}
               </Typography>
             </Box>
+          )}
+
+          {supportsVmidRange && (
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={form.apiSelfService}
+                  onChange={(e) => setForm((f) => ({ ...f, apiSelfService: e.target.checked }))}
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                  <Typography variant="body2">{t('tenants.apiSelfService')}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    {t('tenants.apiSelfServiceHelp')}
+                  </Typography>
+                </Box>
+              }
+            />
           )}
 
           <FormControlLabel

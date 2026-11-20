@@ -140,6 +140,14 @@ describe("a new identity from a tenant IdP", () => {
   })
 })
 
+describe("a service account address (#1404)", () => {
+  it("is never provisioned nor signed in by a tenant IdP", async () => {
+    await connection(T)
+    expect(await signIn(`oidc-${T}`, { sub: "s-sa", email: "x@service-account.invalid", email_verified: true })).toBe("/login?error=OidcLinkRefused")
+    expect(await prismaTest.user.count()).toBe(0)
+  })
+})
+
 describe("an e-mail a tenant IdP does not own", () => {
   it("never takes over the super admin, even verified", async () => {
     await connection(T)

@@ -20,6 +20,7 @@ import { createSession, evaluateSession, revokeSession, touchSession } from "./s
 import { sessionDurations } from "./durations"
 import { beginLoginAttempt } from "./loginLockout"
 import { withTotpThrottle } from "./totpThrottle"
+import { isServiceAccountEmail } from "@/lib/service-accounts"
 
 export type UserRole = "super_admin" | "admin" | "operator" | "viewer"
 
@@ -402,6 +403,11 @@ export const authOptions: NextAuthOptions = {
         }
 
         const email = ldapUser.email.toLowerCase()
+        // A service account address is never a person's (issue #1404).
+        if (isServiceAccountEmail(email)) {
+          await logLdapRefusal(credentials.username, "service_account", `${ldapUser.dn} carries a service account address`)
+          throw new Error("Invalid LDAP credentials")
+        }
 
         // Chercher ou créer l'utilisateur (Postgres)
         let user = await prisma.user.findUnique({
@@ -578,6 +584,8 @@ export const authOptions: NextAuthOptions = {
         const { groups, groupsClaimIsArray } = readGroupsClaim(profile as any, oidcConfig.claimGroups)
 
         if (!email) return false
+        // A service account address is never a person's (issue #1404).
+        if (isServiceAccountEmail(email)) return false
 
         // Look up by (provider connection, sub) first, then by email. The
         // subject alone is not an identity: a tenant IdP may issue the same one.

@@ -58,8 +58,9 @@ async function handlePost(req: Request, ctx: Ctx) {
   const tokenRefusal = await refuseTokenTarget(body.userId)
   if (tokenRefusal) return tokenRefusal
 
-  const target = await prisma.user.findUnique({ where: { id: body.userId }, select: { id: true } })
-  if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 })
+  const target = await prisma.user.findUnique({ where: { id: body.userId }, select: { id: true, serviceAccount: true } })
+  // A service account belongs to the one tenant it was created in (issue #1404).
+  if (!target || target.serviceAccount) return NextResponse.json({ error: "User not found" }, { status: 404 })
 
   // The role granted below comes straight from the body, so it obeys the
   // rules of every grant (lib/rbac/assignmentGuards.ts), checked before the

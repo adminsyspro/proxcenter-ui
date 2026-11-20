@@ -78,3 +78,17 @@ async function checkTokenVnetPermission(principal: Principal, vdcId: string, per
   }
   return checkPermission(permission, "connection", vdc.connectionId)
 }
+
+/**
+ * Tenant the /vdcs/{id}/vnets, IPAM and EVPN network routes act in: the
+ * caller's own, or the tenant that owns the vDC for a provider caller (#1404).
+ * The provider tenant holds no vDC: looked up there, a tenant vDC the
+ * permission check had just let through answered "vDC not found". An unknown
+ * vDC keeps the provider tenant, so the lookup that follows answers its 404.
+ */
+export async function resolveVnetTenant(vdcId: string): Promise<string> {
+  const tenantId = await getCurrentTenantId()
+  if (tenantId !== DEFAULT_TENANT_ID) return tenantId
+  const vdc = await prisma.vdc.findUnique({ where: { id: vdcId }, select: { tenantId: true } })
+  return vdc?.tenantId ?? tenantId
+}

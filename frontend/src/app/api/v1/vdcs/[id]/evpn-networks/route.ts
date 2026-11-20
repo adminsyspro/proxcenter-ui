@@ -2,9 +2,8 @@ import { NextResponse } from "next/server"
 
 import type { Principal } from "@/lib/auth/principal"
 import { PERMISSIONS } from "@/lib/rbac"
-import { getCurrentTenantId } from "@/lib/tenant"
 import { evpnContextForVdc } from "@/lib/vdc/evpnNetworks"
-import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
+import { checkVnetPermission, resolveVnetTenant } from "@/lib/vdc/vnetPermission"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
@@ -25,10 +24,10 @@ async function handleGet(_req: Request, ctx: RouteContext) {
     if (denied) return denied
 
     try {
-      return NextResponse.json({ data: await evpnContextForVdc(vdcId, await getCurrentTenantId()) })
+      return NextResponse.json({ data: await evpnContextForVdc(vdcId, await resolveVnetTenant(vdcId)) })
     } catch (err: any) {
       const msg = err?.message || String(err)
-      // The provider tenant has no vDC of its own: nothing to offer.
+      // A provider caller on an unknown vDC: nothing to offer.
       if (msg.includes("vDC not found")) return NextResponse.json({ data: { available: false, vdcs: [], networks: [] } })
       throw err
     }

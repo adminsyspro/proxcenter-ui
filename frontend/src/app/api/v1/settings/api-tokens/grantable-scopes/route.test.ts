@@ -19,6 +19,9 @@ vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: getCurrentTenantIdMock,
   userHasAccessToTenant: userHasAccessToTenantMock,
 }))
+const { serviceAccountMock } = vi.hoisted(() => ({ serviceAccountMock: vi.fn<(id: string) => Promise<any>>() }))
+vi.mock('@/lib/service-accounts', () => ({ getServiceAccount: serviceAccountMock }))
+vi.mock('@/lib/api-tokens/selfService', () => ({ apiSelfServiceRefusal: async () => null }))
 
 import { callRoute, readJson } from '@/__tests__/setup/route-test'
 import { ALL_SCOPE_IDS, FLEET_SCOPE_IDS, isCreatorCheckedScope, READ_SCOPE_IDS } from '@/lib/api-tokens/scopes'
@@ -100,5 +103,37 @@ describe('GET /api/v1/settings/api-tokens/grantable-scopes', () => {
   it('uses the requested tenant for the checks', async () => {
     await get({ tenantId: 't2', connectionIds: 'c1' })
     expect(holdsMock).toHaveBeenCalledWith('u1', 't2', expect.any(String), ['c1'])
+  })
+})
+
+describe('grantable scopes for a service account token (#1404)', () => {
+  beforeEach(() => {
+    serviceAccountMock.mockImplementation(async (id: string) =>
+      id === 'sa-acme' ? { id: 'sa-acme', tenantId: 'acme' } : null)
+  })
+
+  it('judges in the account tenant and keeps only the scopes the account holds, reads included', async () => {
+    getRBACContextMock.mockResolvedValue({ userId: 'admin', isAdmin: true, tenantId: 'default' })
+    holdsMock.mockImplementation(async (userId: string, tenantId: string, key: string) =>
+      userId === 'sa-acme' && tenantId === 'acme' && key === 'vm.view')
+    const body = await readJson<any>(await get({ serviceAccountId: 'sa-acme' }))
+    expect(body.data.grantable).toEqual(['vms:read'])
+  })
+
+  it('answers 404 for an account the caller does not reach', async () => {
+    getCurrentTenantIdMock.mockResolvedValue('beta')
+    expect((await get({ serviceAccountId: 'sa-acme' })).status).toBe(404)
+    expect((await get({ serviceAccountId: 'nope' })).status).toBe(404)
+  })
+})
+
+describe('a customer tenant token never offers a provider-only scope (#1404)', () => {
+  it('drops tenants:* and vdcs:write outside the provider tenant', async () => {
+    getRBACContextMock.mockResolvedValue({ userId: 'admin', isAdmin: true, tenantId: 'default' })
+    const body = await readJson<any>(await get({ tenantId: 'acme' }))
+    for (const scope of ['tenants:read', 'tenants:write', 'vdcs:write']) expect(body.data.grantable).not.toContain(scope)
+    expect(body.data.grantable).toContain('vms:read')
+    const provider = await readJson<any>(await get({ tenantId: 'default' }))
+    expect(provider.data.grantable).toContain('vdcs:write')
   })
 })

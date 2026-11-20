@@ -24,6 +24,8 @@ export interface Tenant {
   operatingModel: string | null
   vmidRangeStart: number | null
   vmidRangeEnd: number | null
+  /** The tenant manages its own service accounts and API tokens (issue #1404). */
+  apiSelfService: boolean
   settings: Record<string, any> | null
   createdBy: string | null
   createdAt: string
@@ -39,6 +41,7 @@ function rowToTenant(row: {
   operatingModel: string | null
   vmidRangeStart: number | null
   vmidRangeEnd: number | null
+  apiSelfService?: boolean | null
   settings: Prisma.JsonValue | null
   createdBy: string | null
   createdAt: Date
@@ -53,6 +56,7 @@ function rowToTenant(row: {
     operatingModel: row.operatingModel,
     vmidRangeStart: row.vmidRangeStart,
     vmidRangeEnd: row.vmidRangeEnd,
+    apiSelfService: row.apiSelfService === true,
     settings:
       row.settings && typeof row.settings === "object" && !Array.isArray(row.settings)
         ? (row.settings as Record<string, any>)
@@ -510,6 +514,7 @@ export async function updateTenant(
     enabled?: boolean
     vmidRangeStart?: number | null
     vmidRangeEnd?: number | null
+    apiSelfService?: boolean
   },
 ): Promise<Tenant | null> {
   const existing = await prisma.tenant.findUnique({ where: { id } })
@@ -524,6 +529,7 @@ export async function updateTenant(
       enabled: data.enabled !== undefined ? data.enabled : existing.enabled,
       vmidRangeStart: data.vmidRangeStart !== undefined ? data.vmidRangeStart : existing.vmidRangeStart,
       vmidRangeEnd: data.vmidRangeEnd !== undefined ? data.vmidRangeEnd : existing.vmidRangeEnd,
+      apiSelfService: typeof data.apiSelfService === "boolean" ? data.apiSelfService : existing.apiSelfService,
       updatedAt: new Date(),
     },
   })
@@ -736,7 +742,8 @@ export async function getTenantUsers(tenantId: string): Promise<
   }>
 > {
   const memberships = await prisma.userTenant.findMany({
-    where: { tenantId },
+    // Service accounts are listed in Settings > API, not among the members (issue #1404).
+    where: { tenantId, user: { serviceAccount: false } },
     include: { user: true },
     orderBy: { user: { name: "asc" } },
   })

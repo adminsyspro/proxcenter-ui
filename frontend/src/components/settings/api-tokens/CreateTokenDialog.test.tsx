@@ -396,6 +396,34 @@ describe('CreateTokenDialog scope picker', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent(dialogT.fleetOnlyScope)
   })
 
+  it('offers a tenant that only has vDCs, with nothing to restrict the token to (#1404)', async () => {
+    const base = vi.mocked(fetch).getMockImplementation() as (url: string, init?: RequestInit) => Promise<Response>
+    vi.mocked(fetch).mockImplementation((async (url: string, init?: RequestInit) => {
+      if (url === '/api/v1/tenants') {
+        return new Response(JSON.stringify({ data: [
+          { id: 'default', name: 'Provider', enabled: true },
+          { id: 'tenant-v', name: 'Tenant V', enabled: true, operatingModel: 'iaas' },
+        ] }), { status: 200 })
+      }
+      if (url === '/api/v1/admin/vdcs') return new Response(JSON.stringify({ data: [{ id: 'vdc-1', tenantId: 'tenant-v' }] }), { status: 200 })
+      return base(url, init)
+    }) as never)
+    const dialog = await openDialog()
+    await grantableSettled(dialog)
+
+    fireEvent.mouseDown(within(dialog).getAllByRole('combobox')[1])
+    await userEvent.click(await screen.findByRole('option', { name: 'Tenant V' }))
+
+    const connections = within(dialog).getAllByRole('combobox')[2]
+    await waitFor(() => expect(connections).toHaveAttribute('aria-disabled', 'true'))
+    expect(within(dialog).getByText(dialogT.connectionsNone)).toBeInTheDocument()
+
+    await typeName(dialog)
+    await userEvent.click(levelButton(dialog, 'vms', 'read'))
+    await userEvent.click(createButton(dialog))
+    await waitFor(() => expect(postBody()).toMatchObject({ tenantId: 'tenant-v', connectionIds: null }))
+  })
+
   it('presets a 90-day expiry when a domain goes to Write, and keeps it when back to Read', async () => {
     const dialog = await openDialog()
     const expiration = within(dialog).getAllByRole('combobox')[0]
@@ -481,5 +509,53 @@ describe('CreateTokenDialog scope picker', () => {
     await userEvent.click(createButton(dialog))
     await waitFor(() => expect(postBody().writeRateLimitPerMin).toBe(120))
     expect(postBody().scopes).toEqual(['storage:read', 'storage:write'])
+  })
+})
+
+describe('CreateTokenDialog for a service account (#1404)', () => {
+  const dialogT = (en as any).settings.apiTokens.dialog
+  const ACCOUNT = { id: 'sa-1', name: 'ci-onboarding', tenantId: 'tenant-a', tenantName: 'Tenant A' }
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/v1/tenants') return new Response(JSON.stringify({ data: [{ id: 'default', name: 'Provider', enabled: true }] }), { status: 200 })
+      if (url === '/api/v1/admin/connections?type=pve') {
+        return new Response(JSON.stringify({ data: [{ id: 'conn-a', tenantId: 'tenant-a', name: 'Tenant A PVE' }] }), { status: 200 })
+      }
+      if (url.startsWith('/api/v1/settings/api-tokens/grantable-scopes')) {
+        return new Response(JSON.stringify({ data: { grantable: ['vms:read', 'vms:power'] } }), { status: 200 })
+      }
+      if (url === '/api/v1/service-accounts/sa-1/tokens' && init?.method === 'POST') {
+        return new Response(JSON.stringify({ data: { secret: 'pxc_SA' } }), { status: 201 })
+      }
+      return new Response('{}', { status: 404 })
+    }))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    cleanup()
+  })
+
+  it('names the account, fixes its tenant, offers only the scopes it holds and creates on its route', async () => {
+    renderWithProviders(<CreateTokenDialog open onClose={() => {}} onCreated={() => {}} serviceAccount={ACCOUNT} />)
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(dialogT.titleForAccount.replace('{name}', 'ci-onboarding'))).toBeInTheDocument()
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes('serviceAccountId=sa-1'))).toBe(true))
+
+    const backups = within(dialog).getByRole('group', { name: dialogT.domains.backups })
+    await waitFor(() => expect(within(backups).getByRole('button', { name: dialogT.access.read })).toBeDisabled())
+    const vms = within(dialog).getByRole('group', { name: dialogT.domains.vms })
+    await waitFor(() => expect(within(vms).getByRole('button', { name: dialogT.access.write })).toBeEnabled())
+
+    await userEvent.type(within(dialog).getByLabelText(new RegExp(`^${dialogT.name}`)), 'tf')
+    await userEvent.click(within(vms).getByRole('button', { name: dialogT.access.read }))
+    await userEvent.click(within(dialog).getByRole('button', { name: new RegExp(`^${dialogT.create}$`) }))
+
+    await waitFor(() => expect(screen.getByText('pxc_SA')).toBeInTheDocument())
+    const post = vi.mocked(fetch).mock.calls.find(([u, i]: any) => u === '/api/v1/service-accounts/sa-1/tokens' && i?.method === 'POST')
+    const body = JSON.parse((post as any)[1].body)
+    expect(body).toMatchObject({ name: 'tf', scopes: ['vms:read'] })
+    expect(body).not.toHaveProperty('tenantId')
   })
 })

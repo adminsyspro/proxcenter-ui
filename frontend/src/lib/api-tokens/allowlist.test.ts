@@ -35,7 +35,7 @@ describe('PUBLIC_API_ALLOWLIST data', () => {
       expect(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).toContain(entry.method)
       expect([
         'Monitoring', 'VMs', 'Snapshots', 'Backups', 'Storage', 'HA', 'Pools', 'Network', 'Firewall', 'Tasks',
-        'Tenants', 'vDCs', 'RBAC', 'Users',
+        'Tenants', 'vDCs', 'RBAC', 'Users', 'Identity',
       ]).toContain(entry.tag)
       expect(entry.routeFile).toMatch(/^src\/app\/api\/v1\/.+\/route\.ts$/)
       expect(entry.summary.length).toBeGreaterThan(0)
@@ -260,6 +260,18 @@ describe('shared canonical matcher', () => {
       'rbac-assignment-create': '/api/v1/rbac/assignments',
       'rbac-assignment-update': '/api/v1/rbac/assignments/a1',
       'rbac-assignment-delete': '/api/v1/rbac/assignments/a1',
+      'service-accounts-list': '/api/v1/service-accounts',
+      'service-account-get': '/api/v1/service-accounts/sa1',
+      'service-account-tokens-list': '/api/v1/service-accounts/sa1/tokens',
+      'service-account-create': '/api/v1/service-accounts',
+      'service-account-update': '/api/v1/service-accounts/sa1',
+      'service-account-delete': '/api/v1/service-accounts/sa1',
+      'service-account-token-create': '/api/v1/service-accounts/sa1/tokens',
+      'service-account-token-delete': '/api/v1/service-accounts/sa1/tokens/t1',
+      'service-account-token-rotate': '/api/v1/service-accounts/sa1/tokens/t1/rotate',
+      'tenant-oidc-connection-get': '/api/v1/auth/oidc/connections/t1',
+      'tenant-oidc-connection-update': '/api/v1/auth/oidc/connections/t1',
+      'tenant-oidc-connection-delete': '/api/v1/auth/oidc/connections/t1',
       'admin-vdc-create': '/api/v1/admin/vdcs',
       'admin-vdc-update': '/api/v1/admin/vdcs/vdc-1',
       'admin-vdc-delete': '/api/v1/admin/vdcs/vdc-1',

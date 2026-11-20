@@ -31,6 +31,7 @@ export async function seedApiToken(opts: {
   rateLimitPerMin?: number
   writeRateLimitPerMin?: number
   createdByUserId?: string | null
+  serviceAccountId?: string | null
 } = {}): Promise<{ id: string; secret: string; prefix: string }> {
   const generated = generateApiToken()
   const id = `tok_test_${++seq}_${Date.now()}`
@@ -48,6 +49,7 @@ export async function seedApiToken(opts: {
       rateLimitPerMin: opts.rateLimitPerMin ?? 600,
       writeRateLimitPerMin: opts.writeRateLimitPerMin ?? 60,
       createdByUserId: opts.createdByUserId ?? null,
+      serviceAccountId: opts.serviceAccountId ?? null,
     },
   })
   return { id, secret: generated.secret, prefix: generated.prefix }

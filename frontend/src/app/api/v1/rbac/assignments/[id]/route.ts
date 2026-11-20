@@ -257,6 +257,7 @@ async function handlePatch(req: Request, context: RouteContext) {
         callerUserId: writer.userId ?? "",
         roleId: role_id,
         targetTenantId: assignment.tenantId,
+        targetUserId: assignment.userId,
       })
       if (!guard.ok) return guard.response!
     }

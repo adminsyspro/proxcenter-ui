@@ -581,10 +581,32 @@ describe('ApiTokensTab', () => {
     expect(screen.queryByText('pxc_ROTATEDSECRET')).not.toBeInTheDocument()
   })
 
+  it('says a service account token keeps acting as its account when rotated', async () => {
+    tokensFixture = [{ ...TOKEN_ROW, serviceAccountId: 'sa-1', serviceAccount: { name: 'ci' } }]
+    renderWithProviders(<ApiTokensTab />)
+    await screen.findByText('pxc_Ab12Cd34')
+    await userEvent.click(screen.getByRole('button', { name: enTokens.rotate }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(enTokens.serviceAccounts.rotateTokenConfirm)).toBeInTheDocument()
+    expect(within(dialog).queryByText(enTokens.rotateConfirm)).toBeNull()
+  })
+
   it('offers no rotation on a legacy revoked row', async () => {
     tokensFixture = [LEGACY_REVOKED_TOKEN_ROW]
     renderWithProviders(<ApiTokensTab />)
     await screen.findByText('pxc_Rr77Vv66')
     expect(screen.queryByRole('button', { name: enTokens.rotate })).not.toBeInTheDocument()
+  })
+})
+
+describe('ApiTokensTab in a customer tenant the provider keeps closed (#1404)', () => {
+  it('says so once, translated, instead of two load errors', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ error: "The provider manages this tenant's service accounts and API tokens" }), { status: 403 },
+    )))
+    renderWithProviders(<ApiTokensTab />)
+    expect(await screen.findByText(enTokens.selfServiceClosed)).toBeInTheDocument()
+    expect(screen.queryByText(enTokens.loadError)).toBeNull()
+    expect(screen.queryByText(enTokens.serviceAccounts.title)).toBeNull()
   })
 })

@@ -10,6 +10,7 @@ import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const h = vi.hoisted(() => ({
   checkVnetPermission: vi.fn(),
+  resolveVnetTenant: vi.fn(),
   evpnContextForVdc: vi.fn(),
   setEvpnNetworkPresence: vi.fn(),
   auditMock: vi.fn(),
@@ -22,7 +23,10 @@ vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-a' }))
 vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { SDN_VNET_VIEW: 'sdn.vnet.view', SDN_VNET_CREATE: 'sdn.vnet.create', SDN_VNET_EDIT: 'sdn.vnet.edit', SDN_VNET_DELETE: 'sdn.vnet.delete' },
 }))
-vi.mock('@/lib/vdc/vnetPermission', () => ({ checkVnetPermission: (...a: unknown[]) => h.checkVnetPermission(...a) }))
+vi.mock('@/lib/vdc/vnetPermission', () => ({
+  checkVnetPermission: (...a: unknown[]) => h.checkVnetPermission(...a),
+  resolveVnetTenant: (...a: unknown[]) => h.resolveVnetTenant(...a),
+}))
 vi.mock('@/lib/vdc/evpnNetworks', () => ({
   evpnContextForVdc: (...a: unknown[]) => h.evpnContextForVdc(...a),
   setEvpnNetworkPresence: (...a: unknown[]) => h.setEvpnNetworkPresence(...a),
@@ -44,6 +48,7 @@ const put = (body: unknown, params: Record<string, string> = { id: 'a1', network
 beforeEach(() => {
   vi.clearAllMocks()
   h.checkVnetPermission.mockResolvedValue(null)
+  h.resolveVnetTenant.mockResolvedValue('tenant-a')
   h.evpnContextForVdc.mockResolvedValue(CONTEXT)
   h.setEvpnNetworkPresence.mockResolvedValue({ vdcIds: ['a1', 'a3'] })
 })
@@ -112,5 +117,25 @@ describe('PUT /api/v1/vdcs/[id]/evpn-networks/[networkId]', () => {
       h.setEvpnNetworkPresence.mockRejectedValueOnce(error)
       expect((await put({ vdcIds: ['a1', 'a2'] })).status).toBe(status)
     }
+  })
+})
+
+describe('a provider caller on the EVPN networks of a tenant vDC (#1404)', () => {
+  beforeEach(() => {
+    h.resolveVnetTenant.mockResolvedValue('tenant-b')
+  })
+
+  it('GET reads the context in the tenant that owns the vDC', async () => {
+    await callRoute(GET as any, { params: { id: 'a1' } })
+
+    expect(h.resolveVnetTenant).toHaveBeenCalledWith('a1')
+    expect(h.evpnContextForVdc).toHaveBeenCalledWith('a1', 'tenant-b')
+  })
+
+  it('PUT sets the presence in the tenant that owns the vDC', async () => {
+    await put({ vdcIds: ['a1', 'a3'] })
+
+    expect(h.evpnContextForVdc).toHaveBeenCalledWith('a1', 'tenant-b')
+    expect(h.setEvpnNetworkPresence).toHaveBeenCalledWith('n1', 'tenant-b', ['a1', 'a3'])
   })
 })

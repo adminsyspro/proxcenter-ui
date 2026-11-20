@@ -2,9 +2,8 @@ import { NextResponse } from "next/server"
 
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { getPrincipal, type Principal } from "@/lib/auth/principal"
-import { getCurrentTenantId } from "@/lib/tenant"
 import { listVnetsForTenant, createVnetForTenant } from "@/lib/vdc/vnets"
-import { checkVnetPermission } from "@/lib/vdc/vnetPermission"
+import { checkVnetPermission, resolveVnetTenant } from "@/lib/vdc/vnetPermission"
 import { PERMISSIONS } from "@/lib/rbac"
 import { VniError } from "@/lib/vdc/vniPolicy"
 import { mapTenantNetworkError } from "@/lib/vdc/httpErrors"
@@ -115,7 +114,7 @@ async function postHandler(req: Request, ctx: RouteContext) {
     // A token creates as nobody: the audit journals the write under the token.
     const principal = ctx.principal ?? (await getPrincipal()).principal
     const createdBy = principal?.userId ?? null
-    const tenantId = await getCurrentTenantId()
+    const tenantId = await resolveVnetTenant(vdcId)
 
     // A shared-zone network is created on several vDCs at once (#1334): the
     // caller must hold the right on each of them, not only on the one in the

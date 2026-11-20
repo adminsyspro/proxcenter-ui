@@ -32,7 +32,7 @@ beforeEach(async () => {
   headersMock.mockResolvedValue(new Headers())
   getServerSessionMock.mockResolvedValue(null)
   invalidateTrustedProxiesCache()
-  await truncate(['audit_logs', 'api_tokens', 'tenants', 'security_policies'])
+  await truncate(['audit_logs', 'api_tokens', 'users', 'tenants', 'security_policies'])
   await seedDefaultTenant()
 })
 
@@ -69,6 +69,27 @@ describe('audit, token attribution (D13)', () => {
     expect(row?.userId).toBeNull()
     expect(row?.userEmail).toBeNull()
     expect(row?.tenantId).toBe('default')
+  })
+
+  it('names the service account a token acts as, durably, next to the token (#1404)', async () => {
+    const now = new Date()
+    await prismaTest.user.create({
+      data: { id: 'sa1', email: 'sa1@service-account.invalid', name: 'ci', serviceAccount: true, createdAt: now, updatedAt: now },
+    })
+    const { id, secret } = await seedApiToken({ serviceAccountId: 'sa1' })
+    headersMock.mockResolvedValue(tokenHeaders(secret, 'vms-list', '/api/v1/vms'))
+    const row = await prismaTest.auditLog.findUnique({ where: { id: await audit({ action: 'read', category: 'api_tokens' }) } })
+    expect(row).toMatchObject({ apiTokenId: id, userId: 'sa1', userEmail: 'sa1@service-account.invalid' })
+  })
+
+  it('names the service account on a row that only carries the token id, a refusal included (#1404)', async () => {
+    const now = new Date()
+    await prismaTest.user.create({
+      data: { id: 'sa2', email: 'sa2@service-account.invalid', name: 'ci', serviceAccount: true, createdAt: now, updatedAt: now },
+    })
+    const { id } = await seedApiToken({ serviceAccountId: 'sa2' })
+    const row = await prismaTest.auditLog.findUnique({ where: { id: await audit({ action: 'apitoken.denied', category: 'api_tokens', apiTokenId: id }) } })
+    expect(row).toMatchObject({ apiTokenId: id, userId: 'sa2', userEmail: 'sa2@service-account.invalid' })
   })
 
   it('keeps the session behavior unchanged (user fields, no apiTokenId)', async () => {

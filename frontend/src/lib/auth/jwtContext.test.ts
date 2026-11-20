@@ -75,6 +75,18 @@ describe('loadJwtContext', () => {
     expect(tenantQuery).not.toHaveProperty('take')
   })
 
+  it('never keeps a session alive for a service account: it counts as disabled (#1404)', async () => {
+    userFindUniqueMock.mockResolvedValue({
+      enabled: true, serviceAccount: true, totpEnabled: false, require2faEnrollment: false,
+      tenants: [{ tenantId: 'tenant-a', tenant: { enabled: true } }], sessions: [sessionRow],
+    })
+
+    const ctx = await loadJwtContext('sa1', 'sid1')
+
+    expect(ctx.enabled).toBe(false)
+    expect(userFindUniqueMock.mock.calls[0][0].select.serviceAccount).toBe(true)
+  })
+
   it('honours the per-user 2FA flag without consulting the policy', async () => {
     userFindUniqueMock.mockResolvedValue({
       enabled: true, totpEnabled: false, require2faEnrollment: true,

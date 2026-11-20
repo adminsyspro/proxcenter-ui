@@ -52,3 +52,17 @@ describe('existing gates', () => {
     expect(isSettingsTabVisible({ requiredFeature: 'x' }, ctx({ licenseLoading: true, hasFeature: () => false }))).toBe(true)
   })
 })
+
+describe('a provider tab a customer tenant may also reach (API, #1404)', () => {
+  const apiTab = { providerOnly: true, orCustomerTenantPermission: 'admin.apitokens' }
+
+  it('shows to the provider super admin, and to a customer tenant holding admin.apitokens', () => {
+    expect(isSettingsTabVisible(apiTab, ctx({ isSuperAdmin: true, isProviderTenant: true }))).toBe(true)
+    expect(isSettingsTabVisible(apiTab, ctx({ hasPermission: (p: string) => p === 'admin.apitokens' }))).toBe(true)
+  })
+
+  it('stays hidden to a customer tenant without it, and to a provider user who is not super admin', () => {
+    expect(isSettingsTabVisible(apiTab, ctx({ hasPermission: () => false }))).toBe(false)
+    expect(isSettingsTabVisible(apiTab, ctx({ isProviderTenant: true, hasPermission: () => true }))).toBe(false)
+  })
+})

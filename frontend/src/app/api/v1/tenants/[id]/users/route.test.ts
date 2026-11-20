@@ -49,7 +49,7 @@ vi.mock("@/lib/tenant", () => ({
 }))
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
-    user: { findUnique: async ({ where }: any) => (where.id === "ghost" ? null : { id: where.id }) },
+    user: { findUnique: async ({ where }: any) => (where.id === "ghost" ? null : { id: where.id, serviceAccount: where.id === "svc" }) },
     rbacRole: { findUnique: (...a: any[]) => roleFindUniqueMock(...a) },
     rbacUserRole: { findFirst: (...a: any[]) => grantFindFirstMock(...a), create: (...a: any[]) => grantCreateMock(...a) },
   },
@@ -144,6 +144,13 @@ describe("POST /api/v1/tenants/[id]/users", () => {
     expect(addUserToTenantMock).not.toHaveBeenCalled()
     sessionMock.mockResolvedValue({ user: { id: "sa", email: "sa@x" } })
     expect((await post("t1", { userId: "u1", roleId: "role_nic" })).status).toBe(200)
+  })
+
+  it("never adds a service account to another tenant: it belongs to one tenant only (#1404)", async () => {
+    const res = await post("t1", { userId: "svc" })
+    expect(res.status).toBe(404)
+    expect(addUserToTenantMock).not.toHaveBeenCalled()
+    expect(grantCreateMock).not.toHaveBeenCalled()
   })
 
   it("stays behind the provider tenant gate", async () => {

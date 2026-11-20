@@ -11,11 +11,13 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 
 import CreateTokenDialog from './CreateTokenDialog'
-import TokenSecretReveal from './TokenSecretReveal'
+import RotateTokenDialog from './RotateTokenDialog'
+import ServiceAccountsPanel from './ServiceAccountsPanel'
 import FeatureGuard from '@/components/guards/FeatureGuard'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 import { DESTRUCTIVE_SCOPE_IDS, isWriteScope } from '@/lib/api-tokens/scopes'
 import { Features } from '@/lib/license/features'
+import { SELF_SERVICE_CLOSED } from '@/lib/api-tokens/selfServiceMessage'
 
 type ApiTokenView = {
   id: string
@@ -36,6 +38,9 @@ type ApiTokenView = {
   // minted before the column existed, and on tokens created without a user
   // session -- the grid falls back to the "unknown" label for those.
   createdByEmail?: string | null
+  // The service account the token acts as (issue #1404), named instead of its creator.
+  serviceAccountId?: string | null
+  serviceAccount?: { name: string | null } | null
   createdAt: string
 }
 
@@ -87,13 +92,20 @@ function ApiTokensPanel() {
   const [createOpen, setCreateOpen] = useState(false)
   const [deletingToken, setDeletingToken] = useState<ApiTokenView | null>(null)
   const [rotatingToken, setRotatingToken] = useState<ApiTokenView | null>(null)
-  const [rotating, setRotating] = useState(false)
-  const [rotatedSecret, setRotatedSecret] = useState('')
+  // A customer tenant whose provider has not opened self-service (issue #1404).
+  const [closed, setClosed] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch('/api/v1/settings/api-tokens')
+      if (res.status === 403) {
+        const body = await res.json().catch(() => null)
+        if (body?.error === SELF_SERVICE_CLOSED) {
+          setClosed(true)
+          return
+        }
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json()
       setTokens(Array.isArray(json?.data) ? json.data : [])
@@ -122,33 +134,6 @@ function ApiTokensPanel() {
     }
   }
 
-  // The old secret dies with the request: the dialog stays open on the new
-  // one, shown once, and the list reloads behind it (prefix and creator).
-  async function confirmRotate() {
-    if (!rotatingToken) return
-    setRotating(true)
-    try {
-      const res = await fetch(`/api/v1/settings/api-tokens/${rotatingToken.id}/rotate`, { method: 'POST' })
-      const json = await res.json().catch(() => null)
-      if (!res.ok) {
-        setError(res.status === 403 ? t('rotateForbidden') : t('rotateError'))
-        setRotatingToken(null)
-        return
-      }
-      setRotatedSecret(json.data.secret)
-      await load()
-    } catch {
-      setError(t('rotateError'))
-      setRotatingToken(null)
-    } finally {
-      setRotating(false)
-    }
-  }
-
-  function closeRotate() {
-    setRotatingToken(null)
-    setRotatedSecret('')
-  }
 
   const columns: GridColDef[] = [
     {
@@ -207,7 +192,18 @@ function ApiTokensPanel() {
       // credential, so an admin cannot tie a live token to a departing
       // person. Plain text like the tenant column -- an email is a name,
       // not an identifier, so no monospace.
-      renderCell: params => (params.value ? (params.value as string) : t('unknownCreator')),
+      renderCell: params => {
+        const account = (params.row as ApiTokenView).serviceAccount
+        if (account) {
+          return (
+            <Stack direction='row' spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+              <i className='ri-robot-2-line' />
+              <Typography variant='body2' noWrap>{t('serviceAccounts.createdByAccount', { name: account.name ?? '' })}</Typography>
+            </Stack>
+          )
+        }
+        return params.value ? (params.value as string) : t('unknownCreator')
+      },
     },
     {
       field: 'actions',
@@ -247,6 +243,8 @@ function ApiTokensPanel() {
       },
     },
   ]
+
+  if (closed) return <Alert severity='info'>{t('selfServiceClosed')}</Alert>
 
   return (
     <Box>
@@ -294,26 +292,22 @@ function ApiTokensPanel() {
         </CardContent>
       </Card>
 
+      <ServiceAccountsPanel onTokensChanged={load} />
+
       <CreateTokenDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreated={load} />
 
-      <Dialog open={!!rotatingToken} onClose={rotatedSecret || rotating ? undefined : closeRotate} fullWidth maxWidth='sm'>
-        <DialogTitle>{rotatedSecret ? t('reveal.title') : t('rotateTitle', { name: rotatingToken?.name ?? '' })}</DialogTitle>
-        <DialogContent>
-          {rotatedSecret
-            ? <TokenSecretReveal secret={rotatedSecret} />
-            : <Typography variant='body2'>{t('rotateConfirm')}</Typography>}
-        </DialogContent>
-        <DialogActions>
-          {rotatedSecret ? (
-            <Button variant='contained' onClick={closeRotate}>{t('reveal.done')}</Button>
-          ) : (
-            <>
-              <Button onClick={closeRotate} disabled={rotating}>{t('dialog.cancel')}</Button>
-              <Button color='warning' variant='contained' onClick={confirmRotate} disabled={rotating}>{t('rotate')}</Button>
-            </>
-          )}
-        </DialogActions>
-      </Dialog>
+      <RotateTokenDialog
+        token={rotatingToken}
+        url={`/api/v1/settings/api-tokens/${rotatingToken?.id}/rotate`}
+        // An account token keeps acting as its account: the rotator does not take it over.
+        confirm={rotatingToken?.serviceAccountId ? t('serviceAccounts.rotateTokenConfirm') : t('rotateConfirm')}
+        onClose={() => setRotatingToken(null)}
+        onRotated={() => void load()}
+        onRefused={status => {
+          setError(status === 403 ? t('rotateForbidden') : t('rotateError'))
+          setRotatingToken(null)
+        }}
+      />
 
       <Dialog open={!!deletingToken} onClose={() => setDeletingToken(null)}>
         <DialogTitle>{t('delete')}</DialogTitle>

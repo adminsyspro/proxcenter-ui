@@ -31,6 +31,9 @@ export const READ_SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
   "ipam:read": ["sdn.vnet.view"],
   "rbac:read": ["admin.rbac.view"],
   "users:read": ["admin.users.view"],
+  // Service accounts, their tokens (never a secret) and the IdP connection of
+  // customer tenants (issue #1404).
+  "identity:read": ["admin.apitokens.view", "admin.settings.view"],
 }
 
 /**
@@ -40,7 +43,7 @@ export const READ_SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
  * admin.apitokens alone does not show. The older read scopes keep their
  * historical rule.
  */
-export const CREATOR_CHECKED_READ_SCOPE_IDS: readonly string[] = ["tenants:read", "vdcs:read", "ipam:read", "rbac:read", "users:read"]
+export const CREATOR_CHECKED_READ_SCOPE_IDS: readonly string[] = ["tenants:read", "vdcs:read", "ipam:read", "rbac:read", "users:read", "identity:read"]
 
 export const WRITE_SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
   "vms:power": ["vm.view", "connection.view", "vm.start", "vm.stop", "vm.restart", "vm.suspend"],
@@ -93,6 +96,10 @@ export const WRITE_SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
   "tenants:write": ["admin.tenants.view", "admin.tenants"],
   "users:write": ["admin.users.view", "admin.users"],
   "rbac:write": ["admin.rbac.view", "admin.rbac"],
+  // Service accounts and their tokens, the IdP connection of customer tenants
+  // (issue #1404). A token never mints a token wider than itself, nor one its
+  // service account could not use.
+  "identity:write": ["admin.apitokens.view", "admin.apitokens", "admin.settings.view", "admin.settings.identity"],
 }
 
 export const SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
@@ -108,7 +115,7 @@ export const ALL_SCOPE_IDS = Object.keys(SCOPE_DEFINITIONS)
  * Write scopes carrying an admin right, which only counts when granted
  * globally. They read back what they manage.
  */
-export const ADMIN_WRITE_SCOPE_IDS: readonly string[] = ["vdcs:write", "tenants:write", "users:write", "rbac:write"]
+export const ADMIN_WRITE_SCOPE_IDS: readonly string[] = ["vdcs:write", "tenants:write", "users:write", "rbac:write", "identity:write"]
 
 /**
  * Write scopes no connection perimeter can hold: vDC operations reach
@@ -118,6 +125,12 @@ export const ADMIN_WRITE_SCOPE_IDS: readonly string[] = ["vdcs:write", "tenants:
  * (issue #1360).
  */
 export const FLEET_SCOPE_IDS: readonly string[] = ADMIN_WRITE_SCOPE_IDS
+
+/**
+ * Scopes whose every route answers the provider tenant only: a customer
+ * tenant's token is never minted with them (issue #1404).
+ */
+export const PROVIDER_ONLY_SCOPE_IDS: readonly string[] = ["tenants:read", "tenants:write", "vdcs:write"]
 
 /** Scopes that let a token destroy data; the UI asks for extra confirmation. */
 export const DESTRUCTIVE_SCOPE_IDS: readonly string[] = ["vms:delete", "backups:delete"]

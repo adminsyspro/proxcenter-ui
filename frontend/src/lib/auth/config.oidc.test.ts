@@ -117,6 +117,19 @@ describe('OIDC sign-in binding a local account found by e-mail (H2)', () => {
     ;(prisma.userTenant.findFirst as any).mockResolvedValue({ userId: 'u-local' })
   })
 
+  it('never signs in nor binds a service account address, whatever the IdP vouches (#1404)', async () => {
+    const res = await (authOptions.callbacks as any).signIn({
+      user: { id: 'sub-new' },
+      account: { provider: 'oidc' },
+      profile: { sub: 'sub-new', email: 'abc@service-account.invalid', email_verified: true },
+    })
+
+    expect(res).toBe(false)
+    expect(prisma.user.findFirst).not.toHaveBeenCalled()
+    expect(prisma.user.findUnique).not.toHaveBeenCalled()
+    expect(prisma.user.update).not.toHaveBeenCalled()
+  })
+
   it('never re-binds an account already tied to another subject', async () => {
     ;(prisma.user.findUnique as any).mockResolvedValue({ ...localAccount, oidcSub: 'sub-old' })
 

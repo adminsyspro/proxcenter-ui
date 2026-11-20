@@ -12,6 +12,7 @@ import { clientIpFromHeaders } from "@/lib/net/clientIp"
 
 import { withAuditOrigin } from "./origin"
 import { markAuditExplicit } from "./scope"
+import { isServiceAccountEmail } from "@/lib/service-accounts"
 
 export type AuditCategory =
   | "auth"           // Connexion, déconnexion, changement de mot de passe
@@ -292,6 +293,24 @@ export async function audit(entry: AuditLogEntry, tx?: Prisma.TransactionClient)
     }
   }
 
+  // A row written for a service account's token, a refusal included, also
+  // names the account (issue #1404): it keeps saying who acted once the
+  // token is deleted.
+  if (apiTokenId && !userId) {
+    try {
+      const token = await prisma.apiToken.findUnique({
+        where: { id: apiTokenId },
+        select: { serviceAccount: { select: { id: true, email: true } } },
+      })
+      if (token?.serviceAccount) {
+        userId = token.serviceAccount.id
+        userEmail = userEmail || token.serviceAccount.email
+      }
+    } catch {
+      // Attribution is best effort: the row is written anyway.
+    }
+  }
+
   if (!ipAddress || !userAgent) {
     try {
       const headersList = await headers()
@@ -496,6 +515,14 @@ export async function getAuditLogs(options: {
     : []
   const tokensById = new Map(tokens.map(token => [token.id, token]))
 
+  // Rows written by a service account token name the account (issue #1404);
+  // a deleted account keeps its address on the row.
+  const accountIds = [...new Set(rows.filter(row => row.apiTokenId && isServiceAccountEmail(row.userEmail)).map(row => row.userId as string))]
+  const accounts = accountIds.length
+    ? await prisma.user.findMany({ where: { id: { in: accountIds }, serviceAccount: true }, select: { id: true, name: true } })
+    : []
+  const accountNames = new Map(accounts.map(account => [account.id, account.name]))
+
   // Re-map Prisma camelCase + JSONB → legacy SQLite snake_case + JSON-string
   // shape so the public response wire contract is unchanged.
   const data = rows.map(row => ({
@@ -517,6 +544,7 @@ export async function getAuditLogs(options: {
     api_token_id: row.apiTokenId,
     api_token_name: (row.apiTokenId && tokensById.get(row.apiTokenId)?.name) || null,
     api_token_prefix: (row.apiTokenId && tokensById.get(row.apiTokenId)?.tokenPrefix) || null,
+    service_account_name: (row.userId && accountNames.get(row.userId)) || null,
   }))
 
   return { data, meta: { total, limit, offset } }

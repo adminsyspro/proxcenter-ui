@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { prisma } from "@/lib/db/prisma"
-import { audit } from "@/lib/audit"
+import { deleteApiToken } from "@/lib/api-tokens/mint"
 
 import { requireApiTokenAdmin, tenantVisibleToCaller } from "../_shared"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -46,22 +46,7 @@ async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string }
   // journal entry to show for it is worse here than it was for revocation --
   // there would be nothing left anywhere to say the token ever existed.
   try {
-    await prisma.$transaction(async tx => {
-      await tx.apiToken.delete({ where: { id } })
-      await audit(
-        {
-          action: "apitoken.delete",
-          category: "api_tokens",
-          resourceType: "api_token",
-          resourceId: id,
-          resourceName: token.name,
-          // The prefix is the only identifier that survives the row, and it
-          // is what an operator reads to recognise which integration this was.
-          details: { tokenPrefix: token.tokenPrefix },
-        },
-        tx,
-      )
-    })
+    await deleteApiToken(token)
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Internal server error" }, { status: 500 })
   }

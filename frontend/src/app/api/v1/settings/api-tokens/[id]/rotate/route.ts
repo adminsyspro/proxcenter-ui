@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 
 import { prisma } from "@/lib/db/prisma"
-import { audit } from "@/lib/audit"
 import { withAudit } from "@/lib/audit/withAudit"
 import { requireFeature } from "@/lib/auth/requireEnterprise"
 import { Features } from "@/lib/license/features"
 import { firstUngrantableScope } from "@/lib/api-tokens/grantable"
 import { isCreatorCheckedScope } from "@/lib/api-tokens/scopes"
-import { generateApiToken } from "@/lib/api-tokens/tokenCrypto"
+import { rotateApiToken } from "@/lib/api-tokens/mint"
+import { getCurrentTenantId, userHasAccessToTenant } from "@/lib/tenant"
 
 import { requireApiTokenAdmin, tenantVisibleToCaller, TOKEN_VIEW_SELECT } from "../../_shared"
 
@@ -50,6 +50,15 @@ async function handlePost(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   const scopes = Array.isArray(token.scopes) ? (token.scopes as string[]) : []
   const connectionIds = Array.isArray(token.connectionIds) ? (token.connectionIds as string[]) : null
+  // Another tenant's token (the provider reaches every tenant's): rotating
+  // hands out a working secret for that tenant's data, so the caller must be a
+  // member there, as for creating one. Listing and deleting stay open.
+  if (!rbac.isAdmin && token.tenantId !== (await getCurrentTenantId())) {
+    if (!rbac.userId || !(await userHasAccessToTenant(rbac.userId, token.tenantId))) {
+      return NextResponse.json({ error: "Tenant not accessible" }, { status: 403 })
+    }
+  }
+
   if (!rbac.isAdmin) {
     // Fail closed: without a user id nothing can be proven held.
     let ungrantable: string | null | undefined
@@ -69,40 +78,16 @@ async function handlePost(_req: Request, ctx: { params: Promise<{ id: string }> 
     }
   }
 
-  const generated = generateApiToken()
-  const rotator = rbac.userId
-    ? await prisma.user.findUnique({ where: { id: rbac.userId }, select: { email: true } })
-    : null
-
   // Atomic with the audit row, like creation and deletion: a secret that
   // changed with no journal entry would leave an unexplained outage behind.
-  let rotated: unknown
+  let rotated: { token: unknown; secret: string }
   try {
-    rotated = await prisma.$transaction(async tx => {
-      const updated = await tx.apiToken.update({
-        where: { id },
-        data: {
-          tokenPrefix: generated.prefix,
-          tokenHash: generated.hash,
-          createdByUserId: rbac.userId ?? null,
-          createdByEmail: rotator?.email ?? null,
-        },
-        select: TOKEN_VIEW_SELECT,
-      })
-      await audit(
-        {
-          action: "apitoken.rotate",
-          category: "api_tokens",
-          resourceType: "api_token",
-          resourceId: id,
-          resourceName: token.name,
-          // Prefixes, never secrets: they tell which credential stopped
-          // working and which one replaced it.
-          details: { previousPrefix: token.tokenPrefix, tokenPrefix: generated.prefix },
-        },
-        tx,
-      )
-      return updated
+    rotated = await rotateApiToken({
+      id,
+      name: token.name,
+      previousPrefix: token.tokenPrefix,
+      rotatedByUserId: rbac.userId ?? null,
+      select: TOKEN_VIEW_SELECT,
     })
   } catch (e: any) {
     console.error("[api-tokens] rotation failed:", e?.message ?? e)
@@ -110,7 +95,7 @@ async function handlePost(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   // ONE-TIME reveal, as on creation: the clear secret is never stored.
-  return NextResponse.json({ data: { token: rotated, secret: generated.secret } })
+  return NextResponse.json({ data: rotated })
 }
 
 export const POST = withAudit({ category: "api_tokens", resourceType: "api_token", resourceParam: "id" }, handlePost)

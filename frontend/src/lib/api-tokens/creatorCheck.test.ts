@@ -90,6 +90,26 @@ describe("creatorStillHolds", () => {
   })
 })
 
+describe("creatorStillHolds for a service account token (#1404)", () => {
+  const saToken = { ...token, creatorUserId: "sa1", serviceAccountId: "sa1" }
+
+  it("checks a read scope too: the account must hold each of its keys broadly", async () => {
+    expect(await creatorStillHolds(saToken, "nodes:read")).toBe(true)
+    expect(mocks.holds).toHaveBeenCalledWith("sa1", "ten1", "node.view", ["c1"])
+    expect(mocks.holds).toHaveBeenCalledWith("sa1", "ten1", "connection.view", ["c1"])
+  })
+
+  it("is false on a read scope whose key the account lost", async () => {
+    mocks.holds.mockImplementation(async (_u: string, _t: string, key: string) => key !== "connection.view")
+    expect(await creatorStillHolds(saToken, "nodes:read")).toBe(false)
+  })
+
+  it("is false for an unknown scope", async () => {
+    expect(await creatorStillHolds(saToken, "nope:read")).toBe(false)
+    expect(mocks.holds).not.toHaveBeenCalled()
+  })
+})
+
 describe("creatorStillHoldsPermission (secondary permissions, Ruling 35)", () => {
   it("asks holdsBroadPermission for that one key over the token tenant and perimeter", async () => {
     expect(await creatorStillHoldsPermission(token, "vm.delete")).toBe(true)

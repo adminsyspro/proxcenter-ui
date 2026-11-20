@@ -108,6 +108,9 @@ export async function deleteTokensCreatedBy(
 function activeCreatedByWhere(userId: string, tenantId?: string) {
   return {
     createdByUserId: userId,
+    // A service account's token acts as the account, not as the person who
+    // minted it: it outlives them by design (issue #1404).
+    serviceAccountId: null,
     revokedAt: null,
     OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
     ...(tenantId ? { tenantId } : {}),

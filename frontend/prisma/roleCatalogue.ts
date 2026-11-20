@@ -98,6 +98,8 @@ export const ALL_PERMISSIONS: Permission[] = [
   { id: "admin.settings.view", name: "admin.settings.view", category: "admin", description: "View provider settings: vDCs, EVPN zones, storage policies (implied by admin.settings)" },
   { id: "admin.tenants.view", name: "admin.tenants.view", category: "admin", description: "View tenants and their members (implied by admin.tenants)" },
   { id: "admin.settings.vdcs", name: "admin.settings.vdcs", category: "admin", description: "Manage vDCs, their GPU quota, storage policies and shared EVPN zones (implied by admin.settings)", isDangerous: true },
+  { id: "admin.apitokens.view", name: "admin.apitokens.view", category: "admin", description: "View API tokens and service accounts, never their secrets (implied by admin.apitokens)" },
+  { id: "admin.settings.identity", name: "admin.settings.identity", category: "admin", description: "Manage the identity provider connection of customer tenants (implied by admin.settings)", isDangerous: true },
 
   // SDN / VNet
   { id: "sdn.vnet.view", name: "sdn.vnet.view", category: "sdn", description: "List and view VNets in own vDCs" },
@@ -211,6 +213,8 @@ export const ROLES: RoleSeed[] = [
       "admin.users", "admin.rbac", "admin.settings", "admin.audit",
       // issue #1289: only effective once the provider opens self-service.
       "admin.identity",
+      // issue #1404: only effective once the provider opens API self-service.
+      "admin.apitokens",
       "alerts.view", "alerts.manage",
       "events.view", "tasks.view",
       "reports.view",

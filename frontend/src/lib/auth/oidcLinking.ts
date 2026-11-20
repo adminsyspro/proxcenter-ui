@@ -8,6 +8,8 @@ export type OidcLinkRefusal =
   // does not own, or to a domain the connection does not accept.
   | "email_in_use"
   | "email_domain_not_allowed"
+  // A service account address (issue #1404): never a person, never signed in.
+  | "service_account"
 
 /** Error code put in /login?error= when a sign-in is refused here. */
 export const OIDC_LINK_REFUSED = "OidcLinkRefused"

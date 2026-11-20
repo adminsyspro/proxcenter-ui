@@ -2570,7 +2570,7 @@ export default function SettingsPage() {
     { name: 'ldap', group: 'access', label: 'LDAP / Active Directory', icon: 'ri-server-line', component: LdapConfigTab, requiredFeature: Features.LDAP, providerOnly: true },
     { name: 'oidc', group: 'access', label: 'OIDC / SSO', icon: 'ri-shield-keyhole-line', component: OidcConfigTab, requiredFeature: Features.OIDC, providerOnly: true },
     { name: 'identity', group: 'access', label: t('oidc.tenantConnections.tenantTabLabel'), icon: 'ri-shield-user-line', component: TenantIdentityTab, requiredFeature: Features.OIDC, customerTenantPermission: 'admin.identity' },
-    { name: 'api', group: 'access', label: t('settings.apiTokens.tabLabel'), icon: 'ri-code-box-line', component: ApiTokensTab, providerOnly: true },
+    { name: 'api', group: 'access', label: t('settings.apiTokens.tabLabel'), icon: 'ri-code-box-line', component: ApiTokensTab, providerOnly: true, orCustomerTenantPermission: 'admin.apitokens' },
     { name: 'tls', group: 'access', label: t('settings.tls.tabLabel'), icon: 'ri-lock-line', component: TlsTab, providerOnly: true },
     { name: 'alert-thresholds', group: 'monitoring', label: t('settings.alertThresholds.title'), icon: 'ri-alarm-warning-line', component: AlertThresholdsTab, providerOnly: true },
     { name: 'notifications', group: 'monitoring', label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS, providerOnly: true },

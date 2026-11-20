@@ -13,12 +13,17 @@ import TokenSecretReveal from './TokenSecretReveal'
 import { tooltipSlotProps } from '@/components/settings/ha/tooltipSlotProps'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { ALL_SCOPE_IDS, DESTRUCTIVE_SCOPE_IDS, FLEET_SCOPE_IDS, isCreatorCheckedScope, isWriteScope } from '@/lib/api-tokens/scopes'
-import { selectableTenants, sortTenantsProviderFirst } from '@/lib/storage/tenantFacets'
+import { sortTenantsProviderFirst } from '@/lib/storage/tenantFacets'
+
+/** The service account a token is minted for (issue #1404): its tenant is fixed. */
+export type TokenServiceAccount = { id: string; name: string; tenantId: string; tenantName: string }
 
 type Props = {
   open: boolean
   onClose: () => void
   onCreated: () => void
+  /** Mint for this service account: its tenant, its route, only the scopes it holds. */
+  serviceAccount?: TokenServiceAccount
 }
 
 type TenantOption = { id: string; name: string }
@@ -72,6 +77,8 @@ export const SCOPE_DOMAINS: readonly ScopeDomain[] = [
   { id: 'ipam', icon: 'ri-router-line', read: 'ipam:read', write: [] },
   { id: 'rbac', icon: 'ri-lock-2-line', read: 'rbac:read', write: ['rbac:write'] },
   { id: 'users', icon: 'ri-user-line', read: 'users:read', write: ['users:write'] },
+  // Service accounts, their tokens, tenant IdP connections (issue #1404).
+  { id: 'identity', icon: 'ri-shield-user-line', read: 'identity:read', write: ['identity:write'] },
 ]
 
 // Short toggle labels (dialog.subScopes.*) of the write sub-scopes,
@@ -129,7 +136,7 @@ async function fetchJsonArray(url: string): Promise<{ ok: boolean; value: any[] 
   }
 }
 
-export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
+export default function CreateTokenDialog({ open, onClose, onCreated, serviceAccount }: Props) {
   const t = useTranslations('settings.apiTokens')
   // A PVE connection is shown with the Proxmox mark, the same convention the
   // rest of the app uses (MigrateVmDialog's target-cluster selector). The
@@ -168,9 +175,8 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     let active = true
 
     void (async () => {
-      const [tenantsRes, vdcsRes, connectionsRes] = await Promise.all([
+      const [tenantsRes, connectionsRes] = await Promise.all([
         fetchJsonArray('/api/v1/tenants'),
-        fetchJsonArray('/api/v1/admin/vdcs'),
         fetchJsonArray('/api/v1/admin/connections?type=pve'),
       ])
       if (!active) return
@@ -184,15 +190,14 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
         return
       }
 
-      const enabled = tenantsRes.value.filter((tenant: any) => tenant?.enabled)
-      // vDC-only exclusion needs to know real connection owners; without a
-      // reliable connections fetch we cannot tell a legitimately-empty
-      // tenant from a vDC-only one, so we skip the exclusion rather than
-      // risk hiding a valid tenant (issue #609's rule, best-effort here).
-      const selectable = connectionsRes.ok
-        ? selectableTenants(enabled, vdcsRes.value.map((vdc: any) => vdc.tenantId), connectionsRes.value)
-        : enabled
-      const sorted = sortTenantsProviderFirst(selectable)
+      // Every enabled tenant can hold a token, a tenant that only has vDCs
+      // included (#1404): its token reaches those vDCs, it simply has no
+      // connection of its own to be restricted to.
+      // A service account token lives in the account's tenant, nowhere else.
+      const enabled = serviceAccount
+        ? [{ id: serviceAccount.tenantId, name: serviceAccount.tenantName }]
+        : tenantsRes.value.filter((tenant: any) => tenant?.enabled)
+      const sorted = sortTenantsProviderFirst(enabled)
 
       setTenants(sorted)
       setTenantsAvailable(true)
@@ -202,7 +207,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     return () => {
       active = false
     }
-  }, [open])
+  }, [open, serviceAccount])
 
   // Changing the tenant clears the connection selection: a selection carried
   // over from another tenant would be rejected or, worse, silently scope
@@ -266,7 +271,8 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
 
     void (async () => {
       const params = new URLSearchParams()
-      if (grantableTenantId) params.set('tenantId', grantableTenantId)
+      if (serviceAccount) params.set('serviceAccountId', serviceAccount.id)
+      else if (grantableTenantId) params.set('tenantId', grantableTenantId)
       if (perimeterKey) params.set('connectionIds', perimeterKey)
       const query = params.toString()
       let list: string[] | null = null
@@ -281,13 +287,13 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
       // A perimeter never carries a fleet-wide scope, whatever the answer says.
       const allowed = (list ?? []).filter(scope => !perimeterKey || !FLEET_SCOPE_IDS.includes(scope))
       setGrantableResult({ key: grantableKey, list })
-      setScopes(prev => prev.filter(scope => !isCreatorCheckedScope(scope) || allowed.includes(scope)))
+      setScopes(prev => prev.filter(scope => !(serviceAccount || isCreatorCheckedScope(scope)) || allowed.includes(scope)))
     })()
 
     return () => {
       active = false
     }
-  }, [open, grantableKey, grantableTenantId, perimeterKey])
+  }, [open, grantableKey, grantableTenantId, perimeterKey, serviceAccount])
 
   // Loading (no answer yet for the current key) and failure both keep every
   // write scope disabled: the UI fails closed, the creation route stays the
@@ -303,7 +309,8 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   // roles, tenants, provider settings): the creator must hold it, like a
   // write scope. Every other read scope is always grantable.
   function domainReadBlocker(domain: ScopeDomain): string {
-    return isCreatorCheckedScope(domain.read) ? writeScopeBlocker(domain.read) : ''
+    // A service account must hold every scope of its token, reads included.
+    return serviceAccount || isCreatorCheckedScope(domain.read) ? writeScopeBlocker(domain.read) : ''
   }
 
   // Write on a whole domain: unavailable on a read only domain, while the
@@ -350,13 +357,13 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
   // A scope the creator must hold (any write scope, an admin read scope)
   // checked against an answer that is not (yet) a success for the current
   // tenant and perimeter: the request would likely be refused.
-  const writeCheckPending = scopes.some(isCreatorCheckedScope) && (grantableResult?.key !== grantableKey || !grantableResult.list)
+  const writeCheckPending = scopes.some(scope => serviceAccount || isCreatorCheckedScope(scope)) && (grantableResult?.key !== grantableKey || !grantableResult.list)
 
   async function handleCreate() {
     setSaving(true)
     setError('')
     try {
-      const res = await fetch('/api/v1/settings/api-tokens', {
+      const res = await fetch(serviceAccount ? `/api/v1/service-accounts/${serviceAccount.id}/tokens` : '/api/v1/settings/api-tokens', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -369,7 +376,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
           // Only a write token has a write bucket; the server default
           // applies otherwise.
           ...(hasWriteScope ? { writeRateLimitPerMin: writeRateLimit } : {}),
-          ...(tenantsAvailable && tenantId ? { tenantId } : {}),
+          ...(!serviceAccount && tenantsAvailable && tenantId ? { tenantId } : {}),
         }),
       })
       const json = await res.json()
@@ -389,9 +396,13 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
     onClose()
   }
 
+  const formTitle = serviceAccount ? t('dialog.titleForAccount', { name: serviceAccount.name }) : t('dialog.title')
+
   return (
     <Dialog open={open} onClose={secret ? undefined : handleClose} fullWidth maxWidth='sm'>
-      <DialogTitle>{secret ? t('reveal.title') : t('dialog.title')}</DialogTitle>
+      <DialogTitle>
+        {secret ? t('reveal.title') : formTitle}
+      </DialogTitle>
       <DialogContent>
         {secret ? (
           <TokenSecretReveal secret={secret} />
@@ -450,7 +461,7 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
               )}
             </Box>
             {tenantsAvailable && (
-              <TextField select label={t('dialog.tenant')} value={tenantId} onChange={e => setTenantId(e.target.value)} fullWidth>
+              <TextField select label={t('dialog.tenant')} value={tenantId} onChange={e => setTenantId(e.target.value)} fullWidth disabled={!!serviceAccount}>
                 {tenants.map(tenant => (
                   <MenuItem key={tenant.id} value={tenant.id}>
                     <Stack direction='row' alignItems='center' spacing={1}>
@@ -465,7 +476,8 @@ export default function CreateTokenDialog({ open, onClose, onCreated }: Props) {
               <TextField
                 select
                 label={t('dialog.connections')}
-                helperText={t('dialog.connectionsAll')}
+                helperText={t(visibleConnections.length ? 'dialog.connectionsAll' : 'dialog.connectionsNone')}
+                disabled={visibleConnections.length === 0}
                 value={connectionIds}
                 onChange={e => {
                   const raw = e.target.value

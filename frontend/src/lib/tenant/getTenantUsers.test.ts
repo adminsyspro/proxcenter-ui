@@ -67,6 +67,11 @@ describe('getTenantUsers: rbac_roles (roadmap#65)', () => {
     })
   })
 
+  it('never lists a service account among the members (#1404)', async () => {
+    await getTenantUsers('t1')
+    expect(userTenantFindManyMock.mock.calls[0][0].where).toEqual({ tenantId: 't1', user: { serviceAccount: false } })
+  })
+
   it('skips the grant queries for a tenant with no member', async () => {
     userTenantFindManyMock.mockResolvedValue([])
     expect(await getTenantUsers('t1')).toEqual([])

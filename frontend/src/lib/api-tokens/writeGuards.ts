@@ -261,6 +261,7 @@ async function evaluateGuards(
       tokenId: principal.tokenId ?? "",
       tenantId: principal.tenantId,
       creatorUserId: principal.creatorUserId ?? null,
+      ...(principal.serviceAccountId ? { serviceAccountId: principal.serviceAccountId } : {}),
       connectionIds: principal.connectionIds,
     }
     const verdict = async (check: () => Promise<boolean>): Promise<boolean> => {
@@ -299,6 +300,9 @@ async function evaluateGuards(
  */
 function creatorCheckedScopesOf(entry: AllowlistEntry, principal: Principal): string[] {
   if (isWriteEntry(entry)) return entry.requiredScopes.slice(0, 1)
+  // A service account token is bound by its account on every scope it uses
+  // (issue #1404): each one it carries that opens the entry is checked.
+  if (principal.serviceAccountId) return entry.requiredScopes.filter(scope => principal.scopes?.includes(scope))
   return entry.requiredScopes.filter(scope => principal.scopes?.includes(scope) && readsAdminData(scope))
 }
 

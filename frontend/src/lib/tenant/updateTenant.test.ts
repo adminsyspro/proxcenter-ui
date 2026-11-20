@@ -36,6 +36,7 @@ const EXISTING = {
   operatingModel: 'msp',
   vmidRangeStart: 100,
   vmidRangeEnd: 200,
+  apiSelfService: false,
   settings: null,
   createdBy: 'u1',
   createdAt: new Date('2026-01-01T00:00:00Z'),
@@ -62,6 +63,19 @@ describe('updateTenant', () => {
     const result = await updateTenant('missing', { name: 'New name' })
     expect(result).toBeNull()
     expect(tenantUpdateMock).not.toHaveBeenCalled()
+  })
+
+  it('opens and closes API self-service, and keeps it when the field is absent (#1404)', async () => {
+    expect((await updateTenant('t1', { apiSelfService: true }))?.apiSelfService).toBe(true)
+    expect(tenantUpdateMock.mock.calls[0][0].data.apiSelfService).toBe(true)
+    tenantFindUniqueMock.mockResolvedValue({ ...EXISTING, apiSelfService: true })
+    await updateTenant('t1', { name: 'Renamed' })
+    expect(tenantUpdateMock.mock.calls[1][0].data.apiSelfService).toBe(true)
+  })
+
+  it('ignores a non boolean apiSelfService', async () => {
+    await updateTenant('t1', { apiSelfService: 'yes' as any })
+    expect(tenantUpdateMock.mock.calls[0][0].data.apiSelfService).toBe(false)
   })
 
   it('sets both vmidRangeStart and vmidRangeEnd when both are provided', async () => {

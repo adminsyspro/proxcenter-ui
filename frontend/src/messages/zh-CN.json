@@ -4692,7 +4692,7 @@
     "pveStep1": "创建专用用户",
     "pveStep2": "创建 API 令牌（privsep=0 继承用户权限）",
     "pveStep3": "在整个集群上授予 PVEAdmin 角色",
-    "pveStep4": "添加 Sys.Modify 和 Sys.PowerMgmt 权限（Rolling Update 刷新 apt 软件包列表，节点重启/关机）",
+    "pveStep4": "添加 Sys.Modify、Sys.PowerMgmt 和 Sys.Incoming 权限（Rolling Update 刷新 apt 软件包列表，节点重启/关机，跨集群迁移到此集群）",
     "pbsStep1": "创建专用用户",
     "pbsStep2": "生成 API 令牌",
     "pbsStep3": "同时向用户和令牌授予权限",

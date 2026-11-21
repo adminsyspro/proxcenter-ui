@@ -5666,7 +5666,27 @@
     "sshTrustHostKey": "Faire confiance à cette clé",
     "sshTrustNewHostKey": "Faire confiance à la nouvelle clé",
     "sshTrustHostKeyHelper": "Comparez cette empreinte avec celle que l'hôte annonce lui-même avant de lui faire confiance : ssh-keygen -lf sur ses fichiers /etc/ssh/ssh_host_*_key.pub.",
-    "sshTrustFailed": "La clé n'a pas été acceptée : {error}"
+    "sshTrustFailed": "La clé n'a pas été acceptée : {error}",
+    "connectionUsage": {
+      "checking": "Recherche de ce qui utilise cette connexion…",
+      "intro": "Cette connexion est encore utilisée. Retirez d’abord ces liaisons, chacune depuis sa page :",
+      "titles": {
+        "tenantOwner": "Appartient au tenant",
+        "vdcs": "Datacenters virtuels",
+        "pbsVdcs": "Datacenters virtuels qui y sauvegardent",
+        "replicationJobs": "Jobs de réplication Site Recovery",
+        "recoveryPlans": "Plans de reprise Site Recovery",
+        "microseg": "Politique de micro-segmentation (clusters)",
+        "drsRules": "Règles d’affinité DRS",
+        "migrations": "Migrations en cours",
+        "vdcMoves": "Déplacements de vDC en cours",
+        "complianceProfiles": "Profils de conformité",
+        "slaWindows": "Fenêtres de maintenance SLA",
+        "restoreDrillSchedules": "Planifications de tests de restauration"
+      },
+      "apiTokensTitle": "Jetons API limités à cette connexion",
+      "apiTokensHint": "Ils n’atteindront plus rien une fois la connexion supprimée. Cela ne bloque pas la suppression."
+    }
   },
   "green": {
     "score": {
@@ -7601,6 +7621,11 @@
       "traceEmpty": "En attente du premier événement…",
       "lastReverseSync": "Dernière synchro inverse",
       "transferred": "Transféré"
+    },
+    "orphan": {
+      "connectionName": "Connexion supprimée",
+      "jobHint": "La connexion de ce job a été supprimée : il ne peut plus tourner. Supprimez-le pour le retirer du tableau de bord.",
+      "planHint": "La connexion de ce plan a été supprimée : il ne peut plus basculer. Supprimez-le pour le retirer de la liste."
     }
   },
   "templates": {

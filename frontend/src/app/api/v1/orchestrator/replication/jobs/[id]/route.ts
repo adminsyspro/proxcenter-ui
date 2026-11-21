@@ -3,27 +3,20 @@ import { NextRequest, NextResponse } from "next/server"
 import { getOrchestratorClient, parseOrchestratorError } from "@/lib/orchestrator/client"
 import { replicationErrorResponse } from "@/lib/orchestrator/replicationError"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getTenantConnectionIds } from "@/lib/tenant"
 import { withAudit } from "@/lib/audit/withAudit"
+import { getReplicationScope, itemForAction } from "@/lib/orchestrator/replicationScope"
 
 export const runtime = "nodejs"
 
-/** Verify that a replication job belongs to the current tenant */
-async function verifyJobOwnership(id: string) {
+/**
+ * The job when the current tenant may act on it. A job whose connection was
+ * deleted is reachable by the provider for reading and deletion only (ui#1394).
+ */
+async function verifyJobOwnership(id: string, allowOrphan = false) {
   const client = getOrchestratorClient()
-  const tenantConnectionIds = await getTenantConnectionIds()
-  const response = await client.getReplicationJob(id)
-  const job = response.data
+  const [scope, response] = await Promise.all([getReplicationScope(), client.getReplicationJob(id)])
 
-  if (
-    job &&
-    ((job.source_cluster && !tenantConnectionIds.has(job.source_cluster)) ||
-    (job.target_cluster && !tenantConnectionIds.has(job.target_cluster)))
-  ) {
-    return null // not owned by tenant
-  }
-
-  return job
+  return itemForAction(response.data, scope, { allowOrphan })
 }
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -33,7 +26,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (denied) return denied
 
     const { id } = await params
-    const job = await verifyJobOwnership(id)
+    const job = await verifyJobOwnership(id, true)
 
     if (!job) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -99,7 +92,7 @@ async function handleDelete(_request: NextRequest, { params }: { params: Promise
     if (denied) return denied
 
     const { id } = await params
-    const job = await verifyJobOwnership(id)
+    const job = await verifyJobOwnership(id, true)
 
     if (!job) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })

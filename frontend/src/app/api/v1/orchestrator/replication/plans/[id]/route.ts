@@ -3,27 +3,20 @@ import { NextRequest, NextResponse } from "next/server"
 import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { replicationErrorResponse } from "@/lib/orchestrator/replicationError"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { getTenantConnectionIds } from "@/lib/tenant"
 import { withAudit } from "@/lib/audit/withAudit"
+import { getReplicationScope, itemForAction } from "@/lib/orchestrator/replicationScope"
 
 export const runtime = "nodejs"
 
-/** Verify that a recovery plan belongs to the current tenant */
-async function verifyPlanOwnership(id: string) {
+/**
+ * The plan when the current tenant may act on it. A plan whose connection was
+ * deleted is reachable by the provider for reading and deletion only (ui#1394).
+ */
+async function verifyPlanOwnership(id: string, allowOrphan = false) {
   const client = getOrchestratorClient()
-  const tenantConnectionIds = await getTenantConnectionIds()
-  const response = await client.getRecoveryPlan(id)
-  const plan = response.data
+  const [scope, response] = await Promise.all([getReplicationScope(), client.getRecoveryPlan(id)])
 
-  if (
-    plan &&
-    ((plan.source_cluster && !tenantConnectionIds.has(plan.source_cluster)) ||
-    (plan.target_cluster && !tenantConnectionIds.has(plan.target_cluster)))
-  ) {
-    return null // not owned by tenant
-  }
-
-  return plan
+  return itemForAction(response.data, scope, { allowOrphan })
 }
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -33,7 +26,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (denied) return denied
 
     const { id } = await params
-    const plan = await verifyPlanOwnership(id)
+    const plan = await verifyPlanOwnership(id, true)
 
     if (!plan) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -89,7 +82,7 @@ async function handleDelete(_request: NextRequest, { params }: { params: Promise
     if (denied) return denied
 
     const { id } = await params
-    const plan = await verifyPlanOwnership(id)
+    const plan = await verifyPlanOwnership(id, true)
 
     if (!plan) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })

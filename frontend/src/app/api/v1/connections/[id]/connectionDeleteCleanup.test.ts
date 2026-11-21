@@ -62,7 +62,10 @@ vi.mock("@/lib/orchestrator/client", () => ({
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
 vi.mock("@/lib/connections/getConnection", () => ({ invalidateConnectionCache: vi.fn() }))
 vi.mock("@/lib/cache/inventoryCache", () => ({ invalidateInventoryCache: vi.fn() }))
-vi.mock("@/lib/vdc/pbsOrchestrator", () => ({ unbindFromVdc: unbindMock }))
+vi.mock("@/lib/connections/connectionUsage", () => ({
+  connectionUsage: vi.fn(async () => ({ blocking: {}, apiTokens: [] })),
+  isBlocked: () => false,
+}))
 const { evictGuestCoverageMock } = vi.hoisted(() => ({ evictGuestCoverageMock: vi.fn() }))
 vi.mock("@/lib/firewall/guestCoverage", () => ({ evictGuestCoverage: evictGuestCoverageMock }))
 
@@ -84,49 +87,13 @@ beforeEach(() => {
   unbindMock.mockResolvedValue(undefined)
 })
 
-describe("DELETE /api/v1/connections/[id] (PBS binding cleanup)", () => {
-  it("unbinds every vDC PBS binding before deleting a PBS connection", async () => {
-    bindingsFindManyMock.mockResolvedValue([{ id: "bind-1" }, { id: "bind-2" }])
-
+describe("DELETE /api/v1/connections/[id] (cleanup)", () => {
+  it("no longer unbinds a PBS behind the tenant's back: one in use is refused by the usage check (ui#1394)", async () => {
     const res = await callRoute(DELETE, { params: { id: "pbs-1" }, method: "DELETE" })
-
-    expect(res.status).toBe(200)
-    expect(bindingsFindManyMock).toHaveBeenCalledWith({
-      where: { pbsConnectionId: "pbs-1" },
-      select: { id: true },
-    })
-    expect(unbindMock).toHaveBeenCalledTimes(2)
-    expect(unbindMock).toHaveBeenCalledWith("bind-1")
-    expect(unbindMock).toHaveBeenCalledWith("bind-2")
-    // The unbinds ran BEFORE the row deletion
-    expect(Math.max(...unbindMock.mock.invocationCallOrder)).toBeLessThan(
-      sessionDeleteMock.mock.invocationCallOrder[0]
-    )
-  })
-
-  it("does not query bindings when deleting a PVE connection", async () => {
-    sessionFindUniqueMock.mockResolvedValue({
-      name: "PVE prod",
-      type: "pve",
-      baseUrl: "https://pve:8006",
-    })
-
-    const res = await callRoute(DELETE, { params: { id: "pve-1" }, method: "DELETE" })
 
     expect(res.status).toBe(200)
     expect(bindingsFindManyMock).not.toHaveBeenCalled()
     expect(unbindMock).not.toHaveBeenCalled()
-  })
-
-  it("a failed unbind never blocks the deletion (best-effort)", async () => {
-    bindingsFindManyMock.mockResolvedValue([{ id: "bind-1" }])
-    unbindMock.mockRejectedValue(new Error("PBS unreachable"))
-
-    const res = await callRoute(DELETE, { params: { id: "pbs-1" }, method: "DELETE" })
-
-    expect(res.status).toBe(200)
-    const body = await readJson<any>(res)
-    expect(body.ok).toBe(true)
     expect(sessionDeleteMock).toHaveBeenCalled()
   })
 

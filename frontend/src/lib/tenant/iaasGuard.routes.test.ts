@@ -80,6 +80,7 @@ vi.mock("@/lib/api-tokens/routeGuard", () => ({ withPublicApiGuard: (_id: unknow
 
 /** Paths relative to src/app/api/v1/connections. */
 const DENIED_FILES = [
+  "[id]/usage/route.ts",
   "[id]/check/route.ts",
   "[id]/cluster/route.ts",
   "[id]/cluster/config/route.ts",

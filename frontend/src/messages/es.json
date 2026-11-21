@@ -5666,7 +5666,27 @@
     "sshTrustHostKey": "Confiar en esta clave",
     "sshTrustNewHostKey": "Confiar en la nueva clave",
     "sshTrustHostKeyHelper": "Compare esta huella con la que indica el propio host antes de confiar en ella: ssh-keygen -lf sobre sus archivos /etc/ssh/ssh_host_*_key.pub.",
-    "sshTrustFailed": "No se confió en la clave: {error}"
+    "sshTrustFailed": "No se confió en la clave: {error}",
+    "connectionUsage": {
+      "checking": "Comprobando qué usa esta conexión…",
+      "intro": "Esta conexión todavía está en uso. Quite primero estos vínculos, cada uno desde su propia página:",
+      "titles": {
+        "tenantOwner": "Pertenece al inquilino",
+        "vdcs": "Centros de datos virtuales",
+        "pbsVdcs": "Centros de datos virtuales que respaldan aquí",
+        "replicationJobs": "Trabajos de replicación de Site Recovery",
+        "recoveryPlans": "Planes de recuperación de Site Recovery",
+        "microseg": "Política de microsegmentación (clústeres)",
+        "drsRules": "Reglas de afinidad DRS",
+        "migrations": "Migraciones en curso",
+        "vdcMoves": "Movimientos de vDC en curso",
+        "complianceProfiles": "Perfiles de cumplimiento",
+        "slaWindows": "Ventanas de mantenimiento SLA",
+        "restoreDrillSchedules": "Planificaciones de pruebas de restauración"
+      },
+      "apiTokensTitle": "Tokens de API limitados a esta conexión",
+      "apiTokensHint": "Ya no alcanzarán nada una vez eliminada. Esto no bloquea la eliminación."
+    }
   },
   "green": {
     "score": {
@@ -7601,6 +7621,11 @@
       "traceEmpty": "Esperando el primer evento…",
       "lastReverseSync": "Última sincronización inversa",
       "transferred": "Transferido"
+    },
+    "orphan": {
+      "connectionName": "Conexión eliminada",
+      "jobHint": "La conexión de este trabajo se eliminó: ya no puede ejecutarse. Elimínelo para quitarlo del panel.",
+      "planHint": "La conexión de este plan se eliminó: ya no puede hacer failover. Elimínelo para quitarlo de la lista."
     }
   },
   "templates": {

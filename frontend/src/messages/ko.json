@@ -5666,7 +5666,27 @@
     "sshTrustHostKey": "이 키 신뢰",
     "sshTrustNewHostKey": "새 키 신뢰",
     "sshTrustHostKeyHelper": "신뢰하기 전에 이 지문을 호스트가 직접 보고하는 지문과 비교하세요: /etc/ssh/ssh_host_*_key.pub 파일에 ssh-keygen -lf 를 실행합니다.",
-    "sshTrustFailed": "키를 신뢰하지 못했습니다: {error}"
+    "sshTrustFailed": "키를 신뢰하지 못했습니다: {error}",
+    "connectionUsage": {
+      "checking": "이 연결을 사용하는 항목을 확인하는 중…",
+      "intro": "이 연결은 아직 사용 중입니다. 각 페이지에서 다음 연결 항목을 먼저 제거하세요:",
+      "titles": {
+        "tenantOwner": "소유 테넌트",
+        "vdcs": "가상 데이터센터",
+        "pbsVdcs": "이곳에 백업하는 가상 데이터센터",
+        "replicationJobs": "Site Recovery 복제 작업",
+        "recoveryPlans": "Site Recovery 복구 계획",
+        "microseg": "마이크로 세분화 정책(클러스터)",
+        "drsRules": "DRS 선호도 규칙",
+        "migrations": "진행 중인 마이그레이션",
+        "vdcMoves": "진행 중인 vDC 이동",
+        "complianceProfiles": "규정 준수 프로필",
+        "slaWindows": "SLA 유지 관리 기간",
+        "restoreDrillSchedules": "복원 테스트 일정"
+      },
+      "apiTokensTitle": "이 연결로 제한된 API 토큰",
+      "apiTokensHint": "연결이 삭제되면 더 이상 아무것도 사용할 수 없습니다. 삭제를 막지는 않습니다."
+    }
   },
   "green": {
     "score": {
@@ -7601,6 +7621,11 @@
       "traceEmpty": "첫 번째 이벤트 대기 중…",
       "lastReverseSync": "마지막 역방향 동기화",
       "transferred": "전송됨"
+    },
+    "orphan": {
+      "connectionName": "삭제된 연결",
+      "jobHint": "이 작업의 연결이 삭제되어 더 이상 실행할 수 없습니다. 대시보드에서 제거하려면 작업을 삭제하세요.",
+      "planHint": "이 계획의 연결이 삭제되어 더 이상 페일오버할 수 없습니다. 목록에서 제거하려면 계획을 삭제하세요."
     }
   },
   "templates": {

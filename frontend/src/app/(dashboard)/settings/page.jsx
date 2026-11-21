@@ -48,6 +48,7 @@ import { useRBAC } from '@/contexts/RBACContext'
 import EmptyState from '@/components/EmptyState'
 import { CountryFlag } from '@/components/ui/CountryFlag'
 import { interpretConnectionStatusResponse } from '@/components/settings/connectionStatusResult'
+import DeleteConnectionDialog, { usageConflictOf } from '@/components/settings/DeleteConnectionDialog'
 import { findCountry } from '@/lib/utils/countries'
 
 
@@ -218,7 +219,8 @@ async function fetchJson(url, init) {
         .map(([k, v]) => `${k}: ${v.join(', ')}`)
       if (fields.length) msg += ' — ' + fields.join('; ')
     }
-    throw new Error(msg)
+    // Keep the body: some refusals carry structured detail (ui#1394).
+    throw Object.assign(new Error(msg), { body: json })
   }
 
   return json
@@ -633,9 +635,15 @@ function ConnectionsTab() {
   // dialog rendered below.
   const [deleteConnectionDialog, setDeleteConnectionDialog] = useState(null)
   const [deletingConnection, setDeletingConnection] = useState(false)
+  // Why the deletion was refused: the links that still use the connection
+  // (ui#1394), or any other error message.
+  const [deleteConnectionConflict, setDeleteConnectionConflict] = useState(null)
+  const [deleteConnectionError, setDeleteConnectionError] = useState(null)
 
   const deleteConnection = (id, type) => {
     const typeName = type === 'pbs' ? 'PBS' : type === 'vmware' ? 'VMware ESXi' : type === 'xcpng' ? 'XCP-ng' : type === 'nutanix' ? 'Nutanix' : type === 'hyperv' ? 'Hyper-V' : 'PVE'
+    setDeleteConnectionConflict(null)
+    setDeleteConnectionError(null)
     setDeleteConnectionDialog({ id, type, typeName })
   }
 
@@ -660,6 +668,10 @@ function ConnectionsTab() {
         await loadHypervConnections()
       }
       setDeleteConnectionDialog(null)
+    } catch (e) {
+      const conflict = usageConflictOf(e?.body)
+      setDeleteConnectionConflict(conflict)
+      setDeleteConnectionError(conflict ? null : e?.message || String(e))
     } finally {
       setDeletingConnection(false)
     }
@@ -1816,35 +1828,16 @@ function ConnectionsTab() {
       {/* Dialog confirmation suppression connexion — remplace l'ancien
           window.confirm. Le titre i18n existant t('settings.deleteConnectionConfirm')
           est interpolé avec le typeName (PVE / PBS / VMware / …). */}
-      <Dialog
+      <DeleteConnectionDialog
         open={!!deleteConnectionDialog}
-        onClose={() => !deletingConnection && setDeleteConnectionDialog(null)}
-        maxWidth='xs'
-        fullWidth
-      >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
-          <i className='ri-delete-bin-line' style={{ fontSize: 20 }} />
-          {t('settings.deleteConnectionConfirm', { type: deleteConnectionDialog?.typeName || '' })}
-        </DialogTitle>
-        <DialogContent>
-          <Alert severity='warning' sx={{ mt: 1 }}>
-            {t('common.deleteConfirmation')}
-          </Alert>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConnectionDialog(null)} disabled={deletingConnection}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            variant='contained'
-            color='error'
-            onClick={confirmDeleteConnection}
-            disabled={deletingConnection}
-          >
-            {deletingConnection ? t('common.loading') : t('common.delete')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        connectionId={deleteConnectionDialog?.id || null}
+        typeName={deleteConnectionDialog?.typeName || ''}
+        deleting={deletingConnection}
+        conflict={deleteConnectionConflict}
+        error={deleteConnectionError}
+        onCancel={() => setDeleteConnectionDialog(null)}
+        onConfirm={confirmDeleteConnection}
+      />
     </>
   )
 }

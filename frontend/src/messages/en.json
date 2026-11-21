@@ -5666,7 +5666,27 @@
     "sshTrustHostKey": "Trust this key",
     "sshTrustNewHostKey": "Trust the new key",
     "sshTrustHostKeyHelper": "Compare this fingerprint with the one the host itself reports before trusting it: ssh-keygen -lf on its /etc/ssh/ssh_host_*_key.pub files.",
-    "sshTrustFailed": "The key was not trusted: {error}"
+    "sshTrustFailed": "The key was not trusted: {error}",
+    "connectionUsage": {
+      "checking": "Checking what uses this connection…",
+      "intro": "This connection is still in use. Remove these links first, each from its own page:",
+      "titles": {
+        "tenantOwner": "Owned by tenant",
+        "vdcs": "Virtual datacenters",
+        "pbsVdcs": "Virtual datacenters backing up to it",
+        "replicationJobs": "Site Recovery replication jobs",
+        "recoveryPlans": "Site Recovery recovery plans",
+        "microseg": "Micro-segmentation policy (clusters)",
+        "drsRules": "DRS affinity rules",
+        "migrations": "Migrations in progress",
+        "vdcMoves": "vDC moves in progress",
+        "complianceProfiles": "Compliance profiles",
+        "slaWindows": "SLA maintenance windows",
+        "restoreDrillSchedules": "Restore test schedules"
+      },
+      "apiTokensTitle": "API tokens limited to this connection",
+      "apiTokensHint": "They will no longer reach anything once it is deleted. This does not block the deletion."
+    }
   },
   "green": {
     "score": {
@@ -7601,6 +7621,11 @@
       "traceEmpty": "Waiting for the first event…",
       "lastReverseSync": "Last reverse sync",
       "transferred": "Transferred"
+    },
+    "orphan": {
+      "connectionName": "Deleted connection",
+      "jobHint": "The connection of this job was deleted: it can no longer run. Delete it to clear it from the dashboard.",
+      "planHint": "The connection of this plan was deleted: it can no longer fail over. Delete it to clear it from the list."
     }
   },
   "templates": {

@@ -5666,7 +5666,27 @@
     "sshTrustHostKey": "信任此密钥",
     "sshTrustNewHostKey": "信任新密钥",
     "sshTrustHostKeyHelper": "信任之前，请将此指纹与主机自身报告的指纹进行比对：在其 /etc/ssh/ssh_host_*_key.pub 文件上运行 ssh-keygen -lf。",
-    "sshTrustFailed": "未能信任该密钥：{error}"
+    "sshTrustFailed": "未能信任该密钥：{error}",
+    "connectionUsage": {
+      "checking": "正在检查使用此连接的项目…",
+      "intro": "此连接仍在使用中。请先在各自的页面中移除以下关联：",
+      "titles": {
+        "tenantOwner": "所属租户",
+        "vdcs": "虚拟数据中心",
+        "pbsVdcs": "备份到此处的虚拟数据中心",
+        "replicationJobs": "Site Recovery 复制作业",
+        "recoveryPlans": "Site Recovery 恢复计划",
+        "microseg": "微分段策略（集群）",
+        "drsRules": "DRS 亲和性规则",
+        "migrations": "进行中的迁移",
+        "vdcMoves": "进行中的 vDC 移动",
+        "complianceProfiles": "合规配置文件",
+        "slaWindows": "SLA 维护窗口",
+        "restoreDrillSchedules": "恢复测试计划"
+      },
+      "apiTokensTitle": "仅限于此连接的 API 令牌",
+      "apiTokensHint": "删除后它们将无法访问任何内容。这不会阻止删除。"
+    }
   },
   "green": {
     "score": {
@@ -7601,6 +7621,11 @@
       "traceEmpty": "等待第一个事件…",
       "lastReverseSync": "最近一次反向同步",
       "transferred": "已传输"
+    },
+    "orphan": {
+      "connectionName": "已删除的连接",
+      "jobHint": "此作业的连接已被删除，无法再运行。删除它即可从仪表板中移除。",
+      "planHint": "此计划的连接已被删除，无法再执行故障转移。删除它即可从列表中移除。"
     }
   },
   "templates": {

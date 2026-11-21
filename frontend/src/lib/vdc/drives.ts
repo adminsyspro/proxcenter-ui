@@ -210,6 +210,34 @@ export function parsePveSizeToMb(size: string): number {
   return Math.round(v)
 }
 
+/** A resize request in MB, as Proxmox reads it: "+10G" adds, "64G" is the
+ *  size to reach. A size without unit is counted in GB, the larger reading. */
+function resizeSizeToMb(size: string): number {
+  const match = /^\+?(\d+(?:\.\d+)?)\s*([GMTK])?/i.exec(size)
+  if (!match) return 0
+  const value = Number.parseFloat(match[1])
+  const unit = (match[2] || 'G').toUpperCase()
+  if (unit === 'T') return Math.round(value * 1024 * 1024)
+  if (unit === 'G') return Math.round(value * 1024)
+  if (unit === 'K') return Math.round(value / 1024)
+  return Math.round(value)
+}
+
+/**
+ * What a disk resize adds, in MB, for the quota (roadmap#265). A relative
+ * size ("+10G") is its own growth. An absolute size ("64G") grows the disk by
+ * the difference with its current size; counted whole, it refused a tenant
+ * near its quota a growth that fitted. With an unknown current size the whole
+ * target is counted, the stricter reading. A target below the current size
+ * adds nothing (Proxmox refuses to shrink).
+ */
+export function resizeDeltaMb(size: string, currentSize: string | null): number {
+  const requested = resizeSizeToMb(size.trim())
+  if (size.trim().startsWith('+')) return requested
+  const current = currentSize ? parsePveSizeToMb(currentSize) : 0
+  return Math.max(0, requested - current)
+}
+
 /** Strip-and-stamp: caller only invokes this on DATA disk keys of a
  *  policied storage. No policy = raw preserved verbatim (spec Section 5.2).
  *  isCdrom is deliberately NOT exempted here: a tenant could spoof

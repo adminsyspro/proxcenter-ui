@@ -22,7 +22,7 @@ vi.mock('@/lib/rbac', () => ({
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
 vi.mock('@/lib/proxmox/client', () => ({ pveFetch: pveFetchMock }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-1' }))
-vi.mock('@/lib/vdc/quota', () => ({ resolveVdcForTenant: vi.fn(async () => null), checkVdcQuota: vi.fn() }))
+vi.mock('@/lib/vdc/quota', () => ({ resolveVdcForTenant: vi.fn(async () => null), checkVdcQuota: vi.fn(), checkAndReserveVdcQuota: vi.fn() }))
 const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/tenant/infraScope', () => ({
   getTenantInfrastructureScope: getTenantInfrastructureScopeMock,

@@ -10,23 +10,12 @@ import { getCurrentTenantId } from '@/lib/tenant'
 import { getTenantInfrastructureScope } from '@/lib/tenant/infraScope'
 import { writableStoragesFor } from '@/lib/vdc/scope'
 import { resolveVdcForTenant, checkVdcQuota } from '@/lib/vdc/quota'
-import { parseDriveString } from '@/lib/vdc/drives'
+import { parseDriveString, resizeDeltaMb } from '@/lib/vdc/drives'
 import { guardSessionGuest } from '@/lib/vdc/guestGuard'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
-
-function parseSizeDeltaMb(size: string): number {
-  const match = size.match(/^\+?(\d+(?:\.\d+)?)\s*(G|M|T|K)?/i)
-  if (!match) return 0
-  const value = Number.parseFloat(match[1])
-  const unit = (match[2] || 'G').toUpperCase()
-  if (unit === 'T') return Math.round(value * 1024 * 1024)
-  if (unit === 'G') return Math.round(value * 1024)
-  if (unit === 'K') return Math.round(value / 1024)
-  return Math.round(value) // MB
-}
 
 // POST /api/v1/connections/{id}/guests/{type}/{node}/{vmid}/disk/resize
 // Redimensionne un disque (agrandissement uniquement)
@@ -71,11 +60,14 @@ async function handler(
         // independent of the requested delta.
         const infra = await getTenantInfrastructureScope(tenantId, { ignoreVdcContext: true })
         let diskStorage: string | null = null
+        // The disk as configured: its storage for the tier scope, its size to
+        // turn an absolute target ("64G") into the growth it asks for.
+        const resourceTypePve = type === 'lxc' ? 'lxc' : 'qemu'
+        const cfg = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/${resourceTypePve}/${encodeURIComponent(vmid)}/config`)
+        const parsed = parseDriveString(String(cfg?.[disk] ?? ''))
+        const currentSize = parsed.ok === false ? null : (parsed.drive.opts.find(([k]) => k === 'size')?.[1] ?? null)
         if (infra.kind === 'iaas') {
           const scope = infra.vdcScope
-          const resourceTypePve = type === 'lxc' ? 'lxc' : 'qemu'
-          const cfg = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/${resourceTypePve}/${encodeURIComponent(vmid)}/config`)
-          const parsed = parseDriveString(String(cfg?.[disk] ?? ''))
           diskStorage = parsed.ok === false ? null : parsed.drive.storage
           // Growing a disk writes to its storage: judged on the writable set,
           // so a disk somehow sitting on a read-only ISO library (#894) is refused.
@@ -86,7 +78,7 @@ async function handler(
           }
         }
 
-        const deltaMb = parseSizeDeltaMb(size)
+        const deltaMb = resizeDeltaMb(size, currentSize)
 
         if (deltaMb > 0) {
           const quotaCheck = await checkVdcQuota(id, vdcInfo.poolName, vdcInfo.quota, {

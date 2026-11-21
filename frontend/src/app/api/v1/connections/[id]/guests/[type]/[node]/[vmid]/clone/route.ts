@@ -7,7 +7,7 @@ import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { cloneVmSchema } from "@/lib/schemas"
 import { refreshCachedGuests } from "@/lib/cache/guestSetRefresh"
 import { getCurrentTenantId } from "@/lib/tenant"
-import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { resolveVdcForTenant, checkAndReserveVdcQuota } from "@/lib/vdc/quota"
 import { hostpciEntries } from "@/lib/gpu/quota"
 import { readQemuConfig } from "@/lib/gpu/guestConfigSource"
 import { cloneContingentCheck, contingentRefusal, tenantAddsGpu } from "@/lib/gpu/vdcGuard"
@@ -45,6 +45,9 @@ async function handler(
   // until PVE accepted the clone, then the GPUs stay reserved until its task ends.
   let releaseGpuLock: (() => void) | null = null
   let gpuClone: { vdcId: string; demand: GpuDemand[] } | null = null
+  // Quota of the clone (roadmap#265): reserved from the check until its task
+  // ends, released here when the clone is not started.
+  let releaseQuota: (() => void) | null = null
   try {
     const params = await Promise.resolve(ctx.params)
     const { id, type, node, vmid } = params as { id: string; type: string; node: string; vmid: string }
@@ -148,14 +151,15 @@ async function handler(
           }
         }
 
-        const quotaCheck = await checkVdcQuota(id, vdcInfo.poolName, vdcInfo.quota, {
+        const quotaCheck = await checkAndReserveVdcQuota(id, vdcInfo.poolName, vdcInfo.quota, {
           type: 'clone',
           addVcpus: vcpus,
           addRamMb: ramMb,
           addVms: 1,
           addStorageMb: addMb,
           addStorageMbByStorage: Object.keys(addByStorage).length > 0 ? addByStorage : undefined,
-        }, vdcInfo.storagePolicies, node)
+        }, vdcInfo.storagePolicies, node, String(body.newid))
+        releaseQuota = quotaCheck.release
 
         if (!quotaCheck.allowed) {
           return NextResponse.json({
@@ -293,11 +297,19 @@ async function handler(
     const taskNode = node
 
     // The clone writes its hostpciN and joins the pool from inside its task:
-    // its GPUs stay reserved until the task is seen stopped, then the lock goes.
-    if (gpuClone) {
-      const releaseReservation = reserveVdcGpus(gpuClone.vdcId, String(body.newid), gpuClone.demand)
-      const gpuUpid = String(result || '')
-      after(() => releaseWhenTaskStops(conn, gpuUpid, taskNode, releaseReservation))
+    // its quota and its GPUs stay reserved until the task is seen stopped
+    // (one wait for both), then the lock goes.
+    const taskReleases: Array<() => void> = []
+    if (releaseQuota) {
+      taskReleases.push(releaseQuota)
+      releaseQuota = null
+    }
+    if (gpuClone) taskReleases.push(reserveVdcGpus(gpuClone.vdcId, String(body.newid), gpuClone.demand))
+    if (taskReleases.length > 0) {
+      const taskUpid = String(result || '')
+      const releaseAll = () => taskReleases.forEach(release => release())
+      if (taskUpid) after(() => releaseWhenTaskStops(conn, taskUpid, taskNode, releaseAll))
+      else releaseAll()
     }
     releaseGpuLock?.()
     releaseGpuLock = null
@@ -445,6 +457,7 @@ async function handler(
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   } finally {
     releaseGpuLock?.()
+    releaseQuota?.()
   }
 }
 

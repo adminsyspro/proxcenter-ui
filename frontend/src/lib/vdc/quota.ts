@@ -9,8 +9,10 @@ import { pveFetch } from '@/lib/proxmox/client'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { readGuestDiskBytes } from '@/lib/inventory/guestDiskTotals'
 import { prisma } from '@/lib/db/prisma'
+import { withVdcLock } from '@/lib/gpu/vdcLock'
 
 import { normalizeComputePolicyInput, type VdcComputePolicy } from './computePolicy'
+import { pendingVdcQuota, quotaPoolKey, reserveVdcQuota } from './quotaPending'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -243,16 +245,21 @@ export async function checkVdcQuota(
     members = []
   }
 
-  // 5. Filter to qemu/lxc types only
+  // 5. Filter to qemu/lxc types only. A creation still running is counted at
+  // what was reserved for it (roadmap#265): its guest, once it joined the pool,
+  // is left out here so it counts once, and at its full size while its disks
+  // are still being written.
+  const pending = pendingVdcQuota(connectionId, poolName)
+  const reservedVmids = new Set(pending.map(p => p.vmid))
   const vmMembers = members.filter(
-    (m: any) => m.type === 'qemu' || m.type === 'lxc'
+    (m: any) => (m.type === 'qemu' || m.type === 'lxc') && !reservedVmids.has(String(m.vmid))
   )
 
   // 6. Sum current usage
   let vcpus = 0
   let ramMb = 0
   let storageMb = 0
-  const vms = vmMembers.length
+  let vms = vmMembers.length
 
   // #938: every disk of every member, read from its config. `maxdisk` is the
   // boot disk alone (0 for a VM whose boot order names no disk), and summing it
@@ -268,6 +275,13 @@ export async function checkVdcQuota(
     ramMb += Math.round((vm.maxmem || 0) / 1048576)
     storageMb += Math.round(diskBytes[i] / 1048576)
   })
+
+  for (const p of pending) {
+    vcpus += p.vcpus
+    ramMb += p.ramMb
+    storageMb += p.storageMb
+    vms += p.vms
+  }
 
   // Count snapshots across the pool (only fetched when the operation cares
   // about the snapshot quota — saves ~N PVE calls per ordinary create/resize).
@@ -352,8 +366,9 @@ export async function checkVdcQuota(
       if (!(addMb > 0)) continue
       const policy = policyList.find(p => p.storageId === storage)
       if (!policy || policy.quotaMb === null) continue
-      const usedMb = await getVdcStorageUsedMb(conn, meterNode, storage, poolVmids)
-      if (usedMb === null) continue
+      const listedMb = await getVdcStorageUsedMb(conn, meterNode, storage, poolVmids)
+      if (listedMb === null) continue
+      const usedMb = listedMb + pending.reduce((acc, p) => acc + (p.storageMbByStorage?.[storage] ?? 0), 0)
       if (usedMb + addMb > policy.quotaMb) {
         violations.push(
           `Storage policy "${policy.name}" (${storage}): ${formatMb(usedMb)}/${formatMb(policy.quotaMb)} used, +${formatMb(addMb)} requested exceeds quota`
@@ -368,4 +383,44 @@ export async function checkVdcQuota(
     violations,
     currentUsage,
   }
+}
+
+// ---------------------------------------------------------------------------
+// checkAndReserveVdcQuota (creation paths)
+// ---------------------------------------------------------------------------
+
+export type QuotaReservationResult = QuotaCheckResult & {
+  /** Frees what was reserved. A no-op when nothing was (refused, or no quota). */
+  release: () => void
+}
+
+/**
+ * The quota check of a guest creation (create, clone, catalogue deployment),
+ * with what it was admitted for reserved in the same step (roadmap#265).
+ * Checks of the same pool run one at a time, so creations sent in parallel see
+ * each other. The caller releases the reservation when the PVE task ends, or
+ * right away when the creation is not started.
+ */
+export function checkAndReserveVdcQuota(
+  connectionId: string,
+  poolName: string,
+  quota: VdcResolveResult['quota'],
+  operation: QuotaOperation,
+  storagePolicies: VdcResolveResult['storagePolicies'] | undefined,
+  node: string | undefined,
+  vmid: string,
+): Promise<QuotaReservationResult> {
+  return withVdcLock(quotaPoolKey(connectionId, poolName), async () => {
+    const check = await checkVdcQuota(connectionId, poolName, quota, operation, storagePolicies, node)
+    const metered = !!quota || (storagePolicies?.length ?? 0) > 0
+    if (!check.allowed || !metered) return { ...check, release: () => {} }
+    const release = reserveVdcQuota(connectionId, poolName, vmid, {
+      vcpus: operation.addVcpus ?? 0,
+      ramMb: operation.addRamMb ?? 0,
+      storageMb: operation.addStorageMb ?? 0,
+      vms: operation.addVms ?? 0,
+      storageMbByStorage: operation.addStorageMbByStorage,
+    })
+    return { ...check, release }
+  })
 }

@@ -20,7 +20,7 @@ import { authorizeImageVolume, imageSourceForConnection, SourceVolumeError, type
 import { resolveBuiltInImage } from "@/lib/templates/catalogStore"
 import { BUILT_IN_CATALOG_HIDDEN, isBuiltInCatalogHidden } from "@/lib/templates/builtInCatalogAccess"
 import { supportsVmDisks } from "@/lib/proxmox/storage"
-import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { resolveVdcForTenant, checkAndReserveVdcQuota } from "@/lib/vdc/quota"
 import { validateCpuAgainstPolicy, isPolicyRestrictive, resolveAllowedCpuModels, pickPolicyDefaultModel, parseCpuProperty } from "@/lib/vdc/computePolicy"
 import { getAllowedNetworksForTenant, validateNetAgainstScope, resolveSubnetForBridge } from "@/lib/vdc/vnets"
 import { generatePveMacAddress } from "@/lib/vdc/sdn"
@@ -66,6 +66,9 @@ async function updateDeployment(id: string, status: DeploymentStatus, extra: Rec
 }
 
 async function handlePost(req: Request) {
+  // Quota of the new VM (roadmap#265): reserved from the check until the
+  // pipeline ends, released here when the deployment is not started.
+  let releaseQuota: (() => void) | null = null
   try {
     const prisma = await getSessionPrisma()
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
@@ -270,14 +273,15 @@ async function handlePost(req: Request) {
       const diskGb = Number.parseInt(String(hw.diskSize ?? '0').replace(/G$/i, ''))
       const storageMb = (Number.isFinite(diskGb) && diskGb > 0) ? diskGb * 1024 : 0
 
-      const quotaCheck = await checkVdcQuota(body.connectionId, vdcInfo.poolName, vdcInfo.quota, {
+      const quotaCheck = await checkAndReserveVdcQuota(body.connectionId, vdcInfo.poolName, vdcInfo.quota, {
         type: 'create',
         addVcpus: vcpus,
         addRamMb: Number.isFinite(ramMb) ? ramMb : 0,
         addStorageMb: storageMb,
         addVms: 1,
         addStorageMbByStorage: storageMb > 0 ? { [body.storage]: storageMb } : undefined,
-      }, vdcInfo?.storagePolicies ?? undefined, body.node)
+      }, vdcInfo?.storagePolicies ?? undefined, body.node, String(body.vmid))
+      releaseQuota = quotaCheck.release
 
       if (!quotaCheck.allowed) {
         return NextResponse.json({
@@ -431,7 +435,10 @@ async function handlePost(req: Request) {
       )
     }
 
-    // Run the deployment pipeline asynchronously after the response is sent
+    // Run the deployment pipeline asynchronously after the response is sent.
+    // The VM joins the pool inside the pipeline: its quota goes with it.
+    const releasePipelineQuota = releaseQuota
+    releaseQuota = null
     after(async () => {
       // Hoisted so the catch below can release the IPAM reservation if
       // the pipeline throws after we've claimed an IP. `let` inside the
@@ -787,6 +794,8 @@ async function handlePost(req: Request) {
           } catch { /* tolerate */ }
         }
         await updateDeployment(deployment.id, "failed", { error: err?.message || String(err) })
+      } finally {
+        releasePipelineQuota?.()
       }
     })
 
@@ -796,6 +805,8 @@ async function handlePost(req: Request) {
     if (e instanceof SourceVolumeError) return NextResponse.json({ error: e.message }, { status: e.status })
     if (e instanceof NicConfigError) return NextResponse.json({ error: e.message }, { status: 400 })
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+  } finally {
+    releaseQuota?.()
   }
 }
 

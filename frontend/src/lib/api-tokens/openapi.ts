@@ -54,6 +54,7 @@ function successResponse(entry: AllowlistEntry, schemas: SchemaSets) {
       "RateLimit-Limit": { description: "Requests allowed per minute", schema: { type: "integer" } },
       "RateLimit-Remaining": { description: "Requests left in the window", schema: { type: "integer" } },
       "RateLimit-Reset": { description: "Seconds until the window resets", schema: { type: "integer" } },
+      "ProxCenter-Version": { description: "ProxCenter version that served the request", schema: { type: "string" } },
     },
     content: { [mediaType]: { schema } },
   }

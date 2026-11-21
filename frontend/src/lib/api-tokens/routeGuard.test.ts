@@ -13,6 +13,7 @@ vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 vi.mock('./scope', () => ({ resolveVisibleConnectionIds: resolveVisibleMock }))
 vi.mock('./creatorCheck', () => ({ creatorStillHolds: creatorStillHoldsMock }))
 
+import { APP_VERSION } from '@/config/version'
 import { NextResponse } from 'next/server'
 
 import { prismaTest, truncate } from '@/__tests__/setup/prisma-test'
@@ -115,6 +116,8 @@ describe('withPublicApiGuard', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('RateLimit-Limit')).toBe('600')
     expect(res.headers.get('RateLimit-Remaining')).toBe('599')
+    // The provider checks the minimum ProxCenter version it needs from it (roadmap#265).
+    expect(res.headers.get('ProxCenter-Version')).toBe(APP_VERSION)
     // RateLimit-Reset is DELAY-SECONDS until the window reopens (never a Unix
     // timestamp): always within the 60s fixed window.
     const reset = Number(res.headers.get('RateLimit-Reset'))
@@ -136,6 +139,7 @@ describe('withPublicApiGuard', () => {
     expect(res.status).toBe(403)
     expect(await res.json()).toEqual({ error: 'Connection not in token scope', connection: 'conn-B' })
     expect(okHandler).not.toHaveBeenCalled()
+    expect(res.headers.get('ProxCenter-Version')).toBe(APP_VERSION)
     // The perimeter verdict must be computed from THIS token's principal:
     // this call argument is the contract Task 9's tenant fix consumes.
     expect(resolveVisibleMock).toHaveBeenCalledWith(
@@ -161,6 +165,7 @@ describe('withPublicApiGuard', () => {
     const res = await guarded(new Request('http://t/_'), {})
     expect(res.status).toBe(200)
     expect(res.headers.get('RateLimit-Limit')).toBeNull()
+    expect(res.headers.get('ProxCenter-Version')).toBeNull()
   })
 
   it('session callers: an omitted ctx never reaches the handler as undefined', async () => {

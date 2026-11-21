@@ -43,6 +43,13 @@ describe('buildOpenApiDocument', () => {
     expect(doc.paths['/api/v1/public/health'].get.description).toMatch(/Required scope: any valid token$/)
   })
 
+  it('documents the ProxCenter-Version header on every success (roadmap#265)', () => {
+    const op = doc.paths['/api/v1/vms'].get
+    expect(op.responses['200'].headers['ProxCenter-Version']).toEqual({
+      description: expect.stringContaining('ProxCenter version'), schema: { type: 'string' },
+    })
+  })
+
   it('declares the dynamic segment as a required path parameter', () => {
     const params = doc.paths['/api/v1/pbs/{id}/backups'].get.parameters
     expect(params).toEqual(expect.arrayContaining([

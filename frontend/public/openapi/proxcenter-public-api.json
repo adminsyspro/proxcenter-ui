@@ -10122,6 +10122,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -10363,6 +10369,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -10485,6 +10497,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -10653,6 +10671,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -10765,6 +10789,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -10949,6 +10979,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -11036,6 +11072,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -11253,6 +11295,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -11412,6 +11460,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -11599,6 +11653,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -11779,6 +11839,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -11998,6 +12064,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -12151,6 +12223,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -12331,6 +12409,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -12522,6 +12606,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -12684,6 +12774,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -12838,6 +12934,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -13040,6 +13142,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -13353,6 +13461,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -13567,6 +13681,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -13768,6 +13888,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -14027,6 +14153,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -14302,6 +14434,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -14440,6 +14578,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -14581,6 +14725,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -14712,6 +14862,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -14891,6 +15047,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -15038,6 +15200,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -15177,6 +15345,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -15331,6 +15505,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -15462,6 +15642,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -15688,6 +15874,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -15890,6 +16082,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -16207,6 +16405,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -16333,6 +16537,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -16620,6 +16830,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -16741,6 +16957,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -16871,6 +17093,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -17059,6 +17287,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -17237,6 +17471,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -17488,6 +17728,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -17631,6 +17877,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -17762,6 +18014,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -17941,6 +18199,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -18122,6 +18386,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -18248,6 +18518,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -18417,6 +18693,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -18592,6 +18874,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -18718,6 +19006,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -18879,6 +19173,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -19048,6 +19348,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -19174,6 +19480,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -19349,6 +19661,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -19527,6 +19845,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -19653,6 +19977,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -19781,6 +20111,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -19917,6 +20253,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -20052,6 +20394,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -20186,6 +20534,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -20393,6 +20747,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -20546,6 +20906,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -21023,6 +21389,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -21132,6 +21504,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -21384,6 +21762,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -21664,6 +22048,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -21816,6 +22206,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -21972,6 +22368,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -22179,6 +22581,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -22359,6 +22767,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -22519,6 +22933,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -22681,6 +23101,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -22812,6 +23238,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -22963,6 +23395,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -23099,6 +23537,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -23271,6 +23715,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -23398,6 +23848,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -23518,6 +23974,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -23673,6 +24135,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -23802,6 +24270,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -23960,6 +24434,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -24087,6 +24567,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -24207,6 +24693,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -24387,6 +24879,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -24516,6 +25014,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -24696,6 +25200,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -24823,6 +25333,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -24943,6 +25459,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -25133,6 +25655,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -25283,6 +25811,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -25427,6 +25961,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -25666,6 +26206,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -25866,6 +26412,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -26030,6 +26582,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -26164,6 +26722,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -26358,6 +26922,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -26495,6 +27065,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -26741,6 +27317,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -26867,6 +27449,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -26992,6 +27580,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -27130,6 +27724,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -27374,6 +27974,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -27509,6 +28115,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -27627,6 +28239,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -27758,6 +28376,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -28071,6 +28695,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -28297,6 +28927,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -28559,6 +29195,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -28781,6 +29423,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -28885,6 +29533,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -29041,6 +29695,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -29196,6 +29856,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -29327,6 +29993,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -29455,6 +30127,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -29771,6 +30449,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -29981,6 +30665,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -30194,6 +30884,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -30410,6 +31106,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -30541,6 +31243,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -30665,6 +31373,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -30892,6 +31606,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -31024,6 +31744,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -31241,6 +31967,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -31466,6 +32198,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -31601,6 +32339,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -31720,6 +32464,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -31885,6 +32635,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -32017,6 +32773,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -32172,6 +32934,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -32314,6 +33082,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -32451,6 +33225,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -32776,6 +33556,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -32995,6 +33781,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -33217,6 +34009,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -33442,6 +34240,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -33581,6 +34385,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -33742,6 +34552,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -34110,6 +34926,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -34322,6 +35144,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -34565,6 +35393,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -34722,6 +35556,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -34892,6 +35732,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -35006,6 +35852,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -35230,6 +36082,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -35413,6 +36271,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -35636,6 +36500,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -35817,6 +36687,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -35930,6 +36806,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -36111,6 +36993,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -36231,6 +37119,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -36334,6 +37228,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -36697,6 +37597,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -37229,6 +38135,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -37597,6 +38509,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -38114,6 +39032,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -38480,6 +39404,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -38598,6 +39528,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -38737,6 +39673,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -39001,6 +39943,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -39202,6 +40150,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -39442,6 +40396,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -39641,6 +40601,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -39774,6 +40740,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -40004,6 +40976,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -40184,6 +41162,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -40388,6 +41372,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -40577,6 +41567,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -40800,6 +41796,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -41005,6 +42007,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -41170,6 +42178,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -41404,6 +42418,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -41551,6 +42571,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -41753,6 +42779,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -41910,6 +42942,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -42013,6 +43051,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -42228,6 +43272,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -42396,6 +43446,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -42579,6 +43635,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -42754,6 +43816,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -42921,6 +43989,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -43095,6 +44169,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -43324,6 +44404,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -43511,6 +44597,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -43684,6 +44776,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -43892,6 +44990,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -44125,6 +45229,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -44227,6 +45337,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -44423,6 +45539,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -44608,6 +45730,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -44811,6 +45939,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -44994,6 +46128,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -45115,6 +46255,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -45339,6 +46485,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -45536,6 +46688,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -45665,6 +46823,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -45854,6 +47018,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },
@@ -46175,6 +47345,12 @@
                 "schema": {
                   "type": "integer"
                 }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
               }
             },
             "content": {
@@ -46285,6 +47461,12 @@
                 "description": "Seconds until the window resets",
                 "schema": {
                   "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
                 }
               }
             },

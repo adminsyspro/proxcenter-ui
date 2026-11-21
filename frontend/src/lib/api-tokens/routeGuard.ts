@@ -5,6 +5,7 @@
 // RateLimit-* on token responses.
 import { headers } from "next/headers"
 
+import { APP_VERSION } from "@/config/version"
 import { getPrincipal, rejectionToResponse, type Principal } from "@/lib/auth/principal"
 import { getAllowlistEntryById, matchEntryParams } from "./allowlist"
 import { auditTokenDenied, auditTokenWrite, runTokenEntryGuards } from "./writeGuards"
@@ -60,7 +61,7 @@ export function withPublicApiGuard<C extends GuardedRouteContext = GuardedRouteC
     if (!params) return rejectionToResponse()
 
     const denied = await runTokenEntryGuards(entry, principal, req, params)
-    if (denied) return denied
+    if (denied) return withVersion(denied)
 
     let res: Response
     try {
@@ -71,6 +72,7 @@ export function withPublicApiGuard<C extends GuardedRouteContext = GuardedRouteC
       throw err
     }
     await auditTokenWrite(entry, principal, req, res)
+    withVersion(res)
     if (result.rateLimit) {
       res.headers.set("RateLimit-Limit", String(result.rateLimit.limit))
       res.headers.set("RateLimit-Remaining", String(result.rateLimit.remaining))
@@ -78,4 +80,14 @@ export function withPublicApiGuard<C extends GuardedRouteContext = GuardedRouteC
     }
     return res
   }
+}
+
+/**
+ * Every answer to a token names the ProxCenter version that served it, so an
+ * API client (the Terraform provider, roadmap#265) can check the minimum
+ * version it needs without a scope of its own.
+ */
+function withVersion(res: Response): Response {
+  res.headers.set("ProxCenter-Version", APP_VERSION)
+  return res
 }

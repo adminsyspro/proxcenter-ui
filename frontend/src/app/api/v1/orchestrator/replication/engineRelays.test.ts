@@ -2,13 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const mocks = vi.hoisted(() => ({
-  permission: vi.fn(), ssh: vi.fn(), preflight: vi.fn(), usage: vi.fn(), delete: vi.fn(), health: vi.fn(),
+  permission: vi.fn(), ssh: vi.fn(), preflight: vi.fn(), usage: vi.fn(), delete: vi.fn(), health: vi.fn(), jobs: vi.fn(),
 }))
 vi.mock('@/lib/rbac', () => ({ checkPermission: mocks.permission, PERMISSIONS: { AUTOMATION_VIEW: 'automation.view', AUTOMATION_MANAGE: 'automation.manage' } }))
-vi.mock('@/lib/tenant', () => ({ getTenantConnectionIds: async () => new Set(['src', 'dst']) }))
+vi.mock('@/lib/tenant', () => ({
+  DEFAULT_TENANT_ID: 'default',
+  getCurrentTenantId: async () => 'acme',
+  getTenantConnectionIds: async () => new Set(['src', 'dst']),
+}))
 vi.mock('@/lib/orchestrator/client', () => ({ getOrchestratorClient: () => ({
   checkSSHConnectivity: mocks.ssh, preflightReplication: mocks.preflight, getSnapshotUsage: mocks.usage,
-  deleteMirrorSnapshots: mocks.delete, getReplicationHealth: mocks.health,
+  deleteMirrorSnapshots: mocks.delete, getReplicationHealth: mocks.health, getReplicationJobs: mocks.jobs,
 }) }))
 
 import { POST as ssh } from './check-ssh/route'
@@ -81,6 +85,7 @@ it('preserves complete deletion identities while removing foreign tenant items',
 
 it('surfaces engines and filters status sites to the tenant', async () => {
   mocks.health.mockResolvedValue({ data: { engines: ['rbd', 'zfs'], sites: [{ cluster_id: 'src' }, { cluster_id: 'foreign' }] } })
+  mocks.jobs.mockRejectedValue(new Error('jobs unavailable'))
   expect(await (await status()).json()).toEqual({ engines: ['rbd', 'zfs'], sites: [{ cluster_id: 'src' }] })
 })
 

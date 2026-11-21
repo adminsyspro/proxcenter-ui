@@ -95,6 +95,8 @@ export interface ReplicationJob {
   updated_at: string
   snapshot_keep_source?: number
   snapshot_keep_target?: number
+  /** Ends whose connection no longer exists (ui#1394), set for the provider only. */
+  missing_connections?: Array<'source' | 'target'>
 }
 
 export interface CreateReplicationJobRequest {
@@ -195,6 +197,8 @@ export interface RecoveryPlan {
   guests?: RecoveryPlanGuest[]
   created_at: string
   updated_at: string
+  /** Ends whose connection no longer exists (ui#1394), set for the provider only. */
+  missing_connections?: Array<'source' | 'target'>
 }
 
 export interface CreateRecoveryPlanRequest {

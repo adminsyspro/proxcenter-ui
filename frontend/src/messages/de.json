@@ -5654,7 +5654,27 @@
     "sshTrustHostKey": "Diesem Schlüssel vertrauen",
     "sshTrustNewHostKey": "Dem neuen Schlüssel vertrauen",
     "sshTrustHostKeyHelper": "Vergleichen Sie diesen Fingerabdruck vor dem Vertrauen mit dem, den der Host selbst meldet: ssh-keygen -lf auf seinen Dateien /etc/ssh/ssh_host_*_key.pub.",
-    "sshTrustFailed": "Dem Schlüssel wurde nicht vertraut: {error}"
+    "sshTrustFailed": "Dem Schlüssel wurde nicht vertraut: {error}",
+    "connectionUsage": {
+      "checking": "Es wird geprüft, was diese Verbindung verwendet…",
+      "intro": "Diese Verbindung wird noch verwendet. Entfernen Sie zuerst diese Verknüpfungen, jeweils auf ihrer eigenen Seite:",
+      "titles": {
+        "tenantOwner": "Gehört dem Mandanten",
+        "vdcs": "Virtuelle Rechenzentren",
+        "pbsVdcs": "Virtuelle Rechenzentren, die hierhin sichern",
+        "replicationJobs": "Site-Recovery-Replikationsjobs",
+        "recoveryPlans": "Site-Recovery-Wiederherstellungspläne",
+        "microseg": "Mikrosegmentierungsrichtlinie (Cluster)",
+        "drsRules": "DRS-Affinitätsregeln",
+        "migrations": "Laufende Migrationen",
+        "vdcMoves": "Laufende vDC-Verschiebungen",
+        "complianceProfiles": "Compliance-Profile",
+        "slaWindows": "SLA-Wartungsfenster",
+        "restoreDrillSchedules": "Zeitpläne für Wiederherstellungstests"
+      },
+      "apiTokensTitle": "Auf diese Verbindung beschränkte API-Tokens",
+      "apiTokensHint": "Sie erreichen nach dem Löschen nichts mehr. Das Löschen wird dadurch nicht blockiert."
+    }
   },
   "green": {
     "score": {
@@ -7581,6 +7601,11 @@
       "traceEmpty": "Warten auf das erste Ereignis…",
       "lastReverseSync": "Letzte Rücksynchronisation",
       "transferred": "Übertragen"
+    },
+    "orphan": {
+      "connectionName": "Gelöschte Verbindung",
+      "jobHint": "Die Verbindung dieses Jobs wurde gelöscht: Er kann nicht mehr laufen. Löschen Sie ihn, um ihn aus dem Dashboard zu entfernen.",
+      "planHint": "Die Verbindung dieses Plans wurde gelöscht: Er kann kein Failover mehr ausführen. Löschen Sie ihn, um ihn aus der Liste zu entfernen."
     }
   },
   "templates": {

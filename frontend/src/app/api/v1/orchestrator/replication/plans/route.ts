@@ -4,6 +4,7 @@ import { getOrchestratorClient } from "@/lib/orchestrator/client"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getTenantConnectionIds } from "@/lib/tenant"
 import { withAudit } from "@/lib/audit/withAudit"
+import { getReplicationScope, scopeReplicationItems } from "@/lib/orchestrator/replicationScope"
 
 export const runtime = "nodejs"
 
@@ -52,17 +53,13 @@ export async function GET() {
     const denied = await checkPermission(PERMISSIONS.AUTOMATION_VIEW, "global", "*")
     if (denied) return denied
 
-    const tenantConnectionIds = await getTenantConnectionIds()
+    const scope = await getReplicationScope()
     const client = getOrchestratorClient()
     const response = await client.getRecoveryPlans()
 
-    const all = Array.isArray(response.data) ? response.data : []
-    const filtered = all.filter((p: any) =>
-      (!p.source_cluster || tenantConnectionIds.has(p.source_cluster)) &&
-      (!p.target_cluster || tenantConnectionIds.has(p.target_cluster))
-    )
-
-    return NextResponse.json(filtered)
+    // Same rule as the jobs: a plan on a deleted connection is listed to the
+    // provider, flagged, so it can be deleted (ui#1394).
+    return NextResponse.json(scopeReplicationItems(response.data, scope))
   } catch (e: any) {
     // Return mock data when orchestrator is not available (filtered is not possible for mocks)
     return NextResponse.json(MOCK_PLANS)

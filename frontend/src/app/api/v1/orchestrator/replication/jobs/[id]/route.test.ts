@@ -16,6 +16,8 @@ vi.mock('@/lib/rbac', () => ({
 }))
 
 vi.mock('@/lib/tenant', () => ({
+  DEFAULT_TENANT_ID: 'default',
+  getCurrentTenantId: async () => 'default',
   getTenantConnectionIds: () => getTenantConnectionIdsMock(),
 }))
 

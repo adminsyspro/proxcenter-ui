@@ -343,3 +343,26 @@ describe('RecoveryPlansTab - guests shared with another plan', () => {
     expect(screen.queryByText(/also in/)).not.toBeInTheDocument()
   })
 })
+
+describe('RecoveryPlansTab: a plan whose connection was deleted (ui#1394)', () => {
+  const orphan = () => plan({ target_cluster: 'gone', missing_connections: ['target'] })
+
+  it('names the missing end once instead of its raw id', () => {
+    renderTab([orphan()])
+
+    expect(screen.getAllByText(/Deleted connection|Connection deleted/)).toHaveLength(1)
+    expect(screen.queryByText('gone')).not.toBeInTheDocument()
+  })
+
+  it('offers only Delete in the drawer, with the reason', async () => {
+    renderTab([orphan()])
+
+    await openDrawer()
+
+    expect(screen.getByText(/it can no longer fail over/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete' })).not.toBeDisabled()
+    for (const name of ['Edit plan', 'Failback', 'Test Failover', 'Failover']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+    }
+  })
+})

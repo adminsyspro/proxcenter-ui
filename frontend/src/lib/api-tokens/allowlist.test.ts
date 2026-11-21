@@ -116,6 +116,7 @@ describe('shared canonical matcher', () => {
       'templates-blueprints': '/api/v1/templates/blueprints',
       'templates-blueprint-get': '/api/v1/templates/blueprints/bp1',
       'template-deploy': '/api/v1/templates/deploy',
+      'template-deployment-get': '/api/v1/templates/deployments/dep1',
       'vm-template': `${guest}/template`,
       'vm-disk-resize': `${guest}/disk/resize`,
       'vm-disk-move': `${guest}/disk/move`,

@@ -83,6 +83,26 @@ export const TEMPLATE_RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> 
   TemplateCatalogResponse: { type: "object", properties: { data: { type: "array", items: IMAGE } } },
   TemplateBlueprintListResponse: { type: "object", properties: { data: { type: "array", items: BLUEPRINT } } },
   TemplateBlueprintResponse: { type: "object", properties: { data: BLUEPRINT } },
+  TemplateDeploymentResponse: {
+    type: "object",
+    properties: {
+      data: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          status: { type: "string", enum: ["pending", "downloading", "creating", "configuring", "starting", "completed", "failed"] },
+          currentStep: { type: ["string", "null"], description: "Step a failed deployment stopped at" },
+          error: { type: ["string", "null"] },
+          connectionId: { type: "string" },
+          node: { type: "string" },
+          vmid: { type: "integer" },
+          vmName: { type: ["string", "null"] },
+          startedAt: { type: ["string", "null"], format: "date-time" },
+          completedAt: { type: ["string", "null"], format: "date-time" },
+        },
+      },
+    },
+  },
   TemplateDeployResponse: {
     type: "object",
     properties: {

@@ -10205,6 +10205,73 @@
           }
         }
       },
+      "TemplateDeploymentResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "downloading",
+                  "creating",
+                  "configuring",
+                  "starting",
+                  "completed",
+                  "failed"
+                ]
+              },
+              "currentStep": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Step a failed deployment stopped at"
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "connectionId": {
+                "type": "string"
+              },
+              "node": {
+                "type": "string"
+              },
+              "vmid": {
+                "type": "integer"
+              },
+              "vmName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "startedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "completedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
       "TemplateDeployResponse": {
         "type": "object",
         "properties": {
@@ -48736,6 +48803,180 @@
                 "example": {
                   "error": "Method not allowed for this API token route",
                   "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/templates/deployments/{id}": {
+      "get": {
+        "operationId": "template-deployment-get",
+        "summary": "Progress of a catalogue deployment",
+        "description": "The deployment started by POST /api/v1/templates/deploy: `status` goes pending, downloading, creating, configuring, starting, then `completed` or `failed` (with `error` and the `currentStep` it stopped at). A deployment of another tenant, or on a connection outside the token perimeter, is 404.\n\nRequired scope: `vms:read` or `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete`",
+        "tags": [
+          "Templates"
+        ],
+        "x-required-scopes": [
+          "vms:read",
+          "vms:power",
+          "vms:write",
+          "vms:snapshot",
+          "vms:migrate",
+          "vms:delete"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "downloading",
+                            "creating",
+                            "configuring",
+                            "starting",
+                            "completed",
+                            "failed"
+                          ]
+                        },
+                        "currentStep": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "description": "Step a failed deployment stopped at"
+                        },
+                        "error": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "connectionId": {
+                          "type": "string"
+                        },
+                        "node": {
+                          "type": "string"
+                        },
+                        "vmid": {
+                          "type": "integer"
+                        },
+                        "vmName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "startedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "completedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/templates/deployments/{id}"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
                 }
               }
             }

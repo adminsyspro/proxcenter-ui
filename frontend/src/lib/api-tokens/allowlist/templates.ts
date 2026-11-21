@@ -66,4 +66,17 @@ export const TEMPLATE_ENTRIES: AllowlistEntry[] = [
     requestSchemaRef: "TemplateDeployRequest",
     responseSchemaRef: "TemplateDeployResponse",
   }),
+  templateEntry({
+    id: "template-deployment-get",
+    method: "GET",
+    file: "deployments/[id]",
+    requiredScopes: VM_READ_SCOPES,
+    // The connection is read from the deployment record: the handler
+    // answers 404 when a restricted token does not hold it.
+    perimeter: "handler",
+    summary: "Progress of a catalogue deployment",
+    description:
+      "The deployment started by POST /api/v1/templates/deploy: `status` goes pending, downloading, creating, configuring, starting, then `completed` or `failed` (with `error` and the `currentStep` it stopped at). A deployment of another tenant, or on a connection outside the token perimeter, is 404.",
+    responseSchemaRef: "TemplateDeploymentResponse",
+  }),
 ]

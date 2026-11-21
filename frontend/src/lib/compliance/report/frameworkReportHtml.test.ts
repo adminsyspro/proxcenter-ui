@@ -5,7 +5,7 @@ import type { FrameworkAssessment } from '../frameworkAssessment'
 import type { NodeBreakdown } from '../nodeBreakdown'
 
 const a: FrameworkAssessment = {
-  frameworkId: 'nist-800-171-r2', score: 60, satisfied: 3, partial: 1, failed: 1, notAssessed: 105,
+  frameworkId: 'nist-800-171-r3', score: 60, satisfied: 3, partial: 1, failed: 1, notAssessed: 105,
   assessedControls: 5, totalControls: 110, coverage: 5 / 110,
   families: [{ family: 'Access Control', satisfied: 1, partial: 0, failed: 0, notAssessed: 2 }],
   controls: [{ id: '3.1.1', title: 'Limit access', family: 'Access Control', status: 'satisfied', checks: [{ id: 'ssh_root_login', name: 'SSH root login', status: 'pass' }] }],
@@ -14,14 +14,14 @@ const t = (k: string) => k
 
 describe('frameworkReportHtml', () => {
   it('includes framework name, score and a control row', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'prod', generatedAt: '2026-06-22', locale: 'en' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'prod', generatedAt: '2026-06-22', locale: 'en' }, t)
     expect(html).toContain('NIST SP 800-171')
     expect(html).toContain('60')
     expect(html).toContain('3.1.1')
   })
 
   it('escapes hostile dynamic values and embeds no remote/file resources', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: '<script>x</script>', generatedAt: 'd', locale: 'en' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: '<script>x</script>', generatedAt: 'd', locale: 'en' }, t)
     expect(html).not.toContain('<script>x</script>')
     expect(html).toContain('&lt;script&gt;')
     expect(html).not.toMatch(/src=["']https?:|src=["']file:/)
@@ -34,7 +34,7 @@ describe('frameworkReportHtml', () => {
       controls: [{ ...a.controls[0], status: '"><x' as any }],
     }
     const tHostile = (k: string) => k.endsWith('noAssessed') ? '<b>none</b>' : k
-    const html = frameworkReportHtml(hostile, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, tHostile)
+    const html = frameworkReportHtml(hostile, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, tHostile)
     // status must not break out of the class attribute or style attribute
     expect(html).not.toContain('s-"><x')
     expect(html).toContain('&quot;&gt;')
@@ -53,7 +53,7 @@ describe('frameworkReportHtml', () => {
     const meta = { connectionName: 'prod', generatedAt: '2026-06-22', locale: 'en' }
 
     it('carries the app name on the cover, the running header and the title', () => {
-      const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { ...meta, appName: 'ACME Cloud' }, t)
+      const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { ...meta, appName: 'ACME Cloud' }, t)
 
       expect(html).toContain('<div class="cover-app-name">ACME Cloud</div>')
       expect(html).toContain('content: "ACME Cloud  |  Compliance Report"')
@@ -63,7 +63,7 @@ describe('frameworkReportHtml', () => {
 
     it('keeps ProxCenter when no name is configured, or when it is blank', () => {
       for (const appName of [undefined, '', '   ']) {
-        const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { ...meta, appName }, t)
+        const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { ...meta, appName }, t)
 
         expect(html).toContain('<div class="cover-app-name">ProxCenter</div>')
         expect(html).toContain('content: "ProxCenter  |  Compliance Report"')
@@ -71,7 +71,7 @@ describe('frameworkReportHtml', () => {
     })
 
     it('escapes the app name in HTML, where it is operator-supplied text', () => {
-      const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { ...meta, appName: '<script>x</script>' }, t)
+      const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { ...meta, appName: '<script>x</script>' }, t)
 
       expect(html).not.toContain('<script>x</script>')
       expect(html).toContain('&lt;script&gt;')
@@ -83,7 +83,7 @@ describe('frameworkReportHtml', () => {
     it('escapes the app name for the CSS string it lands in', () => {
       const html = frameworkReportHtml(
         a,
-        getFramework('nist-800-171-r2'),
+        getFramework('nist-800-171-r3'),
         { ...meta, appName: 'Ac"me" }\n@page { size: A5 }' },
         t,
       )
@@ -99,7 +99,7 @@ describe('frameworkReportHtml', () => {
     it('cannot break out of the style block through the app name', () => {
       const html = frameworkReportHtml(
         a,
-        getFramework('nist-800-171-r2'),
+        getFramework('nist-800-171-r3'),
         { ...meta, appName: '</style><script>alert(1)</script>' },
         t,
       )
@@ -121,13 +121,13 @@ describe('frameworkReportHtml', () => {
         { id: '3.1.99', title: 'Policy review', family: 'Policy', status: 'not_assessed', checks: [] },
       ],
     }
-    const html = frameworkReportHtml(withNotAssessed, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    const html = frameworkReportHtml(withNotAssessed, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(html).toContain('3.1.1')
     expect(html).not.toContain('3.1.99')
   })
 
   it('does not include a "Not Assessed" stat card', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     // The stat card with "Not Assessed" label must be gone
     expect(html).not.toMatch(/stat-label[^<]*Not Assessed/)
   })
@@ -140,38 +140,38 @@ describe('frameworkReportHtml', () => {
         { family: 'Access Control', satisfied: 1, partial: 0, failed: 0, notAssessed: 2 },
       ],
     }
-    const html = frameworkReportHtml(allNotAssessed, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    const html = frameworkReportHtml(allNotAssessed, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(html).toContain('Access Control')
     // Policy has no assessed controls so it should be omitted
     expect(html).not.toContain('>Policy<')
   })
 
   it('does not show "Not Assessed" column header in the by-family table', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(html).not.toMatch(/<th[^>]*>Not Assessed<\/th>/)
   })
 
   it('includes a scope note about omitted organizational controls', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(html).toContain('outside the scope of automated infrastructure assessment')
   })
 
   // -- Brand color --
 
   it('injects a valid hex brand color into --primary', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', brandColor: '#FF5500' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en', brandColor: '#FF5500' }, t)
     expect(html).toContain('--primary: #FF5500')
   })
 
   it('falls back to #E57000 when brandColor is an invalid / hostile value', () => {
     const hostile = 'red;}body{x:1'
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', brandColor: hostile }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en', brandColor: hostile }, t)
     expect(html).not.toContain(hostile)
     expect(html).toContain('--primary: #E57000')
   })
 
   it('falls back to #E57000 when brandColor is absent', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(html).toContain('--primary: #E57000')
   })
 
@@ -179,52 +179,52 @@ describe('frameworkReportHtml', () => {
   // its text in a fixed white, so a light brand colour printed an unreadable
   // cover.
   it('darkens the cover text when the brand color is light', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', brandColor: '#FFD200' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en', brandColor: '#FFD200' }, t)
     expect(html).toContain('--on-primary: rgba(0, 0, 0, 0.87)')
     expect(html).toContain('color: var(--on-primary)')
   })
 
   it('keeps white cover text on a dark brand color, including the default', () => {
-    const dark = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', brandColor: '#7C4DFF' }, t)
+    const dark = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en', brandColor: '#7C4DFF' }, t)
     expect(dark).toContain('--on-primary: #fff')
 
-    const fallback = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    const fallback = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(fallback).toContain('--on-primary: #fff')
   })
 
   // -- Logo --
 
   it('renders logo img when logoDataUri starts with data:', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', logoDataUri: 'data:image/png;base64,AAAA' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en', logoDataUri: 'data:image/png;base64,AAAA' }, t)
     expect(html).toContain('<img class="cover-logo" src="data:image/png;base64,AAAA"')
   })
 
   it('rejects non-data: logoDataUri (no img rendered)', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', logoDataUri: 'http://evil.com/logo.png' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en', logoDataUri: 'http://evil.com/logo.png' }, t)
     expect(html).not.toContain('http://evil.com')
     expect(html).not.toContain('<img class="cover-logo"')
   })
 
   it('omits logo img when logoDataUri is absent', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(html).not.toContain('<img class="cover-logo"')
   })
 
   // -- Framework badge --
 
   it('renders the framework badge when frameworkLogoDataUri starts with data:', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', frameworkLogoDataUri: 'data:image/png;base64,BBBB' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en', frameworkLogoDataUri: 'data:image/png;base64,BBBB' }, t)
     expect(html).toContain('<img class="cover-framework-logo" src="data:image/png;base64,BBBB"')
   })
 
   it('rejects a non-data: frameworkLogoDataUri (no badge rendered)', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', frameworkLogoDataUri: 'https://evil.com/badge.png' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en', frameworkLogoDataUri: 'https://evil.com/badge.png' }, t)
     expect(html).not.toContain('evil.com')
     expect(html).not.toContain('<img class="cover-framework-logo"')
   })
 
   it('omits the framework badge when frameworkLogoDataUri is absent', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(html).not.toContain('<img class="cover-framework-logo"')
   })
 
@@ -245,7 +245,7 @@ describe('frameworkReportHtml', () => {
         ],
       },
     ]
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'cluster', generatedAt: '2026-06-22', locale: 'en' }, t, breakdown)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'cluster', generatedAt: '2026-06-22', locale: 'en' }, t, breakdown)
     expect(html).toContain('Per-Node Results')
     expect(html).toContain('Node: pve1')
     expect(html).toContain('Node: pve2')
@@ -267,7 +267,7 @@ describe('frameworkReportHtml', () => {
         ],
       },
     ]
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'cluster', generatedAt: '2026-06-22', locale: 'en' }, t, breakdown)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'cluster', generatedAt: '2026-06-22', locale: 'en' }, t, breakdown)
     // hostile node name must be escaped
     expect(html).not.toContain('Node: <b>n</b>')
     expect(html).toContain('Node: &lt;b&gt;n&lt;/b&gt;')
@@ -277,7 +277,7 @@ describe('frameworkReportHtml', () => {
   })
 
   it('does not emit a per-node section when nodeBreakdown is omitted', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'single', generatedAt: '2026-06-22', locale: 'en' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'single', generatedAt: '2026-06-22', locale: 'en' }, t)
     expect(html).not.toContain('Per-Node Results')
   })
 
@@ -290,7 +290,7 @@ describe('frameworkReportHtml', () => {
         ],
       },
     ]
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'single', generatedAt: '2026-06-22', locale: 'en' }, t, breakdown)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'single', generatedAt: '2026-06-22', locale: 'en' }, t, breakdown)
     expect(html).not.toContain('Per-Node Results')
   })
 
@@ -299,7 +299,7 @@ describe('frameworkReportHtml', () => {
       { node: 'n1', checks: [] },
       { node: 'n2', checks: [] },
     ]
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t, breakdown)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t, breakdown)
     expect(html).not.toMatch(/src=["']https?:/)
     expect(html).not.toMatch(/src=["']file:/)
     expect(html).not.toMatch(/@import\s+['"]https?:/)
@@ -307,7 +307,7 @@ describe('frameworkReportHtml', () => {
   })
 
   it('allows data: URI logo without treating it as a remote resource', () => {
-    const html = frameworkReportHtml(a, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en', logoDataUri: 'data:image/png;base64,AAAA' }, t)
+    const html = frameworkReportHtml(a, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en', logoDataUri: 'data:image/png;base64,AAAA' }, t)
     // data: URI is allowed
     expect(html).toContain('data:image/png;base64,AAAA')
     // still no http/file
@@ -318,27 +318,27 @@ describe('frameworkReportHtml', () => {
   // -- sourceUrl link --
 
   it('renders a clickable <a> for a valid https sourceUrl', () => {
-    const defWithUrl = { ...getFramework('nist-800-171-r2'), sourceUrl: 'https://csrc.nist.gov/pubs/sp/800/171/r2/upd1/final' }
+    const defWithUrl = { ...getFramework('nist-800-171-r3'), sourceUrl: 'https://csrc.nist.gov/pubs/sp/800/171/r3/final' }
     const html = frameworkReportHtml(a, defWithUrl, { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
-    expect(html).toContain('<a href="https://csrc.nist.gov/pubs/sp/800/171/r2/upd1/final">')
-    expect(html).toContain('https://csrc.nist.gov/pubs/sp/800/171/r2/upd1/final</a>')
+    expect(html).toContain('<a href="https://csrc.nist.gov/pubs/sp/800/171/r3/final">')
+    expect(html).toContain('https://csrc.nist.gov/pubs/sp/800/171/r3/final</a>')
   })
 
   it('rejects a javascript: sourceUrl and emits no <a href="javascript:', () => {
-    const defWithHostile = { ...getFramework('nist-800-171-r2'), sourceUrl: 'javascript:alert(1)' }
+    const defWithHostile = { ...getFramework('nist-800-171-r3'), sourceUrl: 'javascript:alert(1)' }
     const html = frameworkReportHtml(a, defWithHostile, { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(html).not.toContain('<a href="javascript:')
     expect(html).not.toContain('href="javascript:')
   })
 
   it('rejects a data: sourceUrl and emits no <a href="data:', () => {
-    const defWithData = { ...getFramework('nist-800-171-r2'), sourceUrl: 'data:text/html,<script>x</script>' }
+    const defWithData = { ...getFramework('nist-800-171-r3'), sourceUrl: 'data:text/html,<script>x</script>' }
     const html = frameworkReportHtml(a, defWithData, { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(html).not.toContain('href="data:')
   })
 
   it('rejects a file: sourceUrl and emits no <a href="file:', () => {
-    const defWithFile = { ...getFramework('nist-800-171-r2'), sourceUrl: 'file:///etc/passwd' }
+    const defWithFile = { ...getFramework('nist-800-171-r3'), sourceUrl: 'file:///etc/passwd' }
     const html = frameworkReportHtml(a, defWithFile, { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(html).not.toContain('href="file:')
   })
@@ -356,7 +356,7 @@ describe('frameworkReportHtml', () => {
         ],
       }],
     }
-    const html = frameworkReportHtml(withDetails, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    const html = frameworkReportHtml(withDetails, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(html).toContain('node2: PermitRootLogin=yes')
     expect(html).toContain('Fail: node2: PermitRootLogin=yes')
   })
@@ -371,7 +371,7 @@ describe('frameworkReportHtml', () => {
         ],
       }],
     }
-    const html = frameworkReportHtml(withHostile, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    const html = frameworkReportHtml(withHostile, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(html).not.toContain('<script>x</script>')
     expect(html).toContain('&lt;script&gt;x&lt;/script&gt;')
   })
@@ -384,7 +384,7 @@ describe('frameworkReportHtml', () => {
         checks: [{ id: 'ssh_root_login', name: 'SSH root login', status: 'pass' }],
       }],
     }
-    const html = frameworkReportHtml(noDetails, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    const html = frameworkReportHtml(noDetails, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     // Should render the placeholder, not an empty cell
     expect(html).toContain('#94a3b8')
   })
@@ -400,7 +400,7 @@ describe('frameworkReportHtml', () => {
         ],
       }],
     }
-    const html = frameworkReportHtml(mixed, getFramework('nist-800-171-r2'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
+    const html = frameworkReportHtml(mixed, getFramework('nist-800-171-r3'), { connectionName: 'c', generatedAt: 'd', locale: 'en' }, t)
     expect(html).toContain('reason A')
     // check_b has no details; its name should not appear in a "status: details" pattern in the details column
     expect(html).not.toContain('Pass: Check B')

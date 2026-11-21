@@ -442,6 +442,7 @@ const HARDENING: Array<[string, string, string, string, string, string?]> = [
   ['cluster_policy_out', 'Outbound policy = DROP', 'cluster', 'medium', 'fail', 'Datacenter outbound policy is ACCEPT on both clusters'],
   ['pve_version', 'PVE version up to date', 'cluster', 'medium', 'pass'],
   ['backup_schedule', 'Backup jobs configured', 'cluster', 'high', 'pass'],
+  ['backup_encryption', 'Backups encrypted', 'cluster', 'medium', 'pass'],
   ['ha_enabled', 'High availability configured', 'cluster', 'medium', 'warning', '11 of 24 protected guests are in the HA manager'],
   ['storage_replication', 'Storage replication configured', 'cluster', 'medium', 'pass'],
   ['pool_isolation', 'Resource pool isolation', 'cluster', 'medium', 'pass'],

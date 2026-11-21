@@ -68,7 +68,7 @@ const TWO_NODES_MOCK = [
 ]
 
 const BASE_ASSESSMENT = {
-  frameworkId: 'nist-800-171-r2',
+  frameworkId: 'nist-800-171-r3',
   score: 60,
   satisfied: 3,
   partial: 1,
@@ -151,16 +151,16 @@ describe('FrameworksTab', () => {
 
   it('renders the info icon tooltip trigger for the framework context', () => {
     render(<FrameworksTab />)
-    const trigger = screen.getByLabelText('info-nist-800-171-r2')
+    const trigger = screen.getByLabelText('info-nist-800-171-r3')
     expect(trigger).toBeInTheDocument()
   })
 
   it('renders visible context text on the card (not tooltip-only)', () => {
     render(<FrameworksTab />)
-    // The context key is rendered via t(`context.${frameworkId}`) = "context.nist-800-171-r2"
-    const contextEl = screen.getByTestId('context-nist-800-171-r2')
+    // The context key is rendered via t(`context.${frameworkId}`) = "context.nist-800-171-r3"
+    const contextEl = screen.getByTestId('context-nist-800-171-r3')
     expect(contextEl).toBeInTheDocument()
-    expect(contextEl.textContent).toContain('context.nist-800-171-r2')
+    expect(contextEl.textContent).toContain('context.nist-800-171-r3')
   })
 
   it('does NOT render the old per-family list (e.g. "Access Control:" text)', () => {
@@ -231,7 +231,7 @@ describe('FrameworksTab report download (background job)', () => {
 
     await waitFor(() => expect(addTaskMock).toHaveBeenCalledTimes(1))
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/compliance/report-jobs', expect.objectContaining({ method: 'POST' }))
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ frameworkId: 'nist-800-171-r2', connectionId: 'conn-1' })
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ frameworkId: 'nist-800-171-r3', connectionId: 'conn-1' })
     expect(addTaskMock.mock.calls[0][0]).toMatchObject({
       id: 'report-job-1',
       type: 'report',

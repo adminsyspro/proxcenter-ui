@@ -105,7 +105,7 @@ export const VM_ENTRIES: AllowlistEntry[] = [
     requiredScopes: ["vms:write"],
     summary: "Clone a guest",
     description:
-      "Clones the guest (or a template) to `newid`. Other Proxmox clone parameters pass through. A vDC tenant clone stays in its pool, storages and quota.",
+      "Clones the guest (or a template) to `newid`. Other Proxmox clone parameters pass through. A vDC tenant clone stays in its pool, storages and quota. Once the task ends, read the clone config: `provisioning` tells when the clone still sets up its IPAM addresses, storage QoS or HA.",
     requestSchemaRef: "VmCloneRequest",
     responseSchemaRef: "VmTaskMessageResponse",
   }),

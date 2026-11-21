@@ -6,7 +6,7 @@ vi.mock('@/lib/api-tokens/routeGuard', () => ({
   withPublicApiGuard: (_entryId: string, handler: any) => handler,
 }))
 
-import { callRoute } from '@/__tests__/setup/route-test'
+import { callRoute, readJson } from '@/__tests__/setup/route-test'
 
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 const checkPermissionsMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
@@ -821,3 +821,32 @@ describe('PUT config: GPUs of a vDC go through its GPU section (#672)', () => {
   })
 })
 
+
+describe('GET config: provisioning of a clone (roadmap#265)', () => {
+  async function loadGet() {
+    const mod = await import('./route')
+    return mod.GET as Parameters<typeof callRoute>[0]
+  }
+  beforeEach(async () => {
+    const { resetGuestProvisioning } = await import('@/lib/vdc/guestProvisioning')
+    resetGuestProvisioning()
+  })
+
+  it('reports the steps a clone still goes through, then nothing once they are done', async () => {
+    const { beginProvisioning } = await import('@/lib/vdc/guestProvisioning')
+    const done = beginProvisioning('conn-1', '100', ['ipam'])
+    let json = await readJson<any>(await callRoute(await loadGet(), { method: 'GET', params: baseParams }))
+    expect(json.provisioning).toEqual({ state: 'running', failures: [] })
+
+    done('ipam')
+    json = await readJson<any>(await callRoute(await loadGet(), { method: 'GET', params: baseParams }))
+    expect(json.provisioning).toBeUndefined()
+  })
+
+  it('reports a failed step', async () => {
+    const { beginProvisioning } = await import('@/lib/vdc/guestProvisioning')
+    beginProvisioning('conn-1', '100', ['ipam'])('ipam', 'subnet exhausted')
+    const json = await readJson<any>(await callRoute(await loadGet(), { method: 'GET', params: baseParams }))
+    expect(json.provisioning).toEqual({ state: 'failed', failures: ['ipam: subnet exhausted'] })
+  })
+})

@@ -4531,6 +4531,25 @@
               "null"
             ],
             "description": "Current node when the guest left the URL node"
+          },
+          "provisioning": {
+            "type": "object",
+            "description": "Present while a clone still sets up its IPAM addresses, storage QoS or HA after its task ended (running), or when one of those steps failed (failed). Wait for it to disappear before changing the config.",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "running",
+                  "failed"
+                ]
+              },
+              "failures": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -11891,6 +11910,25 @@
                         "null"
                       ],
                       "description": "Current node when the guest left the URL node"
+                    },
+                    "provisioning": {
+                      "type": "object",
+                      "description": "Present while a clone still sets up its IPAM addresses, storage QoS or HA after its task ended (running), or when one of those steps failed (failed). Wait for it to disappear before changing the config.",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "running",
+                            "failed"
+                          ]
+                        },
+                        "failures": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -12490,7 +12528,7 @@
       "post": {
         "operationId": "vm-clone",
         "summary": "Clone a guest",
-        "description": "Clones the guest (or a template) to `newid`. Other Proxmox clone parameters pass through. A vDC tenant clone stays in its pool, storages and quota.\n\nRequired scope: `vms:write`",
+        "description": "Clones the guest (or a template) to `newid`. Other Proxmox clone parameters pass through. A vDC tenant clone stays in its pool, storages and quota. Once the task ends, read the clone config: `provisioning` tells when the clone still sets up its IPAM addresses, storage QoS or HA.\n\nRequired scope: `vms:write`",
         "tags": [
           "VMs"
         ],

@@ -737,3 +737,48 @@ describe('POST clone: the vDC quota stays reserved until the task ends (roadmap#
     expect(releaseQuotaMock).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('POST clone: provisioning after the task (roadmap#265)', () => {
+  beforeEach(async () => {
+    const { resetGuestProvisioning } = await import('@/lib/vdc/guestProvisioning')
+    resetGuestProvisioning()
+  })
+  const state = async () => (await import('@/lib/vdc/guestProvisioning')).provisioningState('conn-1', '101')
+
+  function ipamSource() {
+    pveFetchMock.mockImplementation(async (_conn, _path, opts?: any) => {
+      if (opts?.method === 'POST') return 'UPID:clone:1'
+      if (opts?.method === 'PUT') return null
+      return { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA' }
+    })
+    resolveSubnetForBridgeMock.mockImplementation(async (_id, bridge) => (bridge === 'tenantA' ? { subnetId: 's1' } : null))
+  }
+
+  it('is running until the IPAM step ran, then gone', async () => {
+    ipamSource()
+    const res = await callRoute(await loadPost(), { params: baseParams, body: { newid: 101, full: true } })
+    expect(res.status).toBe(200)
+    expect(await state()).toEqual({ state: 'running', failures: [] })
+    for (const cb of h.afterCbs) await cb()
+    expect(await state()).toBeNull()
+  })
+
+  it('reports an IPAM step that failed', async () => {
+    ipamSource()
+    syncIpamForVmConfigMock.mockRejectedValue(new Error('subnet exhausted'))
+    await callRoute(await loadPost(), { params: baseParams, body: { newid: 101, full: true } })
+    for (const cb of h.afterCbs) await cb()
+    expect(await state()).toEqual({ state: 'failed', failures: ['ipam: subnet exhausted'] })
+  })
+
+  it('counts the HA registration as a step', async () => {
+    const res = await callRoute(await loadPost(), { params: baseParams, body: { newid: 101, ha: true } })
+    expect(res.status).toBe(200)
+    expect(await state()).toEqual({ state: 'running', failures: [] })
+  })
+
+  it('opens nothing for a clone with no work after its task', async () => {
+    await callRoute(await loadPost(), { params: baseParams, body: { newid: 101 } })
+    expect(await state()).toBeNull()
+  })
+})

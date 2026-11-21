@@ -227,6 +227,11 @@ export const VM_RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
         additionalProperties: true,
       },
       movedTo: { type: ["string", "null"], description: "Current node when the guest left the URL node" },
+      provisioning: {
+        type: "object",
+        description: "Present while a clone still sets up its IPAM addresses, storage QoS or HA after its task ended (running), or when one of those steps failed (failed). Wait for it to disappear before changing the config.",
+        properties: { state: { type: "string", enum: ["running", "failed"] }, failures: STRINGS },
+      },
     },
   },
   VmNextIdResponse: {

@@ -17,6 +17,7 @@ import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
 import { hostpciEntries } from "@/lib/gpu/quota"
 import { gpuAddRefusal, heldHostpci, tenantAddsGpu } from "@/lib/gpu/vdcGuard"
 import { checkTenantGuestScope } from "@/lib/vdc/guestScope"
+import { provisioningState } from "@/lib/vdc/guestProvisioning"
 import { parseGuestTarget } from "@/lib/vdc/guestGuard"
 import { validateCpuAgainstPolicy, parseCpuProperty, loadCpuCapabilitiesIfNeeded } from "@/lib/vdc/computePolicy"
 import { enforceTenantDrives, meterImportRefs, DriveScopeError } from "@/lib/vdc/driveGuard"
@@ -194,7 +195,9 @@ async function getHandler(
       pending: Object.keys(pending).length > 0 ? pending : undefined
     }
 
-    return NextResponse.json({ data: result, movedTo })
+    // A clone still finishing its IPAM, QoS or HA steps says so (roadmap#265).
+    const provisioning = provisioningState(id, vmid)
+    return NextResponse.json({ data: result, movedTo, ...(provisioning ? { provisioning } : {}) })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

@@ -1,6 +1,9 @@
 import { FRAMEWORK_IDS, type Crosswalk, type FrameworkId } from './types'
 
 // First-pass ISO 27001:2022 and CIS Controls v8.1 crosswalk mappings — conservative, pending GRC review.
+// Deliberate gaps: access_login_banner has no ISO Annex A nor CIS v8.1 equivalent
+// (nothing like NIST AC-8); vm_no_usb_passthrough has no CIS v8.1 safeguard
+// (3.9 is encryption, 10.3 autorun, none restricts removable media).
 interface Entry { c80053: string[]; c800171r2: string[]; c800171r3: string[]; c27001: string[]; cCIS: string[]; rationale: string }
 
 // Single source of truth. 800-53 uses base control ids present in the Moderate

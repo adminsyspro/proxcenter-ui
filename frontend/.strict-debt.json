@@ -47,7 +47,6 @@
     "src/app/api/v1/auth/oidc/test/route.ts": 1,
     "src/app/api/v1/auth/switch-tenant/route.test.ts": 3,
     "src/app/api/v1/connections/[id]/backup-jobs/[jobId]/route.ts": 4,
-    "src/app/api/v1/connections/[id]/cluster/nextid/route.ts": 4,
     "src/app/api/v1/connections/[id]/guests/[type]/[node]/[vmid]/config/route.ts": 2,
     "src/app/api/v1/connections/[id]/guests/[type]/[node]/[vmid]/migrate/snapshot-check/route.test.ts": 1,
     "src/app/api/v1/connections/[id]/guests/trends/route.ts": 1,

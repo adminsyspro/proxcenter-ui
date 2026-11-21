@@ -33,7 +33,7 @@ async function handleGet(_req: Request, ctx: { params: Promise<{ id: string }> |
       return NextResponse.json({ data: progress })
     }
     const config = deployment.config && typeof deployment.config === "object" && !Array.isArray(deployment.config)
-      ? withoutCloudInitSecrets(deployment.config as { cloudInit?: unknown })
+      ? withoutCloudInitSecrets(deployment.config)
       : deployment.config
     return NextResponse.json({ data: { ...deployment, config } })
   } catch (e: any) {

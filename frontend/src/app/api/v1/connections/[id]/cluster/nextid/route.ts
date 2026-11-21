@@ -28,7 +28,7 @@ export const runtime = "nodejs"
  *     { data: <n>, available: boolean, error?: string } so the UI
  *     can render a non-blocking inline status.
  */
-async function handler(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function handler(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }): Promise<Response> {
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
@@ -48,8 +48,10 @@ async function handler(req: Request, ctx: { params: Promise<{ id: string }> | { 
     // `?targetVdcId=` (provider only): pick inside that vDC tenant's range,
     // for a provider deploying into it (roadmap#65).
     const scopeTenant = await resolveScopeTenant(req, id, getCurrentTenantId)
-    if (!scopeTenant.ok) return scopeTenant.response
     const tenantId = scopeTenant.tenantId
+    if (!scopeTenant.ok || tenantId === null) {
+      return scopeTenant.response ?? NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
     const range = await resolveTenantVmidRange(tenantId)
 
     if (range) {

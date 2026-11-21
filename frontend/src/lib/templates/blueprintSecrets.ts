@@ -5,8 +5,8 @@
 // cloud-init object) is dropped on the way out.
 
 /** The row without the cloud-init password; the row given is left untouched. */
-export function withoutCloudInitSecrets<T extends { cloudInit?: unknown }>(row: T): T {
-  const cloudInit = row.cloudInit
+export function withoutCloudInitSecrets<T extends object>(row: T): T {
+  const cloudInit = (row as { cloudInit?: unknown }).cloudInit
   if (!cloudInit || typeof cloudInit !== 'object' || Array.isArray(cloudInit) || !('cipassword' in cloudInit)) return row
   const { cipassword: _secret, ...rest } = cloudInit as Record<string, unknown>
   return { ...row, cloudInit: rest }

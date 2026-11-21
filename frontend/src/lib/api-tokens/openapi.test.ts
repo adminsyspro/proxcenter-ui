@@ -50,6 +50,13 @@ describe('buildOpenApiDocument', () => {
     })
   })
 
+  it('documents the catalogue as the { images, vendors, meta } object its route answers (roadmap#265)', () => {
+    const schema = doc.paths['/api/v1/templates/catalog'].get.responses['200'].content['application/json'].schema
+    expect(schema.properties.data.type).toBe('object')
+    expect(schema.properties.data.properties.images.type).toBe('array')
+    expect(schema.properties.data.properties.images.items.properties.slug.type).toBe('string')
+  })
+
   it('declares the dynamic segment as a required path parameter', () => {
     const params = doc.paths['/api/v1/pbs/{id}/backups'].get.parameters
     expect(params).toEqual(expect.arrayContaining([

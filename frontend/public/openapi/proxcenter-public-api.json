@@ -10071,38 +10071,55 @@
         "type": "object",
         "properties": {
           "data": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "slug": {
-                  "type": "string",
-                  "description": "Value to send as `imageSlug` to POST /api/v1/templates/deploy"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "vendor": {
-                  "type": "string"
-                },
-                "version": {
-                  "type": "string"
-                },
-                "format": {
-                  "type": "string",
-                  "description": "qcow2, raw, img or iso"
-                },
-                "isCustom": {
-                  "type": "boolean"
-                },
-                "isShared": {
-                  "type": "boolean"
-                },
-                "ownedByCaller": {
-                  "type": "boolean"
+            "type": "object",
+            "properties": {
+              "images": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "slug": {
+                      "type": "string",
+                      "description": "Value to send as `imageSlug` to POST /api/v1/templates/deploy"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "vendor": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "format": {
+                      "type": "string",
+                      "description": "qcow2, raw, img or iso"
+                    },
+                    "isCustom": {
+                      "type": "boolean"
+                    },
+                    "isShared": {
+                      "type": "boolean"
+                    },
+                    "ownedByCaller": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": true
                 }
               },
-              "additionalProperties": true
+              "vendors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "meta": {
+                "type": "object",
+                "description": "Where the built-in catalogue comes from",
+                "additionalProperties": true
+              }
             }
           }
         }
@@ -48188,38 +48205,55 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "slug": {
-                            "type": "string",
-                            "description": "Value to send as `imageSlug` to POST /api/v1/templates/deploy"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "vendor": {
-                            "type": "string"
-                          },
-                          "version": {
-                            "type": "string"
-                          },
-                          "format": {
-                            "type": "string",
-                            "description": "qcow2, raw, img or iso"
-                          },
-                          "isCustom": {
-                            "type": "boolean"
-                          },
-                          "isShared": {
-                            "type": "boolean"
-                          },
-                          "ownedByCaller": {
-                            "type": "boolean"
+                      "type": "object",
+                      "properties": {
+                        "images": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "slug": {
+                                "type": "string",
+                                "description": "Value to send as `imageSlug` to POST /api/v1/templates/deploy"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "vendor": {
+                                "type": "string"
+                              },
+                              "version": {
+                                "type": "string"
+                              },
+                              "format": {
+                                "type": "string",
+                                "description": "qcow2, raw, img or iso"
+                              },
+                              "isCustom": {
+                                "type": "boolean"
+                              },
+                              "isShared": {
+                                "type": "boolean"
+                              },
+                              "ownedByCaller": {
+                                "type": "boolean"
+                              }
+                            },
+                            "additionalProperties": true
                           }
                         },
-                        "additionalProperties": true
+                        "vendors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "meta": {
+                          "type": "object",
+                          "description": "Where the built-in catalogue comes from",
+                          "additionalProperties": true
+                        }
                       }
                     }
                   }

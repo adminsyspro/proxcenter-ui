@@ -80,7 +80,19 @@ export const TEMPLATE_REQUEST_SCHEMAS: Record<string, Record<string, unknown>> =
 }
 
 export const TEMPLATE_RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
-  TemplateCatalogResponse: { type: "object", properties: { data: { type: "array", items: IMAGE } } },
+  TemplateCatalogResponse: {
+    type: "object",
+    properties: {
+      data: {
+        type: "object",
+        properties: {
+          images: { type: "array", items: IMAGE },
+          vendors: { type: "array", items: { type: "object", additionalProperties: true } },
+          meta: { type: "object", description: "Where the built-in catalogue comes from", additionalProperties: true },
+        },
+      },
+    },
+  },
   TemplateBlueprintListResponse: { type: "object", properties: { data: { type: "array", items: BLUEPRINT } } },
   TemplateBlueprintResponse: { type: "object", properties: { data: BLUEPRINT } },
   TemplateDeploymentResponse: {

@@ -1,7 +1,7 @@
 // Dev-only. Generates the CIS Controls v8.1 safeguard catalogue from the
 // pinned CIS Controls Navigator extraction.
 // Run: npx tsx scripts/extract-cis-safeguards.ts
-// Input (pinned, see src/lib/compliance/frameworks/SOURCES.md):
+// Input (pinned):
 //   - scripts/cis-controls-v8.1-safeguards.json, a one-time extraction from the
 //     public CIS Controls Navigator listing (safeguard ids + short titles only;
 //     CIS descriptive text is copyright Center for Internet Security and is not

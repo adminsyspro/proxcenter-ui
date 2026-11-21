@@ -55,7 +55,7 @@ export async function collectHardeningData(opts: CollectHardeningDataOptions): P
   const { connectionId, conn, nodeFilter, sshEnabled, guestConcurrency } = opts
 
   // Parallel fetch: cluster-level data
-  const [firewallOptions, version, nodesRaw, usersRaw, resourcesRaw, backupJobsRaw, haResourcesRaw, replicationRaw, poolsRaw] = await Promise.all([
+  const [firewallOptions, version, nodesRaw, usersRaw, resourcesRaw, backupJobsRaw, haResourcesRaw, replicationRaw, poolsRaw, storagesRaw] = await Promise.all([
     // undefined, not {}: an empty object reads as "every policy at PVE's default".
     pveFetch<any>(conn, '/cluster/firewall/options').catch(() => undefined),
     pveFetch<any>(conn, '/version').catch(() => ({})),
@@ -66,6 +66,9 @@ export async function collectHardeningData(opts: CollectHardeningDataOptions): P
     pveFetch<any>(conn, '/cluster/ha/resources').catch(() => []),
     pveFetch<any>(conn, '/cluster/replication').catch(() => []),
     pveFetch<any>(conn, '/pools').catch(() => []),
+    // Storage definitions from storage.cfg (pmxcfs), one cheap read: tells
+    // whether a backup target is a PBS storage with an encryption key.
+    pveFetch<any>(conn, '/storage').catch(() => undefined),
   ])
 
   const allNodes: Array<{ node: string; status?: string }> = Array.isArray(nodesRaw) ? nodesRaw : []
@@ -83,6 +86,7 @@ export async function collectHardeningData(opts: CollectHardeningDataOptions): P
   const haResources = Array.isArray(haResourcesRaw) ? haResourcesRaw : []
   const replicationJobs = Array.isArray(replicationRaw) ? replicationRaw : []
   const pools = Array.isArray(poolsRaw) ? poolsRaw : []
+  const storages = Array.isArray(storagesRaw) ? storagesRaw : undefined
 
   // TFA info
   let tfa: any[] = []
@@ -187,6 +191,7 @@ export async function collectHardeningData(opts: CollectHardeningDataOptions): P
     haResources,
     replicationJobs,
     pools,
+    storages,
     vmConfigs,
     sshData,
   }

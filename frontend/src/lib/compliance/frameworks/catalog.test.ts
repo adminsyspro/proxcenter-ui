@@ -1,15 +1,24 @@
 import { describe, it, expect } from 'vitest'
-import { NIST_800_171_R2_CONTROLS } from './catalog.nist-800-171-r2'
+import { NIST_800_171_R3_CONTROLS } from './catalog.nist-800-171-r3'
 import { NIST_800_53_R5_CONTROLS } from './catalog.nist-800-53-r5'
 import { CMMC_L2_CONTROLS } from './catalog.cmmc-l2'
 import { CIS_CONTROLS_V8_1_CONTROLS } from './catalog.cis-controls-v8-1'
 
 describe('generated catalogues', () => {
-  it('800-171 r2 has the full 110 requirements', () => {
-    expect(NIST_800_171_R2_CONTROLS.length).toBe(110)
-    expect(NIST_800_171_R2_CONTROLS.every(c => /^3\.\d+\.\d+$/.test(c.id))).toBe(true)
+  it('800-171 r3 has the 97 requirements in force, withdrawn ones excluded', () => {
+    expect(NIST_800_171_R3_CONTROLS.length).toBe(97)
+    expect(NIST_800_171_R3_CONTROLS.every(c => /^03\.\d{2}\.\d{2}$/.test(c.id))).toBe(true)
+    expect(new Set(NIST_800_171_R3_CONTROLS.map(c => c.id)).size).toBe(97)
+    const ids = new Set(NIST_800_171_R3_CONTROLS.map(c => c.id))
+    for (const withdrawn of ['03.01.13', '03.05.06', '03.13.05', '03.13.16']) expect(ids.has(withdrawn)).toBe(false)
   })
-  it('CMMC L2 has 110 practices derived from 800-171', () => {
+  it('800-171 r3 spans the 17 families, including the three Rev 3 added', () => {
+    const families = new Set(NIST_800_171_R3_CONTROLS.map(c => c.family))
+    expect(families.size).toBe(17)
+    for (const f of ['Planning', 'System and Services Acquisition', 'Supply Chain Risk Management']) expect(families.has(f)).toBe(true)
+    expect(NIST_800_171_R3_CONTROLS.every(c => c.title.trim().length > 0)).toBe(true)
+  })
+  it('CMMC L2 has 110 practices derived from 800-171 Rev 2', () => {
     expect(CMMC_L2_CONTROLS.length).toBe(110)
     expect(CMMC_L2_CONTROLS.every(c => /^[A-Z]{2}\.L2-3\.\d+\.\d+$/.test(c.id))).toBe(true)
   })

@@ -7,11 +7,43 @@ describe('getCrosswalk', () => {
     expect(getCrosswalk('nist-800-53-r5').cluster_fw_enabled.controlIds).toEqual(['SC-7'])
   })
 
-  it('returns 800-171 requirement ids for the 800-171 framework', () => {
-    expect(getCrosswalk('nist-800-171-r2').cluster_fw_enabled.controlIds).toEqual(['3.13.1', '3.13.5'])
+  it('returns Rev 3 requirement ids for the 800-171 framework', () => {
+    // 3.13.5 (public subnetworks) was folded into 03.13.01 by Rev 3.
+    expect(getCrosswalk('nist-800-171-r3').cluster_fw_enabled.controlIds).toEqual(['03.13.01'])
   })
 
-  it('derives CMMC practice ids from the 800-171 column', () => {
+  it('maps the Rev 2 requirements Rev 3 withdrew onto the requirement that absorbed them', () => {
+    const cw = getCrosswalk('nist-800-171-r3')
+    expect(cw.os_disk_encryption.controlIds).toEqual(['03.13.08'])
+    expect(cw.no_default_tokens.controlIds).toEqual(['03.05.12'])
+    expect(cw.ssh_root_login.controlIds).toEqual(['03.01.02', '03.01.06'])
+  })
+
+  it('leaves unmapped on Rev 3 only the checks that prove no requirement', () => {
+    // A backup or replication job existing says nothing about backup
+    // confidentiality (03.08.09), which only backup_encryption can show.
+    const cw = getCrosswalk('nist-800-171-r3')
+    const unmapped = Object.entries(cw).filter(([, m]) => m.controlIds.length === 0).map(([k]) => k).sort()
+    expect(unmapped).toEqual(['backup_schedule', 'storage_replication'])
+  })
+
+  it('scores backup confidentiality only from the backup encryption check', () => {
+    expect(getCrosswalk('nist-800-171-r3').backup_encryption.controlIds).toEqual(['03.08.09'])
+    expect(getCrosswalk('cmmc-l2').backup_encryption.controlIds).toEqual(['MP.L2-3.8.9'])
+  })
+
+  it('maps password lifetime to Rev 3 authenticator refresh, and to nothing in Rev 2', () => {
+    expect(getCrosswalk('nist-800-171-r3').access_password_aging.controlIds).toEqual(['03.05.12'])
+    expect(getCrosswalk('cmmc-l2').access_password_aging.controlIds).toEqual([])
+  })
+
+  it('leaves unmapped on CMMC only the checks Rev 2 has no requirement for', () => {
+    const cw = getCrosswalk('cmmc-l2')
+    const unmapped = Object.entries(cw).filter(([, m]) => m.controlIds.length === 0).map(([k]) => k).sort()
+    expect(unmapped).toEqual(['access_password_aging', 'backup_schedule', 'storage_replication'])
+  })
+
+  it('keeps CMMC practice ids on the Rev 2 numbering', () => {
     expect(getCrosswalk('cmmc-l2').cluster_fw_enabled.controlIds).toEqual(['SC.L2-3.13.1', 'SC.L2-3.13.5'])
   })
 

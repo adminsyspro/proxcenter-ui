@@ -12,7 +12,7 @@ import { prisma } from '@/lib/db/prisma'
 import { withVdcLock } from '@/lib/gpu/vdcLock'
 
 import { normalizeComputePolicyInput, type VdcComputePolicy } from './computePolicy'
-import { pendingVdcQuota, quotaPoolKey, reserveVdcQuota } from './quotaPending'
+import { pendingVdcQuota, quotaPoolKey, reserveVdcQuota, type PendingQuota, type QuotaAmounts } from './quotaPending'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -186,6 +186,33 @@ export async function getVdcStorageUsedMb(
   }
 }
 
+/**
+ * What the creations still running add to the usage the pool shows
+ * (roadmap#265). A creation whose guest has not joined the pool yet counts
+ * whole. Once it joined, it counts once, at the larger of what the pool shows
+ * and what was reserved: its disks are still being written, and a reservation
+ * never shrinks a guest that already exists.
+ */
+function pendingUsage(pending: PendingQuota[], vmMembers: any[], diskBytes: number[]): QuotaAmounts {
+  const memberIndex = new Map<string, number>(vmMembers.map((m: any, i: number) => [String(m.vmid), i]))
+  const add: QuotaAmounts = { vcpus: 0, ramMb: 0, storageMb: 0, vms: 0 }
+  for (const p of pending) {
+    const i = memberIndex.get(p.vmid)
+    const shown = i === undefined
+      ? { vcpus: 0, ramMb: 0, storageMb: 0 }
+      : {
+          vcpus: vmMembers[i].maxcpu || 0,
+          ramMb: Math.round((vmMembers[i].maxmem || 0) / 1048576),
+          storageMb: Math.round(diskBytes[i] / 1048576),
+        }
+    add.vcpus += Math.max(0, p.vcpus - shown.vcpus)
+    add.ramMb += Math.max(0, p.ramMb - shown.ramMb)
+    add.storageMb += Math.max(0, p.storageMb - shown.storageMb)
+    if (i === undefined) add.vms += p.vms
+  }
+  return add
+}
+
 // ---------------------------------------------------------------------------
 // checkVdcQuota (ASYNC - PVE API call)
 // ---------------------------------------------------------------------------
@@ -245,14 +272,9 @@ export async function checkVdcQuota(
     members = []
   }
 
-  // 5. Filter to qemu/lxc types only. A creation still running is counted at
-  // what was reserved for it (roadmap#265): its guest, once it joined the pool,
-  // is left out here so it counts once, and at its full size while its disks
-  // are still being written.
-  const pending = pendingVdcQuota(connectionId, poolName)
-  const reservedVmids = new Set(pending.map(p => p.vmid))
+  // 5. Filter to qemu/lxc types only
   const vmMembers = members.filter(
-    (m: any) => (m.type === 'qemu' || m.type === 'lxc') && !reservedVmids.has(String(m.vmid))
+    (m: any) => m.type === 'qemu' || m.type === 'lxc'
   )
 
   // 6. Sum current usage
@@ -276,12 +298,13 @@ export async function checkVdcQuota(
     storageMb += Math.round(diskBytes[i] / 1048576)
   })
 
-  for (const p of pending) {
-    vcpus += p.vcpus
-    ramMb += p.ramMb
-    storageMb += p.storageMb
-    vms += p.vms
-  }
+  // Creations still running (roadmap#265), on top of what the pool shows.
+  const pending = pendingVdcQuota(connectionId, poolName)
+  const reserved = pendingUsage(pending, vmMembers, diskBytes)
+  vcpus += reserved.vcpus
+  ramMb += reserved.ramMb
+  storageMb += reserved.storageMb
+  vms += reserved.vms
 
   // Count snapshots across the pool (only fetched when the operation cares
   // about the snapshot quota — saves ~N PVE calls per ordinary create/resize).

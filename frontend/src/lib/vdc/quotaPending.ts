@@ -15,7 +15,7 @@ export type QuotaAmounts = {
 
 export type PendingQuota = QuotaAmounts & { vmid: string }
 
-type Reservation = PendingQuota & { expires: number }
+type Reservation = { pending: PendingQuota; expires: number }
 
 /** How long a reservation lives at most: the end of a task never seen frees it. */
 export const QUOTA_RESERVATION_TTL_MS = 2 * 60 * 60_000
@@ -37,7 +37,7 @@ export function reserveVdcQuota(
   opts: { ttlMs?: number; now?: number } = {},
 ): () => void {
   const key = quotaPoolKey(connectionId, poolName)
-  const r: Reservation = { vmid, ...amounts, expires: (opts.now ?? Date.now()) + (opts.ttlMs ?? QUOTA_RESERVATION_TTL_MS) }
+  const r: Reservation = { pending: { vmid, ...amounts }, expires: (opts.now ?? Date.now()) + (opts.ttlMs ?? QUOTA_RESERVATION_TTL_MS) }
   const set = store.get(key) ?? new Set<Reservation>()
   set.add(r)
   store.set(key, set)
@@ -54,12 +54,8 @@ export function pendingVdcQuota(connectionId: string, poolName: string, now = Da
   if (!set) return []
   const out: PendingQuota[] = []
   for (const r of set) {
-    if (r.expires <= now) {
-      set.delete(r)
-      continue
-    }
-    const { expires: _expires, ...pending } = r
-    out.push(pending)
+    if (r.expires <= now) set.delete(r)
+    else out.push(r.pending)
   }
   if (set.size === 0) store.delete(key)
   return out

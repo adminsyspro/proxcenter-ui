@@ -91,6 +91,15 @@ describe('checkAndReserveVdcQuota', () => {
     expect(check.currentUsage).toMatchObject({ vcpus: 2, ramMb: 2048, storageMb: 4096, vms: 2 })
   })
 
+  it('never counts an existing guest below its real size because a creation names its VMID', async () => {
+    // VM 100 holds 2 GiB. A creation asking for its VMID is reserved until PVE refuses it.
+    const tiny = { type: 'clone' as const, addVcpus: 1, addRamMb: 256, addVms: 1, addStorageMb: 512 }
+    await checkAndReserveVdcQuota('conn-1', POOL, quota({ maxVms: 5, maxStorageMb: 100 * 1024 }), tiny, undefined, 'pve1', '100')
+
+    const check = await checkVdcQuota('conn-1', POOL, quota({ maxVms: 5, maxStorageMb: 100 * 1024 }), clone)
+    expect(check.currentUsage).toMatchObject({ vcpus: 1, ramMb: 1024, storageMb: 2048, vms: 1 })
+  })
+
   it('a plain check sees the reservations too', async () => {
     await checkAndReserveVdcQuota('conn-1', POOL, quota({ maxStorageMb: 5 * 1024 }), clone, undefined, 'pve1', '201')
     const resize = await checkVdcQuota('conn-1', POOL, quota({ maxStorageMb: 5 * 1024 }), { type: 'resize', addStorageMb: 2048 })

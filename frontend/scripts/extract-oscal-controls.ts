@@ -1,6 +1,6 @@
 // Dev-only. Generates the static framework catalogues from official NIST OSCAL.
 // Run: npx tsx scripts/extract-oscal-controls.ts
-// Inputs (pinned, see src/lib/compliance/frameworks/SOURCES.md):
+// Inputs (pinned, URLs and commits in SOURCES below):
 //   - 800-53 r5 catalog + Moderate baseline (usnistgov/oscal-content)
 //   - 800-171 r3 requirements (usnistgov/oscal-content, pinned to commit 5006f18c)
 //   - 800-171 r2 requirements, used only to derive the CMMC Level 2 practices

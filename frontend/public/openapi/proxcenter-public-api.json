@@ -4397,6 +4397,22 @@
           }
         }
       },
+      "VmNextIdResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "integer",
+            "description": "The VMID picked, or the one checked"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string",
+            "description": "Why a checked VMID is not available"
+          }
+        }
+      },
       "VmLockStateResponse": {
         "type": "object",
         "properties": {
@@ -11918,6 +11934,157 @@
                 "example": {
                   "error": "Method not allowed for this API token route",
                   "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/cluster/nextid": {
+      "get": {
+        "operationId": "vm-nextid",
+        "summary": "Next free VMID",
+        "description": "The next free VMID for a create or a clone. A tenant with a VMID range gets one inside its range, unique across all its clusters (503 when one of them cannot be reached, so a duplicate cannot hide). With `vmid`, tells whether that VMID is free without reserving it.\n\nRequired scope: `vms:read` or `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete`",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:read",
+          "vms:power",
+          "vms:write",
+          "vms:snapshot",
+          "vms:migrate",
+          "vms:delete"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "vmid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Check this VMID instead of picking one"
+          },
+          {
+            "name": "targetVdcId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Provider only: pick inside the VMID range of this vDC's tenant"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "integer",
+                      "description": "The VMID picked, or the one checked"
+                    },
+                    "available": {
+                      "type": "boolean"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "Why a checked VMID is not available"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/cluster/nextid"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
                 }
               }
             }

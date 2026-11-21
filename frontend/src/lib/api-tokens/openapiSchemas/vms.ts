@@ -229,6 +229,14 @@ export const VM_RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
       movedTo: { type: ["string", "null"], description: "Current node when the guest left the URL node" },
     },
   },
+  VmNextIdResponse: {
+    type: "object",
+    properties: {
+      data: { type: "integer", description: "The VMID picked, or the one checked" },
+      available: { type: "boolean" },
+      error: { type: "string", description: "Why a checked VMID is not available" },
+    },
+  },
   VmLockStateResponse: dataObject({ locked: { type: "boolean" }, lockType: { type: ["string", "null"] } }),
   VmUnlockResponse: {
     type: "object",

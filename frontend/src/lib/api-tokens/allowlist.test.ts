@@ -111,6 +111,7 @@ describe('shared canonical matcher', () => {
       'vm-config-update': `${guest}/config`,
       'vm-power': `${guest}/shutdown`,
       'vm-clone': `${guest}/clone`,
+      'vm-nextid': '/api/v1/connections/c1/cluster/nextid',
       'vm-template': `${guest}/template`,
       'vm-disk-resize': `${guest}/disk/resize`,
       'vm-disk-move': `${guest}/disk/move`,
@@ -313,6 +314,11 @@ describe('method-aware matching', () => {
     expect(matchPublicApiPath('/api/v1/vms', 'POST').ok).toBe(false)
     expect(allowedMethodsForPath('/api/v1/vms')).toEqual(['GET'])
     expect(allowedMethodsForPath('/api/v1/nope')).toEqual([])
+  })
+
+  it('opens the next free VMID of a connection to the VM read and write scopes (roadmap#265)', () => {
+    expect(matchPublicApiPath('/api/v1/connections/c1/cluster/nextid', 'GET')).toEqual({ ok: true, entryId: 'vm-nextid', params: { id: 'c1' } })
+    expect(getAllowlistEntryById('vm-nextid')?.requiredScopes).toEqual(['vms:read', 'vms:power', 'vms:write', 'vms:snapshot', 'vms:migrate', 'vms:delete'])
   })
 
   it('the VM {action} entry never swallows clone, template, unlock or migrate', () => {

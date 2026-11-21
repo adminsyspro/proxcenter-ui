@@ -80,6 +80,23 @@ export const VM_ENTRIES: AllowlistEntry[] = [
     description: "Starts, stops (hard), shuts down (ACPI), reboots, resets, suspends or resumes the guest. No body.",
     responseSchemaRef: "VmPowerResponse",
   }),
+  {
+    id: "vm-nextid",
+    method: "GET",
+    tag: "VMs",
+    pattern: `${CONN}/cluster/nextid`,
+    requiredScopes: VM_READ_SCOPES,
+    connectionSegment: "id",
+    routeFile: "src/app/api/v1/connections/[id]/cluster/nextid/route.ts",
+    summary: "Next free VMID",
+    description:
+      "The next free VMID for a create or a clone. A tenant with a VMID range gets one inside its range, unique across all its clusters (503 when one of them cannot be reached, so a duplicate cannot hide). With `vmid`, tells whether that VMID is free without reserving it.",
+    queryParams: [
+      { name: "vmid", description: "Check this VMID instead of picking one" },
+      { name: "targetVdcId", description: "Provider only: pick inside the VMID range of this vDC's tenant" },
+    ],
+    responseSchemaRef: "VmNextIdResponse",
+  },
   guestEntry({
     id: "vm-clone",
     method: "POST",

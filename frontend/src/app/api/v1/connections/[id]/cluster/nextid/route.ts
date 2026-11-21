@@ -1,5 +1,6 @@
 // src/app/api/v1/connections/[id]/cluster/nextid/route.ts
 import { NextResponse } from "next/server"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { getConnectionById } from "@/lib/connections/getConnection"
@@ -27,7 +28,7 @@ export const runtime = "nodejs"
  *     { data: <n>, available: boolean, error?: string } so the UI
  *     can render a non-blocking inline status.
  */
-export async function GET(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function handler(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
@@ -105,3 +106,5 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> |
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vm-nextid", handler)

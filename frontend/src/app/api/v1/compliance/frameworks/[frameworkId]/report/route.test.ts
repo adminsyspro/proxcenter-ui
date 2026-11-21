@@ -114,7 +114,7 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
 
     const { GET } = await import('./route')
     const res = await callRoute(GET, {
-      params: { frameworkId: 'nist-800-171-r2' },
+      params: { frameworkId: 'nist-800-171-r3' },
       searchParams: { connectionId: 'c1' },
     })
 
@@ -150,7 +150,7 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
   it('returns 400 when connectionId is missing', async () => {
     const { GET } = await import('./route')
     const res = await callRoute(GET, {
-      params: { frameworkId: 'nist-800-171-r2' },
+      params: { frameworkId: 'nist-800-171-r3' },
     })
     expect(res.status).toBe(400)
   })
@@ -171,7 +171,7 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     )
     const { GET } = await import('./route')
     const res = await callRoute(GET, {
-      params: { frameworkId: 'nist-800-171-r2' },
+      params: { frameworkId: 'nist-800-171-r3' },
       searchParams: { connectionId: 'c1' },
     })
     expect(res.status).toBe(403)
@@ -184,7 +184,7 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     )
     const { GET } = await import('./route')
     const res = await callRoute(GET, {
-      params: { frameworkId: 'nist-800-171-r2' },
+      params: { frameworkId: 'nist-800-171-r3' },
       searchParams: { connectionId: 'c1' },
     })
     expect(res.status).toBe(403)
@@ -197,7 +197,7 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     )
     const { GET } = await import('./route')
     const res = await callRoute(GET, {
-      params: { frameworkId: 'nist-800-171-r2' },
+      params: { frameworkId: 'nist-800-171-r3' },
       searchParams: { connectionId: 'c1' },
     })
     expect(res.status).toBe(404)
@@ -207,7 +207,7 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     getConnectionByIdMock.mockResolvedValue(null)
     const { GET } = await import('./route')
     const res = await callRoute(GET, {
-      params: { frameworkId: 'nist-800-171-r2' },
+      params: { frameworkId: 'nist-800-171-r3' },
       searchParams: { connectionId: 'c1' },
     })
     expect(res.status).toBe(404)
@@ -217,7 +217,7 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     renderPdfMock.mockResolvedValue({ ok: false, error: 'down' })
     const { GET } = await import('./route')
     const res = await callRoute(GET, {
-      params: { frameworkId: 'nist-800-171-r2' },
+      params: { frameworkId: 'nist-800-171-r3' },
       searchParams: { connectionId: 'c1' },
     })
     expect(res.status).toBe(503)
@@ -227,7 +227,7 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     renderPdfMock.mockResolvedValue({ ok: true })
     const { GET } = await import('./route')
     const res = await callRoute(GET, {
-      params: { frameworkId: 'nist-800-171-r2' },
+      params: { frameworkId: 'nist-800-171-r3' },
       searchParams: { connectionId: 'c1' },
     })
     expect(res.status).toBe(503)
@@ -237,7 +237,7 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     findUniqueMock.mockResolvedValue({ sshEnabled: true })
     const { GET } = await import('./route')
     await callRoute(GET, {
-      params: { frameworkId: 'nist-800-171-r2' },
+      params: { frameworkId: 'nist-800-171-r3' },
       searchParams: { connectionId: 'c1' },
     })
     expect(collectHardeningDataMock).toHaveBeenCalledWith(
@@ -280,7 +280,7 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
 
     const { GET } = await import('./route')
     const res = await callRoute(GET, {
-      params: { frameworkId: 'nist-800-171-r2' },
+      params: { frameworkId: 'nist-800-171-r3' },
       searchParams: { connectionId: 'c1' },
     })
 
@@ -301,7 +301,7 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     }))
     const { GET } = await import('./route')
     const response = await callRoute(GET, {
-      params: { frameworkId: 'nist-800-171-r2' }, searchParams: { connectionId: 'c1' },
+      params: { frameworkId: 'nist-800-171-r3' }, searchParams: { connectionId: 'c1' },
     })
     expect(response.status).toBe(200)
     expect(renderPdfMock.mock.calls[0][0]).toContain('data:image/png;base64,cHJvdmlkZXI=')
@@ -324,7 +324,7 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
 
     const { GET } = await import('./route')
     const res = await callRoute(GET, {
-      params: { frameworkId: 'nist-800-171-r2' },
+      params: { frameworkId: 'nist-800-171-r3' },
       searchParams: { connectionId: 'c1' },
     })
 
@@ -349,7 +349,7 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
 
       const { GET } = await import('./route')
       const res = await callRoute(GET, {
-        params: { frameworkId: 'nist-800-171-r2' },
+        params: { frameworkId: 'nist-800-171-r3' },
         searchParams: { connectionId: 'c1' },
       })
 
@@ -413,7 +413,7 @@ describe('GET /api/v1/compliance/frameworks/[frameworkId]/report', () => {
     getSettingMock.mockRejectedValue(new Error('DB connection lost'))
     const { GET } = await import('./route')
     const res = await callRoute(GET, {
-      params: { frameworkId: 'nist-800-171-r2' },
+      params: { frameworkId: 'nist-800-171-r3' },
       searchParams: { connectionId: 'c1' },
     })
     expect(res.status).toBe(200)

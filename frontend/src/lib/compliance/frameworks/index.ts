@@ -1,13 +1,14 @@
 import type { FrameworkDef, FrameworkId } from './types'
 import { NIST_800_53_R5_CONTROLS } from './catalog.nist-800-53-r5'
-import { NIST_800_171_R2_CONTROLS } from './catalog.nist-800-171-r2'
+import { NIST_800_171_R3_CONTROLS } from './catalog.nist-800-171-r3'
 import { CMMC_L2_CONTROLS } from './catalog.cmmc-l2'
 import { ISO_27001_2022_CONTROLS } from './catalog.iso-27001-2022'
 import { CIS_CONTROLS_V8_1_CONTROLS } from './catalog.cis-controls-v8-1'
 
 export { getCrosswalk } from './crosswalk'
 
-const REV2_NOTE = 'Rev 2 (CMMC-contract-targeted). Rev 3 (2024) exists but is not yet contractually required.'
+const REV3_NOTE = 'Rev 3 (May 2024): the 97 requirements in force across 17 families. Withdrawn Rev 3 identifiers are not scored. CMMC Level 2 is still assessed against Rev 2.'
+const CMMC_NOTE = 'Derived from NIST SP 800-171 Rev 2 (110 requirements), the revision the CMMC program rule (32 CFR Part 170) still references.'
 
 export const FRAMEWORKS: FrameworkDef[] = [
   {
@@ -19,19 +20,19 @@ export const FRAMEWORKS: FrameworkDef[] = [
     controls: NIST_800_53_R5_CONTROLS,
   },
   {
-    id: 'nist-800-171-r2',
+    id: 'nist-800-171-r3',
     name: 'NIST SP 800-171',
-    version: 'Rev 2',
-    sourceUrl: 'https://csrc.nist.gov/pubs/sp/800/171/r2/upd1/final',
-    provenanceNote: REV2_NOTE,
-    controls: NIST_800_171_R2_CONTROLS,
+    version: 'Rev 3',
+    sourceUrl: 'https://csrc.nist.gov/pubs/sp/800/171/r3/final',
+    provenanceNote: REV3_NOTE,
+    controls: NIST_800_171_R3_CONTROLS,
   },
   {
     id: 'cmmc-l2',
     name: 'CMMC',
     version: 'Level 2',
     sourceUrl: 'https://dodcio.defense.gov/CMMC/',
-    provenanceNote: REV2_NOTE,
+    provenanceNote: CMMC_NOTE,
     controls: CMMC_L2_CONTROLS,
   },
   {

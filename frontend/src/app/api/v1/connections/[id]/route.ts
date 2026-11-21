@@ -18,6 +18,7 @@ import { invalidateGuestIpIndex } from "@/lib/cache/guestIpCache"
 import { evictGuestCoverage } from "@/lib/firewall/guestCoverage"
 import { updateConnectionSchema } from "@/lib/schemas"
 import { orchestratorFetch } from "@/lib/orchestrator/client"
+import { connectionUsage, isBlocked } from "@/lib/connections/connectionUsage"
 import { pveFetch } from "@/lib/proxmox/client"
 import { clearNodeIpCache } from "@/lib/ceph/exporter"
 import { discoverNodeIps } from "@/lib/proxmox/discoverNodeIps"
@@ -392,29 +393,35 @@ async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string }
     // Récupérer le nom avant suppression pour l'audit
     const connection = await prisma.connection.findUnique({
       where: { id },
-      select: { name: true, type: true, baseUrl: true },
+      select: { name: true, type: true, baseUrl: true, tenantId: true },
     })
 
-    // Route PBS deletions through unbindFromVdc first: the DB delete-trigger
-    // cascades the binding rows (vdc_pbs_namespaces + vdc_pbs_pve_storages),
-    // but only the app-level unbind also removes the denormalized vdc_storages
-    // rows, the pbs-type storage definitions left on the PVE clusters and the
-    // PBS sub-token. Best-effort per binding: a failed unbind must not block
-    // the deletion (the trigger keeps the DB consistent either way).
-    if (connection?.type === "pbs") {
-      const bindings = await globalPrisma.vdcPbsNamespace.findMany({
-        where: { pbsConnectionId: id },
-        select: { id: true },
-      })
-      if (bindings.length > 0) {
-        const { unbindFromVdc } = await import("@/lib/vdc/pbsOrchestrator")
-        for (const b of bindings) {
-          try {
-            await unbindFromVdc(b.id)
-          } catch (e: any) {
-            console.error(`[connections] unbind ${b.id} before PBS delete failed:`, e?.message || e)
-          }
-        }
+    // Whatever still names this connection by id (a vDC, a tenant that owns
+    // it, Site Recovery, micro-segmentation, a running migration...) would be
+    // left stranded, or would make the delete fail half way (ui#1394). Refuse
+    // until those links are removed; the dialog lists them by name. A PBS that
+    // vDCs back up to is refused too, instead of being unbound behind the
+    // tenant's back.
+    // The provider's session reaches pool connections only: one an MSP tenant
+    // owns is read globally, so the answer names that tenant instead of a raw
+    // "Record not found".
+    const callerTenantId = await getCurrentTenantId()
+    const checked = connection ?? (callerTenantId === DEFAULT_TENANT_ID
+      ? await globalPrisma.connection.findUnique({ where: { id }, select: { name: true, type: true, baseUrl: true, tenantId: true } })
+      : null)
+
+    if (checked) {
+      const usage = await connectionUsage(id, checked, { callerTenantId })
+
+      if (isBlocked(usage)) {
+        return NextResponse.json(
+          {
+            error: "This connection is still in use: remove the links listed first.",
+            code: "CONNECTION_IN_USE",
+            usage,
+          },
+          { status: 409 }
+        )
       }
     }
 

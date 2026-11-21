@@ -502,3 +502,45 @@ describe('ProtectionTab — a re-seed the orchestrator has accepted but not star
   })
 
 })
+
+describe('ProtectionTab: a job whose connection was deleted (ui#1394)', () => {
+  const orphan = () => job({ status: 'error', target_cluster: 'gone', missing_connections: ['target'], error_message: 'failed to get PVE client for gone: connection not found' })
+
+  it('names the missing end once, in the group header, instead of its raw id', () => {
+    renderTab([orphan()])
+
+    expect(screen.getAllByText(/Deleted connection|Connection deleted/)).toHaveLength(1)
+    expect(screen.getByText(/→ Deleted connection/)).toBeInTheDocument()
+    expect(screen.queryByText(/gone/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the card on one line: no retry badge, Delete in place of Edit', async () => {
+    renderTab([job({ ...orphan(), retry_count: 1, next_retry_at: new Date(Date.now() + 60000).toISOString() })])
+
+    expect(screen.queryByText(/retry/i)).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText(/Delete replication job|delete this replication job/i)).toBeInTheDocument()
+  })
+
+  it('shows the retry badge beside the status of a job that can still retry, on the same line', () => {
+    renderTab([job({ status: 'error', retry_count: 1, next_retry_at: new Date(Date.now() + 60000).toISOString() })])
+
+    const status = screen.getByText('Error').closest('.MuiChip-root')!.parentElement!
+    expect(status).toHaveStyle({ flexDirection: 'row' })
+    expect(status.textContent).toMatch(/1\/3/)
+  })
+
+  it('offers only Delete in the drawer, with the reason', async () => {
+    stubDrawerFetch()
+    renderTab([orphan()])
+
+    await openDrawer('100 - web-01')
+
+    expect(await screen.findByText(/it can no longer run/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete' })).not.toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Sync Now' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+  })
+})

@@ -217,6 +217,7 @@ export default function RecoveryPlansTab({
   const [confirmClearHistory, setConfirmClearHistory] = useState(false)
 
   const selected = useMemo(() => (plans || []).find(p => p.id === selectedPlanId), [plans, selectedPlanId])
+  const selectedOrphan = !!selected?.missing_connections?.length
 
   // The other plans listing a guest of the selected one, each with the shared
   // vmids. A guest is the same guest when it sits on the same source cluster:
@@ -243,8 +244,15 @@ export default function RecoveryPlansTab({
 
   const connName = useMemo(() => {
     const map = new Map((connections || []).map(c => [c.id, c.name]))
-    return (id: string) => map.get(id) || id
-  }, [connections])
+    // An id a plan names but the fleet no longer has reads "Deleted
+    // connection" rather than a raw id nobody can place (ui#1394).
+    const deleted = new Set<string>()
+    for (const p of plans || []) {
+      if (p.missing_connections?.includes('source')) deleted.add(p.source_cluster)
+      if (p.missing_connections?.includes('target')) deleted.add(p.target_cluster)
+    }
+    return (id: string) => map.get(id) || (deleted.has(id) ? t('siteRecovery.orphan.connectionName') : id)
+  }, [connections, plans, t])
 
   const openPlan = (id: string) => {
     onSelectPlan(id)
@@ -392,6 +400,10 @@ export default function RecoveryPlansTab({
                   <PlanStatusBadge status={selected.status} t={t} />
                 </Box>
               </Box>
+
+              {selectedOrphan && (
+                <Alert severity='error' sx={{ mb: 2 }} icon={<i className='ri-link-unlink' />}>{t('siteRecovery.orphan.planHint')}</Alert>
+              )}
 
               {/* Guests this plan shares with other plans, as "name (vmid, vmid)". */}
               {sharedWith.length > 0 && (
@@ -542,7 +554,15 @@ export default function RecoveryPlansTab({
                 these are the point of the screen and two of them are
                 destructive enough that a bare pictogram would be a trap. */}
             <DialogActions sx={{ px: 2.5, pb: 2.5, pt: 1, gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              {selected.status === 'failing_back' ? (
+              {selectedOrphan ? (
+                <Button
+                  variant='outlined' size='small' color='error'
+                  startIcon={<i className='ri-delete-bin-line' />}
+                  onClick={() => { onDeletePlan(selected.id); closeDrawer() }}
+                >
+                  {t('common.delete')}
+                </Button>
+              ) : selected.status === 'failing_back' ? (
                 <>
                   <Tooltip title={t('siteRecovery.plans.failingBackTooltip')} arrow>
                     <span>

@@ -176,12 +176,14 @@ const BandwidthSparkline = ({ data, size = 'small' }: { data: ThroughputPoint[];
   )
 }
 
-const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { job: ReplicationJob; onClick: () => void; onEdit: () => void; vmNameMap?: Record<number, string>; throughputHistory?: ThroughputPoint[]; t: any }) => {
+const JobCard = ({ job, onClick, onEdit, onDelete, vmNameMap, throughputHistory, t }: { job: ReplicationJob; onClick: () => void; onEdit: () => void; onDelete: () => void; vmNameMap?: Record<number, string>; throughputHistory?: ThroughputPoint[]; t: any }) => {
   const theme = useTheme()
   const progress = job.progress_percent || 0
   const isError = job.status === 'error'
   const isSyncing = job.status === 'syncing'
   const isFailedOver = job.status === 'failed_over'
+  // Its connection was deleted (ui#1394): the job can only be deleted.
+  const isOrphan = !!job.missing_connections?.length
   const rpoActual = computeRpoActual(job.last_sync)
   const rpoOk = rpoActual != null && rpoActual <= job.rpo_target
 
@@ -314,10 +316,11 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
             </Box>
           )}
 
-          {/* Status + retry indicator */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.25 }}>
+          {/* Status + retry indicator, side by side so the card keeps one line.
+              No retry on an orphan: it can never run again. */}
+          <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.5 }}>
             <StatusChip status={job.status} t={t} />
-            {job.status === 'error' && job.next_retry_at && (job.retry_count || 0) < 3 && (
+            {!isOrphan && job.status === 'error' && job.next_retry_at && (job.retry_count || 0) < 3 && (
               <Tooltip title={t('siteRecovery.protection.retryTooltip', { count: job.retry_count, max: 3, at: new Date(job.next_retry_at).toLocaleString() })} arrow>
                 <Chip
                   size='small'
@@ -330,8 +333,20 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
             )}
           </Box>
 
-          {/* Edit (does not open the drawer) */}
-          <Tooltip title={isFailedOver ? t('siteRecovery.jobs.failedOverTooltip') : t('common.edit')} arrow>
+          {/* Edit (does not open the drawer). An orphan has nothing to edit:
+              Delete, its only action, takes the slot and keeps the columns aligned. */}
+          {isOrphan ? (
+            <Tooltip title={t('common.delete')} arrow>
+              <IconButton
+                size='small'
+                aria-label={t('common.delete')}
+                onClick={e => { e.stopPropagation(); onDelete() }}
+                sx={{ p: 0.5, color: 'text.secondary', '&:hover': { color: 'error.main' } }}
+              >
+                <i className='ri-delete-bin-line' style={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+          ) : <Tooltip title={isFailedOver ? t('siteRecovery.jobs.failedOverTooltip') : t('common.edit')} arrow>
             <span>
               <IconButton
                 size='small'
@@ -343,7 +358,7 @@ const JobCard = ({ job, onClick, onEdit, vmNameMap, throughputHistory, t }: { jo
                 <i className='ri-edit-line' style={{ fontSize: 16 }} />
               </IconButton>
             </span>
-          </Tooltip>
+          </Tooltip>}
         </Box>
       </CardContent>
 
@@ -553,7 +568,18 @@ export default function ProtectionTab({
     return m
   }, [connections])
 
-  const connName = (id: string) => connMap[id] || id
+  // Connection ids a job names but the fleet no longer has (ui#1394): read
+  // "Deleted connection" rather than a raw id nobody can place.
+  const deletedConnIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const j of jobs || []) {
+      if (j.missing_connections?.includes('source')) ids.add(j.source_cluster)
+      if (j.missing_connections?.includes('target')) ids.add(j.target_cluster)
+    }
+    return ids
+  }, [jobs])
+
+  const connName = (id: string) => connMap[id] || (deletedConnIds.has(id) ? t('siteRecovery.orphan.connectionName') : id)
 
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase()
@@ -583,6 +609,7 @@ export default function ProtectionTab({
   }, [filtered, currentPage])
 
   const selected = useMemo(() => (jobs || []).find(j => j.id === selectedJobId), [jobs, selectedJobId])
+  const selectedOrphan = !!selected?.missing_connections?.length
 
   const openJob = (id: string) => {
     onSelectJob(id)
@@ -755,7 +782,7 @@ export default function ProtectionTab({
                       )}
                       <Stack spacing={1}>
                         {list.map(j => (
-                          <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} onEdit={() => onEditJob(j.id)} vmNameMap={vmNamesByConn?.[j.source_cluster]} throughputHistory={throughputHistoryRef.current.get(j.id)} t={t} />
+                          <JobCard key={j.id} job={j} onClick={() => openJob(j.id)} onEdit={() => onEditJob(j.id)} onDelete={() => setConfirmDeleteJob(j)} vmNameMap={vmNamesByConn?.[j.source_cluster]} throughputHistory={throughputHistoryRef.current.get(j.id)} t={t} />
                         ))}
                       </Stack>
                     </Box>
@@ -824,6 +851,8 @@ export default function ProtectionTab({
                   A disabled button fires no events, hence the span under its
                   Tooltip. */}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                {/* A job whose connection was deleted can only be deleted (ui#1394) */}
+                {!selectedOrphan && <>
                 <Tooltip title={selected.status === 'failed_over' ? t('siteRecovery.jobs.failedOverTooltip') : t('siteRecovery.protection.syncNow')} arrow>
                   <span>
                     <IconButton color='primary' aria-label={t('siteRecovery.protection.syncNow')} onClick={() => onSyncJob(selected.id)} disabled={selected.status === 'failed_over'}>
@@ -853,6 +882,7 @@ export default function ProtectionTab({
                     </IconButton>
                   </span>
                 </Tooltip>
+                </>}
                 <Tooltip title={t('common.delete')} arrow>
                   <IconButton color='error' aria-label={t('common.delete')} onClick={() => setConfirmDeleteJob(selected)}><i className='ri-delete-bin-line' /></IconButton>
                 </Tooltip>
@@ -861,7 +891,9 @@ export default function ProtectionTab({
                 </Box>
               </Box>
 
-              {(selected.status === 'error' || selected.status === 'partial') && selected.error_message && (
+              {selectedOrphan ? (
+                <Alert severity='error' sx={{ mb: 2 }} icon={<i className='ri-link-unlink' />}>{t('siteRecovery.orphan.jobHint')}</Alert>
+              ) : (selected.status === 'error' || selected.status === 'partial') && selected.error_message && (
                 <Alert severity={selected.status === 'partial' ? 'warning' : 'error'} sx={{ mb: 2 }} icon={<i className='ri-error-warning-line' />}>{selected.error_message}</Alert>
               )}
 

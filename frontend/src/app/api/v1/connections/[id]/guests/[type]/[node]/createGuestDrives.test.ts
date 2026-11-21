@@ -10,6 +10,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // The API token guard is covered by routeGuard.test.ts and writeContract.test.ts:
 // pass-through so this file keeps testing the handler, as for a session caller.
+// after() needs a request scope: collected here, run by the tests that look at it.
+const afterCbs: Array<() => Promise<void>> = []
+vi.mock('next/server', async (io) => {
+  const actual = await io<typeof import('next/server')>()
+  return { ...actual, after: (fn: () => Promise<void>) => { afterCbs.push(fn) } }
+})
+const releaseWhenTaskStopsMock = vi.fn(async (_conn: unknown, _upid: string, _node: string, release: () => void) => release())
+vi.mock('@/lib/gpu/vdcPending', () => ({ releaseWhenTaskStops: releaseWhenTaskStopsMock }))
+
 vi.mock('@/lib/api-tokens/routeGuard', () => ({
   withPublicApiGuard: (_entryId: string, handler: any) => handler,
 }))
@@ -22,6 +31,7 @@ const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const resolveVdcForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const checkVdcQuotaMock = vi.fn<(...args: any[]) => Promise<any>>()
+const releaseQuotaMock = vi.fn()
 const getAllowedNetworksForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getTenantInfrastructureScopeMock = vi.fn<(...args: any[]) => Promise<any>>()
 const tenantAddsGpuMock = vi.fn<(...args: any[]) => Promise<'adds' | 'none' | 'unknown'>>()
@@ -38,6 +48,9 @@ vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-1' }))
 vi.mock('@/lib/vdc/quota', () => ({
   resolveVdcForTenant: resolveVdcForTenantMock,
   checkVdcQuota: checkVdcQuotaMock,
+  // The creation paths reserve what they are admitted for (roadmap#265): same
+  // check, same arguments, plus the VMID and a release handle.
+  checkAndReserveVdcQuota: async (...a: any[]) => ({ ...(await checkVdcQuotaMock(...a.slice(0, 6))), release: releaseQuotaMock }),
 }))
 vi.mock('@/lib/tenant/infraScope', () => ({
   getTenantInfrastructureScope: getTenantInfrastructureScopeMock,
@@ -98,6 +111,9 @@ function createdBody(node: string, type: string) {
 }
 
 beforeEach(() => {
+  afterCbs.length = 0
+  releaseQuotaMock.mockReset()
+  releaseWhenTaskStopsMock.mockClear()
   checkPermissionMock.mockReset().mockResolvedValue(null)
   getRequestGuestScopePerimeterMock.mockReset().mockResolvedValue(null)
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
@@ -387,5 +403,37 @@ describe('POST guests create: GPUs of a vDC go through its GPU section (#672)', 
     getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
     expect((await callRoute(await loadPost(), { params: qemuParams, body: { vmid: 106, hostpci0: 'mapping=gpu-n1-03-00' } })).status).toBe(200)
     expect(tenantAddsGpuMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST guests create: the vDC quota stays reserved until the task ends (roadmap#265)', () => {
+  const metered = { poolName: 'pool-1', allowBlankVms: true, quota: { maxVms: 5 }, storagePolicies: [] }
+
+  it('reserves under the new VMID and releases once the creation task ends', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['ceph-nvme'], { 'ceph-nvme': gold }))
+    resolveVdcForTenantMock.mockResolvedValue(metered)
+    checkVdcQuotaMock.mockResolvedValue({ allowed: true })
+    const res = await callRoute(await loadPost(), { params: qemuParams, body: { vmid: 105, scsi0: 'ceph-nvme:10' } })
+
+    expect(res.status).toBe(200)
+    expect(releaseQuotaMock).not.toHaveBeenCalled()
+    for (const cb of afterCbs) await cb()
+    expect(releaseWhenTaskStopsMock).toHaveBeenCalledWith({ id: 'conn-1' }, 'UPID:x', 'pve1', expect.any(Function))
+    expect(releaseQuotaMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('releases at once when PVE refuses the creation', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasInfra(['ceph-nvme'], { 'ceph-nvme': gold }))
+    resolveVdcForTenantMock.mockResolvedValue(metered)
+    checkVdcQuotaMock.mockResolvedValue({ allowed: true })
+    pveFetchMock.mockImplementation(async (_conn: any, _path: any, opts?: any) => {
+      if (opts?.method === 'POST') throw new Error('VM 105 already exists')
+      return 'UPID:x'
+    })
+    const res = await callRoute(await loadPost(), { params: qemuParams, body: { vmid: 105, scsi0: 'ceph-nvme:10' } })
+
+    expect(res.status).toBe(500)
+    expect(releaseQuotaMock).toHaveBeenCalledTimes(1)
+    expect(afterCbs).toHaveLength(0)
   })
 })

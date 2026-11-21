@@ -163,7 +163,7 @@ describe('frameworksTab helpers', () => {
     })
 
     it('reuses the NIST wordmark for both NIST frameworks', () => {
-      expect(FRAMEWORK_LOGOS['nist-800-53-r5']).toBe(FRAMEWORK_LOGOS['nist-800-171-r2'])
+      expect(FRAMEWORK_LOGOS['nist-800-53-r5']).toBe(FRAMEWORK_LOGOS['nist-800-171-r3'])
     })
   })
 

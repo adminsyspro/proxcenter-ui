@@ -113,6 +113,7 @@ const CHECK_RECOMMENDATIONS: Record<string, string> = {
   cluster_policy_out: 'Set Output Policy to DROP in Datacenter > Firewall > Options.',
   pve_version: 'Upgrade to the latest Proxmox VE version via apt update && apt dist-upgrade.',
   backup_schedule: 'Create a backup job in Datacenter > Backup with a regular schedule.',
+  backup_encryption: 'Send backups to a Proxmox Backup Server storage with an encryption key (Datacenter > Storage > PBS > Encryption).',
   ha_enabled: 'Add critical VMs/CTs to HA in Datacenter > HA > Resources > Add.',
   storage_replication: 'Configure replication in VM > Replication > Add for cross-node data safety.',
   pool_isolation: 'Create resource pools in Datacenter > Permissions > Pools to separate workloads.',
@@ -178,13 +179,14 @@ function scoreColor(score: number): string {
   return '#ef4444'
 }
 
-// All 25 check IDs with readable names and descriptions
+// All 26 check IDs with readable names and descriptions
 const ALL_CHECKS = [
   { id: 'cluster_fw_enabled', name: 'Cluster firewall enabled', category: 'cluster', description: 'Verifies the datacenter-level firewall is active. Without it, no firewall rules are enforced across the cluster.' },
   { id: 'cluster_policy_in', name: 'Inbound policy = DROP', category: 'cluster', description: 'Checks that the default inbound policy is DROP or REJECT, blocking all unsolicited traffic unless explicitly allowed by rules.' },
   { id: 'cluster_policy_out', name: 'Outbound policy = DROP', category: 'cluster', description: 'Checks that the default outbound policy restricts egress traffic, preventing compromised VMs from freely communicating outbound.' },
   { id: 'pve_version', name: 'PVE version up to date', category: 'cluster', description: 'Ensures the Proxmox VE version is on the latest major release to benefit from security patches and new features.' },
   { id: 'backup_schedule', name: 'Backup jobs configured', category: 'cluster', description: 'Verifies that at least one backup job is enabled in Datacenter > Backup, ensuring data can be recovered after incidents.' },
+  { id: 'backup_encryption', name: 'Backups encrypted', category: 'cluster', description: 'Verifies that every enabled backup job writes to a Proxmox Backup Server storage with a client-side encryption key, so backup data stays confidential at its storage location.' },
   { id: 'ha_enabled', name: 'High availability configured', category: 'cluster', description: 'Checks whether critical VMs are added to the HA manager for automatic failover if a node goes down.' },
   { id: 'storage_replication', name: 'Storage replication configured', category: 'cluster', description: 'Verifies that storage replication jobs exist to keep VM data synchronized across nodes for disaster recovery.' },
   { id: 'pool_isolation', name: 'Resource pool isolation', category: 'cluster', description: 'Checks that resource pools are used to logically separate workloads and enforce access control boundaries.' },
@@ -648,7 +650,7 @@ function ProfilesTab() {
       if (!res.ok) throw new Error('Failed to load profile')
       const { data: profile } = await res.json()
 
-      // Merge with ALL_CHECKS to ensure all 25 checks are represented
+      // Merge with ALL_CHECKS to ensure every check is represented
       const mergedChecks = ALL_CHECKS.map(ac => {
         const existing = profile.checks.find((c: any) => c.check_id === ac.id)
         if (existing) {

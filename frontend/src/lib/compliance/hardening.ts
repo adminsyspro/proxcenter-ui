@@ -37,7 +37,10 @@ export interface HardeningData {
   resources?: Array<{ type: string; vmid?: number; node?: string; name?: string; id?: string }>
   vmFirewalls?: Record<string, { enable?: number }>
   vmSecurityGroups?: Record<string, boolean>
-  backupJobs?: Array<{ id?: string; enabled?: number; schedule?: string; type?: string }>
+  backupJobs?: Array<{ id?: string; enabled?: number; schedule?: string; type?: string; storage?: string }>
+  // GET /storage. Undefined when it could not be read, which is not the same as
+  // "no storage": the backup encryption check must not fail on a missing read.
+  storages?: Array<{ storage: string; type?: string; 'encryption-key'?: string }>
   haResources?: Array<{ sid?: string; type?: string; state?: string }>
   replicationJobs?: Array<{ id?: string; target?: string; schedule?: string; disable?: number }>
   pools?: Array<{ poolid?: string; members?: Array<{ id: string; type: string }> }>
@@ -466,6 +469,47 @@ function checkBackupSchedule(data: HardeningData): HardeningCheck {
   }
 }
 
+// Proxmox VE encrypts a backup only when it goes to a Proxmox Backup Server
+// storage that carries a client-side encryption key. The key itself lives in
+// /etc/pve/priv/storage/<id>.enc; storage.cfg, and so GET /storage, keeps only
+// its fingerprint in `encryption-key`. vzdump archives on a dir, NFS or CIFS
+// storage are never encrypted by Proxmox.
+function checkBackupEncryption(data: HardeningData): HardeningCheck {
+  const base = { id: 'backup_encryption', name: 'Backups encrypted', category: 'cluster' as const, severity: 'medium' as const, maxPoints: 10, entity: 'Backup jobs' }
+  const enabledJobs = (data.backupJobs || []).filter(j => j.enabled !== 0)
+  if (enabledJobs.length === 0) {
+    return { ...base, status: 'skip', earned: 0, details: 'No enabled backup job' }
+  }
+  if (!data.storages) {
+    return { ...base, status: 'skip', earned: 0, details: 'Storage configuration could not be read' }
+  }
+
+  const byId = new Map(data.storages.map(s => [s.storage, s]))
+  const unencrypted: string[] = []
+  for (const job of enabledJobs) {
+    const target = job.storage ? byId.get(job.storage) : undefined
+    let reason: string | null = null
+    if (!job.storage) reason = 'no target storage'
+    else if (!target) reason = 'unknown storage'
+    else if (target.type !== 'pbs') reason = `${target.type ?? 'unknown'} storage, not encrypted by Proxmox`
+    else if (!target['encryption-key']) reason = 'PBS storage without encryption key'
+    if (reason) unencrypted.push(`${job.id ?? 'job'} -> ${job.storage ?? '?'} (${reason})`)
+  }
+
+  const ok = unencrypted.length === 0
+  const shown = unencrypted.slice(0, 5).join('; ')
+  const more = unencrypted.length > 5 ? `; +${unencrypted.length - 5} more` : ''
+  return {
+    ...base,
+    entity: `${enabledJobs.length} jobs`,
+    status: ok ? 'pass' : 'fail',
+    earned: ok ? base.maxPoints : 0,
+    details: ok
+      ? `All ${enabledJobs.length} enabled backup job(s) write to an encrypted Proxmox Backup Server storage`
+      : `${unencrypted.length} of ${enabledJobs.length} enabled backup job(s) write unencrypted backups: ${shown}${more}`,
+  }
+}
+
 function checkHaEnabled(data: HardeningData): HardeningCheck {
   const resources = data.haResources || []
   const hasHA = resources.length > 0
@@ -834,6 +878,7 @@ const PVE_CHECK_FUNCTIONS: Record<string, (data: HardeningData) => HardeningChec
   vm_firewalls: checkVmFirewalls,
   vm_security_groups: checkVmSecurityGroups,
   backup_schedule: checkBackupSchedule,
+  backup_encryption: checkBackupEncryption,
   ha_enabled: checkHaEnabled,
   storage_replication: checkStorageReplication,
   pool_isolation: checkPoolIsolation,
@@ -921,6 +966,7 @@ export function runAllChecks(data: HardeningData): HardeningCheck[] {
     checkVmFirewalls(data),
     checkVmSecurityGroups(data),
     checkBackupSchedule(data),
+    checkBackupEncryption(data),
     checkHaEnabled(data),
     checkStorageReplication(data),
     checkPoolIsolation(data),

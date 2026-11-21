@@ -7,7 +7,7 @@ import type { FrameworkId } from './types'
 // reliably in the PDF (webp support is not guaranteed in the sidecar).
 export const FRAMEWORK_LOGO_FILES: Record<FrameworkId, string> = {
   'nist-800-53-r5': 'nist.png',
-  'nist-800-171-r2': 'nist.png',
+  'nist-800-171-r3': 'nist.png',
   'cmmc-l2': 'cmmc.png',
   'iso-27001-2022': 'iso.png',
   'cis-controls-v8-1': 'cis.png',

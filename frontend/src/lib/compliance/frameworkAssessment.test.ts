@@ -6,7 +6,7 @@ import type { FrameworkDef, Crosswalk } from './frameworks/types'
 import { getCrosswalk, getFramework } from './frameworks'
 
 const def: FrameworkDef = {
-  id: 'nist-800-171-r2', name: 'X', version: 'r2', sourceUrl: '',
+  id: 'nist-800-171-r3', name: 'X', version: 'r3', sourceUrl: '',
   controls: [
     { id: 'A', title: 'a', family: 'F1' },
     { id: 'B', title: 'b', family: 'F1' },

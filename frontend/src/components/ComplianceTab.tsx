@@ -44,6 +44,7 @@ const CHECK_INFO: Record<string, { description: string; recommendation: string; 
   cluster_policy_out: { description: 'Checks that the default outbound policy restricts egress.', recommendation: 'Set Output Policy to DROP in Datacenter > Firewall > Options.' },
   pve_version: { description: 'Ensures PVE is on the latest major release.', recommendation: 'Upgrade to the latest Proxmox VE version via apt update && apt dist-upgrade.' },
   backup_schedule: { description: 'Verifies backup jobs are configured.', recommendation: 'Create a backup job in Datacenter > Backup with a regular schedule.' },
+  backup_encryption: { description: 'Verifies backups go to an encrypted PBS storage.', recommendation: 'Send backups to a Proxmox Backup Server storage with an encryption key (Datacenter > Storage > PBS > Encryption).' },
   ha_enabled: { description: 'Checks if HA is configured for critical VMs.', recommendation: 'Add critical VMs/CTs to HA in Datacenter > HA > Resources > Add.' },
   storage_replication: { description: 'Verifies storage replication jobs exist.', recommendation: 'Configure replication in VM > Replication > Add for cross-node data safety.' },
   pool_isolation: { description: 'Checks that resource pools are used for isolation.', recommendation: 'Create resource pools in Datacenter > Permissions > Pools to separate workloads.' },

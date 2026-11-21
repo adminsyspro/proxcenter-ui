@@ -611,6 +611,7 @@ const DEMO_HARDENING_CHECKS: any[] = [
   { id: 'cluster_policy_out', name: 'Outbound policy = DROP', category: 'cluster', severity: 'medium', maxPoints: 10, status: 'fail', entity: 'Cluster', details: 'Datacenter outbound policy is ACCEPT on both clusters' },
   { id: 'pve_version', name: 'PVE version up to date', category: 'cluster', severity: 'medium', maxPoints: 10, status: 'pass', entity: 'Cluster', details: 'Compliant on every node checked' },
   { id: 'backup_schedule', name: 'Backup jobs configured', category: 'cluster', severity: 'high', maxPoints: 15, status: 'pass', entity: 'Cluster', details: 'Compliant on every node checked' },
+  { id: 'backup_encryption', name: 'Backups encrypted', category: 'cluster', severity: 'medium', maxPoints: 10, status: 'pass', entity: '3 jobs', details: 'All 3 enabled backup job(s) write to an encrypted Proxmox Backup Server storage' },
   { id: 'ha_enabled', name: 'High availability configured', category: 'cluster', severity: 'medium', maxPoints: 10, status: 'warning', entity: 'Cluster', details: '11 of 24 protected guests are in the HA manager' },
   { id: 'storage_replication', name: 'Storage replication configured', category: 'cluster', severity: 'medium', maxPoints: 10, status: 'pass', entity: 'Cluster', details: 'Compliant on every node checked' },
   { id: 'pool_isolation', name: 'Resource pool isolation', category: 'cluster', severity: 'medium', maxPoints: 10, status: 'pass', entity: 'Cluster', details: 'Compliant on every node checked' },

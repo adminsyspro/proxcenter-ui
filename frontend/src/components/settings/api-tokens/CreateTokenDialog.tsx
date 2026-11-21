@@ -619,8 +619,9 @@ function ScopeDomainRow({
           aria-label={t('dialog.subScopesLabel', { domain: label })}
           sx={{
             display: 'flex', flexWrap: 'wrap', gap: 1, pl: 7.5, pt: 1.5, pb: 1,
+            // px 2: the six VM toggles hold on one line in every language.
             '& .MuiToggleButton-root': {
-              typography: 'body2', py: 1, px: 3, gap: 1, textTransform: 'none',
+              typography: 'body2', py: 1, px: 2, gap: 1, textTransform: 'none',
               border: 1, borderColor: 'divider', borderRadius: 1, ml: 0,
               '&.Mui-disabled': { borderColor: 'divider' },
             },

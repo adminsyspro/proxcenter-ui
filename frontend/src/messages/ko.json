@@ -4636,7 +4636,7 @@
           "vmsWrite": "편집",
           "vmsSnapshot": "스냅샷",
           "vmsMigrate": "마이그레이션",
-          "vmsNic": "NIC 식별 (VLAN, MAC)",
+          "vmsNic": "VLAN/MAC",
           "vmsDelete": "삭제",
           "backupsWrite": "백업 작업",
           "backupsRestore": "복원",

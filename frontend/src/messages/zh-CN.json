@@ -4636,7 +4636,7 @@
           "vmsWrite": "编辑",
           "vmsSnapshot": "快照",
           "vmsMigrate": "迁移",
-          "vmsNic": "网卡标识（VLAN、MAC）",
+          "vmsNic": "VLAN/MAC",
           "vmsDelete": "删除",
           "backupsWrite": "备份任务",
           "backupsRestore": "恢复",

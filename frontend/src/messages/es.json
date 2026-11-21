@@ -4636,7 +4636,7 @@
           "vmsWrite": "Edición",
           "vmsSnapshot": "Snapshots",
           "vmsMigrate": "Migración",
-          "vmsNic": "Identidad de NIC (VLAN, MAC)",
+          "vmsNic": "VLAN/MAC",
           "vmsDelete": "Eliminación",
           "backupsWrite": "Trabajos de copia",
           "backupsRestore": "Restauración",

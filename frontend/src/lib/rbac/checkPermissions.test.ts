@@ -229,6 +229,14 @@ describe('token checks are confined to the token tenant connections', () => {
   })
 })
 
+describe('vms:nic scope (roadmap#265)', () => {
+  it('opens the NIC mac and vlan keys a vms:write token alone never reaches', async () => {
+    m.getPrincipal.mockResolvedValue(tokenPrincipal(expandScopes(['vms:write', 'vms:nic'])))
+    expect(await checkPermission(PERMISSIONS.VM_CONFIG_NIC_VLAN, 'vm', VM)).toBeNull()
+    expect(await checkPermission(PERMISSIONS.VM_CONFIG_NIC_MAC, 'vm', VM)).toBeNull()
+  })
+})
+
 describe('vms:write scope against the permission hierarchy', () => {
   it('reaches vm.config.hardware through vm.config, never the NIC mac or vlan', async () => {
     m.getPrincipal.mockResolvedValue(tokenPrincipal(expandScopes(['vms:write'])))

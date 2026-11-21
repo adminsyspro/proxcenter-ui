@@ -36,9 +36,9 @@ describe('scope to permission resolver (spec section 7)', () => {
     expect(Object.keys(READ_SCOPE_DEFINITIONS)).toEqual(READ_SCOPE_IDS)
   })
 
-  it('offers 31 scopes: 13 read and 18 write', () => {
-    expect(ALL_SCOPE_IDS).toHaveLength(31)
-    expect(WRITE_SCOPE_IDS).toHaveLength(18)
+  it('offers 32 scopes: 13 read and 19 write', () => {
+    expect(ALL_SCOPE_IDS).toHaveLength(32)
+    expect(WRITE_SCOPE_IDS).toHaveLength(19)
     expect(ALL_SCOPE_IDS).toEqual([...READ_SCOPE_IDS, ...WRITE_SCOPE_IDS])
     expect(Object.keys(SCOPE_DEFINITIONS)).toEqual(ALL_SCOPE_IDS)
   })
@@ -118,6 +118,7 @@ describe('scope to permission resolver (spec section 7)', () => {
       'vms:snapshot': ['vm.view', 'connection.view', 'vm.snapshot'],
       'vms:migrate': ['vm.view', 'connection.view', 'vm.migrate'],
       'vms:delete': ['vm.view', 'connection.view', 'vm.delete'],
+      'vms:nic': ['vm.view', 'connection.view', 'vm.config.nic.mac', 'vm.config.nic.vlan'],
       'backups:write': [
         'backup.view', 'connection.view', 'backup.job.view', 'backup.job.create', 'backup.job.edit',
         'backup.job.delete', 'backup.job.run', 'vm.backup',
@@ -143,6 +144,15 @@ describe('scope to permission resolver (spec section 7)', () => {
     })
   })
 
+  it('vms:nic is the one write scope that carries the NIC mac and vlan keys (roadmap#265)', () => {
+    expect(WRITE_SCOPE_DEFINITIONS['vms:nic']).toEqual(['vm.view', 'connection.view', 'vm.config.nic.mac', 'vm.config.nic.vlan'])
+    const carriers = Object.entries(WRITE_SCOPE_DEFINITIONS)
+      .filter(([, keys]) => keys.some(k => k === 'vm.config.nic.mac' || k === 'vm.config.nic.vlan'))
+      .map(([scope]) => scope)
+    expect(carriers).toEqual(['vms:nic'])
+    expect(isCreatorCheckedScope('vms:nic')).toBe(true)
+  })
+
   it('write scopes never bundle automation, console or NIC mac/vlan keys, and admin keys only in the admin write scopes', () => {
     // The admin write scopes carry the admin right of their own domain and
     // its read-only child, nothing else: each needs a global grant and a
@@ -164,10 +174,11 @@ describe('scope to permission resolver (spec section 7)', () => {
       key === 'node.console' ||
       key === 'vm.config.nic.mac' ||
       key === 'vm.config.nic.vlan'
+    const allowedNic = (scope: string, key: string) => scope === 'vms:nic' && key.startsWith('vm.config.nic.')
 
     for (const [scope, keys] of Object.entries(WRITE_SCOPE_DEFINITIONS)) {
       for (const key of keys) {
-        expect(forbidden(key) && !allowedAdmin(scope, key), `write scope ${scope} bundles forbidden key ${key}`).toBe(false)
+        expect(forbidden(key) && !allowedAdmin(scope, key) && !allowedNic(scope, key), `write scope ${scope} bundles forbidden key ${key}`).toBe(false)
       }
     }
   })

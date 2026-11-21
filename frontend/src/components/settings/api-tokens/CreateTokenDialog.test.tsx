@@ -225,6 +225,18 @@ describe('CreateTokenDialog scope picker', () => {
     expect(postBody().writeRateLimitPerMin).toBe(60)
   })
 
+  it('leaves NIC identity off on Write, and adds it only when its toggle is picked (roadmap#265)', async () => {
+    const dialog = await openDialog()
+    await grantableSettled(dialog)
+    await typeName(dialog)
+    await userEvent.click(levelButton(dialog, 'vms', 'write'))
+    expect(toggle(dialog, 'vms', 'vmsNic')).toHaveAttribute('aria-pressed', 'false')
+    expect(toggle(dialog, 'vms', 'vmsNic')).toHaveTextContent(dialogT.subScopes.vmsNic)
+    await userEvent.click(toggle(dialog, 'vms', 'vmsNic'))
+    await userEvent.click(createButton(dialog))
+    await waitFor(() => expect(postBody().scopes).toEqual([...VM_DEFAULTS, 'vms:nic']))
+  })
+
   it('paints the destructive toggles, label included, in the error colour', async () => {
     const dialog = await openDialog()
     await grantableSettled(dialog)

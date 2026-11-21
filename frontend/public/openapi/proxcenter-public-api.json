@@ -9973,6 +9973,12 @@
         "connection.view",
         "vm.delete"
       ],
+      "vms:nic": [
+        "vm.view",
+        "connection.view",
+        "vm.config.nic.mac",
+        "vm.config.nic.vlan"
+      ],
       "backups:write": [
         "backup.view",
         "connection.view",
@@ -15598,7 +15604,7 @@
       "get": {
         "operationId": "task-status",
         "summary": "Status of a Proxmox task",
-        "description": "Status, progress and log of the task {upid} started on {node}, as returned by every write that answers with a UPID. Poll it until `status` is `stopped`, then read `exitstatus` (`OK` on success) and `failureReason`. Any write scope opens it. A vDC tenant token only reads the tasks of its own guests.\n\nRequired scope: `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete` or `backups:write` or `backups:restore` or `backups:delete` or `storage:write` or `ha:write` or `pools:write` or `network:write` or `firewall:write` or `vdcs:write` or `tenants:write` or `users:write` or `rbac:write` or `identity:write`",
+        "description": "Status, progress and log of the task {upid} started on {node}, as returned by every write that answers with a UPID. Poll it until `status` is `stopped`, then read `exitstatus` (`OK` on success) and `failureReason`. Any write scope opens it. A vDC tenant token only reads the tasks of its own guests.\n\nRequired scope: `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete` or `vms:nic` or `backups:write` or `backups:restore` or `backups:delete` or `storage:write` or `ha:write` or `pools:write` or `network:write` or `firewall:write` or `vdcs:write` or `tenants:write` or `users:write` or `rbac:write` or `identity:write`",
         "tags": [
           "Tasks"
         ],
@@ -15608,6 +15614,7 @@
           "vms:snapshot",
           "vms:migrate",
           "vms:delete",
+          "vms:nic",
           "backups:write",
           "backups:restore",
           "backups:delete",

@@ -66,6 +66,12 @@ describe("creatorStillHolds", () => {
     expect(mocks.holds).toHaveBeenCalledWith("u1", "ten1", KEYS[0], ["c1"])
   })
 
+  it("vms:nic needs the creator to hold the NIC keys themselves (roadmap#265)", async () => {
+    mocks.holds.mockImplementation(async (_u: string, _t: string, key: string) => !key.startsWith("vm.config.nic."))
+    expect(await creatorStillHolds(token, "vms:nic")).toBe(false)
+    expect(mocks.holds).toHaveBeenCalledWith("u1", "ten1", "vm.config.nic.mac", ["c1"])
+  })
+
   it("is true when the creator holds every key", async () => {
     expect(await creatorStillHolds(token, SCOPE)).toBe(true)
     expect(mocks.holds).toHaveBeenCalledTimes(KEYS.length)

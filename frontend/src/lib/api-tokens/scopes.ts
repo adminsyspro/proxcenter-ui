@@ -51,6 +51,10 @@ export const WRITE_SCOPE_DEFINITIONS: Record<string, readonly string[]> = {
   "vms:snapshot": ["vm.view", "connection.view", "vm.snapshot"],
   "vms:migrate": ["vm.view", "connection.view", "vm.migrate"],
   "vms:delete": ["vm.view", "connection.view", "vm.delete"],
+  // The NIC identity keys no other scope carries: a VLAN tag or a MAC chosen
+  // by the caller (roadmap#265). Checked against the creator like every write
+  // scope, and the vDC network allow-list still bounds the VLAN.
+  "vms:nic": ["vm.view", "connection.view", "vm.config.nic.mac", "vm.config.nic.vlan"],
   "backups:write": [
     "backup.view",
     "connection.view",

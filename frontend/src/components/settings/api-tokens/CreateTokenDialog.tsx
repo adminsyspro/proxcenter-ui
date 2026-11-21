@@ -58,7 +58,7 @@ export const SCOPE_DOMAINS: readonly ScopeDomain[] = [
     id: 'vms',
     icon: 'ri-computer-line',
     read: 'vms:read',
-    write: ['vms:power', 'vms:write', 'vms:snapshot', 'vms:migrate', 'vms:delete'],
+    write: ['vms:power', 'vms:write', 'vms:snapshot', 'vms:migrate', 'vms:nic', 'vms:delete'],
   },
   { id: 'backups', icon: 'ri-save-line', read: 'backups:read', write: ['backups:write', 'backups:restore', 'backups:delete'] },
   { id: 'storage', icon: 'ri-hard-drive-2-line', read: 'storage:read', write: ['storage:write'] },
@@ -81,6 +81,9 @@ export const SCOPE_DOMAINS: readonly ScopeDomain[] = [
   { id: 'identity', icon: 'ri-shield-user-line', read: 'identity:read', write: ['identity:write'] },
 ]
 
+// Write sub-scopes Write never preselects: each is a choice of its own.
+const OPT_IN_WRITE_SCOPE_IDS: readonly string[] = ['vms:nic']
+
 // Short toggle labels (dialog.subScopes.*) of the write sub-scopes,
 // shown under a row on Write when its domain has more than one.
 export const SUB_SCOPE_LABEL_KEYS: Record<string, string> = {
@@ -88,6 +91,7 @@ export const SUB_SCOPE_LABEL_KEYS: Record<string, string> = {
   'vms:write': 'vmsWrite',
   'vms:snapshot': 'vmsSnapshot',
   'vms:migrate': 'vmsMigrate',
+  'vms:nic': 'vmsNic',
   'vms:delete': 'vmsDelete',
   'backups:write': 'backupsWrite',
   'backups:restore': 'backupsRestore',
@@ -324,12 +328,13 @@ export default function CreateTokenDialog({ open, onClose, onCreated, serviceAcc
     return domain.write.some(scope => grantableResult.list.includes(scope)) ? '' : t('dialog.domainNotGrantable')
   }
 
-  // Write preselects every grantable non destructive sub-scope; a domain
-  // whose only grantable ones are destructive gets the first of them, so a
-  // row on Write never carries zero write scopes.
+  // Write preselects every grantable non destructive sub-scope but the NIC
+  // identity one, picked on purpose; a domain whose only grantable ones are
+  // destructive gets the first of them, so a row on Write never carries zero
+  // write scopes.
   function defaultWriteScopes(domain: ScopeDomain): string[] {
     const grantable = domain.write.filter(scope => !writeScopeBlocker(scope))
-    const safe = grantable.filter(scope => !DESTRUCTIVE_SCOPE_IDS.includes(scope))
+    const safe = grantable.filter(scope => !DESTRUCTIVE_SCOPE_IDS.includes(scope) && !OPT_IN_WRITE_SCOPE_IDS.includes(scope))
     return safe.length ? safe : grantable.slice(0, 1)
   }
 

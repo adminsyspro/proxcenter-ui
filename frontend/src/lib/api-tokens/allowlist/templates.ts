@@ -51,4 +51,19 @@ export const TEMPLATE_ENTRIES: AllowlistEntry[] = [
     description: "A blueprint the caller owns, sees as shared, or was granted; 404 otherwise. A cloud-init password is never returned.",
     responseSchemaRef: "TemplateBlueprintResponse",
   }),
+  templateEntry({
+    id: "template-deploy",
+    method: "POST",
+    file: "deploy",
+    requiredScopes: ["vms:write"],
+    connectionField: { source: "body", field: "connectionId" },
+    // Checked by the handler beyond vms:write: starting the VM (vms:power),
+    // HA registration, and a VLAN tag or MAC chosen by the caller (vms:nic).
+    secondaryPermissions: ["vm.start", "node.manage", "vm.config.nic.mac", "vm.config.nic.vlan"],
+    summary: "Deploy a VM from the catalogue",
+    description:
+      "Creates a QEMU VM from a catalogue image (`imageSlug`) or a blueprint (`blueprintId` plus the image it names), then imports, configures and, unless `start` is false, starts it. Answers at once with a `deploymentId`: follow it with GET /api/v1/templates/deployments/{id} until `status` is `completed` or `failed`. A vDC tenant deploys only what its vDC was granted, on its own nodes, storages and networks, within its quota and VMID range. A token needs vms:power as well to start the VM, and vms:nic to set a VLAN tag.",
+    requestSchemaRef: "TemplateDeployRequest",
+    responseSchemaRef: "TemplateDeployResponse",
+  }),
 ]

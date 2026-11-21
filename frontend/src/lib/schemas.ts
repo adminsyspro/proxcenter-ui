@@ -469,6 +469,10 @@ export const deploySchema = z.object({
   // Register the new VM as an HA resource once created (#181). Needs
   // node.manage on the connection and a shared target storage.
   ha: z.boolean().optional(),
+  // Start the VM once deployed (the wizard's behaviour). `false` leaves it
+  // stopped, for an API client that still has disks and NICs to add
+  // (roadmap#265). An ISO deployment always stays stopped.
+  start: z.boolean().default(true),
   cloudInit: z.object({
     ciuser: z.string().optional(),
     cipassword: z.string().optional(),

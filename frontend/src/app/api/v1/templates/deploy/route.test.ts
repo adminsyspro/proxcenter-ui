@@ -16,6 +16,15 @@ async function runAfters() {
   for (const cb of afterCbs) await cb()
 }
 
+// The API token guard is covered by routeGuard.test.ts and writeContract.test.ts;
+// here it only hands the handler the principal a test sets (roadmap#265).
+const guardPrincipal: { value: any } = { value: undefined }
+vi.mock('@/lib/api-tokens/routeGuard', () => ({
+  withPublicApiGuard: (_id: string, handler: any) => (req: Request, ctx: any) => handler(req, { ...(ctx ?? {}), principal: guardPrincipal.value }),
+}))
+const actingUserMock = vi.fn(async (): Promise<any> => ({ id: 'u1' }))
+vi.mock('@/lib/auth/actingUser', () => ({ getActingUser: () => actingUserMock() }))
+
 const checkPermissionMock = vi.fn<(...args: any[]) => Promise<Response | null>>()
 const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
@@ -24,6 +33,10 @@ const findCustomImageForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const isProviderImageSlugMock = vi.fn<(...args: any[]) => Promise<boolean>>()
 const findBlueprintForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const getCurrentTenantIdMock = vi.fn<() => Promise<string>>()
+async function sessionTenant(): Promise<string> {
+  const { backgroundTenantId } = await import('@/lib/tenant/background')
+  return backgroundTenantId() ?? getCurrentTenantIdMock()
+}
 
 const deploymentUpdateMock = vi.fn<(...args: any[]) => Promise<any>>()
 const deploymentCreateMock = vi.fn<(...args: any[]) => Promise<any>>()
@@ -33,16 +46,18 @@ const blueprintCreateMock = vi.fn(async (..._a: any[]) => ({}))
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => null) }))
 vi.mock('@/lib/tenant', () => ({
-  getSessionPrisma: async () => ({
+  // Like the real one, the scoped client follows the tenant of the caller, or
+  // the background tenant inside a pipeline run after the response.
+  getSessionPrisma: async () => (await sessionTenant(), {
     customImage: { findUnique: customImageFindUniqueMock },
     deployment: { create: deploymentCreateMock, update: deploymentUpdateMock },
     blueprint: { create: blueprintCreateMock },
   }),
-  getCurrentTenantId: () => getCurrentTenantIdMock(),
+  getCurrentTenantId: () => sessionTenant(),
   requireProviderTenant: () => requireProviderTenantMock(),
   DEFAULT_TENANT_ID: 'default',
 }))
-vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { VM_CREATE: 'vm.create', VM_CLONE: 'vm.clone', NODE_MANAGE: 'node.manage' }, buildVmResourceId: (...parts: string[]) => parts.join(':') }))
+vi.mock('@/lib/rbac', () => ({ checkPermission: checkPermissionMock, PERMISSIONS: { VM_CREATE: 'vm.create', VM_CLONE: 'vm.clone', VM_START: 'vm.start', NODE_MANAGE: 'node.manage' }, buildVmResourceId: (...parts: string[]) => parts.join(':') }))
 vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 vi.mock('@/lib/schemas', () => ({ deploySchema: { safeParse: (b: any) => ({ success: true, data: b }) } }))
 vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: getConnectionByIdMock }))
@@ -153,6 +168,8 @@ beforeEach(async () => {
   resolveVdcForTenantMock.mockReset().mockResolvedValue(null)
   checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })
   releaseQuotaMock.mockReset()
+  guardPrincipal.value = undefined
+  actingUserMock.mockReset().mockResolvedValue({ id: 'u1' })
   getCurrentTenantIdMock.mockReset().mockResolvedValue('tenant-1')
   auditMock.mockReset().mockResolvedValue({})
   requireProviderTenantMock.mockReset().mockResolvedValue(null)
@@ -1400,5 +1417,79 @@ describe('POST templates/deploy: a saved blueprint never keeps the cloud-init pa
     expect(res.status).toBe(200)
     expect(blueprintCreateMock).toHaveBeenCalledTimes(1)
     expect(blueprintCreateMock.mock.calls[0][0].data.cloudInit).toEqual({ ciuser: 'ops', ipconfig0: 'ip=dhcp' })
+  })
+})
+
+describe('POST templates/deploy: API tokens (roadmap#265)', () => {
+  const token = { kind: 'token', tokenId: 't1', tenantId: 'tenant-1', scopes: ['vms:write'], connectionIds: null }
+  const denyStart = () => checkPermissionMock.mockImplementation(async (permission: string) =>
+    permission === 'vm.start' ? new Response(JSON.stringify({ error: 'Permission denied: vm.start' }), { status: 403 }) : null)
+  const startCalls = () => pveFetchMock.mock.calls.filter(c => String(c[1]).endsWith('/status/start'))
+  function reachPipeline() {
+    stubPveFetchForDeploy()
+    getImageBySlugMock.mockReturnValue({ slug: 'ubuntu-22.04', format: 'qcow2', downloadUrl: 'https://img.test/u.qcow2' })
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-a', quota: { maxVms: 5 }, storagePolicies: [] })
+    getVdcScopeMock.mockResolvedValue({ storagesByConnection: new Map([['conn-1', new Set(['local-lvm'])]]), storagePoliciesByConnection: new Map() })
+  }
+
+  it('403 for a token that may not start the VM it would start, before any deployment or quota', async () => {
+    reachPipeline()
+    guardPrincipal.value = token
+    denyStart()
+    const res = await callRoute(await loadPost(), { body: baseBody })
+
+    expect(res.status).toBe(403)
+    expect(checkPermissionMock).toHaveBeenCalledWith('vm.start', 'vm', 'conn-1:pve1:qemu:190')
+    expect(deploymentCreateMock).not.toHaveBeenCalled()
+    expect(checkVdcQuotaMock).not.toHaveBeenCalled()
+  })
+
+  it('a token deploys a stopped VM with vms:write alone: the pipeline never starts it', async () => {
+    reachPipeline()
+    guardPrincipal.value = token
+    denyStart()
+    const res = await callRoute(await loadPost(), { body: { ...baseBody, start: false } })
+
+    expect(res.status).toBe(200)
+    await runAfters()
+    expect(startCalls()).toHaveLength(0)
+    expect(deploymentUpdateMock).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'completed' }) }))
+  })
+
+  it('a session caller still deploys a started VM, with no start check', async () => {
+    reachPipeline()
+    const res = await callRoute(await loadPost(), { body: baseBody })
+
+    expect(res.status).toBe(200)
+    await runAfters()
+    expect(startCalls()).toHaveLength(1)
+    expect(checkPermissionMock).not.toHaveBeenCalledWith('vm.start', expect.anything(), expect.anything())
+  })
+
+  it('400 when a token asks to save a blueprint', async () => {
+    reachPipeline()
+    guardPrincipal.value = token
+    const res = await callRoute(await loadPost(), { body: { ...baseBody, start: false, saveAsBlueprint: true, blueprintName: 'web' } })
+
+    expect(res.status).toBe(400)
+    expect(await readJson<any>(res)).toEqual({ error: 'saveAsBlueprint is not available to API tokens' })
+    expect(deploymentCreateMock).not.toHaveBeenCalled()
+  })
+
+  it('the pipeline keeps the tenant of the request when the token is gone after the response', async () => {
+    reachPipeline()
+    guardPrincipal.value = token
+    const res = await callRoute(await loadPost(), { body: { ...baseBody, start: false } })
+    expect(res.status).toBe(200)
+
+    getCurrentTenantIdMock.mockRejectedValue(new Error('Invalid or expired API token'))
+    await runAfters()
+    expect(deploymentUpdateMock).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'completed' }) }))
+  })
+
+  it('attributes a saved blueprint to the acting user', async () => {
+    reachPipeline()
+    await callRoute(await loadPost(), { body: { ...baseBody, saveAsBlueprint: true, blueprintName: 'web' } })
+    expect(blueprintCreateMock.mock.calls[0][0].data.createdBy).toBe('u1')
   })
 })

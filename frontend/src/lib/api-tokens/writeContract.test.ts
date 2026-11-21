@@ -32,6 +32,7 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
     'vm-remote-migrate-check', 'vm-remote-migrate-prepare', 'vm-delete', 'vm-notes-update',
     'vm-snapshot-create', 'vm-snapshot-delete', 'vm-snapshot-rollback', 'vm-snapshot-update',
   ],
+  templates: ['template-deploy'],
   backups: [
     'backup-job-create', 'backup-job-update', 'backup-job-delete', 'backup-job-run', 'backup-job-guests',
     'vm-backup-now', 'vm-restore', 'pbs-backup-delete', 'pbs-backup-verify',

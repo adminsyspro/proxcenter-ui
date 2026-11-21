@@ -551,6 +551,53 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: failure reason (#926)'
   })
 })
 
+describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]?summary=1: the outcome without the log (roadmap#265)', () => {
+  function task(status: Record<string, unknown>) {
+    pveFetchMock.mockImplementation((_conn: any, path: string) => {
+      if (typeof path === 'string') {
+        if (path.includes('/status')) return Promise.resolve({ type: 'qmclone', id: '100', starttime: 1000, ...status })
+        if (path.includes('/log')) return Promise.resolve([{ n: 1, t: 'TASK ERROR: clone failed: no space left on device' }])
+      }
+      return Promise.resolve(undefined)
+    })
+  }
+  const logReads = () => pveFetchMock.mock.calls.filter((c: any[]) => String(c[1]).includes('/log')).length
+
+  async function body(query: string) {
+    const { req, params } = ctx(query)
+    const res = await GET(req, { params })
+    expect(res.status).toBe(200)
+    return readJson<any>(res)
+  }
+
+  it('does not read the log of a running task', async () => {
+    task({ status: 'running' })
+    const json = await body('?summary=1')
+    expect(json.status).toBe('running')
+    expect(logReads()).toBe(0)
+  })
+
+  it('does not read the log of a task that ended OK', async () => {
+    task({ status: 'stopped', exitstatus: 'OK', endtime: 1004 })
+    const json = await body('?summary=1')
+    expect(json.exitstatus).toBe('OK')
+    expect(logReads()).toBe(0)
+  })
+
+  it('still reads the log of a failed task, for its failure reason', async () => {
+    task({ status: 'stopped', exitstatus: 'clone failed', endtime: 1004 })
+    const json = await body('?summary=1')
+    expect(json.failureReason).toContain('no space left on device')
+    expect(logReads()).toBe(1)
+  })
+
+  it('reads the log as before without the parameter', async () => {
+    task({ status: 'running' })
+    await body('')
+    expect(logReads()).toBe(1)
+  })
+})
+
 describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: connection and vDC perimeter', () => {
   const token = {
     kind: 'token', tokenId: 'tok-1', tenantId: 'tenant-v', creatorUserId: 'u1',

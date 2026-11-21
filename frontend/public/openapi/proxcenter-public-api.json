@@ -15850,7 +15850,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Set to '1' to skip the log lines"
+            "description": "Set to '1' when only the outcome matters: no log lines, and the Proxmox log is read only for a failed task (its failureReason)"
           }
         ],
         "responses": {

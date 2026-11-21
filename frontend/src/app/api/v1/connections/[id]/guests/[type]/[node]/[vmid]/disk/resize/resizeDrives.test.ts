@@ -157,6 +157,38 @@ describe('POST disk/resize: tier quota (spec §6)', () => {
 })
 
 describe('POST disk/resize: provider tenant (unchanged)', () => {
+  it('an absolute size is metered as the growth it asks for, not as its whole value (roadmap#265)', async () => {
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-x', quota: { maxStorageMb: 100 * 1024 }, storagePolicies: [] })
+    getTenantInfrastructureScopeMock.mockResolvedValue(iaasScope(['ceph-nvme']))
+    pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (opts?.method === 'PUT' && String(path).endsWith('/resize')) return 'UPID:resize:1'
+      if (String(path).endsWith('/qemu/100/config')) return { scsi0: 'ceph-nvme:vm-100-disk-0,size=32G' }
+      return {}
+    })
+
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { disk: 'scsi0', size: '64G' } })
+
+    expect(res.status).toBe(200)
+    expect(checkVdcQuotaMock.mock.calls[0][3]).toMatchObject({ addStorageMb: 32 * 1024, addStorageMbByStorage: { 'ceph-nvme': 32 * 1024 } })
+  })
+
+  it('an absolute size is metered on a tenant without storage scope too', async () => {
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-x', quota: { maxStorageMb: 100 * 1024 }, storagePolicies: [] })
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'msp' })
+    pveFetchMock.mockImplementation(async (_conn, path: string, opts?: any) => {
+      if (opts?.method === 'PUT' && String(path).endsWith('/resize')) return 'UPID:resize:1'
+      if (String(path).endsWith('/qemu/100/config')) return { scsi0: 'ceph-nvme:vm-100-disk-0,size=32G' }
+      return {}
+    })
+
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { disk: 'scsi0', size: '40G' } })
+
+    expect(res.status).toBe(200)
+    expect(checkVdcQuotaMock.mock.calls[0][3]).toMatchObject({ addStorageMb: 8 * 1024 })
+  })
+
   it('200: provider tenant has no vDC, the whole guard block is a no-op', async () => {
     resolveVdcForTenantMock.mockResolvedValue(null) // DEFAULT_TENANT_ID short-circuit
     const POST = await loadPost()

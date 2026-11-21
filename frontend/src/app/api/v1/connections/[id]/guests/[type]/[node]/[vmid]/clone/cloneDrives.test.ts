@@ -42,6 +42,7 @@ const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const resolveVdcForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const checkVdcQuotaMock = vi.fn<(...args: any[]) => Promise<any>>()
+const releaseQuotaMock = vi.fn()
 const getAllowedNetworksForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const resolveSubnetForBridgeMock = vi.fn<(...args: any[]) => Promise<any>>()
 const syncIpamForVmConfigMock = vi.fn<(...args: any[]) => Promise<any>>()
@@ -60,6 +61,9 @@ vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-1' }))
 vi.mock('@/lib/vdc/quota', () => ({
   resolveVdcForTenant: resolveVdcForTenantMock,
   checkVdcQuota: checkVdcQuotaMock,
+  // The creation paths reserve what they are admitted for (roadmap#265): same
+  // check, same arguments, plus the VMID and a release handle.
+  checkAndReserveVdcQuota: async (...a: any[]) => ({ ...(await checkVdcQuotaMock(...a.slice(0, 6))), release: releaseQuotaMock }),
 }))
 vi.mock('@/lib/vdc/vnets', async (io) => {
   const actual = await io<typeof import('@/lib/vdc/vnets')>()

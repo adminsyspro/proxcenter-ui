@@ -69,7 +69,14 @@ vi.mock('@/lib/templates/catalogGrants', async (io) => {
 })
 const resolveVdcForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const checkVdcQuotaMock = vi.fn<(...args: any[]) => Promise<any>>()
-vi.mock('@/lib/vdc/quota', () => ({ resolveVdcForTenant: resolveVdcForTenantMock, checkVdcQuota: checkVdcQuotaMock }))
+const releaseQuotaMock = vi.fn()
+vi.mock('@/lib/vdc/quota', () => ({
+  resolveVdcForTenant: resolveVdcForTenantMock,
+  checkVdcQuota: checkVdcQuotaMock,
+  // The creation paths reserve what they are admitted for (roadmap#265): same
+  // check, same arguments, plus the VMID and a release handle.
+  checkAndReserveVdcQuota: async (...a: any[]) => ({ ...(await checkVdcQuotaMock(...a.slice(0, 6))), release: releaseQuotaMock }),
+}))
 const getAllowedNetworksForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 vi.mock('@/lib/vdc/vnets', async (io) => {
   // The verdict logic is what this file exercises, so it runs for real; only
@@ -144,6 +151,7 @@ beforeEach(async () => {
   isBuiltInCatalogHiddenMock.mockReset().mockResolvedValue(false)
   resolveVdcForTenantMock.mockReset().mockResolvedValue(null)
   checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })
+  releaseQuotaMock.mockReset()
   getCurrentTenantIdMock.mockReset().mockResolvedValue('tenant-1')
   auditMock.mockReset().mockResolvedValue({})
   requireProviderTenantMock.mockReset().mockResolvedValue(null)
@@ -1349,5 +1357,32 @@ describe('POST templates/deploy: built-in catalogue turned off for the tenant', 
     const res = await callRoute(POST, { body: { ...baseBody, imageSlug: 'custom-fortigate' } })
     expect((await readJson<{ error: string }>(res))?.error).not.toMatch(/built-in image catalogue/)
     expect(isBuiltInCatalogHiddenMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST templates/deploy: the vDC quota stays reserved until the pipeline ends (roadmap#265)', () => {
+  it('reserves under the new VMID and releases when the pipeline is over', async () => {
+    stubPveFetchForDeploy()
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-a', quota: { maxVms: 5 }, storagePolicies: [] })
+    getVdcScopeMock.mockResolvedValue({ storagesByConnection: new Map([['conn-1', new Set(['local-lvm'])]]), storagePoliciesByConnection: new Map() })
+    getImageBySlugMock.mockReturnValue({ slug: 'ubuntu-22.04', format: 'qcow2', downloadUrl: 'https://img.test/u.qcow2' })
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: baseBody })
+
+    expect(res.status).toBe(200)
+    expect(checkVdcQuotaMock).toHaveBeenCalled()
+    expect(releaseQuotaMock).not.toHaveBeenCalled()
+    await runAfters()
+    expect(releaseQuotaMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('releases at once when the deployment is refused after the quota check', async () => {
+    getImageBySlugMock.mockReturnValue({ slug: 'ubuntu-22.04', format: 'qcow2', downloadUrl: 'https://img.test/u.qcow2' })
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-a', quota: { maxVms: 5 }, storagePolicies: [] })
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: { ...baseBody, storage: 'not-in-the-vdc' } })
+
+    expect(res.status).toBe(403)
+    expect(releaseQuotaMock).toHaveBeenCalledTimes(1)
   })
 })

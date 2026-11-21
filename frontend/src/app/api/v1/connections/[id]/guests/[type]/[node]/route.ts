@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextResponse, after } from "next/server"
 import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
@@ -10,7 +10,8 @@ import { checkPermission, getRequestGuestScopePerimeter, PERMISSIONS } from "@/l
 import { enforceGuestTagAccess } from "@/lib/proxmox/tagAccessServer"
 import { sensitiveNicPermissions, NicConfigError } from "@/lib/rbac/nicPermissions"
 import { getCurrentTenantId } from "@/lib/tenant"
-import { resolveVdcForTenant, checkVdcQuota } from "@/lib/vdc/quota"
+import { resolveVdcForTenant, checkAndReserveVdcQuota } from "@/lib/vdc/quota"
+import { releaseWhenTaskStops } from "@/lib/gpu/vdcPending"
 import { validateCpuAgainstPolicy, pickPolicyDefaultModel } from "@/lib/vdc/computePolicy"
 import { getAllowedNetworksForTenant, validateNetAgainstScope, resolveSubnetForBridge, parseBridgeFromNet } from "@/lib/vdc/vnets"
 import { generatePveMacAddress } from "@/lib/vdc/sdn"
@@ -86,6 +87,9 @@ async function handler(
   req: Request, 
   ctx: { params: Promise<{ id: string; type: string; node: string }> | { id: string; type: string; node: string } }
 ) {
+  // Quota of the new guest (roadmap#265): reserved from the check until its
+  // task ends, released here when the creation is not started.
+  let releaseQuota: (() => void) | null = null
   try {
     const params = await Promise.resolve(ctx.params)
     const { id, type, node } = params as { id: string; type: string; node: string }
@@ -264,14 +268,15 @@ async function handler(
         const ramMb = Number.parseInt(body.memory || '512')
         const storageMb = drives ? drives.totalAddMb : sumNewDiskStorageMb(body)
 
-        const quotaCheck = await checkVdcQuota(id, vdcInfo.poolName, vdcInfo.quota, {
+        const quotaCheck = await checkAndReserveVdcQuota(id, vdcInfo.poolName, vdcInfo.quota, {
           type: 'create',
           addVcpus: vcpus,
           addRamMb: ramMb,
           addStorageMb: storageMb,
           addStorageMbByStorage: drives?.addStorageMbByStorage,
           addVms: 1,
-        }, vdcInfo.storagePolicies, node)
+        }, vdcInfo.storagePolicies, node, String(body.vmid))
+        releaseQuota = quotaCheck.release
 
         if (!quotaCheck.allowed) {
           return NextResponse.json({
@@ -418,6 +423,16 @@ async function handler(
       throw err
     }
 
+    // The guest joins the pool from inside its task: its quota stays reserved
+    // until the task is seen stopped.
+    if (releaseQuota) {
+      const release = releaseQuota
+      const quotaUpid = typeof result === 'string' ? result : ''
+      releaseQuota = null
+      if (quotaUpid) after(() => releaseWhenTaskStops(conn, quotaUpid, node, release))
+      else release()
+    }
+
     // roadmap#192: the new guest shows on the next reload, not after the TTL.
     await refreshCachedGuests(id, conn, { type, vmid: body.vmid })
 
@@ -433,6 +448,8 @@ async function handler(
     console.error('Error creating guest:', e)
 
 return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
+  } finally {
+    releaseQuota?.()
   }
 }
 

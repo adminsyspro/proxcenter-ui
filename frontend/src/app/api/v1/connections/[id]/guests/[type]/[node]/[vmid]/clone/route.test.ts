@@ -30,6 +30,7 @@ const getConnectionByIdMock = vi.fn<(id: string) => Promise<any>>()
 const pveFetchMock = vi.fn<(...args: any[]) => Promise<any>>()
 const resolveVdcForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const checkVdcQuotaMock = vi.fn<(...args: any[]) => Promise<any>>()
+const releaseQuotaMock = vi.fn()
 const getAllowedNetworksForTenantMock = vi.fn<(...args: any[]) => Promise<any>>()
 const resolveSubnetForBridgeMock = vi.fn<(...args: any[]) => Promise<any>>()
 const syncIpamForVmConfigMock = vi.fn<(...args: any[]) => Promise<any>>()
@@ -53,6 +54,9 @@ vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-1', req
 vi.mock('@/lib/vdc/quota', () => ({
   resolveVdcForTenant: resolveVdcForTenantMock,
   checkVdcQuota: checkVdcQuotaMock,
+  // The creation paths reserve what they are admitted for (roadmap#265): same
+  // check, same arguments, plus the VMID and a release handle.
+  checkAndReserveVdcQuota: async (...a: any[]) => ({ ...(await checkVdcQuotaMock(...a.slice(0, 6))), release: releaseQuotaMock }),
 }))
 vi.mock('@/lib/vdc/vnets', async (io) => {
   // Real parser + real verdict logic, so the IPAM detection, the after() MAC
@@ -104,6 +108,7 @@ beforeEach(() => {
   getConnectionByIdMock.mockReset().mockResolvedValue({ id: 'conn-1' })
   resolveVdcForTenantMock.mockReset().mockResolvedValue(null)
   checkVdcQuotaMock.mockReset().mockResolvedValue({ allowed: true })
+  releaseQuotaMock.mockReset()
   tenantAddsGpuMock.mockReset().mockResolvedValue('none')
   cloneContingentCheckMock.mockReset().mockResolvedValue({ ok: true, demand: [] })
   resetVdcPending()
@@ -671,5 +676,64 @@ describe('POST clone: follow-ups poll the node that runs the task', () => {
     await runAfterCbs()
 
     expect(waitForTaskMock.mock.calls.map(c => c[1])).toEqual(['pve3', 'pve3', 'pve3'])
+  })
+})
+
+describe('POST clone: the vDC quota stays reserved until the task ends (roadmap#265)', () => {
+  const metered = { poolName: 'vdc-pool', quota: { maxVms: 5 }, storagePolicies: [] }
+
+  it('reserves under the new VMID and releases once the clone task is seen stopped', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(metered)
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 101 } })
+
+    expect(res.status).toBe(200)
+    expect(releaseQuotaMock).not.toHaveBeenCalled()
+    await runAfterCbs()
+    expect(waitForTaskStoppedMock).toHaveBeenCalledTimes(1)
+    expect(releaseQuotaMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the reservation when the end of the task is never seen', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(metered)
+    waitForTaskStoppedMock.mockResolvedValue({ stopped: false })
+    const POST = await loadPost()
+    await callRoute(POST, { params: baseParams, body: { newid: 101 } })
+    await runAfterCbs()
+
+    expect(releaseQuotaMock).not.toHaveBeenCalled()
+  })
+
+  it('releases at once when the clone is refused after the quota check', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(metered)
+    getAllowedNetworksForTenantMock.mockResolvedValue(new Map([['vmbr0', { kind: 'shared' as const, vlanRanges: [{ start: 100, end: 199 }] }]]))
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 101, net0: 'virtio,bridge=vmbr0,tag=250' } })
+
+    expect(res.status).toBe(403)
+    expect(releaseQuotaMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('releases at once when PVE refuses the clone', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(metered)
+    pveFetchMock.mockImplementation(async (_conn, _path, opts?: any) => {
+      if (opts?.method === 'POST') throw new Error('VM 101 already exists')
+      return {}
+    })
+    const POST = await loadPost()
+    const res = await callRoute(POST, { params: baseParams, body: { newid: 101 } })
+
+    expect(res.status).toBe(500)
+    expect(releaseQuotaMock).toHaveBeenCalledTimes(1)
+    expect(h.afterCbs).toHaveLength(0)
+  })
+
+  it('releases at once when PVE answers without a task', async () => {
+    resolveVdcForTenantMock.mockResolvedValue(metered)
+    pveFetchMock.mockImplementation(async (_conn, _path, opts?: any) => (opts?.method === 'POST' ? null : {}))
+    const POST = await loadPost()
+    await callRoute(POST, { params: baseParams, body: { newid: 101 } })
+
+    expect(releaseQuotaMock).toHaveBeenCalledTimes(1)
   })
 })

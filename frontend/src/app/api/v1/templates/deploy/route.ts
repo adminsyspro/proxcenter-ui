@@ -401,7 +401,9 @@ async function handlePost(req: Request, ctx?: { principal?: Principal }) {
       storage: body.storage,
       vmName: body.vmName,
       hardware: body.hardware,
-      cloudInit: body.cloudInit,
+      // The retry record: never the cloud-init password (roadmap#265). The
+      // pipeline reads the request body, not this.
+      cloudInit: body.cloudInit ? withoutCloudInitSecrets({ cloudInit: body.cloudInit }).cloudInit : body.cloudInit,
       ...(body.ha ? { ha: true } : {}),
       // Kept for the history and for a retry, which must land in the same
       // vDC. The record itself stays the caller's, where its progress is read.

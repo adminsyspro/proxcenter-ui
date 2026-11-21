@@ -11,3 +11,10 @@ export function withoutCloudInitSecrets<T extends object>(row: T): T {
   const { cipassword: _secret, ...rest } = cloudInit as Record<string, unknown>
   return { ...row, cloudInit: rest }
 }
+
+/** A deployment record without the cloud-init password of its stored config. */
+export function withoutStoredSecrets<T extends { config?: unknown }>(row: T): T {
+  const config = row.config
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return row
+  return { ...row, config: withoutCloudInitSecrets(config) }
+}

@@ -6,7 +6,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { withAudit } from "@/lib/audit/withAudit"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import type { Principal } from "@/lib/auth/principal"
-import { withoutCloudInitSecrets } from "@/lib/templates/blueprintSecrets"
+import { withoutStoredSecrets } from "@/lib/templates/blueprintSecrets"
 
 export const runtime = "nodejs"
 
@@ -32,10 +32,7 @@ async function handleGet(_req: Request, ctx: { params: Promise<{ id: string }> |
       const { config: _config, ...progress } = deployment
       return NextResponse.json({ data: progress })
     }
-    const config = deployment.config && typeof deployment.config === "object" && !Array.isArray(deployment.config)
-      ? withoutCloudInitSecrets(deployment.config)
-      : deployment.config
-    return NextResponse.json({ data: { ...deployment, config } })
+    return NextResponse.json({ data: withoutStoredSecrets(deployment) })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

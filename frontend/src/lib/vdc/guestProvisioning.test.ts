@@ -47,3 +47,14 @@ describe('guest provisioning after a clone (roadmap#265)', () => {
     expect(provisioningState('c1', '101', 1000 + PROVISIONING_TTL_MS)).toBeNull()
   })
 })
+
+describe('a VMID used again (roadmap#265)', () => {
+  beforeEach(() => resetGuestProvisioning())
+
+  it('a new clone with nothing to run forgets the failure of an earlier guest with that VMID', () => {
+    beginProvisioning('c1', '101', ['ipam'])('ipam', 'subnet exhausted')
+    expect(provisioningState('c1', '101')?.state).toBe('failed')
+    beginProvisioning('c1', '101', [])
+    expect(provisioningState('c1', '101')).toBeNull()
+  })
+})

@@ -543,7 +543,7 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: failure reason (#926)'
   it('omits the log lines in summary mode but still extracts the reason', async () => {
     stoppedTask('migration aborted', ['TASK ERROR: CT is locked (backup)'])
 
-    const json = await body('?summary=1')
+    const json = await body('?log=0')
 
     expect(json.failureReason).toBe('CT is locked (backup)')
     expect(json.logs).toEqual([])
@@ -551,7 +551,7 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]: failure reason (#926)'
   })
 })
 
-describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]?summary=1: the outcome without the log (roadmap#265)', () => {
+describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]?log=0: the outcome without the log (roadmap#265)', () => {
   function task(status: Record<string, unknown>) {
     pveFetchMock.mockImplementation((_conn: any, path: string) => {
       if (typeof path === 'string') {
@@ -572,22 +572,28 @@ describe('GET /api/v1/tasks/[connectionId]/[node]/[upid]?summary=1: the outcome 
 
   it('does not read the log of a running task', async () => {
     task({ status: 'running' })
-    const json = await body('?summary=1')
+    const json = await body('?log=0')
     expect(json.status).toBe('running')
     expect(logReads()).toBe(0)
   })
 
   it('does not read the log of a task that ended OK', async () => {
     task({ status: 'stopped', exitstatus: 'OK', endtime: 1004 })
-    const json = await body('?summary=1')
+    const json = await body('?log=0')
     expect(json.exitstatus).toBe('OK')
     expect(logReads()).toBe(0)
   })
 
   it('still reads the log of a failed task, for its failure reason', async () => {
     task({ status: 'stopped', exitstatus: 'clone failed', endtime: 1004 })
-    const json = await body('?summary=1')
+    const json = await body('?log=0')
     expect(json.failureReason).toContain('no space left on device')
+    expect(logReads()).toBe(1)
+  })
+
+  it('summary=1 still reads the log of a running task, for the progress the action cards show', async () => {
+    task({ status: 'running' })
+    await body('?summary=1')
     expect(logReads()).toBe(1)
   })
 

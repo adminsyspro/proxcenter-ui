@@ -31,6 +31,8 @@ export function beginProvisioning(
   opts: { ttlMs?: number; now?: number } = {},
 ): (step: string, error?: string) => void {
   const key = keyOf(connectionId, vmid)
+  // A new guest under this VMID: whatever an earlier one left is not its own.
+  store.delete(key)
   if (steps.length === 0) return () => {}
   const entry: Entry = { pending: new Set(steps), failures: [], expires: (opts.now ?? Date.now()) + (opts.ttlMs ?? PROVISIONING_TTL_MS) }
   store.set(key, entry)

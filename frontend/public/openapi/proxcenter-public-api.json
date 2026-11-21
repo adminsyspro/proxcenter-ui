@@ -4534,7 +4534,7 @@
           },
           "provisioning": {
             "type": "object",
-            "description": "Present while a clone still sets up its IPAM addresses, storage QoS or HA after its task ended (running), or when one of those steps failed (failed). Wait for it to disappear before changing the config.",
+            "description": "Present while a clone still sets up its IPAM addresses, storage QoS or HA after its task ended (running): wait for it to disappear before changing the config. `failed` is final: one of those steps failed, `failures` says which; the clone exists but needs attention.",
             "properties": {
               "state": {
                 "type": "string",
@@ -11930,7 +11930,7 @@
                     },
                     "provisioning": {
                       "type": "object",
-                      "description": "Present while a clone still sets up its IPAM addresses, storage QoS or HA after its task ended (running), or when one of those steps failed (failed). Wait for it to disappear before changing the config.",
+                      "description": "Present while a clone still sets up its IPAM addresses, storage QoS or HA after its task ended (running): wait for it to disappear before changing the config. `failed` is final: one of those steps failed, `failures` says which; the clone exists but needs attention.",
                       "properties": {
                         "state": {
                           "type": "string",
@@ -16455,7 +16455,16 @@
             "schema": {
               "type": "string"
             },
-            "description": "Set to '1' when only the outcome matters: no log lines, and the Proxmox log is read only for a failed task (its failureReason)"
+            "description": "Set to '1' to skip the log lines (the progress is still parsed from the log)"
+          },
+          {
+            "name": "log",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Set to '0' when only the outcome matters: no log lines, no progress, and the Proxmox log is read only for a failed task (its failureReason)"
           }
         ],
         "responses": {

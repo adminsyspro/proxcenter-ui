@@ -1405,6 +1405,22 @@ describe('POST templates/deploy: the vDC quota stays reserved until the pipeline
   })
 })
 
+describe('POST templates/deploy: the deployment record never keeps the cloud-init password (roadmap#265)', () => {
+  it('stores the config without the password, the pipeline still gets it', async () => {
+    stubPveFetchForDeploy()
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-a', quota: null, storagePolicies: [] })
+    getVdcScopeMock.mockResolvedValue({ storagesByConnection: new Map([['conn-1', new Set(['local-lvm'])]]), storagePoliciesByConnection: new Map() })
+    getImageBySlugMock.mockReturnValue({ slug: 'ubuntu-22.04', format: 'qcow2', downloadUrl: 'https://img.test/u.qcow2' })
+    const res = await callRoute(await loadPost(), { body: { ...baseBody, cloudInit: { ciuser: 'ops', cipassword: 's3cret', ipconfig0: 'ip=dhcp' } } })
+
+    expect(res.status).toBe(200)
+    expect(JSON.stringify(deploymentCreateMock.mock.calls[0][0].data.config)).not.toContain('s3cret')
+    await runAfters()
+    expect(JSON.stringify(deploymentUpdateMock.mock.calls)).not.toContain('s3cret')
+    expect(JSON.stringify(pveFetchMock.mock.calls)).toContain('s3cret')
+  })
+})
+
 describe('POST templates/deploy: a saved blueprint never keeps the cloud-init password (roadmap#265)', () => {
   it('saves the blueprint without the password the deployment was sent', async () => {
     stubPveFetchForDeploy()

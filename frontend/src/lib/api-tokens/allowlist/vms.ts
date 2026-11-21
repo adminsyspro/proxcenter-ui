@@ -341,7 +341,10 @@ export const VM_ENTRIES: AllowlistEntry[] = [
     summary: "Status of a Proxmox task",
     description:
       "Status, progress and log of the task {upid} started on {node}, as returned by every write that answers with a UPID. Poll it until `status` is `stopped`, then read `exitstatus` (`OK` on success) and `failureReason`. Any write scope opens it. A vDC tenant token only reads the tasks of its own guests.",
-    queryParams: [{ name: "summary", description: "Set to '1' when only the outcome matters: no log lines, and the Proxmox log is read only for a failed task (its failureReason)" }],
+    queryParams: [
+      { name: "summary", description: "Set to '1' to skip the log lines (the progress is still parsed from the log)" },
+      { name: "log", description: "Set to '0' when only the outcome matters: no log lines, no progress, and the Proxmox log is read only for a failed task (its failureReason)" },
+    ],
     responseSchemaRef: "TaskStatusResponse",
   },
 ]

@@ -353,12 +353,14 @@ async function handler(
           // the sync below would hit, so strip the pinned MAC and let PVE
           // assign a fresh one, then re-read the config before allocating.
           const macPatch = new URLSearchParams()
+          const managedSlots: string[] = []
           for (const k of Object.keys(cloneConfig || {})) {
             if (!/^net\d+$/.test(k)) continue
             const val = String(cloneConfig[k] || '')
             const bridge = parseBridgeFromNet(val)
             if (bridge && await resolveSubnetForBridge(id, bridge)) {
               macPatch.set(k, stripMacFromNet(val))
+              managedSlots.push(k.slice(3))
             }
           }
           if (Array.from(macPatch.keys()).length > 0) {
@@ -370,9 +372,15 @@ async function handler(
             cloneConfig = await pveFetch<any>(conn, cloneConfigPath)
           }
 
+          // The ipconfigN of a managed NIC is the source's address, held by
+          // the source: handed to the allocator as a wish it fails the whole
+          // sync and the clone kept that address (roadmap#265). Without it the
+          // allocator picks a free one and the override below writes it.
+          const cloneAfter = { ...cloneConfig }
+          for (const slot of managedSlots) delete cloneAfter[`ipconfig${slot}`]
           const sync = await syncIpamForVmConfig({
             before: null,
-            after: cloneConfig,
+            after: cloneAfter,
             conn,
             connectionId: id,
             vmid: newVmid,

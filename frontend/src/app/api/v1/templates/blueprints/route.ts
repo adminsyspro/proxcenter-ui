@@ -1,17 +1,18 @@
 // src/app/api/v1/templates/blueprints/route.ts
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
 
 import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
-import { authOptions } from "@/lib/auth/config"
+import { getActingSession } from "@/lib/auth/actingUser"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withoutCloudInitSecrets } from "@/lib/templates/blueprintSecrets"
 import { createBlueprintSchema } from "@/lib/schemas"
 import { listVisibleBlueprints, loadGrantSummaries, replaceTenantGrants } from "@/lib/templates/catalogGrants"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
-export async function GET() {
+async function handleGet() {
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied
@@ -24,7 +25,7 @@ export async function GET() {
     const isProvider = tenantId === DEFAULT_TENANT_ID
     const grants = isProvider ? await loadGrantSummaries('blueprint', rows.map(r => r.id)) : new Map()
     const blueprints = rows.map(row => ({
-      ...row,
+      ...withoutCloudInitSecrets(row),
       ownedByCaller: row.tenantId === tenantId,
       ...(isProvider ? { grants: grants.get(row.id) ?? { tenantIds: [], vdcIds: [] } } : {}),
     }))
@@ -41,7 +42,7 @@ async function handlePost(req: Request) {
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
     if (denied) return denied
 
-    const session = await getServerSession(authOptions)
+    const session = await getActingSession()
     const rawBody = await req.json().catch(() => null)
     if (!rawBody) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
 
@@ -94,3 +95,4 @@ async function handlePost(req: Request) {
 }
 
 export const POST = withAudit({ category: "templates", resourceType: "blueprint" }, handlePost)
+export const GET = withPublicApiGuard("templates-blueprints", handleGet)

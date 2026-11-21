@@ -29,13 +29,14 @@ const deploymentUpdateMock = vi.fn<(...args: any[]) => Promise<any>>()
 const deploymentCreateMock = vi.fn<(...args: any[]) => Promise<any>>()
 const resolveProviderVdcTargetMock = vi.fn<(...args: any[]) => Promise<any>>()
 const requireProviderTenantMock = vi.fn<() => Promise<Response | null>>()
+const blueprintCreateMock = vi.fn(async (..._a: any[]) => ({}))
 
 vi.mock('next-auth', () => ({ getServerSession: vi.fn(async () => null) }))
 vi.mock('@/lib/tenant', () => ({
   getSessionPrisma: async () => ({
     customImage: { findUnique: customImageFindUniqueMock },
     deployment: { create: deploymentCreateMock, update: deploymentUpdateMock },
-    blueprint: { create: vi.fn(async () => ({})) },
+    blueprint: { create: blueprintCreateMock },
   }),
   getCurrentTenantId: () => getCurrentTenantIdMock(),
   requireProviderTenant: () => requireProviderTenantMock(),
@@ -1384,5 +1385,20 @@ describe('POST templates/deploy: the vDC quota stays reserved until the pipeline
 
     expect(res.status).toBe(403)
     expect(releaseQuotaMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('POST templates/deploy: a saved blueprint never keeps the cloud-init password (roadmap#265)', () => {
+  it('saves the blueprint without the password the deployment was sent', async () => {
+    stubPveFetchForDeploy()
+    resolveVdcForTenantMock.mockResolvedValue({ poolName: 'pool-a', quota: null, storagePolicies: [] })
+    getVdcScopeMock.mockResolvedValue({ storagesByConnection: new Map([['conn-1', new Set(['local-lvm'])]]), storagePoliciesByConnection: new Map() })
+    getImageBySlugMock.mockReturnValue({ slug: 'ubuntu-22.04', format: 'qcow2', downloadUrl: 'https://img.test/u.qcow2' })
+    const POST = await loadPost()
+    const res = await callRoute(POST, { body: { ...baseBody, saveAsBlueprint: true, blueprintName: 'web', cloudInit: { ciuser: 'ops', cipassword: 's3cret', ipconfig0: 'ip=dhcp' } } })
+
+    expect(res.status).toBe(200)
+    expect(blueprintCreateMock).toHaveBeenCalledTimes(1)
+    expect(blueprintCreateMock.mock.calls[0][0].data.cloudInit).toEqual({ ciuser: 'ops', ipconfig0: 'ip=dhcp' })
   })
 })

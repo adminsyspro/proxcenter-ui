@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { prisma } from "@/lib/db/prisma"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { customImageToCloudImage } from "@/lib/templates/cloudImages"
 import { getEffectiveCatalog } from "@/lib/templates/catalogStore"
 import { customImageScopeWhere } from "@/lib/templates/customImageScope"
@@ -12,7 +13,7 @@ import { isBuiltInCatalogHidden } from "@/lib/templates/builtInCatalogAccess"
 
 export const runtime = "nodejs"
 
-export async function GET(req: Request) {
+async function handleGet(req: Request) {
   try {
     const denied = await checkPermission(PERMISSIONS.VM_VIEW)
     if (denied) return denied
@@ -93,3 +94,5 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("templates-catalog", handleGet)

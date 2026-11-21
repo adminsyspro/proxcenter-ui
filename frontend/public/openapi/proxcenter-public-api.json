@@ -65,6 +65,9 @@
     },
     {
       "name": "Identity"
+    },
+    {
+      "name": "Templates"
     }
   ],
   "components": {
@@ -9908,6 +9911,163 @@
                 "description": "The pxc_ secret, returned once and never again"
               }
             }
+          }
+        }
+      },
+      "TemplateCatalogResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "slug": {
+                  "type": "string",
+                  "description": "Value to send as `imageSlug` to POST /api/v1/templates/deploy"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "vendor": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "format": {
+                  "type": "string",
+                  "description": "qcow2, raw, img or iso"
+                },
+                "isCustom": {
+                  "type": "boolean"
+                },
+                "isShared": {
+                  "type": "boolean"
+                },
+                "ownedByCaller": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "TemplateBlueprintListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "imageSlug": {
+                  "type": "string"
+                },
+                "hardware": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "cloudInit": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "description": "Cloud-init defaults, never with a password",
+                  "properties": {
+                    "ciuser": {
+                      "type": "string"
+                    },
+                    "sshKeys": {
+                      "type": "string"
+                    },
+                    "ipconfig0": {
+                      "type": "string"
+                    },
+                    "nameserver": {
+                      "type": "string"
+                    },
+                    "searchdomain": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "ownedByCaller": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "TemplateBlueprintResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "imageSlug": {
+                "type": "string"
+              },
+              "hardware": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "cloudInit": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Cloud-init defaults, never with a password",
+                "properties": {
+                  "ciuser": {
+                    "type": "string"
+                  },
+                  "sshKeys": {
+                    "type": "string"
+                  },
+                  "ipconfig0": {
+                    "type": "string"
+                  },
+                  "nameserver": {
+                    "type": "string"
+                  },
+                  "searchdomain": {
+                    "type": "string"
+                  }
+                }
+              },
+              "ownedByCaller": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": true
           }
         }
       }
@@ -47676,6 +47836,474 @@
                       "error": "This operation reaches every connection: it needs a token not restricted to connections"
                     }
                   }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/templates/catalog": {
+      "get": {
+        "operationId": "templates-catalog",
+        "summary": "Images a deployment can start from",
+        "description": "The built-in cloud images (unless the provider turned them off for the tenant) and the custom images the caller owns, sees as shared, or was granted. A deployment names one by its `slug`.\n\nRequired scope: `vms:read` or `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete`",
+        "tags": [
+          "Templates"
+        ],
+        "x-required-scopes": [
+          "vms:read",
+          "vms:power",
+          "vms:write",
+          "vms:snapshot",
+          "vms:migrate",
+          "vms:delete"
+        ],
+        "parameters": [
+          {
+            "name": "vendor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Only the images of this vendor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "slug": {
+                            "type": "string",
+                            "description": "Value to send as `imageSlug` to POST /api/v1/templates/deploy"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "vendor": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "format": {
+                            "type": "string",
+                            "description": "qcow2, raw, img or iso"
+                          },
+                          "isCustom": {
+                            "type": "boolean"
+                          },
+                          "isShared": {
+                            "type": "boolean"
+                          },
+                          "ownedByCaller": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/templates/catalog"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/templates/blueprints": {
+      "get": {
+        "operationId": "templates-blueprints",
+        "summary": "Blueprints the caller can deploy",
+        "description": "Deployment recipes (image, hardware, cloud-init defaults) the caller owns, sees as shared, or was granted. A cloud-init password is never returned.\n\nRequired scope: `vms:read` or `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete`",
+        "tags": [
+          "Templates"
+        ],
+        "x-required-scopes": [
+          "vms:read",
+          "vms:power",
+          "vms:write",
+          "vms:snapshot",
+          "vms:migrate",
+          "vms:delete"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "imageSlug": {
+                            "type": "string"
+                          },
+                          "hardware": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "cloudInit": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "description": "Cloud-init defaults, never with a password",
+                            "properties": {
+                              "ciuser": {
+                                "type": "string"
+                              },
+                              "sshKeys": {
+                                "type": "string"
+                              },
+                              "ipconfig0": {
+                                "type": "string"
+                              },
+                              "nameserver": {
+                                "type": "string"
+                              },
+                              "searchdomain": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "ownedByCaller": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/templates/blueprints"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/templates/blueprints/{id}": {
+      "get": {
+        "operationId": "templates-blueprint-get",
+        "summary": "One blueprint",
+        "description": "A blueprint the caller owns, sees as shared, or was granted; 404 otherwise. A cloud-init password is never returned.\n\nRequired scope: `vms:read` or `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete`",
+        "tags": [
+          "Templates"
+        ],
+        "x-required-scopes": [
+          "vms:read",
+          "vms:power",
+          "vms:write",
+          "vms:snapshot",
+          "vms:migrate",
+          "vms:delete"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "imageSlug": {
+                          "type": "string"
+                        },
+                        "hardware": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "cloudInit": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "description": "Cloud-init defaults, never with a password",
+                          "properties": {
+                            "ciuser": {
+                              "type": "string"
+                            },
+                            "sshKeys": {
+                              "type": "string"
+                            },
+                            "ipconfig0": {
+                              "type": "string"
+                            },
+                            "nameserver": {
+                              "type": "string"
+                            },
+                            "searchdomain": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "ownedByCaller": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Route not available to API tokens",
+                  "route": "/api/v1/templates/blueprints/{id}"
                 }
               }
             }

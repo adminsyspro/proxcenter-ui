@@ -10,7 +10,7 @@ const GUEST_SCOPE: GuestScopeSpec = { connection: "id", node: "node", type: "typ
 const VM_KEY = "/api/v1/guests/{vmid}"
 const VM_KEY_FILE = "src/app/api/v1/guests/[vmid]"
 /** GET neighbours of the VM write routes: the read scope or any VM write scope. */
-const VM_READ_SCOPES = ["vms:read", "vms:power", "vms:write", "vms:snapshot", "vms:migrate", "vms:delete"]
+export const VM_READ_SCOPES = ["vms:read", "vms:power", "vms:write", "vms:snapshot", "vms:migrate", "vms:delete"]
 const NIC_IDENTITY_PERMISSIONS = ["vm.config.nic.mac", "vm.config.nic.vlan"]
 const VM_POWER_ACTIONS = ["start", "stop", "shutdown", "reboot", "reset", "suspend", "resume"] as const
 const TARGET_CONNECTION = [{ source: "body", field: "targetConnectionId" }] satisfies BodyOrQueryField[]

@@ -3,13 +3,15 @@ import { NextResponse } from "next/server"
 
 import { getSessionPrisma, getCurrentTenantId, DEFAULT_TENANT_ID } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { withoutCloudInitSecrets } from "@/lib/templates/blueprintSecrets"
 import { createBlueprintSchema } from "@/lib/schemas"
 import { findBlueprintForTenant, loadGrantSummary, replaceTenantGrants } from "@/lib/templates/catalogGrants"
 import { withAudit } from "@/lib/audit/withAudit"
 
 export const runtime = "nodejs"
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+async function handleGet(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   try {
     const params = await Promise.resolve(ctx.params)
     const id = (params as any)?.id
@@ -25,7 +27,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
     const ownedByCaller = blueprint.tenantId === tenantId
     const grants = tenantId === DEFAULT_TENANT_ID ? await loadGrantSummary('blueprint', id) : undefined
-    return NextResponse.json({ data: { ...blueprint, ownedByCaller, ...(grants ? { grants } : {}) } })
+    return NextResponse.json({ data: { ...withoutCloudInitSecrets(blueprint), ownedByCaller, ...(grants ? { grants } : {}) } })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
@@ -127,3 +129,4 @@ async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string }
 
 export const PUT = withAudit({ category: "templates", resourceType: "blueprint", resourceParam: "id" }, handlePut)
 export const DELETE = withAudit({ category: "templates", resourceType: "blueprint", resourceParam: "id" }, handleDelete)
+export const GET = withPublicApiGuard("templates-blueprint-get", handleGet)

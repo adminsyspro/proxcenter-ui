@@ -35,7 +35,7 @@ describe('PUBLIC_API_ALLOWLIST data', () => {
       expect(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).toContain(entry.method)
       expect([
         'Monitoring', 'VMs', 'Snapshots', 'Backups', 'Storage', 'HA', 'Pools', 'Network', 'Firewall', 'Tasks',
-        'Tenants', 'vDCs', 'RBAC', 'Users', 'Identity',
+        'Tenants', 'vDCs', 'RBAC', 'Users', 'Identity', 'Templates',
       ]).toContain(entry.tag)
       expect(entry.routeFile).toMatch(/^src\/app\/api\/v1\/.+\/route\.ts$/)
       expect(entry.summary.length).toBeGreaterThan(0)
@@ -112,6 +112,9 @@ describe('shared canonical matcher', () => {
       'vm-power': `${guest}/shutdown`,
       'vm-clone': `${guest}/clone`,
       'vm-nextid': '/api/v1/connections/c1/cluster/nextid',
+      'templates-catalog': '/api/v1/templates/catalog',
+      'templates-blueprints': '/api/v1/templates/blueprints',
+      'templates-blueprint-get': '/api/v1/templates/blueprints/bp1',
       'vm-template': `${guest}/template`,
       'vm-disk-resize': `${guest}/disk/resize`,
       'vm-disk-move': `${guest}/disk/move`,

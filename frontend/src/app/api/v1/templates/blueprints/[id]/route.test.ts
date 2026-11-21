@@ -21,6 +21,7 @@ vi.mock('@/lib/tenant', () => ({
   DEFAULT_TENANT_ID: 'default',
 }))
 vi.mock('@/lib/audit', () => ({ audit: m.audit }))
+vi.mock('@/lib/api-tokens/routeGuard', () => ({ withPublicApiGuard: (_id: string, handler: any) => handler }))
 vi.mock('@/lib/templates/catalogGrants', () => ({
   findBlueprintForTenant: m.findBlueprintForTenant,
   loadGrantSummary: m.loadGrantSummary,
@@ -71,6 +72,20 @@ describe('GET /api/v1/templates/blueprints/[id] (#903)', () => {
     m.findBlueprintForTenant.mockResolvedValue(null)
     const res = await callRoute(GET as any, { method: 'GET', params })
     expect(res.status).toBe(404)
+  })
+})
+
+describe('blueprints/[id] never hands out a cloud-init password (roadmap#265)', () => {
+  it('answers a row saved before with a password without it', async () => {
+    m.findBlueprintForTenant.mockResolvedValue({ id: 'bp-1', tenantId: 'tenant-1', cloudInit: { ciuser: 'ops', cipassword: 's3cret' } })
+    const json = await readJson<any>(await callRoute(GET as any, { method: 'GET', params }))
+    expect(json.data.cloudInit).toEqual({ ciuser: 'ops' })
+  })
+
+  it('saves an update without the password it was sent', async () => {
+    const res = await callRoute(PUT as any, { method: 'PUT', params, body: { ...body, cloudInit: { ciuser: 'ops', cipassword: 's3cret' } } })
+    expect(res.status).toBe(200)
+    expect(m.update.mock.calls[0][0].data.cloudInit).toEqual({ ciuser: 'ops', ipconfig0: 'ip=dhcp' })
   })
 })
 

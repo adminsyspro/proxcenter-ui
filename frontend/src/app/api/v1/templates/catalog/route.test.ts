@@ -6,6 +6,7 @@ const findManyMock = vi.fn<(...a: any[]) => Promise<any[]>>()
 const getEffectiveCatalogMock = vi.fn<() => Promise<any>>()
 const isBuiltInCatalogHiddenMock = vi.fn<(tenantId: string) => Promise<boolean>>()
 
+vi.mock('@/lib/api-tokens/routeGuard', () => ({ withPublicApiGuard: (_id: string, handler: any) => handler }))
 vi.mock('@/lib/rbac', () => ({
   checkPermission: (...a: any[]) => checkPermissionMock(...a),
   PERMISSIONS: { VM_VIEW: 'vm.view' },

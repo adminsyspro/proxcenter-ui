@@ -7,6 +7,7 @@ import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { sensitiveNicPermissions, NicConfigError } from "@/lib/rbac/nicPermissions"
 import { authOptions } from "@/lib/auth/config"
 import { deploySchema } from "@/lib/schemas"
+import { withoutCloudInitSecrets } from "@/lib/templates/blueprintSecrets"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { refreshCachedGuests } from "@/lib/cache/guestSetRefresh"
 import { pveFetch } from "@/lib/proxmox/client"
@@ -416,7 +417,7 @@ async function handlePost(req: Request) {
           name: body.blueprintName,
           imageSlug: body.imageSlug,
           hardware: body.hardware,
-          cloudInit: body.cloudInit ?? null,
+          cloudInit: body.cloudInit ? withoutCloudInitSecrets({ cloudInit: body.cloudInit }).cloudInit : null,
           createdBy: session?.user?.id || null,
         },
       }).catch(() => {}) // Non-blocking

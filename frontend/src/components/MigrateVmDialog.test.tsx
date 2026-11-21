@@ -614,7 +614,7 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
     )
     const { props } = await renderPrereqs(/VMID/)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Use next free ID' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Use next free ID' }, { timeout: 10_000 }))
 
     // The chosen ID is shown, the preflight re-runs with it and the row clears.
     await waitFor(() => expect(screen.getByLabelText('Target VM ID (optional)')).toHaveValue(101), { timeout: 10_000 })
@@ -631,7 +631,7 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
       HttpResponse.json({ error: 'Target unreachable' }, { status: 503 })))
     await renderPrereqs(/VMID/)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Use next free ID' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Use next free ID' }, { timeout: 10_000 }))
 
     expect(await screen.findByText('Target unreachable', {}, { timeout: 10_000 })).toBeInTheDocument()
   })

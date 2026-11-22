@@ -169,8 +169,9 @@ describe('a policy of one cluster', () => {
     for (const id of ids) expect(await node(id)).toBeTruthy()
     await settled()
 
-    expect(urls().sort()).toEqual([
-      `${BASE}/clusters`, `${BASE}/policy`, `${BASE}/runs?limit=100`, `${BASE}/status`, `${BASE}/suggestions?status=pending&limit=200`, GUESTS_ROUTE,
+    // The same reads, plus the sFlow volume totals of the map's period (no Proxmox call).
+    expect(urls().map(u => (u.startsWith(`${BASE}/volume?`) && u.includes('totals=1') ? `${BASE}/volume` : u)).sort()).toEqual([
+      `${BASE}/clusters`, `${BASE}/policy`, `${BASE}/runs?limit=100`, `${BASE}/status`, `${BASE}/suggestions?status=pending&limit=200`, GUESTS_ROUTE, `${BASE}/volume`,
     ].sort())
     expect(screen.queryAllByTestId(/^node-pvecluster:/)).toHaveLength(0)
     expect(screen.queryAllByTestId(/^node-guest:.*c1\//)).toHaveLength(0)

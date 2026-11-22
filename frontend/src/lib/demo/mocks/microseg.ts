@@ -376,6 +376,47 @@ function traffic(params: URLSearchParams, now: number) {
   return { step, from: new Date(from).toISOString(), to: new Date(to).toISOString(), buckets }
 }
 
+/** The bytes an allowed flow of the demo policy carries in an hour, by its port: a database pair is busier than DNS. */
+const ALLOWED_BYTES_PER_HOUR: Record<string, number> = { '443': 6e9, '8080': 4e9, '3306': 2.5e9, '5432': 3.5e9, '6379': 8e8, '53': 4e7, '389': 1.2e8, '9100': 6e7 }
+
+/**
+ * GET /volume: what sFlow would measure between the zones, per bucket (or summed with `totals=1`): the allowed flows of
+ * the demo policy with their own day curve, and the observed ones (what crossed the bridge before the firewall). The
+ * services of a pair are summed with `group=pair`.
+ */
+function volume(params: URLSearchParams, now: number) {
+  const totals = params.get('totals') === '1'
+  const step = totals ? 300 : Math.max(Number(params.get('step')) || 300, 300)
+  const to = Number.isNaN(Date.parse(params.get('to') ?? '')) ? now : Date.parse(params.get('to')!)
+  const from = Math.max(Number.isNaN(Date.parse(params.get('from') ?? '')) ? to - HOUR : Date.parse(params.get('from')!), to - TRAFFIC_MAX_BUCKETS * step * 1000)
+  const byPair = params.get('group') === 'pair'
+  const series = [
+    ...FLOWS.map((f, index) => ({ src: f.src, dst: f.dst, proto: f.proto, port: Number(f.dport) || 0, perHour: ALLOWED_BYTES_PER_HOUR[f.dport] ?? 1e8, index })),
+    ...flowSeries().map(f => ({
+      src: f.out ? f.zone : f.srcZone, dst: f.out ? f.srcZone : f.zone, proto: String(f.seed.proto), port: f.seed.proto === 'tcp' || f.seed.proto === 'udp' ? Number(f.seed.dport) || 0 : 0,
+      perHour: f.perHour * 1_500, index: f.index + 40,
+    })),
+  ]
+  const sums = new Map<string, { at: number; src_zone: string; dst_zone: string; proto: string; port: number; bytes: number; packets: number }>()
+  for (let at = from - (from % (step * 1000)); at < to; at += step * 1000) {
+    if (at > now) break
+    const n = at / (step * 1000)
+    for (const f of series) {
+      const day = 0.6 + 0.4 * Math.sin((2 * Math.PI * at) / DAY + f.index * 1.3)
+      const bytes = Math.round(f.perHour * (step / 3600) * day * (0.8 + 0.4 * noise(n, f.index)))
+      if (bytes <= 0) continue
+      const bucket = totals ? from : at
+      const key = [bucket, f.src, f.dst, byPair ? '' : f.proto, byPair ? 0 : f.port].join('|')
+      const row = sums.get(key) ?? { at: bucket, src_zone: f.src, dst_zone: f.dst, proto: byPair ? '' : f.proto, port: byPair ? 0 : f.port, bytes: 0, packets: 0 }
+      row.bytes += bytes
+      row.packets += Math.round(bytes / 900)
+      sums.set(key, row)
+    }
+  }
+  const buckets = [...sums.values()].map(r => ({ ...r, at: new Date(r.at).toISOString() }))
+  return { step, from: new Date(from).toISOString(), to: new Date(to).toISOString(), covered: true, buckets }
+}
+
 const EVENTS_RING = 240
 
 /** GET /events: the last flows the engine read, newest first, one every few seconds, taken in turn from the pending flows. */
@@ -446,7 +487,7 @@ function coverage(now: number) {
 
 export const MICROSEG_MOCKS: DemoMockMap = {}
 
-const ROUTE = /^\/api\/v1\/firewall\/microseg\/[^/]+\/(policy|status|drifts|preflight|suggestions|runs|revisions|traffic|events)(?:\/([^/]+))?$/
+const ROUTE = /^\/api\/v1\/firewall\/microseg\/[^/]+\/(policy|status|drifts|preflight|suggestions|runs|revisions|traffic|volume|events)(?:\/([^/]+))?$/
 
 /** The guest coverage the Dashboard reads (its chips, its "To do" list, the groupings by VLAN and node): same guests, same zones. */
 const COVERAGE_ROUTE = /^\/api\/v1\/firewall\/coverage\/[^/]+$/
@@ -487,6 +528,7 @@ export const resolveMicrosegMock: DemoMockResolver = (method, cleanPath, url) =>
       return { runs: RUNS.slice(offset, offset + limit).map(r => runRow(r, now)), limit, offset }
     }
     case 'traffic': return traffic(url.searchParams, now)
+    case 'volume': return volume(url.searchParams, now)
     case 'events': return events(url.searchParams, now)
     default: {
       const params = url.searchParams

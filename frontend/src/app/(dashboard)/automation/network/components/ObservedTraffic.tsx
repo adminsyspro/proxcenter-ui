@@ -7,6 +7,7 @@ import { useFormatter, useTranslations } from 'next-intl'
 import PostureCard from './PostureCard'
 import type { BlockPhase } from './dashboardModel'
 import type { SuggestionKind } from '@/lib/microseg/types'
+import { volumeText, type VolumeFigure } from '@/lib/microseg/volume'
 
 import { observedTokens, type PostureDistribution, type ServicePart, type ServiceRow, type ServiceStatus, type Share } from './dashboardPosture'
 import type { ObservedService } from './microseg/microsegTabTypes'
@@ -76,9 +77,11 @@ const textOf = (color: string, mode: 'light' | 'dark') => (mode === 'dark' ? lig
  * tiles). The three tiles of flows open what they count: the Policy for the allowed ones, the Observation list on
  * their type for the others.
  */
-export function TrafficDistribution({ phase, distribution, onOpenObserved, onOpenUnknown, onOpenPolicy }: {
+export function TrafficDistribution({ phase, distribution, allowedVolume = null, onOpenObserved, onOpenUnknown, onOpenPolicy }: {
   phase: BlockPhase
   distribution: PostureDistribution
+  /** The volume sFlow measured on the allowed flows over the range; null when sFlow does not measure the connection. */
+  allowedVolume?: VolumeFigure | null
   onOpenObserved?: (kind: SuggestionKind) => void
   /** Opens the flows whose source is in no zone. */
   onOpenUnknown?: () => void
@@ -112,7 +115,15 @@ export function TrafficDistribution({ phase, distribution, onOpenObserved, onOpe
       <Box sx={TILE_GRID}>
         <Tile testId='tile-east-west' label={t('postureEastWest')} value={none ? '-' : percent(d.eastWest)} caption={hits(d.eastWest)} color={textOf(EDGE_COLORS.blocked, mode)} />
         <Tile testId='tile-unknown' label={t('postureUnknownSource')} value={none ? '-' : percent(d.unknown)} caption={hits(d.unknown)} color={textOf(EDGE_COLORS.unprotected, mode)} onClick={none ? undefined : onOpenUnknown} />
-        <Tile testId='tile-allowed' label={t('postureAllowed')} value={t('postureFlows', { count: d.allowed })} caption={t('postureNoCounter')} hint={t('postureNoCounterHint')} color={textOf(EDGE_COLORS.allowed, mode)} onClick={onOpenPolicy} />
+        <Tile
+          testId='tile-allowed'
+          label={t('postureAllowed')}
+          value={t('postureFlows', { count: d.allowed })}
+          caption={allowedVolume ? t('postureVolumeMeasured', { bytes: volumeText(allowedVolume, 1) }) : t('postureNoCounter')}
+          hint={allowedVolume ? t('postureVolumeMeasuredHint', { packets: format.number(allowedVolume.packets) }) : t('postureNoCounterHint')}
+          color={textOf(EDGE_COLORS.allowed, mode)}
+          onClick={onOpenPolicy}
+        />
         <Tile testId='tile-would-block' label={t('postureWouldBlock')} value={t('postureFlows', { count: d.wouldBlock })} caption={t('postureAwaitingDecision')} color={textOf(EDGE_COLORS.unprotected, mode)} onClick={onOpenObserved && (() => onOpenObserved('would_block'))} />
         <Tile testId='tile-blocked' label={t('postureBlocked')} value={t('postureFlows', { count: d.blocked })} caption={blockedCaption} color={textOf(EDGE_COLORS.blocked, mode)} onClick={onOpenObserved && (() => onOpenObserved('blocked'))} />
       </Box>
@@ -150,9 +161,11 @@ function PartChip({ part, several, onClick }: { part: ServicePart; several: bool
  * opens the Observation list on the service, a status on the service and that type of flow; an allowed status opens
  * the Policy. Under the table, how many services it leaves out and a link to every observed flow.
  */
-export function TopServices({ phase, rows, total, onOpenService, onOpenPolicy, onOpenAll }: {
+export function TopServices({ phase, rows, total, volumeOf, onOpenService, onOpenPolicy, onOpenAll }: {
   phase: BlockPhase
   rows: ServiceRow[]
+  /** The bytes sFlow measured for the tokens of a service over the range; absent when sFlow does not measure the connection (no column). */
+  volumeOf?: (tokens: readonly string[]) => VolumeFigure
   /** Every service seen, the rows being the busiest of them. */
   total?: number
   onOpenService?: (service: ObservedService, kind?: SuggestionKind) => void
@@ -183,6 +196,7 @@ export function TopServices({ phase, rows, total, onOpenService, onOpenPolicy, o
               <TableCell>{t('postureColService')}</TableCell>
               <TableCell align='right'>{t('postureColFlows')}</TableCell>
               <TableCell align='right'>{t('postureColHits')}</TableCell>
+              {volumeOf && <TableCell align='right'>{t('postureColVolume')}</TableCell>}
               <TableCell>{t('postureColStatus')}</TableCell>
             </TableRow>
           </TableHead>
@@ -212,6 +226,7 @@ export function TopServices({ phase, rows, total, onOpenService, onOpenPolicy, o
                       ? <Tooltip title={t('postureNoCounterHint')}><Typography variant='body2' color='text.secondary' component='span'>{t('postureNoCounter')}</Typography></Tooltip>
                       : format.number(row.hits)}
                   </TableCell>
+                  {volumeOf && <TableCell align='right' sx={{ whiteSpace: 'nowrap' }} data-testid={`service-volume-${row.key}`}>{volumeText(volumeOf(row.tokens), 1)}</TableCell>}
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                       {row.parts.map(part => <PartChip key={part.status} part={part} several={row.parts.filter(p => p.hits !== null).length > 1} onClick={openPart(part)} />)}

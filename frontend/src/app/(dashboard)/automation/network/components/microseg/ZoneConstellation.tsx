@@ -6,6 +6,7 @@ import { Box, IconButton, Tooltip, Typography, alpha, useMediaQuery, useTheme } 
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
+import { volumeText } from '@/lib/microseg/volume'
 
 import {
   MAX_PITCH, MAX_ZOOM, MIN_ZOOM, OUTER_RADIUS, OUTER_TILT, arcPoints, buildConstellation, clamp, depthLook, hiddenChips, hiddenNames, orbitRing, project, rotate, sphereRadius, trimmedPath,
@@ -609,7 +610,12 @@ export default function ZoneConstellation({ nodes, edges, onSelectZone, onEnterZ
   const centreMembers = centreZone && centreZone.members !== null ? tNode('members', { count: centreZone.members }) : null
   const centreSelected = !!scene.centre?.selected
   const labelled = arcs.length <= LABELLED_ARCS
-  const arcLabel = (d: MapEdgeData) => [d.label, d.hits === null ? null : format.number(d.hits, { notation: 'compact' })].filter(Boolean).join(' · ')
+  // The label of a hovered arc: its services, its log occurrences and the volume sFlow measured, all already loaded.
+  const arcLabel = (d: MapEdgeData) => [
+    d.label,
+    d.hits === null ? null : format.number(d.hits, { notation: 'compact' }),
+    d.volume && d.volume.bytes > 0 ? volumeText(d.volume, 1) : null,
+  ].filter(Boolean).join(' · ')
   const controlSx = { width: 28, height: 28, borderRadius: 0, color: 'text.primary', borderBottom: 1, borderColor: 'divider', '&:last-of-type': { borderBottom: 0 }, '&:hover': { bgcolor: 'action.hover' } } as const
 
   return (

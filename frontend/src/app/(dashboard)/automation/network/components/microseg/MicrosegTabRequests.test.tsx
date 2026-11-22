@@ -50,7 +50,11 @@ describe('requests of the tab on load, one cluster', () => {
       `GET ${BASE}/suggestions?status=pending&limit=200`,
       'GET /api/v1/vms?connId=c1',
     ]
-    expect([...issued].sort()).toEqual([...before, `GET ${BASE}/clusters`].sort())
+    // Plus the sFlow volume totals of the map's period (the orchestrator's database, no Proxmox call).
+    const volume = issued.filter(r => r.startsWith(`GET ${BASE}/volume?`))
+    expect(volume).toHaveLength(1)
+    expect(volume[0]).toContain('totals=1')
+    expect(issued.filter(r => !volume.includes(r)).sort()).toEqual([...before, `GET ${BASE}/clusters`].sort())
     for (const r of issued) {
       expect(r).not.toContain('connection=')
       if (r.includes('/firewall/microseg/')) expect(r.startsWith(`GET ${BASE}/`) || r.startsWith(`POST ${BASE}/`)).toBe(true)

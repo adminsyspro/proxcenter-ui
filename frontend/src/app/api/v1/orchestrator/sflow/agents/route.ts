@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { asRoot, SFLOW_MIN_SAMPLING } from "@/lib/ssh/sudo"
+import { SFLOW_MIN_SAMPLING } from "@/lib/ssh/sudo"
 
 import { getCurrentTenantId, getSessionPrisma, requireProviderTenant } from "@/lib/tenant"
-import { orchestratorFetch } from "@/lib/orchestrator"
-import { executeSSH } from "@/lib/ssh/exec"
-import { managedHostSshEndpoint, type NodeSshEndpoint } from "@/lib/ssh/node-endpoint-core"
+import { managedHostSshEndpoint } from "@/lib/ssh/node-endpoint-core"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { audit } from "@/lib/audit"
 import { applySFlowOnNode, type SFlowDesiredConfig } from "@/lib/sflow/configure"
-import { GUEST_MACS_COMMAND, parseGuestMACs } from "@/lib/sflow/guestMacs"
+import { collectGuestMACs, probeHost, type NodeSFlowStatus } from "@/lib/sflow/probe"
 import { saveDesiredSFlowConfig } from "@/lib/sflow/reconciler"
 import { reportExpectedAgents, type ExpectedAgentReport } from "@/lib/sflow/expectedAgents"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -20,25 +18,6 @@ const COLLECTOR_TARGET_RE = /^[A-Za-z0-9._:[\]-]{1,255}$/
 
 export const runtime = "nodejs"
 
-interface NodeSFlowStatus {
-  node: string
-  ip: string
-  connectionId: string
-  connectionName: string
-  online: boolean
-  hasOvs: boolean
-  ovsVersion: string
-  sflowConfigured: boolean
-  sflowTarget: string
-  sflowSampling: number
-  // Counter polling interval in seconds, the cadence a healthy agent speaks
-  // at even with every guest powered off (roadmap#52).
-  sflowPolling: number
-  bridges: string[]
-  // Why the port map push failed, when it did. Swallowing it made a node that
-  // could never attribute a flow look identical to one waiting for traffic.
-  portMapError: string
-}
 
 // Tell the orchestrator which nodes it should hear from (roadmap#52). Only the
 // nodes the probe reached: an unreachable node is unknown, not unconfigured,
@@ -67,28 +46,6 @@ function toExpectedAgent(n: NodeSFlowStatus, reconfigured = false): ExpectedAgen
   }
 }
 
-// Read every guest NIC MAC of a cluster, from any one of its nodes. The command
-// and the parsing live in @/lib/sflow/guestMacs, which documents why the path is
-// what it is.
-//
-// Tries the hosts in turn: one reachable node answers for the whole cluster, and
-// depending on a single one would lose the whole table whenever that node is down.
-// Every probe of this route only reads, so a cluster outside the license is
-// still listed with its sFlow state (roadmap#58); configuring it is refused.
-const READ_ONLY = { readOnly: true }
-
-async function collectGuestMACs(connId: string, ips: NodeSshEndpoint[]): Promise<Record<string, number>> {
-  for (const ip of ips) {
-    const result = await executeSSH(connId, ip, GUEST_MACS_COMMAND, undefined, READ_ONLY)
-    if (!result.success) continue
-
-    const macs = parseGuestMACs(result.output ?? "")
-    if (Object.keys(macs).length > 0) return macs
-  }
-
-  return {}
-}
-
 // In-memory TTL cache per tenant. Each GET probes every node of every PVE connection
 // over SSH (4 commands per node) plus pushes a port map to the Go orchestrator, so
 // caching eliminates the SSH storm when users navigate back to the Network Flows page.
@@ -97,106 +54,6 @@ const agentsCache = new Map<string, { at: number; data: NodeSFlowStatus[] }>()
 
 function invalidateAgentsCache(tenantId: string) {
   agentsCache.delete(tenantId)
-}
-
-// Probe a single PVE node over its SSH endpoint (`ssh`): detect OVS, capture
-// version + sFlow config, and push the port map to the Go orchestrator, keyed
-// by `ip`, the node's own address (the sFlow agent address). Returns a status entry even on failure
-// so the UI can show the node as offline. Independent SSH commands run in
-// parallel once OVS presence is confirmed.
-async function probeHost(
-  connId: string,
-  connName: string,
-  nodeName: string,
-  ip: string,
-  ssh: NodeSshEndpoint,
-  guestMacs: Record<string, number>,
-): Promise<NodeSFlowStatus> {
-  const nodeStatus: NodeSFlowStatus = {
-    node: nodeName,
-    ip,
-    connectionId: connId,
-    connectionName: connName,
-    online: true,
-    hasOvs: false,
-    ovsVersion: "",
-    sflowConfigured: false,
-    sflowTarget: "",
-    sflowSampling: 0,
-    sflowPolling: 0,
-    bridges: [],
-    portMapError: "",
-  }
-
-  try {
-    const bridgesResult = await executeSSH(connId, ssh, `${asRoot("ovs-vsctl list-br")} 2>/dev/null || true`, undefined, READ_ONLY)
-    let hasBridges = bridgesResult.success && !!bridgesResult.output?.trim()
-
-    if (!hasBridges) {
-      // Fallback: ovs-vsctl may not be in PATH — probe with which
-      const whichResult = await executeSSH(connId, ssh, `which ovs-vsctl 2>/dev/null && ${asRoot("ovs-vsctl list-br")}`, undefined, READ_ONLY)
-      if (whichResult.success && whichResult.output?.trim()) {
-        const lines = whichResult.output.trim().split("\n").filter(Boolean)
-        if (lines.length > 0 && lines[0].includes("ovs-vsctl")) {
-          hasBridges = true
-          nodeStatus.hasOvs = true
-          nodeStatus.bridges = lines.slice(1)
-        }
-      }
-    }
-
-    if (hasBridges) {
-      nodeStatus.hasOvs = true
-      if (!nodeStatus.bridges.length && bridgesResult.output?.trim()) {
-        nodeStatus.bridges = bridgesResult.output.trim().split("\n").filter(Boolean)
-      }
-
-      // Run the three remaining probes concurrently since they're independent
-      const [versionResult, sflowResult, ipLinkResult] = await Promise.all([
-        executeSSH(connId, ssh, `${asRoot("ovs-vsctl --version")} 2>/dev/null | head -1 || true`, undefined, READ_ONLY),
-        executeSSH(connId, ssh, `${asRoot("ovs-vsctl list sflow")} 2>/dev/null | grep -E 'targets|agent|sampling|polling' || true`, undefined, READ_ONLY),
-        executeSSH(connId, ssh, "ip -o link 2>/dev/null", undefined, { ...READ_ONLY, asAccount: true }),
-      ])
-
-      if (versionResult.success && versionResult.output?.trim()) {
-        const match = versionResult.output.match(/(?<!\d)(\d+\.\d+\.\d+)/)
-        if (match) nodeStatus.ovsVersion = match[1]
-      }
-
-      if (sflowResult.success && sflowResult.output?.includes("targets")) {
-        nodeStatus.sflowConfigured = true
-        const targetMatch = sflowResult.output.match(/targets\s*:\s*\["?([^"\]]+)/)
-        if (targetMatch) nodeStatus.sflowTarget = targetMatch[1]
-        const samplingMatch = sflowResult.output.match(/sampling\s*:\s*(\d+)/)
-        if (samplingMatch) nodeStatus.sflowSampling = Number.parseInt(samplingMatch[1], 10)
-        const pollingMatch = sflowResult.output.match(/polling\s*:\s*(\d+)/)
-        if (pollingMatch) nodeStatus.sflowPolling = Number.parseInt(pollingMatch[1], 10)
-      }
-
-      // Refresh the Go orchestrator port map so sFlow samples can be attributed
-      // to a guest: by ifIndex when the guest port is on the sampled bridge, by
-      // guest MAC otherwise. The failure is reported rather than swallowed,
-      // because a silent failure here is indistinguishable from "no traffic".
-      if ((ipLinkResult.success && ipLinkResult.output) || Object.keys(guestMacs).length > 0) {
-        try {
-          await orchestratorFetch("/sflow/portmap", {
-            method: "POST",
-            body: {
-              agent_ip: ip,
-              ip_link_output: ipLinkResult.output ?? "",
-              guest_macs: guestMacs,
-            },
-          })
-        } catch (e: any) {
-          nodeStatus.portMapError = e?.message || "port map push failed"
-        }
-      }
-    }
-  } catch {
-    nodeStatus.online = false
-  }
-
-  return nodeStatus
 }
 
 // Record the outcome of a configure run. Without this there is no trace at all

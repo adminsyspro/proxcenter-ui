@@ -5669,6 +5669,19 @@
       },
       "apiTokensTitle": "仅限于此连接的 API 令牌",
       "apiTokensHint": "删除后它们将无法访问任何内容。这不会阻止删除。"
+    },
+    "sflow": {
+      "tabLabel": "sFlow",
+      "description": "使用 Open vSwitch 的 Proxmox 节点上的 sFlow 代理。其采样给出微分段（网络安全）各区域之间的流量。",
+      "noNode": "没有可通过 SSH 访问的 Proxmox 节点",
+      "target": "收集器",
+      "sampling": "采样",
+      "flowRate": "速率",
+      "samples": "样本",
+      "nodes": "{count} 个节点",
+      "noOvs": "无 OVS",
+      "samplingRate": "采样率（每 N 个数据包取 1 个）",
+      "samplingLoad": "节点负载"
     }
   },
   "green": {
@@ -9757,7 +9770,18 @@
       "clustersDrifts": "{count, plural, =0 {无偏差} other {# 个偏差}}",
       "clustersFiguresMissing": "数据缺失",
       "clustersOutOfScope": "不在您的权限范围内",
-      "clustersHiddenTraffic": "{count, plural, other {不包括您权限范围外 # 个集群的流量。}}"
+      "clustersHiddenTraffic": "{count, plural, other {不包括您权限范围外 # 个集群的流量。}}",
+      "postureVolumeMeasured": "sFlow 测得 {bytes}",
+      "postureVolumeMeasuredHint": "该时段内允许流量的数据量，由 Open vSwitch 上的 sFlow 测得（{packets} 个数据包）",
+      "postureColVolume": "数据量",
+      "postureTalkersTitle": "最活跃的虚拟机",
+      "postureTalkersEmpty": "sFlow 目前未测得任何虚拟机流量",
+      "postureColGuest": "虚拟机",
+      "postureColNode": "节点",
+      "postureColIn": "接收",
+      "postureColOut": "发送",
+      "postureUnitLabel": "图表统计的内容",
+      "postureUnitEvents": "连接"
     },
     "rulesOnDemand": {
       "chip": "打开时加载规则",
@@ -14590,7 +14614,27 @@
         "exception": "例外：{services}",
         "exceptionCount": "{count, plural, other {# 条例外}}",
         "exceptionsBetween": "{count, plural, other {两个区域的虚拟机之间有 # 条例外}}",
-        "pairsSampled": "引擎保留的示例对："
+        "pairsSampled": "引擎保留的示例对：",
+        "volumeNone": "该时段内 sFlow 未测得流量",
+        "volumeSpark": "{range}内峰值 {peak}",
+        "volumeSparkPair": "整个区域对 {from} → {to}，{range}内峰值 {peak}",
+        "statHits": "日志次数",
+        "statVolume": "流量",
+        "statPackets": "数据包",
+        "statEdgeVolume": "此边流量",
+        "statPairVolume": "整个区域对",
+        "volumeNote": "由 sFlow 在地图时段内测量",
+        "volumeNoteRange": "由 sFlow 测量的流量，{range} 内",
+        "volumeBlockedNote": "防火墙拒绝前由 sFlow 采样",
+        "volumeBlockedNoteRange": "防火墙拒绝前 sFlow 看到的流量，{range} 内",
+        "volumeFewSamples": "≈ 基于 {count, plural, other {# 个 sFlow 样本}} 的估算",
+        "volumeShared": "其部分流量计入另一条边（每个字节在地图上只计一次）",
+        "volumeSharedAll": "其全部流量计入其他边：图表显示整个区域对",
+        "volumeUntold": "区域对的其余部分未按虚拟机细分（此前已计入，或超出上限）",
+        "colService": "服务",
+        "colHits": "次数",
+        "colSeen": "最后出现",
+        "hitsSampled": "次数按两个区域之间统计（显示示例对）"
       },
       "panel": {
         "label": "区域 {name}",
@@ -14733,6 +14777,7 @@
       "sankey": {
         "label": "以条带显示区域之间的流量",
         "note": "条带宽度取决于观察到的流的命中次数。允许的流没有计数器：以细线绘制。",
+        "noteVolume": "带的宽度取决于 sFlow 测得的流量。没有流量的带以细线绘制。",
         "flows": "{count, plural, other {# 条允许的流}}",
         "sources": "来源",
         "destinations": "目标",
@@ -14818,7 +14863,8 @@
         "topBoth": "主要来源和目的地",
         "topBothEmpty": "此时间范围内没有来源或目的地",
         "fromInto": "从 {name} 进入此区域",
-        "toFrom": "从此区域到 {name}"
+        "toFrom": "从此区域到 {name}",
+        "volumeSummary": "该时段内 sFlow 测得：{bytes}，{packets} 个数据包"
       },
       "services": {
         "button": "服务",

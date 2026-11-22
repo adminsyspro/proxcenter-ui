@@ -5,11 +5,13 @@ import { Box, Tooltip, Typography, useTheme } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { serviceTokensTitle } from '@/lib/network/serviceNames'
+import { volumeText } from '@/lib/microseg/volume'
 
 import type { MatrixEnd, MatrixModel } from './matrixModel'
-import { BAR_W, FILL_ENTER_WIDTH, FILL_MIN_WIDTH, FOOT, HEAD, buildSankey, type Ribbon, type SankeyLayout, type SankeyNode } from './sankeyModel'
+import { BAR_W, FILL_ENTER_WIDTH, FILL_MIN_WIDTH, FOOT, HEAD, buildSankey, type Ribbon, type SankeyLayout, type SankeyNode, type SankeyVolume } from './sankeyModel'
 import { useBoxSize } from './useBoxSize'
-import { EDGE_COLORS, EXTERNAL_ID, type FlowFilters } from './zoneGraph'
+import { EDGE_COLORS, EXTERNAL_ID, type FlowFilters, type MapEdgeData } from './zoneGraph'
+import { EDGE_CARD_TOOLTIP, EdgeDetails } from './FlowEdge'
 import { onKeys } from './ZoneNode'
 import TruncatedText from './TruncatedText'
 
@@ -112,6 +114,8 @@ type Props = {
   onSelectZone: (zoneId: string) => void
   names: { end: (e: Pick<MatrixEnd, 'kind' | 'zone'>) => string }
   target?: SankeyTarget | null
+  /** The volume measured by sFlow over the period of the map: the ribbons are then as wide as their bytes. */
+  volume?: SankeyVolume | null
 }
 
 /**
@@ -120,7 +124,7 @@ type Props = {
  * counter, the note says so). Hovering a ribbon or a node lights it and dims the rest; a click (or enter) on a
  * ribbon opens the flow panel of its pair, on a zone its panel.
  */
-export default function ZoneSankey({ model, filters, selectedCell, selectedZone, onSelectCell, onSelectZone, names, target = null }: Props) {
+export default function ZoneSankey({ model, filters, selectedCell, selectedZone, onSelectCell, onSelectZone, names, target = null, volume = null }: Props) {
   const t = useTranslations('microsegPilot.overview')
   const theme = useTheme()
   const [focus, setFocus] = useState<Focus>(null)
@@ -132,7 +136,7 @@ export default function ZoneSankey({ model, filters, selectedCell, selectedZone,
   const [filling, setFilling] = useState(false)
   const fillNow = !!size && size.width >= (filling ? FILL_MIN_WIDTH : FILL_ENTER_WIDTH)
   if (fillNow !== filling) setFilling(fillNow)
-  const layout = useMemo(() => buildSankey(model, filters, fillNow ? size : null), [model, filters, size, fillNow])
+  const layout = useMemo(() => buildSankey(model, filters, fillNow ? size : null, volume), [model, filters, size, fillNow, volume])
   const lit = litRibbons(layout, focus, selectedCell, selectedZone)
   const byWidth = useMemo(() => [...layout.ribbons].sort((a, b) => b.width - a.width), [layout.ribbons])
   const height = HEAD + layout.height + FOOT
@@ -143,10 +147,19 @@ export default function ZoneSankey({ model, filters, selectedCell, selectedZone,
   const nameOf = (n: Pick<SankeyNode, 'id' | 'zone'>, side: Side) => names.end({ kind: endKind(n.id, side), zone: n.zone })
   const nodeOf = new Map([...layout.sources.map(n => [`s:${n.id}`, n] as const), ...layout.targets.map(n => [`t:${n.id}`, n] as const)])
 
+  // A ribbon as the edge its card describes: the same card as an edge of the map (kind, figures, chart, flows).
+  const ribbonEdge = (r: Ribbon): MapEdgeData => ({
+    kind: r.kind, services: r.services, label: '', count: r.count, hits: r.kind === 'unprotected' || r.kind === 'blocked' ? r.hits : null,
+    flows: r.flows, observed: r.observed, exceptions: [], exceptionCount: 0, draft: false, fromGroup: r.source, toGroup: r.target,
+    path: '', points: [], label_x: 0, label_y: 0, label_w: 0, label_h: 0, small: false, particle: false, color: EDGE_COLORS[r.kind],
+    volume: r.volume, volumeLevel: r.volume && r.volume.bytes > 0 ? 1 : 0, volumeShared: r.volumeShared,
+  })
+
   const ribbonTip = (r: Ribbon) => {
     const from = nameOf(nodeOf.get(`s:${r.source}`)!, 'source')
     const to = nameOf(nodeOf.get(`t:${r.target}`)!, 'target')
-    const amount = r.hits ? t('matrix.hits', { count: r.hits }) : t('sankey.flows', { count: r.count })
+    const counted = r.hits ? t('matrix.hits', { count: r.hits }) : t('sankey.flows', { count: r.count })
+    const amount = r.volume && r.volume.bytes > 0 ? `${counted} · ${volumeText(r.volume, 1)}` : counted
     const legend = t(r.kind === 'outside' ? 'legend.allowed' : `legend.${r.kind}`)
     const services = serviceTokensTitle(r.services)
     const line = `${legend}: ${services}`
@@ -176,7 +189,7 @@ export default function ZoneSankey({ model, filters, selectedCell, selectedZone,
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 1.5, boxSizing: 'border-box', ...FOCUS_SX(theme.palette.primary.main) }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1, minWidth: 0, flexShrink: 0 }}>
         <Box component='i' className='ri-information-line' aria-hidden sx={{ color: 'text.secondary', flexShrink: 0 }} />
-        <TruncatedText text={t('sankey.note')} variant='caption' color='text.secondary' sx={{ minWidth: 0 }} />
+        <TruncatedText text={t(layout.byBytes ? 'sankey.noteVolume' : 'sankey.note')} variant='caption' color='text.secondary' sx={{ minWidth: 0 }} />
       </Box>
       <Box ref={measure} data-testid='sankey-box' sx={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, overflow: 'auto' }}>
         {/* A named figure, not an image: its ribbons and zones are buttons that assistive technology must reach. */}
@@ -205,13 +218,8 @@ export default function ZoneSankey({ model, filters, selectedCell, selectedZone,
                   <Tooltip
                     key={r.id}
                     followCursor
-                    title={(
-                      <Box>
-                        <Typography variant='caption' fontWeight={600} sx={{ display: 'block' }}>{tip.title}</Typography>
-                        <Typography variant='caption' sx={{ display: 'block' }}>{tip.line}</Typography>
-                        <Typography variant='caption' sx={{ display: 'block' }}>{tip.amount}</Typography>
-                      </Box>
-                    )}
+                    title={<EdgeDetails d={ribbonEdge(r)} source={r.source} target={r.target} heading={tip.title} />}
+                    slotProps={EDGE_CARD_TOOLTIP}
                   >
                     <g>
                       <path

@@ -20,7 +20,7 @@ import EdgePanel from './EdgePanel'
 import GuestPanel from './GuestPanel'
 import GuestViewBar from './GuestViewBar'
 import { defaultCentre } from './guestViewModel'
-import { MapNamesContext, edgeAria, type EdgeT, type MapNames } from './FlowEdge'
+import { EdgeVolumeContext, MapNamesContext, edgeAria, type EdgeT, type MapNames } from './FlowEdge'
 import MapToolbar, { useExternalAddresses, useFlowFilters, useMapView, type MapView } from './MapToolbar'
 import { SlotActions } from './microsegAccess'
 import { useNamedNetworks } from './namedNetworksContext'
@@ -43,10 +43,14 @@ import TargetPicker from './TargetPicker'
 import { filterCentre, filterInput, filterMarks, itemsInView, trimMatrix, type FilterItem } from './mapFilterModel'
 import { targetFocus, targetRing, targetSankey, targetSuggestions, type TargetGuest } from './targetModel'
 import { useMapTarget } from './useMapTarget'
+import { useGuestVolume, useZoneVolume } from './useZoneVolume'
+import { rangeOfPeriod } from './useEdgeVolumeHistory'
+import { MapRangeContext } from './SelectionTraffic'
+import { edgeVolumes } from './edgeVolume'
 import {
   EXTERNAL_ID, OUTSIDE_ID, SEEN_PERIODS, STALE_AFTER_MS, UNZONED_ID, edgeServices, filterEdgeAge, filterEdgeServices, filterEdges, focusSets, isPveGroup, lastSeenOf, pveNodeName,
   zoneNodeId,
-  type MapCluster, type MapEdgeData, type MapInput, type MapNodeData, type PanelEdgeData,
+  type MapCluster, type MapEdgeData, type MapInput, type MapMember, type MapNodeData, type PanelEdgeData,
 } from './zoneGraph'
 import { zoneMembers } from './zoneModel'
 import ZonePanel from './ZonePanel'
@@ -133,6 +137,12 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   const [addresses, setAddresses] = useExternalAddresses()
   // How far back the observed flows drawn go; the clock moves every minute, so a flow fades or leaves on its own.
   const [seenPeriod, setSeenPeriod] = useStoredChoice('microseg.map.seen', SEEN_PERIODS, 'all')
+  // What sFlow measured between the zones over that period, summed over the clusters of the policy (Open vSwitch only).
+  const volume = useZoneVolume(connectionId, readIds, seenPeriod)
+  // The labels of the edges between zones keep room for their volume gauge once sFlow is known to measure the map.
+  const measured = !!volume?.covered
+  // The same volume by pair of guests, for the edges drawn from a guest to a guest: read once sFlow measures the map.
+  const guestVolume = useGuestVolume(connectionId, readIds, seenPeriod, measured)
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60_000)
@@ -155,6 +165,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   )
   const membersKnown = guestsStatus === 'ready'
   const zonesById = useMemo(() => new Map(zones.map(z => [z.id, z])), [zones])
+  const zoneName = useCallback((zoneId: string) => zonesById.get(zoneId)?.name, [zonesById])
   const insideZone = inside ? zonesById.get(inside) ?? null : null
   const shown: ShownView = insideZone ? 'inside' : view
 
@@ -193,8 +204,9 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     return {
       zones, flows, suggestions: suggestions.data ?? [], members: drawn?.members ?? null, unzoned: drawn?.unzoned ?? null, unapplied, exceptions, pveNodes, networks,
       ...(clusters ? { clusters } : {}),
+      gauges: measured,
     }
-  }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied, exceptions, nodeNames, pveNodeStatus, clusterOf, clusters, connectionId, guestErrors, connectionNodes, networks])
+  }, [zones, flows, suggestions.data, membersByZone, membersKnown, guests, unapplied, exceptions, nodeNames, pveNodeStatus, clusterOf, clusters, connectionId, guestErrors, connectionNodes, networks, measured])
   // The zone of the guest view: the one picked, else (or once it is deleted) the one with the most observed traffic.
   const centreId = useMemo(
     () => (centre && zonesById.has(centre) ? centre : defaultCentre(zones, input.suggestions)),
@@ -327,7 +339,31 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     return shown.length === services.length ? null : new Set(shown)
   }, [services, hiddenServices])
   // The edges take no focus, but a screen reader names them: "web to db: tcp/443".
-  const edges = useMemo(() => filterEdgeAge(filterEdgeServices(filterEdges(graph.edges, filters), shownServices), seenPeriod, now).filter(e => !isolated || isolated.edges.has(e.id)).map(e => {
+  const filteredEdges = useMemo(
+    () => filterEdgeAge(filterEdgeServices(filterEdges(graph.edges, filters), shownServices), seenPeriod, now).filter(e => !isolated || isolated.edges.has(e.id)),
+    [graph.edges, filters, shownServices, seenPeriod, now, isolated],
+  )
+  const sankeyVolume = useMemo(() => (volume?.covered ? { rows: volume.buckets, zoneName } : null), [volume, zoneName])
+  // The sFlow volume of the edges between zones over the period of the map: the totals already read, no request per edge.
+  // The guest a node of the map stands for: its VMID in its cluster (the last part of its id is the guest's key).
+  const guestRefs = useMemo(() => {
+    const refs = new Map<string, { conn: string; vmid: number }>()
+    const add = (m: MapMember) => refs.set(m.key, { conn: m.cluster?.id ?? connectionId, vmid: m.vmid })
+    for (const list of input.members?.values() ?? []) list.forEach(add)
+    input.unzoned?.forEach(add)
+    return refs
+  }, [input.members, input.unzoned, connectionId])
+  const guestVolumes = useMemo(
+    () => ({ rows: guestVolume, of: (nodeId: string) => (nodeId.startsWith('guest:') ? guestRefs.get(nodeId.slice(nodeId.lastIndexOf(':') + 1)) : undefined) }),
+    [guestVolume, guestRefs],
+  )
+  const volumes = useMemo(
+    () => (volume?.covered ? edgeVolumes(filteredEdges, volume.buckets, zoneName, guestVolumes) : null),
+    [volume, filteredEdges, zoneName, guestVolumes],
+  )
+  // What the tooltip of an edge reads its volume chart with, once sFlow is known to measure the map.
+  const volumeSource = useMemo(() => (measured ? { clusterIds: readIds.length ? readIds : [connectionId], period: seenPeriod, zoneName } : null), [measured, readIds, connectionId, seenPeriod, zoneName])
+  const edges = useMemo(() => filteredEdges.map(e => {
     const d = e.data as unknown as MapEdgeData
     const dimmed = !!lit && !lit.edges.has(e.id)
     let className: string | undefined
@@ -335,13 +371,14 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     if (lock?.faintEdges.has(e.id)) className = 'microseg-faint'
     else if (dimmed) className = 'microseg-dim'
     else if (seenAt !== null && now - seenAt > STALE_AFTER_MS) className = 'microseg-stale'
+    const measured = volumes?.get(e.id)
     return {
       ...e,
       className,
       ariaLabel: edgeAria(tEdge as EdgeT, names, e.source, e.target, d),
-      data: dimmed ? { ...e.data, dimmed } : e.data,
+      data: { ...e.data, ...(dimmed ? { dimmed } : {}), volume: measured?.figure ?? null, volumeLevel: measured?.level ?? 0, volumeShared: measured?.shared ?? false, volumeUntold: measured?.untold ?? false, volumeRules: measured?.rules, volumePair: measured?.pair ?? null, volumeGuest: measured?.guest },
     }
-  }), [graph.edges, filters, shownServices, seenPeriod, now, lit, isolated, lock, tEdge, names])
+  }), [filteredEdges, volumes, now, lit, lock, tEdge, names])
 
   // In the guest view another zone is not opened but put in the centre; the zone in the centre opens its panel.
   const selectZone = useCallback((zoneId: string) => {
@@ -501,6 +538,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
         <GuestViewBar zones={shownInput.zones} suggestions={input.suggestions} centre={keptCentre} onCentre={changeCentre} />
       )}
       <MapNamesContext.Provider value={names}>
+      <EdgeVolumeContext.Provider value={volumeSource}>
+      <MapRangeContext.Provider value={rangeOfPeriod(seenPeriod)}>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch', flexWrap: { xs: 'wrap', lg: 'nowrap' }, flex: 1, minHeight: 560 }}>
           <Box
             role='region'
@@ -517,6 +556,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
                 onSelectZone={selectZone}
                 names={{ end: endName }}
                 target={sankeyTarget}
+                volume={sankeyVolume}
               />
             )}
             {matrix && !sankey && (
@@ -531,6 +571,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
                 onSelectZone={selectZone}
                 names={{ end: endName }}
                 target={target}
+                volume={sankeyVolume}
               />
             )}
             {/* Top left of the map: the way out of an entered zone, then what the selection isolates. */}
@@ -664,6 +705,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
             />
           )}
         </Box>
+      </MapRangeContext.Provider>
+      </EdgeVolumeContext.Provider>
       </MapNamesContext.Provider>
       {assigning && selectedZone && (
         <AssignGuestsDialog

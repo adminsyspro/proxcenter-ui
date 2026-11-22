@@ -6,8 +6,8 @@ vi.mock('next/navigation', () => ({ redirect }))
 import NetworkFlowsPage from './page'
 
 describe('the old network flows page', () => {
-  it('sends an old link or bookmark to the Network Flows tab of Network Security', () => {
+  it('sends an old link or bookmark to the Dashboard of Network Security, where the volumes are', () => {
     NetworkFlowsPage()
-    expect(redirect).toHaveBeenCalledWith('/automation/network?tab=flows')
+    expect(redirect).toHaveBeenCalledWith('/automation/network?tab=dashboard')
   })
 })

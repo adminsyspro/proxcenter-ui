@@ -64,7 +64,7 @@ export function placeBox(out: Placement, zone: MicrosegZone, members: number | n
  * green edge per ordered pair of zones with its ports grouped and the count of the exceptions between them, the observed flows (unprotected, blocked) as their own
  * edges zone to zone, External and Outside boxes when an edge needs them. Pure and deterministic.
  */
-export function buildCompactGraph({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null, clusters = null }: MapInput): ZoneGraph {
+export function buildCompactGraph({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null, clusters = null, gauges = false }: MapInput): ZoneGraph {
   const { known, columns } = zoneColumns(zones, flows)
   const pairs = new Map<string, Pair>()
   addAllowedPairs(pairs, flows, known)
@@ -85,5 +85,5 @@ export function buildCompactGraph({ zones, flows, suggestions, members = null, u
     else placeBoundary(out, cell.id, c, outsideEgress)
   }
 
-  return { nodes: out.nodes, edges: placePairs(ordered, out.endShapes, out.obstacles, unapplied) }
+  return { nodes: out.nodes, edges: placePairs(ordered, out.endShapes, out.obstacles, unapplied, gauges) }
 }

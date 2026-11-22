@@ -17,7 +17,7 @@ import { destinationName, sourceName } from './ObservationRow'
 import { newPairFlow, pairEventFilter, pairFlows, pairSuggestions, trafficPairOf, type PairEnd } from './pairModel'
 import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
 import { PagedList } from './PolicyPager'
-import { SelectionTrafficChart, TrafficSummaryLine, useSelectionTraffic } from './SelectionTraffic'
+import { SelectionTrafficChart, TrafficSummaryLine, VolumeSummaryLine, useSelectionTraffic } from './SelectionTraffic'
 import { formatWhen } from './summaryModel'
 import TruncatedText from './TruncatedText'
 import type { ZoneEdits } from './useZoneEdits'
@@ -257,6 +257,7 @@ export default function EdgePanel({
     <>
       <SelectionTrafficChart traffic={traffic} />
       <TrafficSummaryLine traffic={traffic} />
+      <VolumeSummaryLine traffic={traffic} />
     </>
   )
   const suggestionsBody = (size = ROWS_PER_PAGE) => (

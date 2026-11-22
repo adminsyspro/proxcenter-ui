@@ -20,6 +20,21 @@ const {
   reportExpectedAgentsMock: vi.fn(),
 }))
 
+const { orchestratorFetchMock, collectGuestMACsMock, probeHostMock } = vi.hoisted(() => ({
+  orchestratorFetchMock: vi.fn(),
+  collectGuestMACsMock: vi.fn(async () => ({ "bc:24:11:00:00:01": 101 })),
+  probeHostMock: vi.fn(async (_c: string, _n: string, node: string) => ({ node, hasOvs: node !== "pve3", portMapError: node === "pve2" ? "push failed" : "" })),
+}))
+
+vi.mock("@/lib/orchestrator", () => ({
+  orchestratorFetch: orchestratorFetchMock,
+}))
+
+vi.mock("@/lib/sflow/probe", () => ({
+  collectGuestMACs: collectGuestMACsMock,
+  probeHost: probeHostMock,
+}))
+
 vi.mock("@/lib/license/exclusions", () => ({
   isConnectionLicenseExcluded: isConnectionLicenseExcludedMock,
 }))
@@ -51,9 +66,12 @@ vi.mock("@/lib/sflow/expectedAgents", () => ({
 }))
 
 import {
+  PORTMAP_FIRST_DELAY_MS,
   reconcileSFlow,
+  refreshPortMaps,
   saveDesiredSFlowConfig,
   SFLOW_DESIRED_CONFIG_KEY,
+  startPortMapRefresher,
   startSFlowReconciler,
 } from "./reconciler"
 
@@ -376,5 +394,79 @@ describe("readDesiredSFlowConfig", () => {
 
     settingFindUniqueMock.mockResolvedValueOnce({ value: { collectorTarget: "", samplingRate: 512, pollingInterval: 30 } })
     await expect(readDesiredSFlowConfig("tenant-a")).resolves.toBeNull()
+  })
+})
+
+describe("refreshPortMaps", () => {
+  const heard = (...ips: string[]) => ({ enabled: true, agents: ips.map(agent_ip => ({ agent_ip, active: true })) })
+
+  it("probes only the nodes the collector hears, one MAC read per cluster, and counts the maps pushed", async () => {
+    orchestratorFetchMock.mockResolvedValue(heard("10.0.0.1", "10.0.0.2", "10.0.0.3"))
+    connectionFindManyMock.mockResolvedValue([
+      connection({ id: "prod", name: "PROD", hosts: [
+        { enabled: true, ip: "10.0.0.1", node: "pve1" }, { enabled: true, ip: "10.0.0.2", node: "pve2" }, { enabled: true, ip: "10.0.0.3", node: "pve3" },
+        { enabled: true, ip: "10.0.0.4", node: "pve4" }, { enabled: false, ip: "10.0.0.5", node: "pve5" },
+      ] }),
+      connection({ id: "silent", hosts: [{ enabled: true, ip: "10.9.0.1", node: "dr1" }] }),
+      connection({ id: "nokey", sshKeyEnc: null, sshPassEnc: null, hosts: [{ enabled: true, ip: "10.0.0.1", node: "x" }] }),
+      connection({ id: "excluded", hosts: [{ enabled: true, ip: "10.0.0.1", node: "y" }] }),
+    ])
+    isConnectionLicenseExcludedMock.mockImplementation(async (id: string) => id === "excluded")
+
+    // pve1 pushed; pve2 failed to push; pve3 has no Open vSwitch; pve4 is not heard; pve5 disabled.
+    await expect(refreshPortMaps()).resolves.toBe(1)
+    expect(orchestratorFetchMock).toHaveBeenCalledWith("/sflow/status")
+    expect(collectGuestMACsMock).toHaveBeenCalledTimes(1)
+    expect(probeHostMock.mock.calls.map(c => c[2])).toEqual(["pve1", "pve2", "pve3"])
+    expect(probeHostMock.mock.calls[0]).toEqual(["prod", "PROD", "pve1", "10.0.0.1", expect.objectContaining({ host: "10.0.0.1" }), { "bc:24:11:00:00:01": 101 }])
+    isConnectionLicenseExcludedMock.mockImplementation(async () => false)
+  })
+
+  it("does nothing, not even a database read, when the collector hears no agent or is off", async () => {
+    orchestratorFetchMock.mockResolvedValue({ enabled: true, agents: [{ agent_ip: "10.0.0.1", active: false }] })
+    await expect(refreshPortMaps()).resolves.toBe(0)
+    orchestratorFetchMock.mockResolvedValue({ enabled: false, agents: [{ agent_ip: "10.0.0.1", active: true }] })
+    await expect(refreshPortMaps()).resolves.toBe(0)
+    orchestratorFetchMock.mockResolvedValue(null)
+    await expect(refreshPortMaps()).resolves.toBe(0)
+    expect(connectionFindManyMock).not.toHaveBeenCalled()
+    expect(probeHostMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("startPortMapRefresher", () => {
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
+  it("pushes the maps soon after the start, then every interval, one pass at a time, and never throws", async () => {
+    let release: () => void = () => {}
+    const refresh = vi.fn()
+      .mockImplementationOnce(() => new Promise<number>(resolve => { release = () => resolve(1) }))
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValue(0)
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {})
+    const stop = startPortMapRefresher({ intervalMs: 1000, firstDelayMs: 100, refresh })
+
+    await vi.advanceTimersByTimeAsync(100)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    // Still in flight at the interval: skipped.
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    release()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(refresh).toHaveBeenCalledTimes(2)
+    expect(errors).toHaveBeenCalledWith("[sflow-portmap] pass failed:", "boom")
+
+    stop()
+    expect(() => stop()).not.toThrow()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(refresh).toHaveBeenCalledTimes(2)
+    errors.mockRestore()
+  })
+
+  it("waits a minute before the first pass by default", () => {
+    expect(PORTMAP_FIRST_DELAY_MS).toBe(60_000)
+    const stop = startPortMapRefresher({ refresh: vi.fn().mockResolvedValue(0) })
+    stop()
   })
 })

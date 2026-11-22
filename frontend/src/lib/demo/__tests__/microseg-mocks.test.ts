@@ -295,6 +295,23 @@ describe('demo micro-segmentation, outbound', () => {
     expect(out.buckets.every((b: any) => b.direction === 'out')).toBe(true)
   })
 
+  it('serves the sFlow volume: buckets on the step, the services summed per pair, or the totals of the window', async () => {
+    const to = new Date()
+    const from = new Date(to.getTime() - 3_600_000)
+    const window = `from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`
+    const steps = await demoGet(`${BASE}/volume?${window}&step=300`)
+    expect(steps.covered).toBe(true)
+    expect(steps.buckets.length).toBeGreaterThan(0)
+    expect(steps.buckets.every((b: { at: string }) => Date.parse(b.at) % 300_000 === 0)).toBe(true)
+    expect(steps.buckets.some((b: { src_zone: string; dst_zone: string; port: number }) => b.src_zone === 'app' && b.dst_zone === 'db' && b.port === 5432)).toBe(true)
+    const pairs = await demoGet(`${BASE}/volume?${window}&step=300&group=pair`)
+    expect(pairs.buckets.every((b: { proto: string; port: number }) => b.proto === '' && b.port === 0)).toBe(true)
+    const totals = await demoGet(`${BASE}/volume?${window}&totals=1`)
+    expect(new Set(totals.buckets.map((b: { at: string }) => b.at)).size).toBe(1)
+    const sum = (list: { bytes: number }[]) => list.reduce((s, b) => s + b.bytes, 0)
+    expect(sum(totals.buckets)).toBeGreaterThan(0)
+  })
+
   it('bounds the traffic history to seven days of five-minute buckets, whatever is asked', async () => {
     const to = new Date()
     const from = new Date(to.getTime() - 400 * 86_400_000)

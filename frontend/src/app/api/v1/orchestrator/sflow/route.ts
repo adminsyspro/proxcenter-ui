@@ -6,18 +6,14 @@ import { requireProviderTenant } from "@/lib/tenant"
 
 export const runtime = "nodejs"
 
-// GET /api/v1/orchestrator/sflow?endpoint=status|top-talkers|top-pairs|top-ports|agents
+// GET /api/v1/orchestrator/sflow?endpoint=status|top-talkers|agents|health
 //
 // Trace (2026-08): the Go orchestrator's sFlow aggregator is a single
 // fleet-wide collector (internal/sflow) with NO tenant/X-Tenant-ID handling
-// anywhere in that package. Row shapes are mixed: TopTalker and the
-// status.agents entries DO carry a connection_id, but TopPair, TopPort,
-// TopEndpoint (top-sources/top-destinations), IPPair and every timeseries/*
-// point carry only vmid/IP/port — no connection or tenant linkage at all.
-// Partially filtering only the endpoints that happen to carry connection_id
-// would still let a tenant pivot through top-pairs/ip-pairs/timeseries to
-// see every other tenant's VM traffic. Per the brief's rule 5 (no shape ->
-// no invented mapping), this route is gated provider-only instead.
+// anywhere in that package: the agents and the top talkers name the
+// connection of a node, nothing names a tenant. This route is gated
+// provider-only. The volume between the zones of a policy is the
+// micro-segmentation relay's (per connection, with its rights), not this one.
 export async function GET(request: NextRequest) {
   try {
     const providerGate = await requireProviderTenant()
@@ -28,7 +24,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const endpoint = searchParams.get("endpoint") || "status"
 
-    const allowed = ["status", "top-talkers", "top-pairs", "top-ports", "top-sources", "top-destinations", "ip-pairs", "timeseries/vm", "timeseries/all-vms", "timeseries/ip", "agents", "health"]
+    const allowed = ["status", "top-talkers", "agents", "health"]
     if (!allowed.includes(endpoint)) {
       return NextResponse.json({ error: "Invalid endpoint" }, { status: 400 })
     }

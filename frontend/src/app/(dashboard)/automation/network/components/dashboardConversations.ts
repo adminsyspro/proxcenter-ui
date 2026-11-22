@@ -23,6 +23,8 @@ export type Conversation = {
   /** The busiest flow of the pair: both ends are named from it. */
   sample: MicrosegSuggestion
   services: string[]
+  /** The services as protocol/port tokens ("tcp/5432"), to join the sFlow volume. */
+  tokens: string[]
   flows: number
   hits: number
   parts: ConversationPart[]
@@ -147,14 +149,16 @@ export function topConversations(
     const key = `${direction}|${sourceOf(s)}|${destinationOf(s)}${peer ? `|${peer.cluster ?? ''}` : ''}`
     let pair = pairs.get(key)
     if (!pair) {
-      pair = { key, direction, sample: s, services: [], flows: 0, hits: 0, parts: [], focus: focusOf(s), byService: new Map() }
+      pair = { key, direction, sample: s, services: [], tokens: [], flows: 0, hits: 0, parts: [], focus: focusOf(s), byService: new Map() }
       if (peer) pair.peer = peer
       pairs.set(key, pair)
     }
     if (s.hits > pair.sample.hits) pair.sample = s
     pair.flows += 1
     pair.hits += s.hits
-    const label = serviceTokenLabel(flowService({ proto: s.proto.toLowerCase(), dport: s.dport }))
+    const token = flowService({ proto: s.proto.toLowerCase(), dport: s.dport })
+    if (!pair.tokens.includes(token)) pair.tokens.push(token)
+    const label = serviceTokenLabel(token)
     pair.byService.set(label, (pair.byService.get(label) ?? 0) + s.hits)
     let part = pair.parts.find(p => p.kind === s.kind)
     if (!part) {
@@ -170,6 +174,7 @@ export function topConversations(
     .map(({ byService, ...pair }) => ({
       ...pair,
       services: [...byService.entries()].sort((a, b) => b[1] - a[1] || byText(a[0], b[0])).map(([label]) => label),
+      tokens: [...pair.tokens].sort(byText),
       parts: [...pair.parts].sort((a, b) => b.hits - a.hits || byText(a.kind, b.kind)),
     }))
   return { rows, total: pairs.size }

@@ -5,11 +5,13 @@ import { useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type Mo
 import { Box, ToggleButton, ToggleButtonGroup, Tooltip, Typography, alpha, useTheme, type Theme } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
+import { flowRules, volumeOf } from '@/lib/microseg/volume'
 import { serviceTokensTitle } from '@/lib/network/serviceNames'
 
 import MatrixCell, { gridLine, type CellHandlers } from './MatrixCell'
 import { MATRIX_SORTS, cellId, cellView, sortEnds, type CellView, type MatrixEnd, type MatrixModel, type MatrixSort } from './matrixModel'
 import { involvesAddresses, targetAddresses, type TargetGuest } from './targetModel'
+import type { SankeyVolume } from './sankeyModel'
 import { useStoredChoice } from './useStoredChoice'
 import { EXTERNAL_ID, zoneNodeId, type FlowFilters } from './zoneGraph'
 import { ZoneShield } from './ZoneNode'
@@ -82,6 +84,8 @@ type Props = {
   names: Names
   /** The targeted guest: the row and the column of its zone stay lit, its cells marked, the others dimmed. */
   target?: TargetGuest | null
+  /** The volume measured by sFlow over the period of the map: each cell shows the bytes of its flows. */
+  volume?: SankeyVolume | null
 }
 
 /** The cells the target dims: those out of the row and the column of its zone that carry none of its flows. */
@@ -99,7 +103,7 @@ function targetSx(target: TargetGuest | null | undefined) {
  * on a cell lights its row and its column (the grid's CSS does it: no cell renders again); a click, enter or space
  * opens the flow panel of the pair; the arrows move between cells. A click on a zone head opens its panel.
  */
-export default function ZoneMatrix({ model, filters, unapplied, selectedCell, selectedZone, narrow = false, onSelectCell, onSelectZone, names, target = null }: Props) {
+export default function ZoneMatrix({ model, filters, unapplied, selectedCell, selectedZone, narrow = false, onSelectCell, onSelectZone, names, target = null, volume = null }: Props) {
   const t = useTranslations('microsegPilot.overview')
   const tEdge = useTranslations('microsegPilot.overview.edge')
   const [sort, setSort] = useStoredChoice<MatrixSort>(SORT_KEY, MATRIX_SORTS, 'name')
@@ -112,6 +116,11 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
     () => new Map([...model.cells.values()].map(cell => [cell.id, cellView(cell, filters, unapplied)])),
     [model.cells, filters, unapplied],
   )
+  // The volume of each cell's flows shown, from the totals already read with the map.
+  const volumeByCell = useMemo(() => {
+    if (!volume) return null
+    return new Map([...views.entries()].map(([id, v]) => [id, v ? volumeOf(volume.rows, flowRules(v.flows, v.observed, volume.zoneName)) : null]))
+  }, [views, volume])
   // The cells the targeted guest has observed flows in: read once per draft, checkboxes and target, not per cell.
   const marked = useMemo(() => {
     if (!target) return null
@@ -258,6 +267,7 @@ export default function ZoneMatrix({ model, filters, unapplied, selectedCell, se
                   chips={size.chips}
                   handlers={handlers}
                   marker={marked?.has(id) ? marker : undefined}
+                  volume={volumeByCell?.get(id) ?? null}
                 />
               )
             })}

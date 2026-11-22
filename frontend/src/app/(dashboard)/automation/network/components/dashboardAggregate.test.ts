@@ -6,7 +6,7 @@ import type { MicrosegEvent, MicrosegSuggestion, MicrosegTraffic, MicrosegZone }
 import {
   pendingClusters,
   clusterFilter, eventGuestKey, flowCluster, guestVmid, guestsByCluster, guestsOf, mergeClusterEvents, mergeHistories, policyScope,
-  seriesOf, shownFlows, shownIds,
+  shownFlows, shownIds,
 } from './dashboardAggregate'
 import { policyPeerOf } from './dashboardConversations'
 import { postureTraffic } from './dashboardPosture'
@@ -153,14 +153,6 @@ describe('mergeClusterEvents', () => {
       return sum
     }, {})
     expect(counts).toEqual({ 'vlan:10': 1, 'vlan:20': 2 })
-  })
-})
-
-describe('seriesOf', () => {
-  it('keeps the sFlow series of the guests shown', () => {
-    const series = [{ vmid: 101, points: [] }, { vmid: 205, points: [] }]
-    const guests = [{ key: 'c2|qemu/205', node: 'pve9', tags: [], vlans: [], ips: [] }]
-    expect(seriesOf(series, guests).map(s => s.vmid)).toEqual([205])
   })
 })
 

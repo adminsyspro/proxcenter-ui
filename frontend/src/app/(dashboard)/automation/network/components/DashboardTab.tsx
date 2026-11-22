@@ -9,12 +9,13 @@ import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
 import { useMicrosegSuggestions } from '@/lib/microseg/useMicrosegLists'
 import type { ListSuggestionsParams } from '@/lib/microseg/api'
 import type { MicrosegPolicy, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
+import { flowRules, mergeVolume, tokenRule, volumeOf } from '@/lib/microseg/volume'
 
 import ClusterStrip from './ClusterStrip'
 import {
-  clusterFilter, guestsByCluster, guestsOf, pendingClusters, policyScope, seriesOf, shownFlows, shownIds, type PolicyScope,
+  clusterFilter, guestsByCluster, guestsOf, pendingClusters, policyScope, shownFlows, shownIds, type PolicyScope,
 } from './dashboardAggregate'
-import { policyPeerOf, topConversations, type RemotePeer } from './dashboardConversations'
+import { policyPeerOf, topConversations, type Conversation, type RemotePeer } from './dashboardConversations'
 import type { BlockPhase } from './dashboardModel'
 import {
   GROUP_BYS, POSTURE_SUGGESTIONS_LIMIT, isZoneGrouping, postureDistribution, postureTraffic, topServices, type GroupBy, type PostureGuest,
@@ -22,18 +23,19 @@ import {
 import FirewallLoadAlert from './FirewallLoadAlert'
 import { TopServices, TrafficDistribution } from './ObservedTraffic'
 import TopConversations from './TopConversations'
+import TopTalkers from './TopTalkers'
 import TrafficByZone from './TrafficByZone'
 import TrafficTimeline from './TrafficTimeline'
-import { postureVolume, type TimelineRange, type TimelineVerdict } from './postureTimeline'
+import { stepMsOf, volumeTimeline, type TimelineRange, type TimelineVerdict } from './postureTimeline'
 import { useTimelineRange } from './useTimelineRange'
 import { useTrafficTimeline } from './useTrafficTimeline'
-import { usePolicyCoverage } from './usePolicyReads'
+import { usePolicyCoverage, usePolicyVolume } from './usePolicyReads'
 import { useStoredChoice } from './microseg/useStoredChoice'
-import { usePostureVolume } from './usePostureVolume'
 import type { MicrosegSubTab, ObservationFocus } from './microseg/microsegTabTypes'
 import { shownClusterName } from './microseg/ClusterRunRow'
 import { useGroupGuests } from './microseg/useGroupGuests'
 import { useZoneGuests } from './microseg/useZoneGuests'
+import { useZoneVolume } from './microseg/useZoneVolume'
 import type { PolicyGuest } from './microseg/zoneModel'
 import { TAB } from '../networkLink'
 
@@ -172,30 +174,58 @@ export const GROUP_BY_KEY = 'proxcenter.microseg.postureGroupBy'
 function useTimelineFigures(
   connection: string | null, policy: MicrosegPolicy | undefined, posture: ReturnType<typeof usePostureFigures>, guests: PostureGuest[],
   view: { groupBy: GroupBy; verdict: TimelineVerdict; addresses: boolean; range: TimelineRange },
-  scope: PolicyScope, shown: string[], allGuests: PostureGuest[], filtered: boolean,
+  scope: PolicyScope, shown: string[],
 ) {
   const { groupBy, verdict, addresses, range } = view
-  const { timeline, answer, rangeLock, now, missing, pending } = useTrafficTimeline({
+  const { timeline, answer, rangeLock, missing, pending } = useTrafficTimeline({
     connection, zones: policy?.zones ?? NO_ZONES, slices: posture.traffic.slices, groupBy, verdict, range, guests, addresses,
     clusters: scope.shared ? scope.readIds : undefined, shown: scope.shared ? shown : undefined,
   })
-  // The sFlow window moves at each edge of its windows, on the same minute clock.
-  const sflow = usePostureVolume(connection, allGuests, now, range)
-  const series = useMemo(() => (filtered ? seriesOf(sflow.series, guests) : sflow.series), [filtered, sflow.series, guests])
-  const available = sflow.available && (!filtered || series.some(vm => (vm.points ?? []).length > 0))
-  const volume = useMemo(() => (available ? postureVolume({
-    series, groupBy, zones: policy?.zones ?? [], tagPrefix: policy?.policy.tag_prefix ?? '', guests,
-    slices: posture.traffic.slices, range, from: sflow.from, to: sflow.to,
-  }) : null), [available, series, sflow.from, sflow.to, range, groupBy, policy, guests, posture])
+  // The sFlow volume of the range between the zones (zone groupings only: it is kept per pair of zones), the shown
+  // clusters summed, each cluster's answer of the same range only.
+  const volumes = usePolicyVolume(isZoneGrouping(groupBy) ? scope.readIds : NO_IDS, range)
+  const volume = useMemo(() => {
+    const step = stepMsOf(volumes.range) / 1000
+    const merged = mergeVolume(shown.flatMap(id => { const a = volumes.byCluster[id]; return a && a.step === step ? [a] : [] }))
+    if (!merged?.covered) return null
+    return volumeTimeline({ volume: merged, range: volumes.range, zones: policy?.zones ?? NO_ZONES, slices: posture.traffic.slices, by: groupBy === 'zone' ? 'src' : 'dst' })
+  }, [volumes, shown, policy?.zones, posture.traffic.slices, groupBy])
   return { timeline, volume, answer, rangeLock, missing, pending }
+}
+
+/**
+ * What sFlow measured over the range on the clusters shown (Open vSwitch only; the totals of the orchestrator's
+ * database, one read per cluster read and range, the shown ones summed without another read): the volume of the allowed flows, of a service, of a conversation between
+ * two zones. Null figures when sFlow measures none of the clusters.
+ */
+function useVolumeFigures(connection: string | null, readIds: readonly string[], shown: readonly string[], range: TimelineRange, policy: MicrosegPolicy | undefined) {
+  const totals = useZoneVolume(connection, readIds, range, shown)
+  return useMemo(() => {
+    if (!totals?.covered) return { covered: false as const, allowed: null, service: undefined, conversation: undefined }
+    const rows = totals.buckets
+    const names = new Map((policy?.zones ?? NO_ZONES).map(z => [z.id, z.name]))
+    const zoneName = (id: string) => names.get(id)
+    return {
+      covered: true as const,
+      allowed: volumeOf(rows, flowRules(policy?.flows ?? [], [], zoneName)),
+      service: (tokens: readonly string[]) => volumeOf(rows, tokens.map(token => tokenRule(token))),
+      // Kept per pair of zones: a conversation with an end in no zone (an address) cannot be told apart.
+      conversation: (c: Conversation) => {
+        const src = zoneName(c.sample.src_zone_id)
+        const dst = zoneName(c.sample.dst_zone_id)
+        return src && dst ? volumeOf(rows, c.tokens.map(token => tokenRule(token, src, dst))) : null
+      },
+    }
+  }, [totals, policy?.zones, policy?.flows])
 }
 
 /**
  * The "Posture" Dashboard of /automation/network (UA50): the observed traffic per zone (donut, chords and timeline),
  * its distribution and top services, then the busiest conversations down to the bottom of the page. Its reads: the
  * coverage route (computed and cached on the server; its guests' nodes, tags and VLANs), the micro-segmentation policy and pending flows
- * (orchestrator memory), the events ring for the time chart (orchestrator memory, every minute, only when grouped by VLAN or node or when the history route is not served), the persisted history of the flows for the zone grouping (the range chosen, remembered per browser), the sFlow pairs and
- * time series for its Volume tab (orchestrator and InfluxDB). The guest list (the inventory route, one guest config per guest on Proxmox) is read only once
+ * (orchestrator memory), the events ring for the time chart (orchestrator memory, every minute, only when grouped by VLAN or node or when the history route is not served), the persisted history of the flows for the zone grouping (the range chosen, remembered per browser), the sFlow volume
+ * between the zones for its Volume tab, its allowed flows, services and conversations (the orchestrator's database), and
+ * the top talkers when sFlow measures the connection (orchestrator memory). The guest list (the inventory route, one guest config per guest on Proxmox) is read only once
  * a grouping by VLAN or node asks for it, shared with the zone map. On a policy shared by several clusters every figure
  * is the whole policy's: the observed flows are read once for the policy (every cluster's rows), the coverage, the
  * history or the ring and the guests once per cluster the user sees, and merged (`dashboardAggregate`); a zone on two
@@ -238,19 +268,18 @@ export default function DashboardTab({
   // A count that adds up the clusters is a total only once every cluster's read answered or failed: until then the
   // guests are held back (the legend says no count, a grouping that is made of them waits), never a partial sum.
   const guestsPending = scope.shared && pendingClusters(shown, coverage).length > 0
-  const allGuestsPending = scope.shared && pendingClusters(scope.readIds, coverage).length > 0
   const guestsWait = guestsPending && (!isZoneGrouping(groupBy) || addresses)
   const trafficPhase = listsPhase === 'ready' && ((!isZoneGrouping(groupBy) && guestList.status === 'loading') || guestsWait) ? 'loading' : listsPhase
   const distributionPhase = listsPhase === 'ready' && addresses && guestsPending ? 'loading' : listsPhase
   const byCluster = useMemo(() => guestsByCluster(scope, coverage.byCluster, addresses ? guestList.guests : null), [scope, coverage.byCluster, addresses, guestList.guests])
   const guests = useMemo(() => (guestsPending ? NO_GUESTS : guestsOf(byCluster, shown)), [guestsPending, byCluster, shown])
-  const allGuests = useMemo(() => (allGuestsPending ? NO_GUESTS : guestsOf(byCluster, scope.readIds)), [allGuestsPending, byCluster, scope.readIds])
   const posture = usePostureFigures(policy, observed, guests, addresses, groupBy)
   const { timeline, volume, answer, rangeLock, missing: timelineMissing, pending: timelinePending } = useTimelineFigures(
-    connection, policy, posture, guests, { groupBy, verdict, addresses, range }, scope, shown, allGuests, filter !== null,
+    connection, policy, posture, guests, { groupBy, verdict, addresses, range }, scope, shown,
   )
   const { peerOf } = remote
   const conversations = useMemo(() => topConversations(observed ?? [], undefined, peerOf), [observed, peerOf])
+  const volumeFigures = useVolumeFigures(connection, scope.readIds, shown, range, policy)
   // A shared policy names an address after the guest of any cluster the user sees.
   const named = useMemo(() => {
     if (scope.shared) return remote.group.guests
@@ -320,6 +349,7 @@ export default function DashboardTab({
           <TrafficDistribution
             phase={distributionPhase}
             distribution={posture.distribution}
+            allowedVolume={volumeFigures.allowed}
             onOpenObserved={kind => openMicroseg('observation', { kind })}
             onOpenUnknown={() => openMicroseg('observation', { source: 'unknown' })}
             onOpenPolicy={() => openMicroseg('policy')}
@@ -328,6 +358,7 @@ export default function DashboardTab({
             phase={listsPhase}
             rows={posture.services}
             total={posture.servicesTotal}
+            volumeOf={volumeFigures.service}
             onOpenAll={() => openMicroseg('observation')}
             onOpenService={(service, kind) => openMicroseg('observation', { service, kind })}
             onOpenPolicy={() => openMicroseg('policy')}
@@ -344,9 +375,15 @@ export default function DashboardTab({
           zones={policy?.zones ?? NO_ZONES}
           guestName={guestName}
           peerCluster={remote.shared ? remote.peerCluster : undefined}
+          volumeOf={volumeFigures.conversation}
           onOpen={focus => openMicroseg('observation', focus)}
           onOpenAll={() => openMicroseg('observation')}
         />
+      </Box>
+
+      {/* 3. The guests that sent and received the most, when sFlow measures the clusters */}
+      <Box sx={{ mt: 2.5 }}>
+        <TopTalkers readIds={scope.readIds} shown={shown} enabled={volumeFigures.covered} guests={guests} />
       </Box>
     </Box>
   )

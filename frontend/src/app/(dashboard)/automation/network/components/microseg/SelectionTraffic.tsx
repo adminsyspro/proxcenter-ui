@@ -1,21 +1,30 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { createContext, useContext, useMemo, useState } from 'react'
 import { Box, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { GuestType, MicrosegEvent, MicrosegZone } from '@/lib/microseg/types'
+import { addVolume, volumeText, type VolumeFigure } from '@/lib/microseg/volume'
 
 import type { BlockPhase } from '../dashboardModel'
 import { zoneSeries } from '../dashboardPosture'
-import { alignTimelines, topSources, type PostureTimeline, type SourceTotal, type TimelineVerdict } from '../postureTimeline'
+import { alignTimelines, topSources, volumeTimeline, type PostureTimeline, type SourceTotal, type TimelineRange, type TimelineVerdict } from '../postureTimeline'
 import TrafficTimeline, { type TimelineDirection } from '../TrafficTimeline'
 import { useSliceName } from '../TrafficByZone'
 import { useTimelineRange } from '../useTimelineRange'
 import { useTrafficTimeline } from '../useTrafficTimeline'
+import { useVolumeHistory } from '../useVolumeHistory'
 import { objectDotSx } from './objectColour'
 import { bareIp } from './zoneGraph'
 import TruncatedText from './TruncatedText'
+
+/**
+ * The range of the map a panel is opened from (its period, "whenever" as 7 days): the panel starts on it, so that its
+ * chart covers what the map and its tooltips show, and opens on the Volume when sFlow measures it. Changed in the
+ * panel, it stays the panel's (the range remembered by the browser is the Dashboard's). Null out of a map.
+ */
+export const MapRangeContext = createContext<TimelineRange | null>(null)
 
 /** Sources (or destinations) listed in the panel; the header counts them all. */
 const TOP_SOURCES = 5
@@ -49,7 +58,11 @@ export type TopEntry = SourceTotal & { dir: 'in' | 'out' }
 
 export function useSelectionTraffic(connectionId: string, zones: MicrosegZone[], selection: TrafficSelection, enabled = true) {
   const [verdict, setVerdict] = useState<TimelineVerdict>('all')
-  const [range, setRange] = useTimelineRange()
+  const mapRange = useContext(MapRangeContext)
+  const [stored, setStored] = useTimelineRange()
+  const [own, setOwn] = useState<TimelineRange | null>(mapRange)
+  const range = own ?? stored
+  const setRange = mapRange ? setOwn : setStored
   // Both on every opening of a panel: the choice is not remembered.
   const [direction, setDirection] = useState<TimelineDirection>('both')
   const slices = useMemo(() => zoneSeries(zones), [zones])
@@ -71,6 +84,28 @@ export function useSelectionTraffic(connectionId: string, zones: MicrosegZone[],
   // Both directions are read: the same history answer, or the ring the panel holds (inbound of a zone asks `zone=`).
   const inbound = useTrafficTimeline({ connection, zones, slices, groupBy: 'zone', verdict, range, zone, pair, keep: keepIn })
   const outbound = useTrafficTimeline({ connection, zones, slices, groupBy: 'dstzone', verdict, range, zone, pair, keep: keepOut })
+  // What sFlow measured for the selection over the range (a zone or a pair: the volume is kept per pair of zones, not
+  // per guest), read only when sFlow measures the connection; null otherwise, the chart then shows the hits only.
+  const volumeRead = useVolumeHistory(enabled && selection.kind !== 'guest' ? connectionId : null, range)
+  const volume = useMemo(() => {
+    const answer = volumeRead.volume
+    if (!answer?.covered) return null
+    const out = direction === 'out'
+    return volumeTimeline({ volume: answer, range: volumeRead.range, zones, slices, by: out ? 'dst' : 'src', pair, zone: zone ? zone.name : null })
+  }, [volumeRead.volume, volumeRead.range, direction, zones, slices, pair, zone])
+  const volumeTotals = useMemo(() => {
+    const answer = volumeRead.volume
+    if (!answer?.covered || !volume) return null
+    const keep = (b: { src_zone: string; dst_zone: string }) => {
+      const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+      if (pair) return same(b.src_zone, pair.emitter) && same(b.dst_zone, pair.receiver)
+      if (!zone) return true
+      return direction === 'out' ? same(b.src_zone, zone.name) : same(b.dst_zone, zone.name)
+    }
+    const sum: VolumeFigure = { bytes: 0, packets: 0 }
+    for (const b of answer.buckets) if (keep(b)) addVolume(sum, b)
+    return sum
+  }, [volumeRead.volume, volume, pair, zone, direction])
   const inSummary = useMemo(() => summaryOf(inbound.build), [inbound.build])
   const outSummary = useMemo(() => summaryOf(outbound.build), [outbound.build])
   const aligned = useMemo(() => alignTimelines(inbound.timeline, outbound.timeline), [inbound.timeline, outbound.timeline])
@@ -102,8 +137,8 @@ export function useSelectionTraffic(connectionId: string, zones: MicrosegZone[],
   if (direction === 'in') otherTotal = outSummary.total
   else if (direction === 'out') otherTotal = inSummary.total
   return {
-    timeline, mirror: both ? aligned.below : null, summary, phase, rangeLock: inbound.rangeLock, verdict, setVerdict, range, setRange,
-    direction, setDirection, memoryOnly: guestVmid !== null, otherTotal,
+    timeline, mirror: both ? aligned.below : null, summary, phase, rangeLock: inbound.rangeLock, verdict, setVerdict, range, setRange, fromMap: mapRange !== null,
+    direction, setDirection, memoryOnly: guestVmid !== null, otherTotal, volume, volumeTotals,
   }
 }
 
@@ -136,8 +171,19 @@ export function SelectionTrafficChart({ traffic, emptyText }: { traffic: Selecti
       showRange={!traffic.memoryOnly}
       direction={traffic.direction}
       onDirection={traffic.setDirection}
+      volume={traffic.volume}
+      volumeFirst={traffic.fromMap}
     />
   )
+}
+
+/** One line under the chart, when sFlow measures the selection: its bytes and packets over the range. */
+export function VolumeSummaryLine({ traffic }: { traffic: SelectionTrafficState }) {
+  const t = useTranslations('microsegPilot.overview.sections')
+  const format = useFormatter()
+  if (!traffic.volumeTotals) return null
+  const text = t('volumeSummary', { bytes: volumeText(traffic.volumeTotals, 1), packets: format.number(traffic.volumeTotals.packets) })
+  return <Typography variant='body2' color='text.secondary' noWrap data-testid='volume-summary'>{text}</Typography>
 }
 
 /** One line under the zone's chart: hits of the range, the top source and its share, would be blocked vs blocked. */

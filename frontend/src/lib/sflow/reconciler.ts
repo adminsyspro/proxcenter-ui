@@ -17,11 +17,13 @@
  * process alive by itself, and an error path that can never throw.
  */
 import { prisma } from "@/lib/db/prisma"
+import { orchestratorFetch } from "@/lib/orchestrator"
 import { isConnectionLicenseExcluded } from "@/lib/license/exclusions"
 import { executeSSH } from "@/lib/ssh/exec"
 import { managedHostSshEndpoint } from "@/lib/ssh/node-endpoint-core"
 import { applySFlowOnNode, SFLOW_PROBE_COMMAND, type SFlowDesiredConfig } from "@/lib/sflow/configure"
 import { reportExpectedAgents, type ExpectedAgentReport } from "@/lib/sflow/expectedAgents"
+import { collectGuestMACs, probeHost } from "@/lib/sflow/probe"
 
 export const SFLOW_RECONCILE_INTERVAL_MS = 10 * 60 * 1000
 export const SFLOW_DESIRED_CONFIG_KEY = "sflow.desiredConfig"
@@ -204,6 +206,86 @@ export function startSFlowReconciler(options: SFlowReconcilerOptions = {}): () =
 
   return () => {
     stopped = true
+    clearInterval(timer)
+  }
+}
+
+/** The first port map push after a start: the orchestrator may have restarted too, with an empty port map. */
+export const PORTMAP_FIRST_DELAY_MS = 60 * 1000
+
+/**
+ * Push the port map of every Open vSwitch node to the orchestrator: what attributes an sFlow sample to a guest, so to
+ * a zone of the volume history. The agents route did it only when somebody opened the page, and an orchestrator that
+ * restarted had none until then: the samples of that time went to no guest (measured on the lab, 20/11/2026). Per
+ * pass, one read of the collector's status: only the nodes it hears are probed (none on an install without sFlow). Per
+ * cluster with such a node, one guest MAC read; per node heard, the agents route's probe (four read-only SSH
+ * commands), one node after the other. No Proxmox API call. Returns the nodes whose map was pushed.
+ */
+export async function refreshPortMaps(): Promise<number> {
+  // Only the nodes the collector hears: nothing to attribute elsewhere, and no SSH at all on an install without sFlow.
+  const status = await orchestratorFetch<{ enabled?: boolean; agents?: Array<{ agent_ip: string; active?: boolean }> }>("/sflow/status")
+  const heard = new Set((status?.enabled ? status.agents ?? [] : []).filter(a => a.active).map(a => a.agent_ip))
+  if (heard.size === 0) return 0
+  const connections = await prisma.connection.findMany({ where: { type: "pve", sshEnabled: true }, include: { hosts: true } })
+  let pushed = 0
+  for (const conn of connections) {
+    if (!conn.sshKeyEnc && !conn.sshPassEnc) continue
+    if (await isConnectionLicenseExcluded(conn.id)) continue
+    const targets = conn.hosts
+      .filter(h => h.enabled && !!(h.ip || h.sshAddress))
+      .map(h => {
+        const endpoint = managedHostSshEndpoint(h, conn.sshPort)
+        return { node: h.node, ip: h.ip || endpoint.host, endpoint }
+      })
+      .filter(t => heard.has(t.ip))
+    if (targets.length === 0) continue
+    const guestMacs = await collectGuestMACs(conn.id, targets.map(t => t.endpoint))
+    for (const t of targets) {
+      const status = await probeHost(conn.id, conn.name, t.node, t.ip, t.endpoint, guestMacs)
+      if (status.hasOvs && !status.portMapError) pushed++
+    }
+  }
+  return pushed
+}
+
+export interface PortMapRefresherOptions {
+  intervalMs?: number
+  firstDelayMs?: number
+  refresh?: () => Promise<number>
+}
+
+/**
+ * Start the periodic port map push, with the timer discipline of the reconciler (one pass at a time, unref, never
+ * throws). Every replica pushes to the orchestrator it reaches: the push replaces a node's map, so a second one is
+ * redundant, not harmful.
+ *
+ * @returns A stop() function, safe to call multiple times.
+ */
+export function startPortMapRefresher(options: PortMapRefresherOptions = {}): () => void {
+  const { intervalMs = SFLOW_RECONCILE_INTERVAL_MS, firstDelayMs = PORTMAP_FIRST_DELAY_MS, refresh = refreshPortMaps } = options
+  let stopped = false
+  let inFlight = false
+
+  const tick = () => {
+    if (stopped || inFlight) return
+    inFlight = true
+    refresh()
+      .catch(e => {
+        console.error("[sflow-portmap] pass failed:", e?.message || e)
+      })
+      .finally(() => {
+        inFlight = false
+      })
+  }
+
+  const first = setTimeout(tick, firstDelayMs)
+  first.unref?.()
+  const timer = setInterval(tick, intervalMs)
+  timer.unref?.()
+
+  return () => {
+    stopped = true
+    clearTimeout(first)
     clearInterval(timer)
   }
 }

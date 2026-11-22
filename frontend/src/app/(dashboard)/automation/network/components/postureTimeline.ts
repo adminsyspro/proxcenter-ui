@@ -1,7 +1,7 @@
-import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, OUTSIDE_KEY, UNZONED_KEY, buildResolver, groupKeyOf, zoneKey, type LensPair } from '@/lib/microseg/trafficLens'
-import type { FlowDirection, MicrosegEvent, MicrosegTraffic, MicrosegZone, SuggestionKind } from '@/lib/microseg/types'
+import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, OUTSIDE_KEY, UNZONED_KEY, zoneKey } from '@/lib/microseg/trafficGroups'
+import type { FlowDirection, MicrosegEvent, MicrosegTraffic, MicrosegVolume, MicrosegZone, SuggestionKind } from '@/lib/microseg/types'
 
-import { eventGuestKey, guestVmid, type ClusterEvent } from './dashboardAggregate'
+import { eventGuestKey, type ClusterEvent } from './dashboardAggregate'
 import { NO_VLAN_KEY, type GroupBy, type PostureGuest, type PostureSlice } from './dashboardPosture'
 import { bareIp } from './microseg/zoneGraph'
 import { byText } from './microseg/zoneLayout'
@@ -27,22 +27,18 @@ export type TimelineRange = '1h' | '6h' | '24h' | '7d'
 export const TIMELINE_RANGES: readonly TimelineRange[] = ['1h', '6h', '24h', '7d']
 export const DEFAULT_RANGE: TimelineRange = '1h'
 
-/** The InfluxDB window sizes the sFlow route accepts (internal/api/sflow.go): a step is a multiple of one of them. */
-type SflowGranularity = '5m' | '15m' | '1h'
-const GRANULARITY_MS: Record<SflowGranularity, number> = { '5m': 5 * 60_000, '15m': 15 * 60_000, '1h': 60 * 60_000 }
-
-/**
- * Per range: its length, the bucket size of the history route (seconds, a multiple of 300 between 300 and 21600), and the
- * largest InfluxDB window the sFlow route accepts that divides that step (it has no 30 m nor 3 h: summed again here).
- */
-export const RANGE_SPEC: Record<TimelineRange, { ms: number; stepSec: number; granularity: SflowGranularity }> = {
-  '1h': { ms: 60 * 60_000, stepSec: 300, granularity: '5m' },
-  '6h': { ms: 6 * 60 * 60_000, stepSec: 900, granularity: '15m' },
-  '24h': { ms: 24 * 60 * 60_000, stepSec: 1800, granularity: '15m' },
-  '7d': { ms: 7 * 24 * 60 * 60_000, stepSec: 10_800, granularity: '1h' },
+/** Per range: its length, and the bucket size of the history and volume routes (seconds, a multiple of 300 between 300 and 21600). */
+export const RANGE_SPEC: Record<TimelineRange, { ms: number; stepSec: number }> = {
+  '1h': { ms: 60 * 60_000, stepSec: 300 },
+  '6h': { ms: 6 * 60 * 60_000, stepSec: 900 },
+  '24h': { ms: 24 * 60 * 60_000, stepSec: 1800 },
+  '7d': { ms: 7 * 24 * 60 * 60_000, stepSec: 10_800 },
 }
 
 export const stepMsOf = (range: TimelineRange) => RANGE_SPEC[range].stepSec * 1000
+
+/** The label of each range (networkPage.dashboard). */
+export const RANGE_LABEL: Record<TimelineRange, string> = { '1h': 'postureRange1h', '6h': 'postureRange6h', '24h': 'postureRange24h', '7d': 'postureRange7d' }
 
 /** A range read back from storage: anything else is the default. */
 export function asRange(value: unknown): TimelineRange {
@@ -245,6 +241,8 @@ function stack(first: number, last: number, items: readonly { at: number; group:
   for (const item of items) {
     if (!Number.isFinite(item.at) || item.at < first || item.at >= last + stepMs || item.value <= 0) continue
     const bucket = buckets[Math.floor((item.at - first) / stepMs)]
+    // A window that cannot be read has no bucket: nothing is counted in it.
+    if (!bucket) continue
     const key = shown.has(item.group) ? item.group : OTHER_KEY
     bucket.counts[key] = (bucket.counts[key] ?? 0) + item.value
     bucket.total += item.value
@@ -258,98 +256,37 @@ function stack(first: number, last: number, items: readonly { at: number; group:
 }
 
 /**
- * The window of the sFlow volume chart: the range, ending on the edge of the InfluxDB window of that range (5 m, 15 m
- * or 1 h, so the last window is whole and stamped on an edge; the read changes at each edge), starting on the step grid.
+ * The sFlow volume as the time chart (the volume route, the window and steps of the history route): the bytes per
+ * bucket of the range, by SOURCE zone (`by: 'src'`) or DESTINATION zone, as the donut groups. A source in no zone is
+ * "Unknown / External", a destination in none "Outside", a zone renamed or deleted since "Other". `pair` keeps one pair
+ * of zones (by name, '' for no zone), `zone` the traffic into a zone (by source) or out of it (by destination).
  */
-export function volumeWindow(now: number, range: TimelineRange): { from: number; to: number } {
-  const granularity = GRANULARITY_MS[RANGE_SPEC[range].granularity]
-  const to = Math.floor(now / granularity) * granularity + granularity
-  const step = stepMsOf(range)
-  return { from: Math.ceil((to - RANGE_SPEC[range].ms) / step) * step, to }
-}
-
-/** The VMID of a guest key ("qemu/101", or "<cluster>|qemu/101" on a shared policy). */
-const vmidOf = guestVmid
-
-/** The VMIDs of the volume chart at most: the busiest ones, so the series read stays bounded. */
-export const MAX_VOLUME_VMIDS = 100
-
-/** What the pairs told of one VMID of the connection: the most bytes a pair of it carried, and the addresses it had. */
-export type VmidSeen = { bytes: number; ips: ReadonlySet<string> }
-
-/**
- * The guests of the connection (by VMID) the sFlow pairs name at either end, on top of the ones seen before: the set
- * only grows, so the series read keeps its key.
- */
-export function accumulateVmids(seen: ReadonlyMap<number, VmidSeen>, pairs: readonly LensPair[], guests: readonly PostureGuest[]): Map<number, VmidSeen> {
-  const mine = new Set(guests.map(vmidOf))
-  const next = new Map(seen)
-  const take = (vmid: number | undefined, ip: string, bytes: number) => {
-    if (!vmid || !mine.has(vmid)) return
-    const prev = next.get(vmid)
-    next.set(vmid, { bytes: Math.max(prev?.bytes ?? 0, bytes), ips: new Set([...(prev?.ips ?? []), bareIp(ip)]) })
-  }
-  for (const p of pairs) {
-    take(p.src_vmid, p.src_ip, p.bytes)
-    take(p.dst_vmid, p.dst_ip, p.bytes)
-  }
-  return next
-}
-
-/**
- * The VMIDs the series read asks: the `max` busiest seen, in number order (a stable key). sFlow names VMs by VMID
- * across the fleet: once a guest's addresses are known, its VMID is only kept when a pair carried one of them (a VM
- * of another connection with the same VMID is not taken for it).
- */
-export function busiestVmids(seen: ReadonlyMap<number, VmidSeen>, guests: readonly PostureGuest[], max = MAX_VOLUME_VMIDS): number[] {
-  const ipsOf = new Map(guests.map(g => [vmidOf(g), new Set(g.ips.map(bareIp))]))
-  const isMine = (vmid: number, s: VmidSeen) => {
-    const ips = ipsOf.get(vmid)
-    return !!ips && (ips.size === 0 || [...s.ips].some(ip => ips.has(ip)))
-  }
-  return [...seen.entries()].filter(([vmid, s]) => isMine(vmid, s))
-    .sort((a, b) => b[1].bytes - a[1].bytes || a[0] - b[0]).slice(0, max).map(([vmid]) => vmid).sort((a, b) => a - b)
-}
-
-/** One VM of /sflow/timeseries/all-vms: its points, `time` in Unix seconds. */
-export type VmSeries = { vmid: number; vm_name?: string; points: { time: number; bytes_in: number; bytes_out: number }[] | null }
-
-/**
- * The sFlow bytes per 5-minute bucket of the window, per group of the donut: by zone, what the members SENT (the
- * donut groups by source zone; the zone from the guest tags, through the lens resolver); by destination zone, VLAN or
- * node, what the guests RECEIVED (the donut groups by destination). A VM the connection does not hold is Unknown.
- */
-export function postureVolume(input: {
-  series: readonly VmSeries[]
-  groupBy: GroupBy
-  zones: readonly MicrosegZone[]
-  tagPrefix: string
-  guests: readonly PostureGuest[]
-  slices: readonly TimelineSeries[]
+export function volumeTimeline(input: {
+  volume: Pick<MicrosegVolume, 'buckets' | 'from' | 'to'>
   range: TimelineRange
-  from: number
-  to: number
+  zones: readonly MicrosegZone[]
+  slices: readonly TimelineSeries[]
+  by: 'src' | 'dst'
+  pair?: TrafficPair | null
+  zone?: string | null
 }): PostureTimeline {
-  const { groupBy, guests, range } = input
+  const { volume, range, by, pair = null, zone = null } = input
   const stepMs = stepMsOf(range)
-  const granularityMs = GRANULARITY_MS[RANGE_SPEC[range].granularity]
-  const byVmid = new Map(guests.map(g => [vmidOf(g), g]))
-  const resolve = buildResolver([...input.zones], input.tagPrefix, guests.map(g => ({ vmid: vmidOf(g), name: g.key, tags: g.tags, ips: [] })))
-  const groupOfVm = (vmid: number): string => {
-    if (groupBy === 'zone' || groupBy === 'dstzone') return groupKeyOf(resolve('', vmid))
-    const guest = byVmid.get(vmid)
-    if (!guest) return EXTERNAL_KEY
-    if (groupBy === 'node') return `node:${guest.node}`
-    return guest.vlans.length ? `vlan:${guest.vlans[0]}` : NO_VLAN_KEY
+  const zoneByName = new Map(input.zones.map(z => [z.name.toLowerCase(), z]))
+  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+  const groupOf = (name: string): string => {
+    if (!name) return by === 'src' ? EXTERNAL_KEY : OUTSIDE_KEY
+    const z = zoneByName.get(name.toLowerCase())
+    return z ? zoneKey(z.id) : OTHER_KEY
   }
-  const items = input.series.flatMap(vm => {
-    const group = groupOfVm(vm.vmid)
-    // InfluxDB's aggregateWindow stamps each sum with the END of its window (internal/sflow/influx.go, the
-    // `aggregateWindow(every: ..., fn: sum)` queries): the window starts one granularity before, and sums with the
-    // others of the same step bucket (a 30 m or 3 h step is made of 15 m or 1 h windows).
-    return (vm.points ?? []).map(p => ({ at: p.time * 1000 - granularityMs, group, value: groupBy === 'zone' ? p.bytes_out : p.bytes_in }))
+  const items = volume.buckets.flatMap(b => {
+    if (pair && !(same(b.src_zone, pair.emitter) && same(b.dst_zone, pair.receiver))) return []
+    if (zone !== null && !same(by === 'src' ? b.dst_zone : b.src_zone, zone)) return []
+    return [{ at: Date.parse(b.at), group: groupOf(by === 'src' ? b.src_zone : b.dst_zone), value: b.bytes }]
   })
-  return { ...stack(input.from, Math.floor((input.to - 1) / stepMs) * stepMs, items, input.slices, stepMs), windowMinutes: RANGE_SPEC[range].ms / 60_000 }
+  const from = Date.parse(volume.from)
+  const to = Date.parse(volume.to)
+  return { ...stack(from, Math.floor((to - 1) / stepMs) * stepMs, items, input.slices, stepMs), range, windowMinutes: RANGE_SPEC[range].ms / 60_000 }
 }
 
 /** The drawing box of the time chart: the left edge and width of the plot, its top and height. */

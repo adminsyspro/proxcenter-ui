@@ -13,7 +13,7 @@ describe('matchMicrosegRoute', () => {
   it('knows the exact route table of the orchestrator', () => {
     const table = MICROSEG_ROUTES.map(r => `${r.method} ${r.pattern.source}`).sort()
 
-    expect(MICROSEG_ROUTES).toHaveLength(36)
+    expect(MICROSEG_ROUTES).toHaveLength(37)
     expect(table).toHaveLength(new Set(table).size)
 
     const cases: Array<[string, string[], boolean]> = [
@@ -49,6 +49,7 @@ describe('matchMicrosegRoute', () => {
       ['GET', ['status'], false],
       ['GET', ['events'], false],
       ['GET', ['traffic'], false],
+      ['GET', ['volume'], false],
     ]
 
     for (const [method, path, write] of cases) {
@@ -98,6 +99,7 @@ describe('matchMicrosegRoute', () => {
 
     expect(owner('POST', ['plan'])).toBe('none')
     expect(owner('GET', ['traffic'])).toBe('none')
+    expect(owner('GET', ['volume'])).toBe('none')
     for (const route of MICROSEG_ROUTES.filter(r => !r.write)) expect(route.audit).toBe('none')
     expect(MICROSEG_ROUTES.filter(r => r.audit === 'orchestrator')).toHaveLength(9)
   })
@@ -163,6 +165,7 @@ describe('matchMicrosegRoute', () => {
       ['GET', ['status']],
       ['GET', ['events']],
       ['GET', ['traffic']],
+      ['GET', ['volume']],
       ['GET', ['preflight']],
       ['POST', ['check']],
       ['POST', ['cluster-firewall', 'enable']],

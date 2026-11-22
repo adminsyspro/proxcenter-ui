@@ -349,6 +349,9 @@ describe('GET /sflow/agents: node probing and port map push', () => {
     expect(portmapCalls).toHaveLength(1)
     expect(portmapCalls[0][1].body).toEqual({
       agent_ip: '10.0.0.1',
+      // The volume history attributes the agent's samples to its cluster and node.
+      connection_id: 'conn-1',
+      node: 'pve1',
       ip_link_output: expect.stringContaining('ln_CLIENT'),
       guest_macs: { 'bc:24:11:b6:00:5d': 101, 'aa:bb:cc:dd:ee:ff': 109 },
     })

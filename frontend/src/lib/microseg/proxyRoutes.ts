@@ -99,6 +99,8 @@ export const MICROSEG_ROUTES: MicrosegRoute[] = [
   read(/^events$/, 'cluster'),
   // The persisted history of those flows per bucket (7 days, the engine's database): no Proxmox call either.
   read(/^traffic$/, 'cluster'),
+  // The sFlow volume between the zones per bucket (7 days, the orchestrator's database): no Proxmox call.
+  read(/^volume$/, 'cluster'),
   // The clusters sharing the policy. Associating one also needs the caller's
   // rights on the connection the body brings in (checked by the relay).
   read(/^clusters$/, 'policy', { clustersRead: true }),

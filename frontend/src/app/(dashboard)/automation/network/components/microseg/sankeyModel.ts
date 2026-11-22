@@ -1,8 +1,10 @@
-import type { MicrosegZone } from '@/lib/microseg/types'
+import type { MicrosegFlow, MicrosegSuggestion, MicrosegVolumeBucket, MicrosegZone } from '@/lib/microseg/types'
+import type { VolumeFigure } from '@/lib/microseg/volume'
 
 import { flowService } from './FlowSummary'
 import { cellView, type MatrixModel } from './matrixModel'
-import { OUTSIDE_ID, type FlowFilters, type MapEdgeKind } from './zoneGraph'
+import { edgeVolumes } from './edgeVolume'
+import { EXTERNAL_ID, OUTSIDE_ID, type FlowFilters, type MapEdgeKind } from './zoneGraph'
 import { byText } from './zoneLayout'
 
 /** The widest observed ribbon (the busiest pair), the thinnest one, and the width of an allowed ribbon (no counter). */
@@ -47,6 +49,15 @@ export type Ribbon = {
   hits: number
   /** How many flows (allowed) or observed flows the ribbon stands for. */
   count: number
+  /** The bytes sFlow measured for its flows over the period of the map, null when not measured. */
+  bytes: number | null
+  /** Those bytes with their packets and samples, for the text of the ribbon; null when not measured. */
+  volume: VolumeFigure | null
+  /** Some of the traffic its flows stand for is on another ribbon (the allowed flow that covers it): its own leaves it out. */
+  volumeShared: boolean
+  /** The flows (allowed) and observed flows the ribbon stands for: what its card lists and its chart reads. */
+  flows: MicrosegFlow[]
+  observed: MicrosegSuggestion[]
   services: string[]
   width: number
   /** The top of the ribbon at its source and at its target. */
@@ -66,6 +77,8 @@ export type SankeyLayout = {
   rightX: number
   /** Drawn at its size in px to fill the map (else scaled from COMPACT_W). */
   fill: boolean
+  /** The ribbons are as wide as the bytes sFlow measured (else as the hits of the observed flows). */
+  byBytes: boolean
 }
 
 // The diagram draws no exception: its ribbons are zone to zone.
@@ -80,8 +93,15 @@ export function ribbonWidth(hits: number, maxHits: number, maxW = MAX_W): number
 
 type Draft = Omit<Ribbon, 'width' | 'y0' | 'y1'>
 
-/** The ribbons of every cell the checkboxes leave something in: unprotected, blocked, allowed. */
-function draftRibbons(model: MatrixModel, filters: FlowFilters): Draft[] {
+/** The volume rows of the period and the names of the zones: the ribbons are then as wide as their bytes. */
+export type SankeyVolume = { rows: readonly MicrosegVolumeBucket[]; zoneName: (zoneId: string) => string | undefined }
+
+/**
+ * The ribbons of every cell the checkboxes leave something in: unprotected, blocked, allowed. Their volume is told as
+ * on the map, each measured byte on one ribbon: the allowed one when it covers an observed flow of the same pair.
+ */
+function draftRibbons(model: MatrixModel, filters: FlowFilters, volume: SankeyVolume | null): Draft[] {
+  const unmeasured = { bytes: null, volume: null, volumeShared: false }
   const out: Draft[] = []
   for (const cell of model.cells.values()) {
     const view = cellView(cell, filters, null)
@@ -90,15 +110,21 @@ function draftRibbons(model: MatrixModel, filters: FlowFilters): Draft[] {
     for (const kind of ['unprotected', 'blocked'] as const) {
       const seen = view.observed.filter(s => (s.kind === 'blocked') === (kind === 'blocked'))
       if (seen.length) {
-        out.push({ ...base, id: `${kind}:${cell.id}`, kind, hits: seen.reduce((sum, s) => sum + s.hits, 0), count: seen.length, services: [...new Set(seen.map(s => flowService(s)))].sort(byText) })
+        out.push({ ...base, id: `${kind}:${cell.id}`, kind, hits: seen.reduce((sum, s) => sum + s.hits, 0), count: seen.length, ...unmeasured, flows: [], observed: seen, services: [...new Set(seen.map(s => flowService(s)))].sort(byText) })
       }
     }
     if (view.flows.length) {
       const kind: MapEdgeKind = cell.target === OUTSIDE_ID ? 'outside' : 'allowed'
-      out.push({ ...base, id: `${kind}:${cell.id}`, kind, hits: 0, count: view.flows.length, services: view.services })
+      out.push({ ...base, id: `${kind}:${cell.id}`, kind, hits: 0, count: view.flows.length, ...unmeasured, flows: view.flows, observed: [], services: view.services })
     }
   }
-  return out
+  if (!volume) return out
+  // Every ribbon runs between two zones (or boxes): told by its flows alone, whatever its ends are named.
+  const told = edgeVolumes(out.map(r => ({ id: r.id, source: EXTERNAL_ID, target: EXTERNAL_ID, data: { kind: r.kind, flows: r.flows, observed: r.observed } })), volume.rows, volume.zoneName)
+  return out.map(r => {
+    const mine = told.get(r.id)
+    return mine ? { ...r, bytes: mine.figure.bytes, volume: mine.figure, volumeShared: mine.shared } : r
+  })
 }
 
 const nameOf = (zone: MicrosegZone | null, id: string) => zone?.name ?? id
@@ -130,9 +156,21 @@ function stack(ids: string[], ribbons: Ribbon[], end: 'source' | 'target', zoneO
   return nodes
 }
 
+/**
+ * What sizes a ribbon: its hits, or its bytes when the volume is measured. A ribbon without any is MIN_W wide when
+ * observed, ALLOWED_W when allowed.
+ */
+type Measure = { of: (d: Draft) => number; max: number }
+
+function draftWidth(d: Draft, measure: Measure, maxW: number): number {
+  const amount = measure.of(d)
+  if (amount > 0) return ribbonWidth(amount, measure.max, maxW)
+  return d.kind === 'unprotected' || d.kind === 'blocked' ? MIN_W : ALLOWED_W
+}
+
 /** The tallest column with ribbons at most `maxW` wide and the least gaps. */
-function tallestColumn(drafts: Draft[], maxHits: number, maxW: number): number {
-  const width = (d: Draft) => (d.hits ? ribbonWidth(d.hits, maxHits, maxW) : ALLOWED_W)
+function tallestColumn(drafts: Draft[], measure: Measure, maxW: number): number {
+  const width = (d: Draft) => draftWidth(d, measure, maxW)
   const column = (end: 'source' | 'target') => {
     const heights = new Map<string, number>()
     for (const d of drafts) heights.set(d[end], (heights.get(d[end]) ?? 0) + width(d))
@@ -143,13 +181,13 @@ function tallestColumn(drafts: Draft[], maxHits: number, maxW: number): number {
 }
 
 /** The widest ribbon (MAX_W to MAX_FILL_W) whose tallest column still fits `available`: the bars scale with the map. */
-function fillMaxWidth(drafts: Draft[], maxHits: number, available: number): number {
-  if (tallestColumn(drafts, maxHits, MAX_W) >= available) return MAX_W
+function fillMaxWidth(drafts: Draft[], measure: Measure, available: number): number {
+  if (tallestColumn(drafts, measure, MAX_W) >= available) return MAX_W
   let low = MAX_W
   let high = MAX_FILL_W
   for (let i = 0; i < 20; i++) {
     const mid = (low + high) / 2
-    if (tallestColumn(drafts, maxHits, mid) <= available) low = mid
+    if (tallestColumn(drafts, measure, mid) <= available) low = mid
     else high = mid
   }
   return Math.floor(low)
@@ -186,16 +224,19 @@ function placeEnds(nodes: SankeyNode[], ribbons: Ribbon[], end: 'source' | 'targ
  * FILL_MIN_WIDTH wide), it fills it: the bars at LEFT_AT and RIGHT_AT of the width, the ribbons widened (up to
  * MAX_FILL_W) so the tallest column uses the height under the headings, the columns spread over it. Pure and deterministic.
  */
-export function buildSankey(model: MatrixModel, filters: FlowFilters, size?: SankeySize | null): SankeyLayout {
+export function buildSankey(model: MatrixModel, filters: FlowFilters, size?: SankeySize | null, volume: SankeyVolume | null = null): SankeyLayout {
   const fill = !!size && size.width >= FILL_MIN_WIDTH
   const width = fill ? size.width : COMPACT_W
   const geometry = fill ? { width, ...columnsAt(width), fill } : { width, leftX: LABEL_W, rightX: COMPACT_W - LABEL_W - BAR_W, fill }
-  const drafts = draftRibbons(model, filters)
-  if (!drafts.length) return { sources: [], targets: [], ribbons: [], height: 0, ...geometry }
-  const maxHits = Math.max(0, ...drafts.map(d => d.hits))
+  const drafts = draftRibbons(model, filters, volume)
+  if (!drafts.length) return { sources: [], targets: [], ribbons: [], height: 0, byBytes: false, ...geometry }
+  // Measured by sFlow, every ribbon is as wide as its bytes; else an observed one as its hits.
+  const byBytes = drafts.some(d => (d.bytes ?? 0) > 0)
+  const of = byBytes ? (d: Draft) => d.bytes ?? 0 : (d: Draft) => d.hits
+  const measure: Measure = { of, max: Math.max(0, ...drafts.map(of)) }
   const available = fill ? Math.max(0, size.height - HEAD - FOOT) : null
-  const maxW = available === null ? MAX_W : fillMaxWidth(drafts, maxHits, available)
-  const ribbons: Ribbon[] = drafts.map(d => ({ ...d, width: d.hits ? ribbonWidth(d.hits, maxHits, maxW) : ALLOWED_W, y0: 0, y1: 0 }))
+  const maxW = available === null ? MAX_W : fillMaxWidth(drafts, measure, available)
+  const ribbons: Ribbon[] = drafts.map(d => ({ ...d, width: draftWidth(d, measure, maxW), y0: 0, y1: 0 }))
   const zones = new Map([...model.rows, ...model.cols].map(e => [e.id, e.zone]))
   const zoneOf = (id: string) => zones.get(id) ?? null
   const sources = stack([...new Set(ribbons.map(r => r.source))], ribbons, 'source', zoneOf, available)
@@ -205,5 +246,5 @@ export function buildSankey(model: MatrixModel, filters: FlowFilters, size?: San
   placeEnds(targets, ribbons, 'target', rank(sources))
   ribbons.sort((a, b) => byText(a.id, b.id))
   const height = Math.max(available ?? 0, ...[...sources, ...targets].map(n => n.y + Math.max(n.height, MIN_PITCH)))
-  return { sources, targets, ribbons, height: round(height), ...geometry }
+  return { sources, targets, ribbons, height: round(height), byBytes, ...geometry }
 }

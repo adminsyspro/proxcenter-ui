@@ -2,11 +2,12 @@ import { useMemo } from 'react'
 
 import { useVMFirewallCoverage, type FirewallCoverage } from '@/hooks/useZeroTrust'
 import { MAX_POLICY_CONNECTIONS } from '@/lib/microseg/useMicrosegGroup'
-import type { MicrosegEvent, MicrosegTraffic } from '@/lib/microseg/types'
+import type { MicrosegEvent, MicrosegTraffic, MicrosegVolume } from '@/lib/microseg/types'
 
 import type { TimelineRange } from './postureTimeline'
 import { usePostureEvents } from './usePostureEvents'
 import { usePostureHistory } from './usePostureHistory'
+import { useVolumeHistory } from './useVolumeHistory'
 
 /**
  * The per-cluster reads of the Dashboard of a shared policy, one read per cluster through its own relay, as
@@ -95,6 +96,24 @@ export function usePolicyHistory(clusterIds: readonly string[], range: TimelineR
   const [d0, d1, d2, d3, d4, d5, d6, d7] = slots.map(s => s.history)
   const [e0, e1, e2, e3, e4, e5, e6, e7] = slots.map(s => s.error)
   const shown = slots.find((s, i) => i < ids.length && s.history)?.range ?? range
+  return useMemo(() => {
+    const data = [d0, d1, d2, d3, d4, d5, d6, d7]
+    const failed = [e0, e1, e2, e3, e4, e5, e6, e7]
+    return { ...bySlot(ids, data.map((d, i) => ({ data: d, error: failed[i] }))), range: shown }
+  }, [ids, d0, d1, d2, d3, d4, d5, d6, d7, e0, e1, e2, e3, e4, e5, e6, e7, shown])
+}
+
+/** The sFlow volume of each cluster over the range (orchestrator database, no Proxmox call), at the pace of the history. */
+export function usePolicyVolume(clusterIds: readonly string[], range: TimelineRange): ClusterReads<MicrosegVolume> & { range: TimelineRange } {
+  const ids = useIds(clusterIds)
+  const slot = (i: number) => ids[i] ?? null
+  const slots = [
+    useVolumeHistory(slot(0), range), useVolumeHistory(slot(1), range), useVolumeHistory(slot(2), range), useVolumeHistory(slot(3), range),
+    useVolumeHistory(slot(4), range), useVolumeHistory(slot(5), range), useVolumeHistory(slot(6), range), useVolumeHistory(slot(7), range),
+  ]
+  const [d0, d1, d2, d3, d4, d5, d6, d7] = slots.map(s => s.volume)
+  const [e0, e1, e2, e3, e4, e5, e6, e7] = slots.map(s => s.error)
+  const shown = slots.find((s, i) => i < ids.length && s.volume)?.range ?? range
   return useMemo(() => {
     const data = [d0, d1, d2, d3, d4, d5, d6, d7]
     const failed = [e0, e1, e2, e3, e4, e5, e6, e7]

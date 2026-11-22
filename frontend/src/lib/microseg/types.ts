@@ -498,6 +498,36 @@ export type MicrosegTrafficBucket = {
 /** GET /traffic: the persisted history of the flows (7 days), `step` in seconds. */
 export type MicrosegTraffic = { step: number; from: string; to: string; buckets: MicrosegTrafficBucket[] }
 
+/**
+ * One row of GET /volume: what sFlow estimated from `src_zone` to `dst_zone` ('' for an address in no zone) for one
+ * service, in the bucket that starts at `at`. Each sample is counted in the direction of its conversation (client to
+ * server): `port` is the service port, 0 for icmp, other and the services past the bound of a pair. `proto` is ''
+ * when the services of a pair are summed (`group: 'pair'`).
+ */
+export type MicrosegVolumeBucket = {
+  at: string
+  src_zone: string
+  dst_zone: string
+  proto: string
+  port: number
+  bytes: number
+  packets: number
+  /** How many sFlow samples the estimate stands on; absent from an orchestrator that does not count them. */
+  samples?: number
+}
+
+/** GET /volume: `covered` false means sFlow does not measure the connection (no OVS, no agent), not "no traffic". */
+export type MicrosegVolume = { step: number; from: string; to: string; covered: boolean; buckets: MicrosegVolumeBucket[] }
+
+/**
+ * A bucket of GET /volume?group=guest: the same volume by pair of guests, `src_vmid` to `dst_vmid` (0 for an end that
+ * is no guest of the connection), with the zones of the two ends when it was last counted.
+ */
+export type MicrosegVolumeGuestBucket = MicrosegVolumeBucket & { src_vmid: number; dst_vmid: number }
+
+/** GET /volume?group=guest. */
+export type MicrosegGuestVolume = Omit<MicrosegVolume, 'buckets'> & { buckets: MicrosegVolumeGuestBucket[] }
+
 /** GET /events: newest first. */
 export type MicrosegEventList = {
   events: MicrosegEvent[]

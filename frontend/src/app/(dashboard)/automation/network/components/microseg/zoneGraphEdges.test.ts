@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Point } from './edgeGeometry'
-import { placeEdges, type EdgeEnds, type EdgeSpec } from './zoneGraphEdges'
+import { rectAround, rectsOverlap } from './edgeGeometry'
+import { placeEdges, placeLabel, type EdgeEnds, type EdgeSpec } from './zoneGraphEdges'
 
 const spec = (id: string, source: string, target: string): EdgeSpec => ({ id, source, target, label: id, small: false })
 const box = (x: number, y: number, group: string): EdgeEnds => ({ center: { x, y }, shape: { kind: 'box', halfW: 80, halfH: 20 }, group })
@@ -36,5 +37,21 @@ describe('placeEdges: lanes', () => {
     const ends = new Map<string, EdgeEnds>([['a', circle(0, 0, 10, 'zone:a')], ['b', circle(300, 0, 10, 'zone:b')]])
     const lone = placeEdges([spec('only', 'a', 'b')], ends, []).get('only')!
     expect(Math.abs(middle(lone.points).y)).toBeLessThan(1)
+  })
+})
+
+describe('placeLabel', () => {
+  // A straight edge from (0, 0) to (240, 0).
+  const line = { start: { x: 0, y: 0 }, end: { x: 240, y: 0 }, mid: { x: 120, y: 0 }, path: '', points: [], pointAt: (t: number) => ({ x: 240 * t, y: 0 }) }
+
+  it('keeps a label on its edge where a place is free', () => {
+    expect(placeLabel(line, 100, 18, 0.5, [], []).point).toEqual({ x: 120, y: 0 })
+  })
+
+  it('moves a label a label height off the side of its edge when every place on it is taken, covering nothing', () => {
+    const taken = [rectAround({ x: 120, y: 0 }, 260, 16)]
+    const { point, rect } = placeLabel(line, 100, 18, 0.5, taken, [])
+    expect(Math.abs(point.y)).toBe(21)
+    expect(rectsOverlap(rect, taken[0], 3)).toBe(false)
   })
 })

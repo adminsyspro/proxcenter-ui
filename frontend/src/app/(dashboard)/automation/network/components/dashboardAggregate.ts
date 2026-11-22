@@ -2,7 +2,6 @@ import type { FirewallCoverage } from '@/hooks/useZeroTrust'
 import type { MicrosegCluster, MicrosegEvent, MicrosegSuggestion, MicrosegTraffic } from '@/lib/microseg/types'
 
 import { postureGuests, type PostureGuest } from './dashboardPosture'
-import type { VmSeries } from './postureTimeline'
 import type { PolicyGuest } from './microseg/zoneModel'
 
 /**
@@ -140,8 +139,3 @@ export function mergeClusterEvents(lists: readonly { cluster: string; events: Mi
 /** The VMID of a guest key ("qemu/101", or "<cluster>|qemu/101" on a shared policy). */
 export const guestVmid = (g: Pick<PostureGuest, 'key'>) => Number(g.key.slice(g.key.lastIndexOf('/') + 1))
 
-/** The sFlow series of the guests shown (the filter keeps those of one cluster; sFlow keys them by VMID). */
-export function seriesOf(series: readonly VmSeries[], guests: readonly PostureGuest[]): VmSeries[] {
-  const vmids = new Set(guests.map(guestVmid))
-  return series.filter(vm => vmids.has(vm.vmid))
-}

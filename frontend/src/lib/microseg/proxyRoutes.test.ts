@@ -13,7 +13,7 @@ describe('matchMicrosegRoute', () => {
   it('knows the exact route table of the orchestrator', () => {
     const table = MICROSEG_ROUTES.map(r => `${r.method} ${r.pattern.source}`).sort()
 
-    expect(MICROSEG_ROUTES).toHaveLength(37)
+    expect(MICROSEG_ROUTES).toHaveLength(38)
     expect(table).toHaveLength(new Set(table).size)
 
     const cases: Array<[string, string[], boolean]> = [
@@ -39,6 +39,7 @@ describe('matchMicrosegRoute', () => {
       ['POST', ['suggestions', 'resolve'], true],
       ['GET', ['drifts'], false],
       ['GET', ['preflight'], false],
+      ['GET', ['ipfilter'], false],
       ['POST', ['confirm-writes'], true],
       ['POST', ['emergency-stop'], true],
       ['POST', ['remove'], true],
@@ -167,6 +168,7 @@ describe('matchMicrosegRoute', () => {
       ['GET', ['traffic']],
       ['GET', ['volume']],
       ['GET', ['preflight']],
+      ['GET', ['ipfilter']],
       ['POST', ['check']],
       ['POST', ['cluster-firewall', 'enable']],
       ['POST', ['confirm-writes']],

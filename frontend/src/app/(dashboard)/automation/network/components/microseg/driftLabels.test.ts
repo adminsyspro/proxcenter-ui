@@ -42,6 +42,16 @@ const SAMPLES: MicrosegDrift[] = [
   { kind: 'known_rule_extra', guest, object: 'pcz-_known' },
   { kind: 'local_set_desync', object: 'pcz-_local', detail: { desired: ['10.0.0.0/24'], actual: [] } },
   { kind: 'egress_no_subnet', guest, detail: { zone: 'web' } },
+  { kind: 'ipfilter_off', guest, detail: { zone: 'web', option: true, nics: ['net0'] } },
+  { kind: 'ipfilter_off', guest, detail: { zone: 'web', option: false, nics: [] } },
+  { kind: 'ipfilter_list_changed', guest, detail: { zone: 'web', nic: 'net0', missing: ['10.0.0.5'], extra: ['10.0.0.9'] } },
+  { kind: 'ipfilter_no_address', guest, detail: { zone: 'web', nics: ['net1'] } },
+  { kind: 'ipfilter_address_held', guest, detail: { zone: 'web', nic: 'net0', addr: '10.0.0.7', reason: 'guest', by: 'db-1' } },
+  { kind: 'ipfilter_address_held', guest, detail: { zone: 'web', nic: 'net0', addr: '10.0.0.7', reason: 'peer', by: '' } },
+  { kind: 'ipfilter_address_held', guest, detail: { zone: 'web', nic: 'net0', addr: '10.0.0.7', reason: 'source', by: '10.0.0.0/24' } },
+  { kind: 'ipfilter_address_held', guest, detail: { zone: 'web', nic: 'net0', addr: '10.0.0.7', reason: 'later' } },
+  { kind: 'ipfilter_manual', guest, detail: { zone: 'web', nics: ['net0'] } },
+  { kind: 'unzoned_same_network', guest, detail: { name: 'stray-1', networks: ['vmbr0/20'], zones: ['web', 'db'] } },
 ]
 
 describe('driftLabel', () => {
@@ -113,6 +123,9 @@ describe('driftLabel', () => {
       // The last sample of a kind wins: the collided ones have no fix (Proxmox holds it), the misplaced known rule is realigned.
       egress_rule_missing: null, egress_rule_misplaced: 'plan', egress_rule_verdict: null, known_rule_missing: 'plan',
       known_rule_extra: 'plan', local_set_desync: 'plan', egress_no_subnet: null,
+      // The IP filter: what the plan realigns, the address the admin allows, the guest to assign, and the two the admin handles.
+      ipfilter_off: 'plan', ipfilter_list_changed: 'plan', ipfilter_no_address: null, ipfilter_address_held: 'allow', ipfilter_manual: null,
+      unzoned_same_network: 'assign',
     })
   })
 
@@ -134,6 +147,59 @@ describe('driftKey', () => {
 
   it('ignores the node a guest runs on, like the backend', () => {
     expect(driftKey({ kind: 'ambiguous_zone', guest })).toBe(driftKey({ kind: 'ambiguous_zone', guest: { ...guest, node: 'pve2' } }))
+  })
+})
+
+describe('IP filter drifts', () => {
+  const t = translator('en')
+  const by = (kind: string) => SAMPLES.filter(d => d.kind === kind)
+
+  it('knows the six kinds, each with its chip in the 6 locales', () => {
+    for (const kind of ['ipfilter_off', 'ipfilter_list_changed', 'ipfilter_no_address', 'ipfilter_address_held', 'ipfilter_manual', 'unzoned_same_network']) {
+      expect(DRIFT_KINDS as readonly string[]).toContain(kind)
+      expect(KIND_CHIP[kind], kind).toBeTruthy()
+      for (const locale of Object.keys(locales)) expect(locales[locale].microsegPilot.drifts.chip[kind], `${locale}: chip.${kind}`).toBeTruthy()
+    }
+  })
+
+  it('tells lists that are missing from an option taken off by hand', () => {
+    const [lists, option] = by('ipfilter_off').map(d => driftLabel(d, t).detail)
+    expect(lists).toBe('The IP filter is not applied on net0: this member of web can send from any address.')
+    expect(option).toBe('The IP filter option was taken off this member of web: its lists no longer apply.')
+  })
+
+  it('says what a changed list misses and has in excess', () => {
+    expect(driftLabel(by('ipfilter_list_changed')[0], t).detail).toBe('The list of net0 differs from the policy (missing: 10.0.0.5; in excess: 10.0.0.9).')
+  })
+
+  it('says who holds an address, by reason, and keeps a general sentence for a reason it does not know', () => {
+    const [guestHeld, peer, source, unknown] = by('ipfilter_address_held').map(d => driftLabel(d, t))
+    expect(guestHeld.detail).toBe('10.0.0.7 on net0 was not added: db-1, a member of another zone, holds it.')
+    expect(peer.detail).toBe('10.0.0.7 on net0 was not added: a member of another zone on another cluster holds it.')
+    expect(source.detail).toBe('10.0.0.7 on net0 was not added: it is inside the source network 10.0.0.0/24 of a flow.')
+    expect(unknown.detail).toBe('10.0.0.7 on net0 was not added to the list of this guest.')
+    for (const label of [guestHeld, peer, source, unknown]) expect(label).toMatchObject({ fix: 'allow', fixable: true, hint: null })
+  })
+
+  it('leaves the member without an address and the hand-made list to the admin, with what to do', () => {
+    expect(driftLabel(by('ipfilter_no_address')[0], t)).toMatchObject({ fix: null, detail: 'No address is known on net1: this member of web is not filtered.' })
+    expect(driftLabel(by('ipfilter_no_address')[0], t).hint).toContain('additional address')
+    expect(driftLabel(by('ipfilter_manual')[0], t)).toMatchObject({ fix: null })
+    expect(driftLabel(by('ipfilter_manual')[0], t).hint).toContain('Nothing to do')
+  })
+
+  it('names the guest outside every zone, its networks and the zones it shares them with, and assigns it', () => {
+    const label = driftLabel(by('unzoned_same_network')[0], t)
+    expect(label.detail).toBe('stray-1 is in no zone and shares vmbr0/20 with web, db: it is not filtered.')
+    expect(label.fix).toBe('assign')
+  })
+
+  it('keys an address held and a changed list per NIC and address, the other kinds as before', () => {
+    const held = (addr: string): MicrosegDrift => ({ kind: 'ipfilter_address_held', guest, detail: { nic: 'net0', addr } })
+    expect(driftKey(held('10.0.0.7'))).toBe('ipfilter_address_held|qemu/101|||net0|10.0.0.7')
+    expect(driftKey(held('10.0.0.7'))).not.toBe(driftKey(held('10.0.0.8')))
+    expect(driftKey({ kind: 'ipfilter_list_changed', guest, detail: { nic: 'net1' } })).toBe('ipfilter_list_changed|qemu/101|||net1|')
+    expect(driftKey({ kind: 'ipfilter_off', guest, detail: { nics: ['net0'] } })).toBe('ipfilter_off|qemu/101||')
   })
 })
 

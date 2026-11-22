@@ -36,6 +36,29 @@ describe('demo micro-segmentation', () => {
     expect(suggestions.suggestions.map((s: any) => s.kind)).toContain('blocked')
   })
 
+  it('serves the IP filter of the zone members: every member once, the states the tab tells apart, and a policy that agrees with it', async () => {
+    const policy = await demoGet(`${BASE}/policy`)
+    const filter = await demoGet(`${BASE}/ipfilter`)
+    const preflight = await demoGet(`${BASE}/preflight`)
+
+    expect(policy.policy.ip_filter).toBe(true)
+    expect(filter.enabled).toBe(true)
+    expect(filter.computed).toBe(true)
+    expect(new Set(filter.guests.map((g: any) => `${g.type}/${g.vmid}`)).size).toBe(filter.guests.length)
+    expect(new Set(filter.guests.map((g: any) => g.mode))).toEqual(new Set(['on', 'excluded', 'manual', 'no_address']))
+    expect(filter.guests.some((g: any) => g.held.length > 0 && g.held[0].by)).toBe(true)
+    expect(filter.guests.some((g: any) => g.dhcp.length > 0 && g.unknown.length > 0)).toBe(true)
+
+    // The guest the admin left out is the one the filter reports excluded; the allowed address is in the guest's list.
+    const leftOut = policy.policy.guest_filters.find((f: any) => f.disabled)
+    expect(filter.guests.find((g: any) => g.vmid === leftOut.vmid).mode).toBe('excluded')
+    const extra = policy.policy.guest_filters.find((f: any) => f.extra)
+    expect(filter.guests.find((g: any) => g.vmid === extra.vmid).nics.net0).toContain(extra.extra[0])
+
+    const check = preflight.checks.find((c: any) => c.id === 'ip_filter')
+    expect(check.detail.members).toBe(filter.guests.length)
+  })
+
   it('answers any connection id, as the demo has one cluster', async () => {
     const policy = await demoGet('/api/v1/firewall/microseg/some-other-id/policy')
 
@@ -181,11 +204,11 @@ describe('demo micro-segmentation', () => {
     expect((await demoGet(`${BASE}/runs?limit=2`)).runs).toHaveLength(2)
   })
 
-  it('serves a pre-flight with exactly one warning and no failure', async () => {
+  it('serves a pre-flight with two warnings (the log rate, the IP filter) and no failure', async () => {
     const { checks } = await demoGet(`${BASE}/preflight`)
     const by = (s: string) => checks.filter((c: any) => c.status === s)
 
-    expect(by('warn')).toHaveLength(1)
+    expect(by('warn').map((c: any) => c.id)).toEqual(['log_ratelimit', 'ip_filter'])
     expect(by('fail')).toHaveLength(0)
     expect(by('pass').length).toBeGreaterThanOrEqual(2)
   })

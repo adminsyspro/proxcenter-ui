@@ -186,6 +186,30 @@ describe('microsegApi requests', () => {
     fetchMock.mockResolvedValue(reply(200, { ok: true, was_held: false }))
     expect(await api.confirmWrites()).toEqual({ ok: true, was_held: false })
   })
+
+  it('reads the IP filter of the zone members and fills what an answer leaves null', async () => {
+    const api = microsegApi('c1')
+    const guest = { node: 'pve1', type: 'qemu', vmid: 100, name: 'web-1', zone: 'web', mode: 'on', applied: true, nics: { net0: ['10.0.0.5'] }, held: null, no_address: null, manual: null, dhcp: ['net0'], unknown: [], extra: null }
+    fetchMock.mockResolvedValue(reply(200, { enabled: true, computed: true, computed_at: '2026-11-20T10:00:00Z', guests: [guest] }))
+    expect(await api.getIPFilter()).toEqual({
+      enabled: true, computed: true, computed_at: '2026-11-20T10:00:00Z',
+      guests: [{ ...guest, held: [], no_address: [], manual: [], extra: [] }],
+    })
+    expect(lastCall().url).toBe('/api/v1/firewall/microseg/c1/ipfilter')
+    expect(lastCall().method).toBe('GET')
+    fetchMock.mockResolvedValue(reply(200, { enabled: false, computed: false, guests: null }))
+    expect(await api.getIPFilter()).toEqual({ enabled: false, computed: false, computed_at: null, guests: [] })
+    fetchMock.mockResolvedValue(reply(200, null))
+    expect(await api.getIPFilter()).toEqual({ enabled: false, computed: true, computed_at: null, guests: [] })
+  })
+
+  it('sends the IP filter switch and the whole list of guest settings with the policy', async () => {
+    const api = microsegApi('c1')
+    fetchMock.mockResolvedValue(reply(200, { version: 4 }))
+    await api.savePolicy({ version: 3, ip_filter: true, guest_filters: [{ connection_id: 'c1', type: 'qemu', vmid: 100, disabled: true }] })
+    expect(lastCall().method).toBe('PUT')
+    expect(lastCall().body).toEqual({ version: 3, ip_filter: true, guest_filters: [{ connection_id: 'c1', type: 'qemu', vmid: 100, disabled: true }] })
+  })
 })
 
 describe('microsegApi events', () => {

@@ -5,7 +5,7 @@
  * One policy on the production cluster: five zones holding 22 of its guests (picked from the demo inventory by
  * vmid, tagged `zone-<name>` and given an address on the zone subnet through GET /api/v1/vms), the flows allowed
  * between them, what the engine observed (would-block in the zone still observed, blocked in the enforced ones),
- * three drifts, two revisions, the latest runs and a pre-flight with one warning. The shapes follow
+ * three drifts, two revisions, the latest runs, a pre-flight with two warnings and the IP filter of the members. The shapes follow
  * lib/microseg/types.ts, which follows the orchestrator (internal/microseg).
  *
  * A write answers 403 FORBIDDEN "Action disabled in demo mode", like the demo's other locked mutations: the generic
@@ -132,6 +132,7 @@ function policy(now: number) {
   return {
     policy: {
       id: POLICY_ID, connection_id: PROD, tag_prefix: TAG_PREFIX, version: 7, emergency_stop: false,
+      ip_filter: true, guest_filters: GUEST_FILTERS,
       settings: {
         light_interval_sec: 300, ips_interval_sec: 900, full_interval_sec: 1800, log_interval_sec: 60, ready_after_hours: 24, write_cap: 50,
         observe_log_rate_limit: '10/second', original_log_rate_limit: '1/second',
@@ -219,12 +220,62 @@ const DRIFTS = [
   { kind: 'foreign_accept', guest: guestRef(118), detail: { name: GUESTS[118]?.name ?? 'db-redis-prod-01', source: '10.0.0.0/8', proto: 'tcp', dport: '6379', pos: 3 } },
 ]
 
+/**
+ * The IP filter of the zone members (GET ipfilter): every member of a zone with its addresses per NIC, a few of them in
+ * the states the tab tells apart: left out by the admin, a NIC without a known address, a list made by hand, an address
+ * held by a member of another zone, a NIC on DHCP with a source address the lists would drop.
+ */
+const FILTER_EXCLUDED = 153
+const FILTER_NO_ADDRESS = 118
+const FILTER_MANUAL = 113
+const FILTER_HELD = 152
+const FILTER_DHCP = 133
+const FILTER_EXTRA = '10.20.20.240'
+
+const GUEST_FILTERS = [
+  { connection_id: PROD, type: GUESTS[FILTER_EXCLUDED]?.type ?? 'qemu', vmid: FILTER_EXCLUDED, name: GUESTS[FILTER_EXCLUDED]?.name ?? 'app-prod-03', disabled: true },
+  { connection_id: PROD, type: GUESTS[FILTER_HELD]?.type ?? 'qemu', vmid: FILTER_HELD, name: GUESTS[FILTER_HELD]?.name ?? 'app-prod-02', extra: [FILTER_EXTRA] },
+]
+
+const FILTER_MODE: Record<number, string> = { [FILTER_EXCLUDED]: 'excluded', [FILTER_NO_ADDRESS]: 'no_address', [FILTER_MANUAL]: 'manual' }
+
+function ipFilterGuest(vmid: number, zone: DemoZone) {
+  const g = GUESTS[vmid]
+  const mode = FILTER_MODE[vmid] ?? 'on'
+  const own = ipOf(vmid, zone.octet)
+  const nics: Record<string, string[]> = { net0: ['0.0.0.0', own, `fe80::be24:11ff:fe00:${vmid.toString(16)}`] }
+
+  if (vmid === FILTER_HELD) nics.net0.push(FILTER_EXTRA)
+
+  return {
+    node: g?.node ?? 'pve-node-01', type: g?.type ?? 'qemu', vmid, name: g?.name ?? `guest-${vmid}`, zone: zone.name, mode,
+    applied: mode === 'on' && zone.state !== 'disabled',
+    nics: mode === 'on' ? nics : {},
+    held: vmid === FILTER_HELD ? [{ nic: 'net0', addr: ipOf(100, 10), reason: 'guest', by: GUESTS[100]?.name ?? 'web-prod-01' }] : [],
+    no_address: vmid === FILTER_NO_ADDRESS ? ['net1'] : [],
+    manual: vmid === FILTER_MANUAL ? ['net0'] : [],
+    dhcp: vmid === FILTER_DHCP ? ['net0'] : [],
+    unknown: vmid === FILTER_DHCP ? ['10.20.40.250'] : [],
+    extra: vmid === FILTER_HELD ? [FILTER_EXTRA] : [],
+  }
+}
+
+function ipFilter(now: number) {
+  return {
+    enabled: true, computed: true, computed_at: new Date(hourBucket(now) - 22 * 60_000).toISOString(),
+    guests: ZONES.flatMap(z => z.vmids.map(vmid => ipFilterGuest(vmid, z))),
+  }
+}
+
+const FILTER_MEMBERS = ZONES.reduce((n, z) => n + z.vmids.length, 0)
+
 const CHECKS = [
   { id: 'cluster_firewall', status: 'pass' },
   { id: 'socle_rules', status: 'pass', detail: { web: true, ssh: true } },
   { id: 'node_traffic', status: 'pass' },
   { id: 'log_ratelimit', status: 'warn', detail: { rate: '1/second' } },
   { id: 'self_in_zone', status: 'pass', detail: { self_ip: '10.20.60.5' } },
+  { id: 'ip_filter', status: 'warn', detail: { members: FILTER_MEMBERS, ready: FILTER_MEMBERS - 5, excluded: 1, manual: 1, no_address: 1, held: 1, unknown: 1, dhcp: 1 } },
 ]
 
 type RunSeed = { id: string; kind: string; status: 'done' | 'failed'; minutesAgo: number; ms: number; calls: number; writes: number; error?: string }
@@ -487,7 +538,7 @@ function coverage(now: number) {
 
 export const MICROSEG_MOCKS: DemoMockMap = {}
 
-const ROUTE = /^\/api\/v1\/firewall\/microseg\/[^/]+\/(policy|status|drifts|preflight|suggestions|runs|revisions|traffic|volume|events)(?:\/([^/]+))?$/
+const ROUTE = /^\/api\/v1\/firewall\/microseg\/[^/]+\/(policy|status|drifts|preflight|ipfilter|suggestions|runs|revisions|traffic|volume|events)(?:\/([^/]+))?$/
 
 /** The guest coverage the Dashboard reads (its chips, its "To do" list, the groupings by VLAN and node): same guests, same zones. */
 const COVERAGE_ROUTE = /^\/api\/v1\/firewall\/coverage\/[^/]+$/
@@ -517,6 +568,7 @@ export const resolveMicrosegMock: DemoMockResolver = (method, cleanPath, url) =>
     case 'status': return status(now)
     case 'drifts': return { drifts: DRIFTS }
     case 'preflight': return { checks: CHECKS }
+    case 'ipfilter': return ipFilter(now)
     case 'revisions': {
       const { limit } = page(url.searchParams, 20, 100)
 

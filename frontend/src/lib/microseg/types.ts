@@ -49,10 +49,63 @@ export type MicrosegPolicyRecord = {
   emergency_stop: boolean
   /** The stop switched the cluster firewall off (kept by the engine until the stop is lifted). */
   stop_cluster_disabled?: boolean
+  /**
+   * The IP filter of the zone members: each member may only send from its own addresses once a zone is enforced.
+   * Absent on an orchestrator that does not know it: the feature is not shown then.
+   */
+  ip_filter?: boolean
+  /** What the admin set per guest for the IP filter; null or absent reads as none. */
+  guest_filters?: GuestIPFilter[] | null
   created_at: string
   updated_at: string
   updated_by: string
 }
+
+/** What the admin set for the IP filter of one guest (Go `GuestIPFilter`): left without the filter, and/or more allowed addresses. */
+export type GuestIPFilter = {
+  /** The cluster of the guest; the server stamps the URL's cluster when it is omitted. */
+  connection_id?: string
+  type: GuestType
+  vmid: number
+  name?: string
+  /** The guest is left without the filter. */
+  disabled?: boolean
+  /** More addresses the guest may send from: IPv4 or IPv6 addresses, or CIDRs. */
+  extra?: string[]
+}
+
+/** What a guest gets once the policy filters: filtered, left out by the admin, a hand-made list, or a NIC without a known address. */
+export type IPFilterMode = 'on' | 'excluded' | 'manual' | 'no_address' | (string & {})
+
+/** An address the guest reports that was not added: held by a member of another zone (here or on a peer cluster), or inside a source network of a flow. */
+export type IPFilterHeld = { nic: string; addr: string; reason: 'guest' | 'peer' | 'source' | (string & {}); by?: string }
+
+/** One member of a zone in GET /ipfilter. */
+export type IPFilterGuest = {
+  node: string
+  type: GuestType
+  vmid: number
+  name: string
+  zone: string
+  mode: IPFilterMode
+  /** Proxmox filters the guest right now. */
+  applied: boolean
+  /** The allowed addresses per NIC ("net0"), the technical ones included (0.0.0.0, fe80::...). */
+  nics: Record<string, string[]>
+  held: IPFilterHeld[] | null
+  /** The NICs without a known address. */
+  no_address: string[] | null
+  /** The NICs whose list was made by hand. */
+  manual: string[] | null
+  /** The NICs without a static IPv4. */
+  dhcp: string[]
+  /** Source addresses seen in the outbound log that the lists would drop. */
+  unknown: string[]
+  extra: string[] | null
+}
+
+/** GET /ipfilter (the engine's memory, no Proxmox call). `computed` is false until the first full run after the orchestrator started. */
+export type MicrosegIPFilter = { enabled: boolean; computed: boolean; computed_at: string | null; guests: IPFilterGuest[] }
 
 export type MicrosegZone = {
   id: string
@@ -223,7 +276,8 @@ export type StepKind =
   | 'cluster.ratelimit' | 'ipset.create' | 'ipset.sync' | 'group.create' | 'group.rules'
   | 'guest.tags' | 'guest.group' | 'guest.nic' | 'guest.enable' | 'guest.observe.add'
   | 'guest.observe.remove' | 'guest.policy' | 'guest.restore' | 'guest.release'
-  | 'group.delete' | 'ipset.delete' | 'rule.move' | (string & {})
+  | 'group.delete' | 'ipset.delete' | 'rule.move'
+  | 'guest.ipfilter.set' | 'guest.ipfilter.sync' | 'guest.ipfilter.enable' | 'guest.ipfilter.remove' | (string & {})
 
 /** One step of a plan, or one step outcome (Go `StepRef`). */
 export type StepRef = {
@@ -315,7 +369,8 @@ export type MicrosegRun = {
 
 export type DriftKind =
   | 'unzoned_running' | 'nic_firewall_off' | 'foreign_accept' | 'ipset_out_of_sync'
-  | 'member_without_ip' | 'ambiguous_zone' | 'object_collision' | 'peer_unreadable' | 'stop_lift_held' | 'cluster_firewall_off' | 'firewall_service_stopped' | (string & {})
+  | 'member_without_ip' | 'ambiguous_zone' | 'object_collision' | 'peer_unreadable' | 'stop_lift_held' | 'cluster_firewall_off' | 'firewall_service_stopped'
+  | 'ipfilter_off' | 'ipfilter_list_changed' | 'ipfilter_no_address' | 'ipfilter_address_held' | 'ipfilter_manual' | 'unzoned_same_network' | (string & {})
 
 export type MicrosegDrift = {
   kind: DriftKind
@@ -434,6 +489,10 @@ export type PolicyUpdate = {
   tag_prefix?: string
   /** Partial: omitted fields keep their value. */
   settings?: Partial<Omit<MicrosegSettings, 'original_log_rate_limit'>>
+  /** Turns the IP filter of the zone members on or off (a draft change, applied with the next plan). */
+  ip_filter?: boolean
+  /** The WHOLE list of the per-guest settings of the IP filter: it replaces the stored one. */
+  guest_filters?: GuestIPFilter[]
 }
 
 /** A pending member by type and vmid (the node it was queued on may have changed since). */

@@ -14325,6 +14325,36 @@
           "title": "{node}에서 방화벽 서비스 중지됨",
           "detail": "{node}에서 방화벽 서비스가 중지되어 있습니다: 이 노드에서는 아무것도 필터링되지 않습니다",
           "hint": "이 노드에서 pve-firewall 서비스를 시작하세요."
+        },
+        "ipfilter_off": {
+          "title": "IP 필터 미적용",
+          "detail": "{nics}에 IP 필터가 적용되지 않았습니다: {zone}의 이 멤버는 어떤 주소로든 전송할 수 있습니다.",
+          "detailOption": "{zone}의 이 멤버에서 IP 필터 옵션이 해제되었습니다: 목록이 더 이상 적용되지 않습니다."
+        },
+        "ipfilter_list_changed": {
+          "title": "IP 필터 목록 변경됨",
+          "detail": "{nic}의 목록이 정책과 다릅니다 (누락: {missing}, 초과: {extra})."
+        },
+        "ipfilter_no_address": {
+          "title": "필터링되지 않는 멤버",
+          "detail": "{nics}에 알려진 주소가 없습니다: {zone}의 이 멤버는 필터링되지 않습니다.",
+          "hint": "이 게스트에 추가 주소를 지정하거나 필터 없이 두세요 (패널의 IP 필터 섹션)."
+        },
+        "ipfilter_address_held": {
+          "title": "주소 보류됨",
+          "detail": "{nic}의 {addr}이(가) 이 게스트의 목록에 추가되지 않았습니다.",
+          "detailGuest": "{nic}의 {addr}이(가) 추가되지 않았습니다: 다른 영역의 멤버 {by}이(가) 사용 중입니다.",
+          "detailPeer": "{nic}의 {addr}이(가) 추가되지 않았습니다: 다른 클러스터의 다른 영역 멤버가 사용 중입니다.",
+          "detailSource": "{nic}의 {addr}이(가) 추가되지 않았습니다: 흐름의 출발지 네트워크 {by}에 포함됩니다."
+        },
+        "ipfilter_manual": {
+          "title": "수동으로 작성된 목록",
+          "detail": "{nics}의 목록이 수동으로 작성되었습니다: 엔진은 {zone}의 이 멤버에 아무것도 쓰지 않습니다.",
+          "hint": "할 일 없음: ProxCenter가 관리하게 하려면 Proxmox에서 수동 목록을 삭제하세요."
+        },
+        "unzoned_same_network": {
+          "title": "필터링되는 네트워크에 있는 영역 밖 게스트",
+          "detail": "{name}은(는) 어떤 영역에도 속하지 않으며 {zones}와(과) {networks}을(를) 공유합니다: 필터링되지 않습니다."
         }
       },
       "chip": {
@@ -14346,7 +14376,13 @@
         "peer_unreadable": "클러스터 읽기 불가",
         "stop_lift_held": "방화벽 꺼짐 유지",
         "cluster_firewall_off": "클러스터 방화벽 꺼짐",
-        "firewall_service_stopped": "서비스 중지됨"
+        "firewall_service_stopped": "서비스 중지됨",
+        "ipfilter_off": "IP 필터 꺼짐",
+        "ipfilter_list_changed": "IP 목록 변경됨",
+        "ipfilter_no_address": "필터링할 주소 없음",
+        "ipfilter_address_held": "주소 보류됨",
+        "ipfilter_manual": "수동 목록",
+        "unzoned_same_network": "필터링되지 않는 이웃"
       },
       "zoneFilter": "영역 {name}만",
       "zoneFilterClear": "모든 영역 표시",
@@ -14369,7 +14405,13 @@
         "peer_unreadable": "읽을 수 없는 연결된 클러스터 ({count, number})",
         "stop_lift_held": "꺼진 상태로 유지되는 클러스터 방화벽 ({count, number})",
         "cluster_firewall_off": "꺼진 클러스터 방화벽 ({count, number})",
-        "firewall_service_stopped": "방화벽 서비스가 중지된 노드 ({count, number})"
+        "firewall_service_stopped": "방화벽 서비스가 중지된 노드 ({count, number})",
+        "ipfilter_off": "IP 필터 미적용 ({count, number})",
+        "ipfilter_list_changed": "변경된 IP 필터 목록 ({count, number})",
+        "ipfilter_no_address": "주소가 없어 필터링되지 않는 멤버 ({count, number})",
+        "ipfilter_address_held": "IP 필터가 보류한 주소 ({count, number})",
+        "ipfilter_manual": "수동으로 작성된 IP 필터 목록 ({count, number})",
+        "unzoned_same_network": "차단 중인 영역의 네트워크에 있는 영역 밖 게스트 ({count, number})"
       },
       "noneZone": "없음",
       "select": "{name} 선택",
@@ -14400,7 +14442,8 @@
         "stop": "긴급 정지 중에는 재개할 때 다시 켜집니다.",
         "refused": "자체 방화벽이 켜진 노드가 웹 UI(8006)와 SSH(22)를 허용하지 않아 클러스터 방화벽을 꺼진 채로 두었습니다. 해당 노드의 방화벽에서 허용하거나 방화벽을 끈 다음 다시 시도하세요.",
         "refusedTraffic": "꺼진 상태 유지: 노드 방화벽이 노드 간 트래픽을 차단합니다."
-      }
+      },
+      "fixAllow": "이 주소 허용"
     },
     "observation": {
       "sampling": "Proxmox는 기본적으로 체인당 초당 최대 한 줄만 기록하므로 트래픽이 많은 흐름은 적게 집계될 수 있습니다.",
@@ -14991,6 +15034,19 @@
             "migration": "마이그레이션 네트워크 {network}: {nodes}에서 차단",
             "other": "{network}: {nodes}에서 차단"
           }
+        },
+        "ip_filter": {
+          "title": "IP 필터",
+          "pass": "{count, plural, other {멤버 #개 준비됨}}",
+          "notChecked": "계산하려면 검사를 실행하세요",
+          "part": {
+            "no_address": "{count, plural, other {알려진 주소 없음 #개}}",
+            "held": "{count, plural, other {보류된 주소 #개}}",
+            "unknown": "{count, plural, other {알 수 없는 출발지 주소 #개}}",
+            "manual": "{count, plural, other {수동 관리 #개}}",
+            "excluded": "{count, plural, other {필터 제외 #개}}",
+            "dhcp": "{count, plural, other {DHCP 사용 #개}}"
+          }
         }
       },
       "rateUnits": {
@@ -15028,7 +15084,8 @@
         "notify_drift": "드리프트",
         "notify_paused": "엔진 일시 중지",
         "notify_unprotected": "보호되지 않은 게스트",
-        "notify_blocked": "차단된 플로우"
+        "notify_blocked": "차단된 플로우",
+        "ip_filter": "영역 멤버의 IP 필터"
       },
       "hints": {
         "tagPrefix": "게스트의 영역 태그는 이 접두사 뒤에 영역 이름이 붙은 형태입니다.",
@@ -15096,7 +15153,8 @@
         "logInterval": "각 노드의 방화벽 로그를 읽는 간격으로, 노드당 간격마다 한 번 읽습니다.",
         "readyAfter": "차단될 새 플로우가 없는 상태가 이 시간 동안 이어져야 영역이 준비 완료로 표시됩니다. 잠금이 아닙니다.",
         "writeCap": "초과하면 엔진이 멈추고 확인을 요청합니다.",
-        "selfIps": "ProxCenter가 노드에 연결할 때 사용하는 주소입니다. 사전 점검에서 이 주소가 차단되지 않는지 확인합니다. 비워 두면 자동 감지를 사용합니다."
+        "selfIps": "ProxCenter가 노드에 연결할 때 사용하는 주소입니다. 사전 점검에서 이 주소가 차단되지 않는지 확인합니다. 비워 두면 자동 감지를 사용합니다.",
+        "ipFilter": "영역이 차단 상태가 되면 각 멤버는 자신의 주소에서만 전송할 수 있습니다"
       },
       "clusters": {
         "row": "연결된 클러스터",
@@ -15558,6 +15616,79 @@
       "unreachableOther": "연결된 클러스터 하나에 연결할 수 없습니다: 상태를 알 수 없습니다.",
       "unreadState": "읽을 수 없습니다: 상태가 표시되지 않습니다.",
       "unreadStateOther": "연결된 클러스터 하나를 읽을 수 없습니다: 상태가 표시되지 않습니다."
+    },
+    "ipFilter": {
+      "section": "IP 필터",
+      "linesLabel": "{name}의 IP 필터",
+      "nicNoAddress": "알려진 주소 없음",
+      "state": {
+        "loading": "IP 필터를 읽는 중...",
+        "off": "이 정책의 IP 필터가 꺼져 있습니다",
+        "notMember": "어떤 영역의 멤버도 아님",
+        "filtered": "필터링됨",
+        "willFilter": "영역이 차단 상태로 적용되면 필터링됩니다",
+        "excluded": "필터 없이 둠",
+        "manual": "수동으로 관리됨",
+        "noAddress": "필터링되지 않음: {nics}에 알려진 주소가 없습니다"
+      },
+      "chip": {
+        "filtered": "필터링됨",
+        "willFilter": "준비됨",
+        "excluded": "필터 제외",
+        "manual": "수동",
+        "noAddress": "주소 없음"
+      },
+      "held": {
+        "guest": "{nic}의 {addr}: 다른 영역의 멤버 {by}이(가) 사용 중",
+        "guestUnnamed": "{nic}의 {addr}: 다른 영역의 멤버가 사용 중",
+        "peer": "{nic}의 {addr}: 다른 클러스터의 다른 영역 멤버가 사용 중",
+        "source": "{nic}의 {addr}: 흐름의 출발지 네트워크 {by}에 포함됨",
+        "other": "{nic}의 {addr}: 추가되지 않음"
+      },
+      "allow": "허용",
+      "allowAddr": "{addr} 허용",
+      "allowTitle": "{name}에 {addr}을(를) 허용하시겠습니까?",
+      "allowBody": "이 주소는 해당 게스트의 추가 주소에 더해지며 다음 계획과 함께 적용됩니다.",
+      "allowConfirm": "이 주소 허용",
+      "unknown": "필터가 차단할 출발지 주소가 관찰됨: {addrs}",
+      "dhcp": "{nics}은(는) DHCP 사용: 주소가 바뀌면 다음 주소 수집까지 차단됩니다",
+      "leaveOut": "필터 없이 두기",
+      "extra": "추가 주소",
+      "extraNone": "없음",
+      "extraCount": "{count, plural, other {주소 #개}}",
+      "extraEdit": "편집",
+      "extraEditLabel": "추가 주소 편집",
+      "extraTitle": "{name}의 추가 주소",
+      "extraHint": "한 줄에 주소 또는 범위 하나 (IPv4, IPv6 또는 CIDR).",
+      "extraLabel": "주소",
+      "extraInvalid": "{addr}은(는) 주소나 범위가 아닙니다",
+      "memberTip": {
+        "excluded": "IP 필터 없이 둠",
+        "manual": "IP 필터 목록이 수동으로 작성됨: 엔진은 아무것도 쓰지 않습니다",
+        "noAddress": "필터링되지 않음: 알려진 주소 없음"
+      },
+      "details": {
+        "title": "IP 필터: 멤버별 주소",
+        "button": "상세",
+        "onlyAttention": "확인이 필요한 항목만",
+        "empty": "영역 멤버 없음",
+        "emptyAttention": "확인이 필요한 멤버 없음",
+        "addresses": "{count, plural, other {주소 #개}}",
+        "expand": "{name}의 주소 표시",
+        "collapse": "{name}의 주소 숨기기",
+        "loading": "IP 필터를 읽는 중...",
+        "count": "{count, plural, other {멤버 #개}}"
+      },
+      "enforce": {
+        "summary": "IP 필터: {ready, plural, other {멤버 #개 준비됨}}, {attention, plural, =0 {확인 필요 없음} other {#개 확인 필요}}",
+        "notComputed": "IP 필터: 아직 계산되지 않았습니다. 검사를 실행하세요"
+      },
+      "banner": {
+        "off": "IP 필터가 꺼져 있습니다: 멤버가 다른 영역 멤버의 주소로 전송할 수 있습니다.",
+        "turnOn": "켜기",
+        "unzoned": "{count, plural, other {어떤 영역에도 속하지 않은 게스트 #개가 차단 중인 영역의 네트워크를 공유합니다: 필터링되지 않습니다.}}",
+        "seeDrifts": "편차 보기"
+      }
     }
   },
   "bulkPower": {

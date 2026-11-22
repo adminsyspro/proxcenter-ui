@@ -492,6 +492,7 @@ export default function ZoneDialog({ zone, connectionId, readyAfterHours, onSave
       {confirming && zone && (
         <ZoneStatesConfirm
           connectionId={connectionId}
+          clusterName={clusterName}
           zone={zone}
           readyAfterHours={readyAfterHours}
           inbound={changes.inbound}

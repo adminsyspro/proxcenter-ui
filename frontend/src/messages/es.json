@@ -14325,6 +14325,36 @@
           "title": "Servicio de cortafuegos detenido en {node}",
           "detail": "El servicio de cortafuegos está detenido en {node}: en este nodo no se filtra nada",
           "hint": "Inicie el servicio pve-firewall en este nodo."
+        },
+        "ipfilter_off": {
+          "title": "Filtro IP no aplicado",
+          "detail": "El filtro IP no está aplicado en {nics}: este miembro de {zone} puede emitir desde cualquier dirección.",
+          "detailOption": "La opción de filtro IP se quitó de este miembro de {zone}: sus listas ya no se aplican."
+        },
+        "ipfilter_list_changed": {
+          "title": "Lista del filtro IP modificada",
+          "detail": "La lista de {nic} difiere de la política (faltan: {missing}; sobran: {extra})."
+        },
+        "ipfilter_no_address": {
+          "title": "Miembro no filtrado",
+          "detail": "No se conoce ninguna dirección en {nics}: este miembro de {zone} no está filtrado.",
+          "hint": "Declare una dirección adicional para esta máquina o déjela sin filtro (sección Filtro IP de su panel)."
+        },
+        "ipfilter_address_held": {
+          "title": "Dirección retenida",
+          "detail": "{addr} en {nic} no se añadió a la lista de esta máquina.",
+          "detailGuest": "{addr} en {nic} no se añadió: la tiene {by}, miembro de otra zona.",
+          "detailPeer": "{addr} en {nic} no se añadió: la tiene un miembro de otra zona en otro clúster.",
+          "detailSource": "{addr} en {nic} no se añadió: está dentro de la red de origen {by} de un flujo."
+        },
+        "ipfilter_manual": {
+          "title": "Lista hecha a mano",
+          "detail": "La lista de {nics} se hizo a mano: el motor no escribe nada en este miembro de {zone}.",
+          "hint": "Nada que hacer: elimine la lista hecha a mano en Proxmox para que ProxCenter la gestione."
+        },
+        "unzoned_same_network": {
+          "title": "Máquina fuera de toda zona en una red filtrada",
+          "detail": "{name} no está en ninguna zona y comparte {networks} con {zones}: no está filtrada."
         }
       },
       "chip": {
@@ -14346,7 +14376,13 @@
         "peer_unreadable": "Clúster ilegible",
         "stop_lift_held": "Cortafuegos sigue apagado",
         "cluster_firewall_off": "Cortafuegos del clúster off",
-        "firewall_service_stopped": "Servicio detenido"
+        "firewall_service_stopped": "Servicio detenido",
+        "ipfilter_off": "Filtro IP inactivo",
+        "ipfilter_list_changed": "Lista IP modificada",
+        "ipfilter_no_address": "Sin dirección que filtrar",
+        "ipfilter_address_held": "Dirección retenida",
+        "ipfilter_manual": "Lista a mano",
+        "unzoned_same_network": "Vecina sin filtrar"
       },
       "zoneFilter": "Solo zona {name}",
       "zoneFilterClear": "Mostrar todas las zonas",
@@ -14369,7 +14405,13 @@
         "peer_unreadable": "Clústeres asociados que no se pueden leer ({count, number})",
         "stop_lift_held": "Cortafuegos de clúster que siguen apagados ({count, number})",
         "cluster_firewall_off": "Cortafuegos de clúster desactivados ({count, number})",
-        "firewall_service_stopped": "Nodos con el servicio de cortafuegos detenido ({count, number})"
+        "firewall_service_stopped": "Nodos con el servicio de cortafuegos detenido ({count, number})",
+        "ipfilter_off": "Filtro IP no aplicado ({count, number})",
+        "ipfilter_list_changed": "Listas del filtro IP modificadas ({count, number})",
+        "ipfilter_no_address": "Miembros no filtrados por falta de dirección ({count, number})",
+        "ipfilter_address_held": "Direcciones retenidas por el filtro IP ({count, number})",
+        "ipfilter_manual": "Listas del filtro IP hechas a mano ({count, number})",
+        "unzoned_same_network": "Máquinas fuera de toda zona en la red de una zona en bloqueo ({count, number})"
       },
       "noneZone": "ninguna",
       "select": "Seleccionar {name}",
@@ -14400,7 +14442,8 @@
         "stop": "Bajo una parada de emergencia, se reactiva al reanudar.",
         "refused": "Un nodo con su propio cortafuegos activo no deja entrar la interfaz web (8006) ni SSH (22), por lo que el cortafuegos del clúster sigue apagado. Permítalos en el cortafuegos de ese nodo, o apáguelo, y vuelva a intentarlo.",
         "refusedTraffic": "Sigue apagado: los cortafuegos de los nodos cortarían el tráfico entre los nodos."
-      }
+      },
+      "fixAllow": "Permitir esta dirección"
     },
     "observation": {
       "sampling": "Por defecto Proxmox registra como máximo una línea por segundo y por cadena, por lo que los flujos muy activos pueden contarse de menos.",
@@ -14991,6 +15034,19 @@
             "migration": "Red de migración {network}: cortada en {nodes}",
             "other": "{network}: cortada en {nodes}"
           }
+        },
+        "ip_filter": {
+          "title": "Filtro IP",
+          "pass": "{count, plural, one {# miembro listo} other {# miembros listos}}",
+          "notChecked": "Lance una comprobación para calcularlo",
+          "part": {
+            "no_address": "{count, plural, one {# sin dirección conocida} other {# sin dirección conocida}}",
+            "held": "{count, plural, one {# dirección retenida} other {# direcciones retenidas}}",
+            "unknown": "{count, plural, one {# con una dirección de origen desconocida} other {# con direcciones de origen desconocidas}}",
+            "manual": "{count, plural, one {# gestionado a mano} other {# gestionados a mano}}",
+            "excluded": "{count, plural, one {# dejado sin filtro} other {# dejados sin filtro}}",
+            "dhcp": "{count, plural, one {# por DHCP} other {# por DHCP}}"
+          }
         }
       },
       "rateUnits": {
@@ -15028,7 +15084,8 @@
         "notify_drift": "Desviaciones",
         "notify_paused": "Motor en pausa",
         "notify_unprotected": "Invitados sin proteger",
-        "notify_blocked": "Flujos bloqueados"
+        "notify_blocked": "Flujos bloqueados",
+        "ip_filter": "Filtro IP en los miembros de las zonas"
       },
       "hints": {
         "tagPrefix": "Las etiquetas de zona de los invitados son este prefijo seguido del nombre de la zona.",
@@ -15096,7 +15153,8 @@
         "logInterval": "Tiempo entre dos lecturas del registro del cortafuegos de cada nodo: una lectura por nodo y por intervalo.",
         "readyAfter": "Tiempo sin ningún flujo nuevo que se bloquearía antes de indicar que una zona está lista; no es un bloqueo.",
         "writeCap": "Superado el tope, el motor se detiene y pide una confirmación.",
-        "selfIps": "Direcciones desde las que ProxCenter alcanza los nodos. La comprobación previa verifica que no queden cortadas. Déjelo vacío para usar la detección."
+        "selfIps": "Direcciones desde las que ProxCenter alcanza los nodos. La comprobación previa verifica que no queden cortadas. Déjelo vacío para usar la detección.",
+        "ipFilter": "Cuando una zona está en bloqueo, cada miembro solo puede emitir desde sus propias direcciones"
       },
       "clusters": {
         "row": "Clústeres asociados",
@@ -15558,6 +15616,79 @@
       "unreachableOther": "Un clúster asociado es inaccesible: su estado es desconocido.",
       "unreadState": "No se puede leer: su estado no se muestra.",
       "unreadStateOther": "No se puede leer un clúster asociado: su estado no se muestra."
+    },
+    "ipFilter": {
+      "section": "Filtro IP",
+      "linesLabel": "Filtro IP de {name}",
+      "nicNoAddress": "ninguna dirección conocida",
+      "state": {
+        "loading": "Leyendo el filtro IP...",
+        "off": "El filtro IP está desactivado para esta política",
+        "notMember": "No es miembro de ninguna zona",
+        "filtered": "Filtrada",
+        "willFilter": "Se filtrará cuando una zona esté en bloqueo y aplicada",
+        "excluded": "Dejada sin filtro",
+        "manual": "Gestionada a mano",
+        "noAddress": "No filtrada: ninguna dirección conocida en {nics}"
+      },
+      "chip": {
+        "filtered": "Filtrada",
+        "willFilter": "Lista",
+        "excluded": "Sin filtro",
+        "manual": "A mano",
+        "noAddress": "Sin dirección"
+      },
+      "held": {
+        "guest": "{addr} en {nic}: la tiene {by}, miembro de otra zona",
+        "guestUnnamed": "{addr} en {nic}: la tiene un miembro de otra zona",
+        "peer": "{addr} en {nic}: la tiene un miembro de otra zona en otro clúster",
+        "source": "{addr} en {nic}: dentro de la red de origen {by} de un flujo",
+        "other": "{addr} en {nic}: no añadida"
+      },
+      "allow": "Permitir",
+      "allowAddr": "Permitir {addr}",
+      "allowTitle": "¿Permitir {addr} para {name}?",
+      "allowBody": "La dirección se añade a las direcciones adicionales de esta máquina; se aplica con el próximo plan.",
+      "allowConfirm": "Permitir esta dirección",
+      "unknown": "Direcciones de origen vistas que el filtro descartaría: {addrs}",
+      "dhcp": "{nics} por DHCP: una dirección que cambia queda cortada hasta la próxima recogida de direcciones",
+      "leaveOut": "Dejar sin filtro",
+      "extra": "Direcciones adicionales",
+      "extraNone": "Ninguna",
+      "extraCount": "{count, plural, one {# dirección} other {# direcciones}}",
+      "extraEdit": "Editar",
+      "extraEditLabel": "Editar las direcciones adicionales",
+      "extraTitle": "Direcciones adicionales de {name}",
+      "extraHint": "Una dirección o un rango por línea (IPv4, IPv6 o CIDR).",
+      "extraLabel": "Direcciones",
+      "extraInvalid": "{addr} no es una dirección ni un rango",
+      "memberTip": {
+        "excluded": "Dejada sin filtro IP",
+        "manual": "Lista del filtro IP hecha a mano: el motor no escribe nada",
+        "noAddress": "No filtrada: ninguna dirección conocida"
+      },
+      "details": {
+        "title": "Filtro IP: direcciones por miembro",
+        "button": "Detalles",
+        "onlyAttention": "Solo los que requieren atención",
+        "empty": "Ningún miembro de zona",
+        "emptyAttention": "Ningún miembro requiere atención",
+        "addresses": "{count, plural, one {# dirección} other {# direcciones}}",
+        "expand": "Mostrar las direcciones de {name}",
+        "collapse": "Ocultar las direcciones de {name}",
+        "loading": "Leyendo el filtro IP...",
+        "count": "{count, plural, one {# miembro} other {# miembros}}"
+      },
+      "enforce": {
+        "summary": "Filtro IP: {ready, plural, one {# miembro listo} other {# miembros listos}}, {attention, plural, =0 {ninguno requiere atención} one {# requiere atención} other {# requieren atención}}",
+        "notComputed": "Filtro IP: aún no calculado, lance una comprobación"
+      },
+      "banner": {
+        "off": "El filtro IP está desactivado: un miembro puede emitir con la dirección de un miembro de otra zona.",
+        "turnOn": "Activar",
+        "unzoned": "{count, plural, one {# máquina fuera de toda zona comparte la red de una zona en bloqueo: no está filtrada.} other {# máquinas fuera de toda zona comparten la red de una zona en bloqueo: no están filtradas.}}",
+        "seeDrifts": "Ver las desviaciones"
+      }
     }
   },
   "bulkPower": {

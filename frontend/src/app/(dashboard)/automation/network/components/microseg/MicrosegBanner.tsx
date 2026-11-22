@@ -13,6 +13,7 @@ import { useMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 import ClusterChip from './ClusterChip'
 import { shownClusterName } from './ClusterRunRow'
 import ClusterUnreadLines, { isUnreachable } from './ClusterUnreadLines'
+import IPFilterBannerLines, { useIPFilterBanner } from './IPFilterBanner'
 import LogNodeLines from './LogNodeLines'
 import MicrosegConfirmDialog, { type ConfirmInfoLine } from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
@@ -28,6 +29,8 @@ type Props = {
   policy: MicrosegPolicy
   controls: MicrosegControls
   onOpenPlan?: () => void
+  /** Opens the Drifts sub-tab (the guests outside every zone on the network of an enforced zone). */
+  onOpenDrifts?: () => void
   /** The clusters sharing the policy once the group is known: each one's status is read for its own firewall state. */
   clusterIds?: string[]
 }
@@ -92,11 +95,12 @@ function ClusterStatusLines({ lines, icon, color, testId }: StatusLinesProps) {
 
 /**
  * Above the sub-tabs, only when something needs the reader: the emergency stop in force, the writes held by the
- * cap, the pause, a stale status, the outcome of an action and the pending changes (UA4, UA11). With none of them
+ * cap, the pause, a stale status, the outcome of an action, the IP filter left off or leaving guests unfiltered, and
+ * the pending changes (UA4, UA11). With none of them
  * nothing is drawn, not even an empty strip (UA27). The Emergency stop button is in the sub-tabs row; the engine
  * state and the coverage are on the page's Dashboard tab. The confirmation dialog is always mounted here.
  */
-export default function MicrosegBanner({ connectionId, policy, controls, onOpenPlan, clusterIds }: Props) {
+export default function MicrosegBanner({ connectionId, policy, controls, onOpenPlan, onOpenDrifts, clusterIds }: Props) {
   const t = useTranslations()
   // A shared policy: the status of every cluster (one read each, the tab's one shared with the controls); one cluster
   // reads only the controls' status, as it always did.
@@ -119,6 +123,9 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
   }, [follow])
   const [fast, setFast] = useState(false)
   const statuses = useMergedClusters(visibleIds, useMicrosegStatus, fast ? FOLLOW_STATUS_MS : undefined)
+  // The IP filter: off while a zone is enforced, or guests outside every zone on the network of an enforced zone.
+  const ownCluster = useMemo(() => [connectionId], [connectionId])
+  const ipFilter = useIPFilterBanner(policy, shared ? visibleIds : ownCluster)
   const { canWrite } = useMicrosegWrite()
   // The held writes are confirmed on this connection alone (relay `cluster` scope): the right on it is enough.
   const canConfirm = useMicrosegClusterWrite().canWriteOn(connectionId)
@@ -244,7 +251,7 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
   const logBehind = logNodes.some(n => n.full_pages_24h > 0)
 
   const hasContent = stopOn || Object.keys(peerFailures).length > 0 || unreachableLines.length > 0 || firewallOffLines.length > 0 || followLines.length > 0 || !!status?.engine.held || !!shownNotice || actionError != null
-    || statusFailed || stale || pausedShown || logBehind || !!policy.pending_changes
+    || statusFailed || stale || pausedShown || logBehind || !!policy.pending_changes || ipFilter.off || ipFilter.unzoned > 0
 
   return (
     <>
@@ -302,6 +309,9 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
           <ClusterStatusLines lines={unreachableLines} icon='ri-wifi-off-line' color='warning.main' testId='cluster-unreachable' />
           <ClusterStatusLines lines={firewallOffLines} icon='ri-shield-cross-line' color='error.main' testId='cluster-firewall-off' />
           {follow && <StopFollowLines lines={followLines} on={follow.on} nameOf={nameOf} />}
+          {(ipFilter.off || ipFilter.unzoned > 0) && (
+            <IPFilterBannerLines connectionId={connectionId} policy={policy} off={ipFilter.off} unzoned={ipFilter.unzoned} onOpenDrifts={onOpenDrifts} />
+          )}
 
           {(pausedShown || stale || logBehind) && (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 4 }}>

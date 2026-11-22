@@ -425,3 +425,51 @@ describe('zone panel: read-only user', () => {
     expect(actions.every(b => b.disabled)).toBe(true)
   })
 })
+
+describe('zone panel: the IP filter of its members', () => {
+  const member = (vmid: number, name: string, mode: string) => ({
+    node: 'pve1', type: 'qemu', vmid, name, zone: 'db', mode, applied: mode === 'on', nics: {}, held: [], no_address: mode === 'no_address' ? ['net0'] : [], manual: [], dhcp: [], unknown: [], extra: [],
+  })
+  const VMS = [vm(101, 'db1', ['zone-db']), vm(102, 'db2', ['zone-db']), vm(103, 'db3', ['zone-db']), vm(104, 'db4', ['zone-db'])]
+  const GUESTS = [member(101, 'db1', 'on'), member(102, 'db2', 'excluded'), member(103, 'db3', 'no_address'), member(104, 'db4', 'manual')]
+
+  /** The map on a draft whose orchestrator knows the IP filter (or not): the routes are set before the tab renders. */
+  function openMap(known = true) {
+    window.localStorage.setItem('microseg.subTab', 'overview')
+    const draft = policy({ zones: [web(), db()], last_revision: REVISION_HEAD })
+    mock.routes['GET /policy'] = () => reply(200, known ? { ...draft, policy: { ...draft.policy, ip_filter: true, guest_filters: [] } } : draft)
+    mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: VMS } })
+    mock.routes[SUGGESTIONS] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
+    return renderTab()
+  }
+
+  it('marks the members the policy does not filter, with why, from one read for the panel', async () => {
+    mock.routes['GET /ipfilter'] = () => reply(200, { enabled: true, computed: true, computed_at: null, guests: GUESTS })
+    openMap()
+    const panel = await openDb()
+    const marked = async (name: string) => within(await within(panel).findByRole('listitem', { name })).findByTestId('member-ipfilter')
+    expect((await marked('db2')).getAttribute('aria-label')).toBe('Left without the IP filter')
+    expect((await marked('db3')).getAttribute('aria-label')).toBe('Not filtered: no known address')
+    expect((await marked('db4')).getAttribute('aria-label')).toBe('IP filter list made by hand: the engine writes nothing')
+    expect(within(within(panel).getByRole('listitem', { name: 'db1' })).queryByTestId('member-ipfilter')).toBeNull()
+    expect(calls('GET /ipfilter')).toHaveLength(1)
+  })
+
+  it('marks nobody while the policy does not filter', async () => {
+    mock.routes['GET /ipfilter'] = () => reply(200, { enabled: false, computed: true, computed_at: null, guests: GUESTS })
+    openMap()
+    const panel = await openDb()
+    await within(panel).findByRole('listitem', { name: 'db2' })
+    await waitFor(() => expect(calls('GET /ipfilter')).toHaveLength(1))
+    expect(within(panel).queryByTestId('member-ipfilter')).toBeNull()
+  })
+
+  it('reads nothing of the filter on an orchestrator that does not know it', async () => {
+    mock.routes['GET /ipfilter'] = () => reply(200, { enabled: true, computed: true, computed_at: null, guests: GUESTS })
+    openMap(false)
+    const panel = await openDb()
+    await within(panel).findByRole('listitem', { name: 'db2' })
+    expect(calls('GET /ipfilter')).toHaveLength(0)
+    expect(within(panel).queryByTestId('member-ipfilter')).toBeNull()
+  })
+})

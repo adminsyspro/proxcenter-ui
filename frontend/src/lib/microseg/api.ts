@@ -5,7 +5,7 @@
 
 import type {
   CheckQueued, EgressState, MicrosegCluster, RunStarted, ExceptionInput, FlowDirection, EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegEventList, MicrosegException,
-  MicrosegFlow, MicrosegPolicy,
+  MicrosegFlow, MicrosegIPFilter, MicrosegPolicy,
   MicrosegRevision, MicrosegRun, MicrosegStatus, MicrosegSuggestion, MicrosegGuestVolume, MicrosegTraffic, MicrosegVolume, MicrosegZone, PolicyUpdate,
   PreflightCheck, ResolveSuggestionsInput, SuggestionKind, SuggestionStatus, ZoneInput, ZoneState,
 } from './types'
@@ -297,6 +297,14 @@ export function microsegApi(connId: string) {
     listClusters: (signal?: AbortSignal) => call<MicrosegClusterList>('GET', 'clusters', undefined, signal),
     associateCluster: (connectionId: string) => call<MicrosegClusterList>('POST', 'clusters', { connection_id: connectionId }),
     dissociateCluster: (connectionId: string) => call<MicrosegClusterList>('DELETE', `clusters/${id(connectionId)}`),
+    /** The IP filter of the zone members as the last full run computed it (the engine's memory, no Proxmox call). */
+    getIPFilter: async (signal?: AbortSignal): Promise<MicrosegIPFilter> => {
+      const body = await call<Partial<MicrosegIPFilter> | null>('GET', 'ipfilter', undefined, signal)
+      const guests = (body?.guests ?? []).map(g => ({
+        ...g, nics: g.nics ?? {}, held: g.held ?? [], no_address: g.no_address ?? [], manual: g.manual ?? [], dhcp: g.dhcp ?? [], unknown: g.unknown ?? [], extra: g.extra ?? [],
+      }))
+      return { enabled: body?.enabled === true, computed: body?.computed !== false, computed_at: body?.computed_at ?? null, guests }
+    },
     getPreflight: async () => (await call<{ checks: PreflightCheck[] }>('GET', 'preflight')).checks,
     getStatus: (signal?: AbortSignal) => call<MicrosegStatus>('GET', 'status', undefined, signal),
     /** The flows seen towards zone guests, newest first, from the orchestrator's memory (no Proxmox call). */

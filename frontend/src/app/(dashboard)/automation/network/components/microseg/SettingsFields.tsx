@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
-import { Box, ButtonBase, Checkbox, Collapse, Divider, FormControl, InputAdornment, MenuItem, Select, TextField, Tooltip, Typography } from '@mui/material'
+import { Box, ButtonBase, Checkbox, Collapse, Divider, FormControl, InputAdornment, MenuItem, Select, Switch, TextField, Tooltip, Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
@@ -177,6 +177,18 @@ export default function SettingsFields({ form, problems, busy, prefixWarning, ef
               onChange={v => onChange(key, v)}
             />
           ))}
+          {section.title === 'enforcement' && typeof form.ipFilter === 'boolean' && (
+            <FieldRow label={t('fields.ip_filter')} tip={t('tips.ipFilter')}>
+              <Switch
+                size='small'
+                checked={form.ipFilter}
+                disabled={busy}
+                onChange={e => onChange('ipFilter', e.target.checked)}
+                slotProps={{ input: { role: 'switch', 'aria-label': t('fields.ip_filter') } }}
+                sx={{ ml: -0.5 }}
+              />
+            </FieldRow>
+          )}
         </Box>
       ))}
 

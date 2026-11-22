@@ -8,6 +8,7 @@ import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/component
 import { getGuestLogAfter, getGuestLogPage, type GuestLogPage } from '@/lib/api/firewall'
 import { parseFirewallLogLine, type ParsedLogLine } from '@/lib/firewall/logParse'
 
+import GuestIPFilterSection from './GuestIPFilterSection'
 import { DirectionGlyph } from './observationParts'
 import PanelSection, { PanelFrame } from './PanelSection'
 import PolicyPager, { PagedList } from './PolicyPager'
@@ -229,7 +230,8 @@ function LogLines({ lines, label }: { lines: Line[]; label: string }) {
 }
 
 /**
- * The panel of a guest clicked on the map: its name, VMID and node, then its firewall log, newest lines first, a page
+ * The panel of a guest clicked on the map: its name, VMID and node, its IP filter (the engine's memory, no Proxmox
+ * call), then its firewall log, newest lines first, a page
  * of 20 at a time. Each page is read when it is shown, never in the background: the first costs two PVE reads (the
  * count, then its lines), each other one a single read, as the count of the first is handed back. The search reads the
  * 2000 newest lines once, at its first letter, and filters them in the browser while it is typed: no other read.
@@ -317,6 +319,7 @@ export default function GuestPanel({ guest, connectionId, onClose }: Readonly<Pr
 
   return (
     <PanelFrame label={t('label', { name: guest.name })} width={400} header={header}>
+      <GuestIPFilterSection connectionId={connectionId} guest={{ connectionId: conn, type: guest.type, vmid: guest.vmid, name: guest.name }} />
       <PanelSection id='guest.log' title={t('logTitle')} count={liveState?.total ?? total} action={<Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>{liveButton}{refreshButton}</Box>}>
         <TextField
           size='small'

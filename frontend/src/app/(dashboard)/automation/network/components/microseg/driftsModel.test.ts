@@ -28,6 +28,23 @@ describe('drift groups', () => {
   })
 })
 
+describe('IP filter drifts in the groups', () => {
+  it('come after the outbound kinds, in the order the sub-tab documents them, before the kinds it does not know', () => {
+    const list = [d('zz_unknown'), d('unzoned_same_network'), d('ipfilter_manual'), d('ipfilter_address_held'), d('ipfilter_address_held', 2), d('ipfilter_off'), d('egress_no_subnet'), d('ipfilter_no_address'), d('ipfilter_list_changed')]
+    expect(groupDrifts(list).map(g => [g.kind, g.drifts.length])).toEqual([
+      ['egress_no_subnet', 1], ['ipfilter_off', 1], ['ipfilter_list_changed', 1], ['ipfilter_no_address', 1], ['ipfilter_address_held', 2], ['ipfilter_manual', 1],
+      ['unzoned_same_network', 1], ['zz_unknown', 1],
+    ])
+    expect(kindCounts(list).find(c => c.kind === 'ipfilter_address_held')).toEqual({ kind: 'ipfilter_address_held', count: 2 })
+  })
+
+  it('gives two addresses held on one guest two row keys, on one cluster and on a shared policy', () => {
+    const held = (addr: string) => ({ kind: 'ipfilter_address_held', guest: { node: 'pve1', type: 'qemu' as const, vmid: 1 }, detail: { nic: 'net0', addr }, connection_id: 'c1' })
+    expect(driftRowKey(held('10.0.0.7'), false)).not.toBe(driftRowKey(held('10.0.0.8'), false))
+    expect(driftRowKey(held('10.0.0.7'), true)).toBe('c1|ipfilter_address_held|qemu/1|||net0|10.0.0.7')
+  })
+})
+
 describe('drifts of a shared policy', () => {
   it('keeps both rows when two clusters report the same guest VMID, each with its cluster', () => {
     const merged = mergeDrifts({ c1: { drifts: [d('unzoned_running', 100)], computed: true }, c2: { drifts: [d('unzoned_running', 100)], computed: true } }, ['c1', 'c2'])

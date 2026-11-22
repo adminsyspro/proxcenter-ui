@@ -14325,6 +14325,36 @@
           "title": "{node} 上的防火墙服务已停止",
           "detail": "{node} 上的防火墙服务已停止：此节点上不会过滤任何流量",
           "hint": "请在此节点上启动 pve-firewall 服务。"
+        },
+        "ipfilter_off": {
+          "title": "IP 过滤未应用",
+          "detail": "{nics} 上未应用 IP 过滤：{zone} 的这个成员可以从任意地址发送。",
+          "detailOption": "{zone} 的这个成员的 IP 过滤选项已被取消：其列表不再生效。"
+        },
+        "ipfilter_list_changed": {
+          "title": "IP 过滤列表已变更",
+          "detail": "{nic} 的列表与策略不一致（缺少：{missing}；多余：{extra}）。"
+        },
+        "ipfilter_no_address": {
+          "title": "成员未被过滤",
+          "detail": "{nics} 上没有已知地址：{zone} 的这个成员未被过滤。",
+          "hint": "为此客户机声明一个附加地址，或让其不启用过滤（其面板的 IP 过滤部分）。"
+        },
+        "ipfilter_address_held": {
+          "title": "地址被保留",
+          "detail": "{nic} 上的 {addr} 未加入此客户机的列表。",
+          "detailGuest": "{nic} 上的 {addr} 未添加：它被另一区域的成员 {by} 占用。",
+          "detailPeer": "{nic} 上的 {addr} 未添加：它被另一集群上另一区域的成员占用。",
+          "detailSource": "{nic} 上的 {addr} 未添加：它位于某条流的源网络 {by} 内。"
+        },
+        "ipfilter_manual": {
+          "title": "手动创建的列表",
+          "detail": "{nics} 的列表为手动创建：引擎不会在 {zone} 的这个成员上写入任何内容。",
+          "hint": "无需操作：在 Proxmox 中删除手动列表后，ProxCenter 才会接管。"
+        },
+        "unzoned_same_network": {
+          "title": "位于受过滤网络上的区域外客户机",
+          "detail": "{name} 不属于任何区域，并与 {zones} 共用 {networks}：它未被过滤。"
         }
       },
       "chip": {
@@ -14346,7 +14376,13 @@
         "peer_unreadable": "集群不可读",
         "stop_lift_held": "防火墙保持关闭",
         "cluster_firewall_off": "集群防火墙关闭",
-        "firewall_service_stopped": "服务已停止"
+        "firewall_service_stopped": "服务已停止",
+        "ipfilter_off": "IP 过滤关闭",
+        "ipfilter_list_changed": "IP 列表已变更",
+        "ipfilter_no_address": "无可过滤地址",
+        "ipfilter_address_held": "地址被保留",
+        "ipfilter_manual": "手动列表",
+        "unzoned_same_network": "未过滤的邻居"
       },
       "zoneFilter": "仅区域 {name}",
       "zoneFilterClear": "显示所有区域",
@@ -14369,7 +14405,13 @@
         "peer_unreadable": "无法读取的关联集群 ({count, number})",
         "stop_lift_held": "保持关闭的集群防火墙 ({count, number})",
         "cluster_firewall_off": "已关闭的集群防火墙（{count, number}）",
-        "firewall_service_stopped": "防火墙服务已停止的节点（{count, number}）"
+        "firewall_service_stopped": "防火墙服务已停止的节点（{count, number}）",
+        "ipfilter_off": "IP 过滤未应用 ({count, number})",
+        "ipfilter_list_changed": "已变更的 IP 过滤列表 ({count, number})",
+        "ipfilter_no_address": "因缺少地址而未过滤的成员 ({count, number})",
+        "ipfilter_address_held": "被 IP 过滤保留的地址 ({count, number})",
+        "ipfilter_manual": "手动创建的 IP 过滤列表 ({count, number})",
+        "unzoned_same_network": "位于阻断区域网络上的区域外客户机 ({count, number})"
       },
       "noneZone": "无",
       "select": "选择 {name}",
@@ -14400,7 +14442,8 @@
         "stop": "紧急停止期间，将在恢复时重新开启。",
         "refused": "某个已开启自身防火墙的节点不允许 Web 界面（8006）和 SSH（22）进入，因此集群防火墙保持关闭。请在该节点的防火墙中放行，或将其关闭，然后重试。",
         "refusedTraffic": "保持关闭：节点防火墙会切断节点间流量。"
-      }
+      },
+      "fixAllow": "允许此地址"
     },
     "observation": {
       "sampling": "Proxmox 默认每条链每秒最多记录一行日志，因此繁忙的流量可能被少计。",
@@ -14991,6 +15034,19 @@
             "migration": "迁移网络 {network}：在 {nodes} 上被切断",
             "other": "{network}：在 {nodes} 上被切断"
           }
+        },
+        "ip_filter": {
+          "title": "IP 过滤",
+          "pass": "{count, plural, other {# 个成员就绪}}",
+          "notChecked": "运行一次检查以进行计算",
+          "part": {
+            "no_address": "{count, plural, other {# 个没有已知地址}}",
+            "held": "{count, plural, other {# 个地址被保留}}",
+            "unknown": "{count, plural, other {# 个有未知源地址}}",
+            "manual": "{count, plural, other {# 个手动管理}}",
+            "excluded": "{count, plural, other {# 个不启用过滤}}",
+            "dhcp": "{count, plural, other {# 个使用 DHCP}}"
+          }
         }
       },
       "rateUnits": {
@@ -15028,7 +15084,8 @@
         "notify_drift": "偏差",
         "notify_paused": "引擎已暂停",
         "notify_unprotected": "未受保护的客户机",
-        "notify_blocked": "被阻止的流量"
+        "notify_blocked": "被阻止的流量",
+        "ip_filter": "区域成员的 IP 过滤"
       },
       "hints": {
         "tagPrefix": "客户机上的区域标签由此前缀加上区域名称组成。",
@@ -15096,7 +15153,8 @@
         "logInterval": "每个节点两次读取防火墙日志之间的间隔：每个节点每个间隔读取一次。",
         "readyAfter": "在没有新的会被阻止的流量的情况下持续该时长后，区域才会显示为就绪；这不是锁定。",
         "writeCap": "超过后引擎会停止并请求确认。",
-        "selfIps": "ProxCenter 访问节点时使用的地址。预检会确认这些地址不会被切断。留空则使用自动检测。"
+        "selfIps": "ProxCenter 访问节点时使用的地址。预检会确认这些地址不会被切断。留空则使用自动检测。",
+        "ipFilter": "一旦区域进入阻断，每个成员只能从自己的地址发送流量"
       },
       "clusters": {
         "row": "关联集群",
@@ -15558,6 +15616,79 @@
       "unreachableOther": "一个关联集群无法连接：其状态未知。",
       "unreadState": "无法读取：未显示其状态。",
       "unreadStateOther": "无法读取一个关联集群：未显示其状态。"
+    },
+    "ipFilter": {
+      "section": "IP 过滤",
+      "linesLabel": "{name} 的 IP 过滤",
+      "nicNoAddress": "没有已知地址",
+      "state": {
+        "loading": "正在读取 IP 过滤...",
+        "off": "此策略的 IP 过滤已关闭",
+        "notMember": "不属于任何区域",
+        "filtered": "已过滤",
+        "willFilter": "一旦有区域进入阻断并应用后即会过滤",
+        "excluded": "不启用过滤",
+        "manual": "手动管理",
+        "noAddress": "未过滤：{nics} 上没有已知地址"
+      },
+      "chip": {
+        "filtered": "已过滤",
+        "willFilter": "就绪",
+        "excluded": "不过滤",
+        "manual": "手动",
+        "noAddress": "无地址"
+      },
+      "held": {
+        "guest": "{nic} 上的 {addr}：被另一区域的成员 {by} 占用",
+        "guestUnnamed": "{nic} 上的 {addr}：被另一区域的成员占用",
+        "peer": "{nic} 上的 {addr}：被另一集群上另一区域的成员占用",
+        "source": "{nic} 上的 {addr}：位于某条流的源网络 {by} 内",
+        "other": "{nic} 上的 {addr}：未添加"
+      },
+      "allow": "允许",
+      "allowAddr": "允许 {addr}",
+      "allowTitle": "为 {name} 允许 {addr}？",
+      "allowBody": "该地址将加入此客户机的附加地址，并随下一次计划生效。",
+      "allowConfirm": "允许此地址",
+      "unknown": "观察到过滤会丢弃的源地址：{addrs}",
+      "dhcp": "{nics} 使用 DHCP：地址变化后将被阻断，直到下一次地址采集",
+      "leaveOut": "不启用过滤",
+      "extra": "附加地址",
+      "extraNone": "无",
+      "extraCount": "{count, plural, other {# 个地址}}",
+      "extraEdit": "编辑",
+      "extraEditLabel": "编辑附加地址",
+      "extraTitle": "{name} 的附加地址",
+      "extraHint": "每行一个地址或范围（IPv4、IPv6 或 CIDR）。",
+      "extraLabel": "地址",
+      "extraInvalid": "{addr} 不是地址或范围",
+      "memberTip": {
+        "excluded": "未启用 IP 过滤",
+        "manual": "IP 过滤列表为手动创建：引擎不写入任何内容",
+        "noAddress": "未过滤：没有已知地址"
+      },
+      "details": {
+        "title": "IP 过滤：各成员的地址",
+        "button": "详情",
+        "onlyAttention": "仅显示需要关注的",
+        "empty": "没有区域成员",
+        "emptyAttention": "没有需要关注的成员",
+        "addresses": "{count, plural, other {# 个地址}}",
+        "expand": "显示 {name} 的地址",
+        "collapse": "隐藏 {name} 的地址",
+        "loading": "正在读取 IP 过滤...",
+        "count": "{count, plural, other {# 个成员}}"
+      },
+      "enforce": {
+        "summary": "IP 过滤：{ready, plural, other {# 个成员就绪}}，{attention, plural, =0 {无需关注} other {# 个需要关注}}",
+        "notComputed": "IP 过滤：尚未计算，请运行一次检查"
+      },
+      "banner": {
+        "off": "IP 过滤已关闭：成员可以使用另一区域成员的地址发送流量。",
+        "turnOn": "开启",
+        "unzoned": "{count, plural, other {# 个不属于任何区域的客户机与处于阻断的区域共用网络：它们未被过滤。}}",
+        "seeDrifts": "查看偏差"
+      }
     }
   },
   "bulkPower": {

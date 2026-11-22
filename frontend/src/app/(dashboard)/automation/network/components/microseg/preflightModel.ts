@@ -11,6 +11,8 @@ export type PreflightMessage = {
   detail: { key: string; values?: Record<string, string | number> } | null
   /** Further sentences under microsegPilot.preflight, said after the detail (every reason of a socle failure). */
   more?: Array<{ key: string; values?: Record<string, string | number> }>
+  /** What joins the detail and the further sentences on the line; a space when absent. */
+  joiner?: string
 }
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : '')
@@ -123,7 +125,28 @@ export function isTrafficRefusal(detail: Record<string, unknown> | undefined): b
   return !!detail && Array.isArray(detail.blocked) && detail.blocked.length > 0
 }
 
-function detailOf(check: PreflightCheck): PreflightMessage['detail'] & { more?: Line[] } | null {
+/** The counts of the IP filter check a warning names, in the order it says them. */
+export const IP_FILTER_PARTS = ['no_address', 'held', 'unknown', 'manual', 'excluded', 'dhcp'] as const
+
+const count = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0)
+
+/**
+ * The IP filter check: how many members are ready, or, on a warning, each count that is not zero ("2 without a known
+ * address, 1 address held, 3 on DHCP"), or that nothing is computed before a check has run.
+ */
+function ipFilterMessage(check: PreflightCheck, detail: Record<string, unknown>): Found {
+  if (detail.reason === 'not_checked') return { key: 'checks.ip_filter.notChecked' }
+  const ready = { key: 'checks.ip_filter.pass', values: { count: count(detail.ready) } }
+  if (check.status === 'pass') return ready
+  const parts = IP_FILTER_PARTS.filter(part => count(detail[part]) > 0).map(part => ({ key: `checks.ip_filter.part.${part}`, values: { count: count(detail[part]) } }))
+  if (parts.length === 0) return ready
+  const [first, ...more] = parts
+  return more.length > 0 ? { ...first, more, joiner: ', ' } : first
+}
+
+type Found = NonNullable<PreflightMessage['detail']> & { more?: PreflightMessage['more']; joiner?: string }
+
+function detailOf(check: PreflightCheck): Found | null {
   const detail = check.detail ?? {}
   const error = text(detail.error)
   if (check.status === 'fail' && error) return { key: 'readFailed', values: { error } }
@@ -161,6 +184,8 @@ function detailOf(check: PreflightCheck): PreflightMessage['detail'] & { more?: 
       const guests = Array.isArray(detail.guests) ? detail.guests : []
       return { key: 'checks.egress_subnets.warn', values: { count: guests.length, guests: guestList(guests) } }
     }
+    case 'ip_filter':
+      return ipFilterMessage(check, detail)
     default:
       return null
   }
@@ -211,13 +236,13 @@ export function parseRate(raw: string | undefined): { count: number; unit: RateU
   return m ? { count: Number(m[1]), unit: m[2] as RateUnit } : null
 }
 
-const KNOWN_IDS = new Set(['cluster_firewall', 'firewall_service', 'socle_rules', 'node_traffic', 'log_ratelimit', 'self_in_zone', 'egress_subnets'])
+const KNOWN_IDS = new Set(['cluster_firewall', 'firewall_service', 'socle_rules', 'node_traffic', 'log_ratelimit', 'self_in_zone', 'egress_subnets', 'ip_filter'])
 
 export function preflightMessage(check: PreflightCheck): PreflightMessage {
   const found = detailOf(check)
   if (!found) return { title: KNOWN_IDS.has(check.id) ? check.id : null, detail: null }
-  const { more, ...detail } = found
-  return { title: KNOWN_IDS.has(check.id) ? check.id : null, detail, ...(more ? { more } : {}) }
+  const { more, joiner, ...detail } = found
+  return { title: KNOWN_IDS.has(check.id) ? check.id : null, detail, ...(more ? { more } : {}), ...(joiner ? { joiner } : {}) }
 }
 
 /** The cluster firewall is off because the emergency stop switched it off: lifting the stop is the fix, not the wizard. */

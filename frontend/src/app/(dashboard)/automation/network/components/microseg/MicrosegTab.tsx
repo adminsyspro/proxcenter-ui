@@ -224,6 +224,7 @@ export default function MicrosegTab({ connectionId, connectionName, firewall, in
         policy={policy}
         controls={controls}
         onOpenPlan={onOpenPlan}
+        onOpenDrifts={() => goToSubTab('drifts')}
         clusterIds={group.loading ? undefined : group.ids}
       />
       <RunStrip connectionId={connectionId} runs={runs} onFinished={runFinished} onRemove={removeRun} clusterName={clusterName} inactiveClusters={inactiveClusters} />

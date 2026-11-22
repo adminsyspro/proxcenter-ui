@@ -646,3 +646,49 @@ describe('associated clusters', () => {
     })
   })
 })
+
+describe('the IP filter of the zone members', () => {
+  function openWith(ipFilter: boolean | undefined) {
+    const base = policy()
+    const current = { ...base, policy: { ...base.policy, settings: SETTINGS, ...(ipFilter === undefined ? {} : { ip_filter: ipFilter }) } }
+    const handlers = { reloadPolicy: vi.fn(async () => undefined), startRun: vi.fn(), onClose: vi.fn() }
+    renderWithProviders(<SettingsDialog connectionId='c1' connectionName='prod-cluster' policy={current} {...handlers} />)
+    return handlers
+  }
+  const toggle = () => screen.getByRole('switch', { name: 'IP filter on zone members' }) as HTMLInputElement
+
+  it('has no row on an orchestrator that does not know it', () => {
+    openWith(undefined)
+    expect(screen.queryByRole('switch', { name: 'IP filter on zone members' })).toBeNull()
+    expect(screen.queryByText('IP filter on zone members')).toBeNull()
+  })
+
+  it('shows the switch as the policy holds it, under Enforcement, with its explanation behind the info icon', () => {
+    openWith(true)
+    expect(toggle().checked).toBe(true)
+    expect(save().disabled).toBe(true)
+    const sectionOf = toggle().closest('[data-testid="settings-section"]') ?? toggle().closest('div.MuiBox-root')
+    expect(sectionOf).toBeTruthy()
+    expect(screen.getByText('IP filter on zone members')).toBeTruthy()
+  })
+
+  it('saves the switch alone with the draft version, through the existing Save', async () => {
+    mock.routes['PUT /policy'] = () => reply(200, { version: 4 })
+    const { onClose, reloadPolicy } = openWith(false)
+    expect(toggle().checked).toBe(false)
+    fireEvent.click(toggle())
+    expect(save().disabled).toBe(false)
+    fireEvent.click(save())
+    await waitFor(() => expect(put()).toHaveLength(1))
+    expect(body(put()[0][1] as RequestInit)).toEqual({ version: 3, ip_filter: true })
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(reloadPolicy).toHaveBeenCalled()
+  })
+
+  it('sends nothing for a switch moved and put back', () => {
+    openWith(true)
+    fireEvent.click(toggle())
+    fireEvent.click(toggle())
+    expect(save().disabled).toBe(true)
+  })
+})

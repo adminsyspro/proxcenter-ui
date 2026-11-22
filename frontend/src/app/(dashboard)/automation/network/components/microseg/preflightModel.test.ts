@@ -180,3 +180,32 @@ describe('the traffic between the nodes', () => {
     ])
   })
 })
+
+describe('the IP filter check', () => {
+  it('counts the members ready when it passes', () => {
+    const m = preflightMessage({ id: 'ip_filter', status: 'pass', detail: { members: 12, ready: 12, excluded: 0, manual: 0, no_address: 0, held: 0, unknown: 0, dhcp: 0 } })
+    expect(m).toEqual({ title: 'ip_filter', detail: { key: 'checks.ip_filter.pass', values: { count: 12 } } })
+  })
+
+  it('names each count that is not zero on a warning, joined by commas, the missing addresses first', () => {
+    const m = preflightMessage({ id: 'ip_filter', status: 'warn', detail: { members: 12, ready: 6, excluded: 1, manual: 0, no_address: 2, held: 1, unknown: 0, dhcp: 3 } })
+    expect(m.detail).toEqual({ key: 'checks.ip_filter.part.no_address', values: { count: 2 } })
+    expect(m.more).toEqual([
+      { key: 'checks.ip_filter.part.held', values: { count: 1 } },
+      { key: 'checks.ip_filter.part.excluded', values: { count: 1 } },
+      { key: 'checks.ip_filter.part.dhcp', values: { count: 3 } },
+    ])
+    expect(m.joiner).toBe(', ')
+  })
+
+  it('says one count alone without a joiner, and the members ready for a warning that names none', () => {
+    const one = preflightMessage({ id: 'ip_filter', status: 'warn', detail: { ready: 3, dhcp: 2 } })
+    expect(one).toEqual({ title: 'ip_filter', detail: { key: 'checks.ip_filter.part.dhcp', values: { count: 2 } } })
+    expect(preflightMessage({ id: 'ip_filter', status: 'warn', detail: { ready: 3, held: 'x' } }).detail).toEqual({ key: 'checks.ip_filter.pass', values: { count: 3 } })
+  })
+
+  it('asks for a check while nothing is computed, and says a read failure as the other checks do', () => {
+    expect(preflightMessage({ id: 'ip_filter', status: 'warn', detail: { reason: 'not_checked' } }).detail).toEqual({ key: 'checks.ip_filter.notChecked' })
+    expect(preflightMessage({ id: 'ip_filter', status: 'fail', detail: { error: 'boom' } }).detail).toEqual({ key: 'readFailed', values: { error: 'boom' } })
+  })
+})

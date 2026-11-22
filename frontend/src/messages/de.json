@@ -13896,6 +13896,36 @@
           "title": "Firewall-Dienst auf {node} gestoppt",
           "detail": "Der Firewall-Dienst ist auf {node} gestoppt: Auf diesem Knoten wird nichts gefiltert",
           "hint": "Starten Sie den Dienst pve-firewall auf diesem Knoten."
+        },
+        "ipfilter_off": {
+          "title": "IP-Filter nicht angewendet",
+          "detail": "Der IP-Filter ist auf {nics} nicht angewendet: dieses Mitglied von {zone} kann von jeder Adresse senden.",
+          "detailOption": "Die Option IP-Filter wurde bei diesem Mitglied von {zone} entfernt: seine Listen gelten nicht mehr."
+        },
+        "ipfilter_list_changed": {
+          "title": "Liste des IP-Filters geändert",
+          "detail": "Die Liste von {nic} weicht von der Richtlinie ab (fehlend: {missing}; zu viel: {extra})."
+        },
+        "ipfilter_no_address": {
+          "title": "Mitglied nicht gefiltert",
+          "detail": "Auf {nics} ist keine Adresse bekannt: dieses Mitglied von {zone} wird nicht gefiltert.",
+          "hint": "Eine zusätzliche Adresse für diesen Gast angeben oder ihn ohne Filter belassen (Abschnitt IP-Filter seines Panels)."
+        },
+        "ipfilter_address_held": {
+          "title": "Adresse zurückgehalten",
+          "detail": "{addr} auf {nic} wurde der Liste dieses Gasts nicht hinzugefügt.",
+          "detailGuest": "{addr} auf {nic} wurde nicht hinzugefügt: sie gehört {by}, einem Mitglied einer anderen Zone.",
+          "detailPeer": "{addr} auf {nic} wurde nicht hinzugefügt: sie gehört einem Mitglied einer anderen Zone auf einem anderen Cluster.",
+          "detailSource": "{addr} auf {nic} wurde nicht hinzugefügt: sie liegt im Quellnetz {by} eines Flusses."
+        },
+        "ipfilter_manual": {
+          "title": "Von Hand erstellte Liste",
+          "detail": "Die Liste von {nics} wurde von Hand erstellt: die Engine schreibt bei diesem Mitglied von {zone} nichts.",
+          "hint": "Nichts zu tun: die von Hand erstellte Liste in Proxmox löschen, damit ProxCenter sie verwaltet."
+        },
+        "unzoned_same_network": {
+          "title": "Gast außerhalb jeder Zone in einem gefilterten Netz",
+          "detail": "{name} ist in keiner Zone und teilt {networks} mit {zones}: er wird nicht gefiltert."
         }
       },
       "chip": {
@@ -13917,7 +13947,13 @@
         "peer_unreadable": "Cluster nicht lesbar",
         "stop_lift_held": "Firewall bleibt aus",
         "cluster_firewall_off": "Cluster-Firewall aus",
-        "firewall_service_stopped": "Dienst gestoppt"
+        "firewall_service_stopped": "Dienst gestoppt",
+        "ipfilter_off": "IP-Filter aus",
+        "ipfilter_list_changed": "IP-Liste geändert",
+        "ipfilter_no_address": "Keine Adresse zum Filtern",
+        "ipfilter_address_held": "Adresse zurückgehalten",
+        "ipfilter_manual": "Liste von Hand",
+        "unzoned_same_network": "Ungefilterter Nachbar"
       },
       "zoneFilter": "Nur Zone {name}",
       "zoneFilterClear": "Alle Zonen anzeigen",
@@ -13940,7 +13976,13 @@
         "peer_unreadable": "Verknüpfte Cluster, die nicht gelesen werden können ({count, number})",
         "stop_lift_held": "Cluster-Firewalls, die aus bleiben ({count, number})",
         "cluster_firewall_off": "Ausgeschaltete Cluster-Firewalls ({count, number})",
-        "firewall_service_stopped": "Knoten mit gestopptem Firewall-Dienst ({count, number})"
+        "firewall_service_stopped": "Knoten mit gestopptem Firewall-Dienst ({count, number})",
+        "ipfilter_off": "IP-Filter nicht angewendet ({count, number})",
+        "ipfilter_list_changed": "Geänderte Listen des IP-Filters ({count, number})",
+        "ipfilter_no_address": "Mangels Adresse nicht gefilterte Mitglieder ({count, number})",
+        "ipfilter_address_held": "Vom IP-Filter zurückgehaltene Adressen ({count, number})",
+        "ipfilter_manual": "Von Hand erstellte Listen des IP-Filters ({count, number})",
+        "unzoned_same_network": "Gäste außerhalb jeder Zone im Netz einer durchgesetzten Zone ({count, number})"
       },
       "noneZone": "keine",
       "select": "{name} auswählen",
@@ -13971,7 +14013,8 @@
         "stop": "Unter einem Notstopp wird sie beim Fortsetzen eingeschaltet.",
         "refused": "Ein Knoten mit eingeschalteter eigener Firewall lässt die Weboberfläche (8006) und SSH (22) nicht herein, daher blieb die Cluster-Firewall ausgeschaltet. Erlauben Sie sie in der Firewall dieses Knotens oder schalten Sie diese aus, und versuchen Sie es erneut.",
         "refusedTraffic": "Bleibt aus: Die Knoten-Firewalls würden den Verkehr zwischen den Knoten unterbrechen."
-      }
+      },
+      "fixAllow": "Diese Adresse erlauben"
     },
     "observation": {
       "sampling": "Proxmox protokolliert standardmäßig höchstens eine Zeile pro Sekunde und Kette, daher können stark ausgelastete Flüsse zu niedrig gezählt werden.",
@@ -14562,6 +14605,19 @@
             "migration": "Migrationsnetz {network}: unterbrochen auf {nodes}",
             "other": "{network}: unterbrochen auf {nodes}"
           }
+        },
+        "ip_filter": {
+          "title": "IP-Filter",
+          "pass": "{count, plural, one {# Mitglied bereit} other {# Mitglieder bereit}}",
+          "notChecked": "Eine Prüfung starten, um ihn zu berechnen",
+          "part": {
+            "no_address": "{count, plural, one {# ohne bekannte Adresse} other {# ohne bekannte Adresse}}",
+            "held": "{count, plural, one {# Adresse zurückgehalten} other {# Adressen zurückgehalten}}",
+            "unknown": "{count, plural, one {# mit unbekannter Quelladresse} other {# mit unbekannten Quelladressen}}",
+            "manual": "{count, plural, one {# von Hand verwaltet} other {# von Hand verwaltet}}",
+            "excluded": "{count, plural, one {# ohne Filter belassen} other {# ohne Filter belassen}}",
+            "dhcp": "{count, plural, one {# per DHCP} other {# per DHCP}}"
+          }
         }
       },
       "rateUnits": {
@@ -14599,7 +14655,8 @@
         "notify_drift": "Abweichungen",
         "notify_paused": "Engine pausiert",
         "notify_unprotected": "Ungeschützte Gäste",
-        "notify_blocked": "Blockierte Flüsse"
+        "notify_blocked": "Blockierte Flüsse",
+        "ip_filter": "IP-Filter für Zonenmitglieder"
       },
       "hints": {
         "tagPrefix": "Die Zonen-Tags der Gäste sind dieses Präfix gefolgt vom Zonennamen.",
@@ -14667,7 +14724,8 @@
         "logInterval": "Abstand zwischen zwei Lesevorgängen des Firewall-Protokolls jedes Knotens: ein Lesevorgang pro Knoten und Intervall.",
         "readyAfter": "Dauer ohne neuen Fluss, der blockiert würde, bevor eine Zone als bereit angezeigt wird; das ist keine Sperre.",
         "writeCap": "Darüber hält die Engine an und bittet um Bestätigung.",
-        "selfIps": "Adressen, von denen aus ProxCenter die Knoten erreicht. Die Vorabprüfung stellt sicher, dass sie nicht abgeschnitten werden. Leer lassen, um die Erkennung zu verwenden."
+        "selfIps": "Adressen, von denen aus ProxCenter die Knoten erreicht. Die Vorabprüfung stellt sicher, dass sie nicht abgeschnitten werden. Leer lassen, um die Erkennung zu verwenden.",
+        "ipFilter": "Sobald eine Zone durchgesetzt ist, darf jedes Mitglied nur von seinen eigenen Adressen senden"
       },
       "clusters": {
         "row": "Verknüpfte Cluster",
@@ -15129,6 +15187,79 @@
       "unreachableOther": "Ein verknüpfter Cluster ist nicht erreichbar: sein Zustand ist unbekannt.",
       "unreadState": "Kann nicht gelesen werden: sein Zustand wird nicht angezeigt.",
       "unreadStateOther": "Ein verknüpfter Cluster kann nicht gelesen werden: sein Zustand wird nicht angezeigt."
+    },
+    "ipFilter": {
+      "section": "IP-Filter",
+      "linesLabel": "IP-Filter von {name}",
+      "nicNoAddress": "keine bekannte Adresse",
+      "state": {
+        "loading": "IP-Filter wird gelesen...",
+        "off": "Der IP-Filter ist für diese Richtlinie ausgeschaltet",
+        "notMember": "Mitglied keiner Zone",
+        "filtered": "Gefiltert",
+        "willFilter": "Wird gefiltert, sobald eine Zone durchgesetzt und angewendet ist",
+        "excluded": "Ohne Filter belassen",
+        "manual": "Von Hand verwaltet",
+        "noAddress": "Nicht gefiltert: keine bekannte Adresse auf {nics}"
+      },
+      "chip": {
+        "filtered": "Gefiltert",
+        "willFilter": "Bereit",
+        "excluded": "Ohne Filter",
+        "manual": "Von Hand",
+        "noAddress": "Keine Adresse"
+      },
+      "held": {
+        "guest": "{addr} auf {nic}: gehört {by}, einem Mitglied einer anderen Zone",
+        "guestUnnamed": "{addr} auf {nic}: gehört einem Mitglied einer anderen Zone",
+        "peer": "{addr} auf {nic}: gehört einem Mitglied einer anderen Zone auf einem anderen Cluster",
+        "source": "{addr} auf {nic}: liegt im Quellnetz {by} eines Flusses",
+        "other": "{addr} auf {nic}: nicht hinzugefügt"
+      },
+      "allow": "Erlauben",
+      "allowAddr": "{addr} erlauben",
+      "allowTitle": "{addr} für {name} erlauben?",
+      "allowBody": "Die Adresse wird den zusätzlichen Adressen dieses Gasts hinzugefügt; sie gilt mit dem nächsten Plan.",
+      "allowConfirm": "Diese Adresse erlauben",
+      "unknown": "Gesehene Quelladressen, die der Filter verwerfen würde: {addrs}",
+      "dhcp": "{nics} per DHCP: eine geänderte Adresse wird bis zur nächsten Adresserfassung blockiert",
+      "leaveOut": "Ohne Filter belassen",
+      "extra": "Zusätzliche Adressen",
+      "extraNone": "Keine",
+      "extraCount": "{count, plural, one {# Adresse} other {# Adressen}}",
+      "extraEdit": "Bearbeiten",
+      "extraEditLabel": "Zusätzliche Adressen bearbeiten",
+      "extraTitle": "Zusätzliche Adressen von {name}",
+      "extraHint": "Eine Adresse oder ein Bereich pro Zeile (IPv4, IPv6 oder CIDR).",
+      "extraLabel": "Adressen",
+      "extraInvalid": "{addr} ist weder eine Adresse noch ein Bereich",
+      "memberTip": {
+        "excluded": "Ohne IP-Filter belassen",
+        "manual": "Liste des IP-Filters von Hand erstellt: die Engine schreibt nichts",
+        "noAddress": "Nicht gefiltert: keine bekannte Adresse"
+      },
+      "details": {
+        "title": "IP-Filter: Adressen pro Mitglied",
+        "button": "Einzelheiten",
+        "onlyAttention": "Nur die zu prüfenden",
+        "empty": "Kein Zonenmitglied",
+        "emptyAttention": "Kein Mitglied ist zu prüfen",
+        "addresses": "{count, plural, one {# Adresse} other {# Adressen}}",
+        "expand": "Adressen von {name} anzeigen",
+        "collapse": "Adressen von {name} ausblenden",
+        "loading": "IP-Filter wird gelesen...",
+        "count": "{count, plural, one {# Mitglied} other {# Mitglieder}}"
+      },
+      "enforce": {
+        "summary": "IP-Filter: {ready, plural, one {# Mitglied bereit} other {# Mitglieder bereit}}, {attention, plural, =0 {keines zu prüfen} one {# zu prüfen} other {# zu prüfen}}",
+        "notComputed": "IP-Filter: noch nicht berechnet, eine Prüfung starten"
+      },
+      "banner": {
+        "off": "Der IP-Filter ist ausgeschaltet: ein Mitglied kann mit der Adresse eines Mitglieds einer anderen Zone senden.",
+        "turnOn": "Einschalten",
+        "unzoned": "{count, plural, one {# Gast außerhalb jeder Zone teilt das Netz einer durchgesetzten Zone: er wird nicht gefiltert.} other {# Gäste außerhalb jeder Zone teilen das Netz einer durchgesetzten Zone: sie werden nicht gefiltert.}}",
+        "seeDrifts": "Abweichungen ansehen"
+      }
     }
   },
   "bulkPower": {

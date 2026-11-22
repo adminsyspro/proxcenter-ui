@@ -9,6 +9,7 @@ import { clustersToRead, shownAnswers, useMergedClusters } from '@/lib/microseg/
 import { useClusterDrifts } from '@/lib/microseg/useMicrosegLists'
 import { useMicrosegStatus } from '@/lib/microseg/useMicrosegStatus'
 
+import AllowAddressDialog from './AllowAddressDialog'
 import AssignGuestsDialog from './AssignGuestsDialog'
 import { shownClusterName } from './ClusterRunRow'
 import ClusterUnreadLines from './ClusterUnreadLines'
@@ -99,7 +100,8 @@ function DriftGroupBody({ group, render, rowKey, selectedKeys, onSelectAll }: Gr
  * The Drifts sub-tab: what the engine's last full run found different between the policy and Proxmox. A strip of
  * chips per kind with their counts (a click shows that kind only), then a table grouped by kind (Object, Zone, What
  * differs, Since, Actions), with a selection for bulk actions: assign the selected guests to a zone (the assign
- * dialog, a draft change) and ignore them. "Fix" only touches the draft (the assign dialog) or opens the plan;
+ * dialog, a draft change) and ignore them. "Fix" only touches the draft (the assign dialog, an address allowed for
+ * the IP filter of a guest) or opens the plan;
  * nothing is written to Proxmox from here. "Ignore" hides a drift in this browser.
  */
 export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpenPlan, goToSubTab, driftsZone = null, anchor, clusterIds, clusterName }: MicrosegSubTabProps) {
@@ -130,6 +132,8 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [menu, setMenu] = useState<MenuFor | null>(null)
   const [assigning, setAssigning] = useState<Assigning | null>(null)
+  // The drift whose held address is being allowed (the IP filter), until its confirmation closes.
+  const [allowing, setAllowing] = useState<ClusterDrift | null>(null)
 
   const rowKey = useMemo(() => (d: ClusterDrift) => driftRowKey(d, shared), [shared])
   // A cluster outside the user's scope is never named by the backend's text: the page's lookup or "Another cluster".
@@ -180,6 +184,7 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
 
   const onFix = (drift: ClusterDrift, label: ReturnType<typeof driftLabel>, anchorEl: HTMLElement) => {
     if (label.fix === 'assign' && drift.guest) setMenu({ anchor: anchorEl, guests: [driftGuestId(drift)!] })
+    else if (label.fix === 'allow') setAllowing(drift)
     else onOpenPlan()
   }
 
@@ -332,6 +337,17 @@ export default function DriftsPanel({ connectionId, policy, reloadPolicy, onOpen
       <Menu anchorEl={menu?.anchor} open={!!menu} onClose={() => setMenu(null)} slotProps={{ list: { 'aria-label': t('assignMenu') } }}>
         {policy.zones.map(zone => <MenuItem key={zone.id} onClick={() => pickZone(zone)}>{zone.name}</MenuItem>)}
       </Menu>
+      {allowing?.guest && typeof allowing.detail?.addr === 'string' && (
+        <AllowAddressDialog
+          connectionId={connectionId}
+          policy={policy}
+          reloadPolicy={reloadPolicy}
+          guest={{ connectionId: allowing.connection_id, type: allowing.guest.type, vmid: allowing.guest.vmid, name: subjectOf(allowing) }}
+          addr={allowing.detail.addr}
+          onDone={() => { setAllowing(null); void reload() }}
+          onCancel={() => setAllowing(null)}
+        />
+      )}
       {assigning && (
         <AssignGuestsDialog
           open

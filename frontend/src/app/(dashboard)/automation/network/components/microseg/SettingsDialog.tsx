@@ -92,7 +92,7 @@ export default function SettingsDialog({
   const { canWrite } = useMicrosegWrite()
 
   // The form at opening: what "changed" is measured against, even if the draft moves meanwhile.
-  const [baseline] = useState(() => formFromSettings(policy.policy.tag_prefix, policy.policy.settings))
+  const [baseline] = useState(() => formFromSettings(policy.policy.tag_prefix, policy.policy.settings, policy.policy.ip_filter))
   const [form, setForm] = useState<SettingsForm>(baseline)
   const [removing, setRemoving] = useState(false)
   const [confirmingPrefix, setConfirmingPrefix] = useState(false)

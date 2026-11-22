@@ -170,6 +170,28 @@ describe('changed fields', () => {
   })
 })
 
+describe('the IP filter switch', () => {
+  it('is in the form only where the orchestrator knows the filter', () => {
+    expect(formFromSettings('zone-', base)).not.toHaveProperty('ipFilter')
+    expect(formFromSettings('zone-', base, false).ipFilter).toBe(false)
+    expect(formFromSettings('zone-', base, true).ipFilter).toBe(true)
+  })
+
+  it('is sent only when it moved, alone or with the other changes', () => {
+    const off = formFromSettings('zone-', base, false)
+    expect(changedUpdate(off, { ...off })).toBeNull()
+    expect(changedUpdate(off, { ...off, ipFilter: true })).toEqual({ ip_filter: true })
+    const on = formFromSettings('zone-', base, true)
+    expect(changedUpdate(on, { ...on, ipFilter: false, write_cap: '10' })).toEqual({ settings: { write_cap: 10 }, ip_filter: false })
+  })
+
+  it('is never sent to an orchestrator that does not know it', () => {
+    const unknown = formFromSettings('zone-', base)
+    expect(changedUpdate(unknown, { ...unknown, ipFilter: true })).toBeNull()
+    expect(validateSettingsForm({ ...unknown, ipFilter: true }, unknown)).toEqual({})
+  })
+})
+
 describe('what an empty addresses field stands for', () => {
   it('names the install or detected addresses with their source', () => {
     expect(selfIpsFallback(['10.42.0.250', '2001:db8::250'], 'install')).toEqual({ ips: '10.42.0.250, 2001:db8::250', source: 'install' })

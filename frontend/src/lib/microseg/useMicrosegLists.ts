@@ -5,7 +5,7 @@ import useSWR from 'swr'
 
 import { MicrosegApiError, microsegApi, microsegBaseUrl, type ListRunsParams, type ListSuggestionsParams } from './api'
 import { FATAL_CODES } from './useMicroseg'
-import type { MicrosegDriftList, MicrosegRevision, MicrosegRun, MicrosegSuggestion } from './types'
+import type { MicrosegDriftList, MicrosegIPFilter, MicrosegRevision, MicrosegRun, MicrosegSuggestion } from './types'
 
 /** The drifts are the engine's own memory of its last full run, which is rarely more often than every few minutes. */
 export const DRIFTS_REFRESH_MS = 60_000
@@ -29,6 +29,28 @@ export function useMicrosegDrifts(connId: string | null | undefined, options: { 
 
 /** The drifts of one cluster at their usual pace, for the reads merged per cluster (`useMergedClusters`). */
 export const useClusterDrifts = (connId: string | null) => useMicrosegDrifts(connId)
+
+/** The SWR key of GET /ipfilter of a connection: a write that changes the filter reads it again through it. */
+export const ipFilterKey = (connId: string) => `${microsegBaseUrl(connId)}/ipfilter`
+
+/**
+ * GET /ipfilter: the IP filter of the zone members of one cluster, as the last full run computed it (the engine's
+ * memory, no Proxmox call). Same pace as the drifts, which come from the same run; `once`: read when the component
+ * mounts and not again. Nothing is read without a connection.
+ */
+export function useMicrosegIPFilter(connId: string | null | undefined, options: { once?: boolean } = {}) {
+  const api = useMemo(() => (connId ? microsegApi(connId) : null), [connId])
+  const key = connId ? ipFilterKey(connId) : null
+  const { data, error, isLoading, mutate } = useSWR<MicrosegIPFilter, MicrosegApiError>(key, () => api!.getIPFilter(), {
+    refreshInterval: options.once ? 0 : DRIFTS_REFRESH_MS,
+    revalidateOnFocus: !options.once,
+    shouldRetryOnError: shouldRetry,
+  })
+  return { data, loading: isLoading, error, reload: () => mutate() }
+}
+
+/** The IP filter of one cluster at its usual pace, for the reads merged per cluster (`useMergedClusters`). */
+export const useClusterIPFilter = (connId: string | null) => useMicrosegIPFilter(connId)
 
 /**
  * The engine reads the firewall log every minute or so and records what it saw: the observed flows are read again at

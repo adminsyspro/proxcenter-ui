@@ -11,6 +11,7 @@ import { clustersToRead, useMergedClusters, type ClusterRead } from '@/lib/micro
 import ClusterChip from './ClusterChip'
 import { shownClusterName } from './ClusterRunRow'
 import { ONE_LINE_SX } from './dialogParts'
+import IPFilterDetailsDialog from './IPFilterDetailsDialog'
 import { heldByStop, opensWizard, parseRate, preflightMessage, raisesLogRate } from './preflightModel'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import TruncatedText from './TruncatedText'
@@ -23,17 +24,18 @@ const STATUS_ICON: Record<PreflightStatus, { icon: string; color: string }> = {
 
 type ChipOf = { id: string; name: string }
 
-function CheckRow({ check, onOpenWizard, onResume, rateLimit, cluster }: { check: PreflightCheck; onOpenWizard?: () => void; onResume?: () => void; rateLimit?: RateLimitFix; cluster?: ChipOf }) {
+function CheckRow({ check, onOpenWizard, onResume, rateLimit, cluster, onIPFilterDetails }: { check: PreflightCheck; onOpenWizard?: () => void; onResume?: () => void; rateLimit?: RateLimitFix; cluster?: ChipOf; onIPFilterDetails?: () => void }) {
   const t = useTranslations('microsegPilot.preflight')
   const tStop = useTranslations('microsegPilot.stop')
-  const { title, detail, more = [] } = preflightMessage(check)
+  const tFilter = useTranslations('microsegPilot.ipFilter.details')
+  const { title, detail, more = [], joiner = ' ' } = preflightMessage(check)
   const name = title ? t(`checks.${title}.title`) : check.id
   // The rate PVE writes ("20/second") is said with a translated unit; any other wording is shown as PVE wrote it.
   const rawRate = detail?.values?.rate
   const rate = parseRate(typeof rawRate === 'string' ? rawRate : undefined)
   const values = rate ? { ...detail?.values, rate: t(`rateUnits.${rate.unit}`, { count: rate.count }) } : detail?.values
   // Every reason on the same line, in full in the tooltip of the cut text.
-  const message = detail ? [t(detail.key, values), ...more.map(line => t(line.key, line.values))].join(' ') : ''
+  const message = detail ? [t(detail.key, values), ...more.map(line => t(line.key, line.values))].join(joiner) : ''
   // The engine raises the log rate while a zone observes once the settings hold the rate to use: the warning is then handled.
   const planned = raisesLogRate(check, rateLimit?.observe)
   const plannedRate = planned ? parseRate(planned) : null
@@ -48,6 +50,9 @@ function CheckRow({ check, onOpenWizard, onResume, rateLimit, cluster }: { check
       <TruncatedText text={name} fontWeight={600} sx={{ flex: '0 0 auto', width: 170 }} />
       <TruncatedText text={planned ? plannedText : message} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
       {raisable && <RaiseLogRate onRaise={rateLimit!.onRaise!} />}
+      {onIPFilterDetails && check.id === 'ip_filter' && check.detail?.reason !== 'not_checked' && (
+        <Button size='small' variant='outlined' onClick={onIPFilterDetails} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{tFilter('button')}</Button>
+      )}
       {onResume && heldByStop(check) && (
         <Button size='small' variant='outlined' color='error' onClick={onResume} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{tStop('resume')}</Button>
       )}
@@ -147,6 +152,8 @@ export default function PreflightPanel({ open, connectionId, clusterIds, anchor,
   const t = useTranslations('microsegPilot.preflight')
   const tAll = useTranslations()
   const [attempt, setAttempt] = useState(0)
+  // The cluster whose IP filter details are open (the line of that cluster's check).
+  const [filterOf, setFilterOf] = useState<string | null>(null)
   const ids = useMemo(() => clustersToRead(connectionId, { anchor, clusterIds }), [connectionId, anchor, clusterIds])
   const shared = ids.length > 1
   const round = open ? `${refreshKey}:${attempt}` : null
@@ -180,11 +187,12 @@ export default function PreflightPanel({ open, connectionId, clusterIds, anchor,
       )]
     }
     return (reads.byCluster[id] ?? []).map(check => (
-      <CheckRow key={`${id}:${check.id}`} check={check} cluster={chipOf(id)} onOpenWizard={id === connectionId ? onOpenWizard : undefined} onResume={onResume} rateLimit={rateLimit} />
+      <CheckRow key={`${id}:${check.id}`} check={check} cluster={chipOf(id)} onOpenWizard={id === connectionId ? onOpenWizard : undefined} onResume={onResume} rateLimit={rateLimit} onIPFilterDetails={() => setFilterOf(id)} />
     ))
   }) : []
 
   return (
+    <>
     <Dialog open={open} onClose={onClose} maxWidth='md' fullWidth aria-labelledby='microseg-preflight-title'>
       <DialogTitle id='microseg-preflight-title' sx={ONE_LINE_SX}>{t('title')}</DialogTitle>
       <DialogContent>
@@ -202,7 +210,7 @@ export default function PreflightPanel({ open, connectionId, clusterIds, anchor,
         )}
         {checks && (
           <Box role='list'>
-            {checks.map(check => <CheckRow key={check.id} check={check} onOpenWizard={onOpenWizard} onResume={onResume} rateLimit={rateLimit} />)}
+            {checks.map(check => <CheckRow key={check.id} check={check} onOpenWizard={onOpenWizard} onResume={onResume} rateLimit={rateLimit} onIPFilterDetails={() => setFilterOf(connectionId)} />)}
           </Box>
         )}
       </DialogContent>
@@ -211,5 +219,7 @@ export default function PreflightPanel({ open, connectionId, clusterIds, anchor,
         <Button onClick={onClose} variant='contained'>{tAll('common.close')}</Button>
       </DialogActions>
     </Dialog>
+    {filterOf !== null && <IPFilterDetailsDialog connectionId={connectionId} clusterIds={[filterOf]} clusterName={clusterName} onClose={() => setFilterOf(null)} />}
+    </>
   )
 }

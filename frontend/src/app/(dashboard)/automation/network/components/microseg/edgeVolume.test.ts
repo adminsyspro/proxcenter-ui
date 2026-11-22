@@ -71,6 +71,27 @@ describe('edgeVolumes', () => {
     expect(sum).toBeLessThanOrEqual(ROWS.filter(r => r.src_zone === 'web').reduce((n, r) => n + r.bytes, 0))
   })
 
+  it('gives a blocked flow last refused before the measured window none of its volume', () => {
+    const SINCE = Date.parse('2026-11-21T12:00:00Z')
+    const at = (last: string) => ({ ...seen('zd', 'zd', '5432'), last_seen: last })
+    const rows = [row('db', 'db', 5432, 9_000_000)]
+    const stale = [edge('old', 'zone:zd', 'zone:zd', 'blocked', [], [at('2026-11-15T08:00:00Z')])]
+    expect(edgeVolumes(stale, rows, zoneName, undefined, SINCE).get('old')).toEqual({ figure: { bytes: 0, packets: 0 }, level: 0, shared: false, untold: false, rules: [], pair: null })
+    // Refused inside the window: what sFlow sampled before the refusal is its volume.
+    const fresh = [edge('new', 'zone:zd', 'zone:zd', 'blocked', [], [at('2026-11-22T08:00:00Z')])]
+    expect(edgeVolumes(fresh, rows, zoneName, undefined, SINCE).get('new')!.figure.bytes).toBe(9_000_000)
+    // No window told, a date that cannot be read, or an unprotected flow: the volume stays.
+    expect(edgeVolumes(stale, rows, zoneName).get('old')!.figure.bytes).toBe(9_000_000)
+    expect(edgeVolumes([edge('odd', 'zone:zd', 'zone:zd', 'blocked', [], [at('')])], rows, zoneName, undefined, SINCE).get('odd')!.figure.bytes).toBe(9_000_000)
+    expect(edgeVolumes([edge('open', 'zone:zd', 'zone:zd', 'unprotected', [], [at('2026-11-15T08:00:00Z')])], rows, zoneName, undefined, SINCE).get('open')!.figure.bytes).toBe(9_000_000)
+    // The stale refusal leaves the row to the unprotected flow drawn beside it.
+    const both = [...stale, edge('open', 'zone:zd', 'zone:zd', 'unprotected', [], [at('2026-11-22T08:00:00Z')])]
+    const told = edgeVolumes(both, rows, zoneName, undefined, SINCE)
+    expect(told.get('open')!.figure.bytes).toBe(9_000_000)
+    expect(told.get('open')!.shared).toBe(false)
+    expect(told.get('old')!.figure.bytes).toBe(0)
+  })
+
   it('tells the ends the volume can be told for', () => {
     expect(zoneLevelEnd('zone:zw')).toBe(true)
     expect(zoneLevelEnd(EXTERNAL_ID)).toBe(true)

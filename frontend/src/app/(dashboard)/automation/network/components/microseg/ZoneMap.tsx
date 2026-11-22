@@ -343,7 +343,9 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     () => filterEdgeAge(filterEdgeServices(filterEdges(graph.edges, filters), shownServices), seenPeriod, now).filter(e => !isolated || isolated.edges.has(e.id)),
     [graph.edges, filters, shownServices, seenPeriod, now, isolated],
   )
-  const sankeyVolume = useMemo(() => (volume?.covered ? { rows: volume.buckets, zoneName } : null), [volume, zoneName])
+  // Where the volume read starts: a flow last refused before it shows none of that volume.
+  const volumeSince = useMemo(() => { const at = volume ? Date.parse(volume.from) : NaN; return Number.isFinite(at) ? at : undefined }, [volume])
+  const sankeyVolume = useMemo(() => (volume?.covered ? { rows: volume.buckets, zoneName, since: volumeSince } : null), [volume, zoneName, volumeSince])
   // The sFlow volume of the edges between zones over the period of the map: the totals already read, no request per edge.
   // The guest a node of the map stands for: its VMID in its cluster (the last part of its id is the guest's key).
   const guestRefs = useMemo(() => {
@@ -358,8 +360,8 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     [guestVolume, guestRefs],
   )
   const volumes = useMemo(
-    () => (volume?.covered ? edgeVolumes(filteredEdges, volume.buckets, zoneName, guestVolumes) : null),
-    [volume, filteredEdges, zoneName, guestVolumes],
+    () => (volume?.covered ? edgeVolumes(filteredEdges, volume.buckets, zoneName, guestVolumes, volumeSince) : null),
+    [volume, filteredEdges, zoneName, guestVolumes, volumeSince],
   )
   // What the tooltip of an edge reads its volume chart with, once sFlow is known to measure the map.
   const volumeSource = useMemo(() => (measured ? { clusterIds: readIds.length ? readIds : [connectionId], period: seenPeriod, zoneName } : null), [measured, readIds, connectionId, seenPeriod, zoneName])

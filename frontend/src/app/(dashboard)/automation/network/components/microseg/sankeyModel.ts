@@ -93,8 +93,11 @@ export function ribbonWidth(hits: number, maxHits: number, maxW = MAX_W): number
 
 type Draft = Omit<Ribbon, 'width' | 'y0' | 'y1'>
 
-/** The volume rows of the period and the names of the zones: the ribbons are then as wide as their bytes. */
-export type SankeyVolume = { rows: readonly MicrosegVolumeBucket[]; zoneName: (zoneId: string) => string | undefined }
+/**
+ * The volume rows of the period and the names of the zones: the ribbons are then as wide as their bytes. `since`
+ * (epoch ms): where the rows start, a flow last refused before it takes none of them.
+ */
+export type SankeyVolume = { rows: readonly MicrosegVolumeBucket[]; zoneName: (zoneId: string) => string | undefined; since?: number }
 
 /**
  * The ribbons of every cell the checkboxes leave something in: unprotected, blocked, allowed. Their volume is told as
@@ -120,7 +123,7 @@ function draftRibbons(model: MatrixModel, filters: FlowFilters, volume: SankeyVo
   }
   if (!volume) return out
   // Every ribbon runs between two zones (or boxes): told by its flows alone, whatever its ends are named.
-  const told = edgeVolumes(out.map(r => ({ id: r.id, source: EXTERNAL_ID, target: EXTERNAL_ID, data: { kind: r.kind, flows: r.flows, observed: r.observed } })), volume.rows, volume.zoneName)
+  const told = edgeVolumes(out.map(r => ({ id: r.id, source: EXTERNAL_ID, target: EXTERNAL_ID, data: { kind: r.kind, flows: r.flows, observed: r.observed } })), volume.rows, volume.zoneName, undefined, volume.since)
   return out.map(r => {
     const mine = told.get(r.id)
     return mine ? { ...r, bytes: mine.figure.bytes, volume: mine.figure, volumeShared: mine.shared } : r

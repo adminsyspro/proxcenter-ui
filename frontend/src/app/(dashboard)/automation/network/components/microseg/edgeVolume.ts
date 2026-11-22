@@ -86,9 +86,11 @@ function endIs(end: VolumeGuestRef | undefined, row: Row, vmid: number | undefin
  * from its guest to its guest, then from or to one of them, then between its zones), else, matched as closely by
  * several observed edges, to none of them. Without the volume by pair of guests (`guests` absent or empty), the edges
  * are told by their zones only. The gauges compare what each edge shows. An exception (guest to guest) has none.
+ * `since` (epoch ms) is where the rows start: a blocked flow the firewall last refused before it takes none of them,
+ * what is measured since then being traffic that went through, not what was refused.
  */
 export function edgeVolumes(
-  edges: readonly VolumeEdge[], rows: readonly MicrosegVolumeBucket[], zoneName: (zoneId: string) => string | undefined, guests?: GuestVolumes,
+  edges: readonly VolumeEdge[], rows: readonly MicrosegVolumeBucket[], zoneName: (zoneId: string) => string | undefined, guests?: GuestVolumes, since?: number,
 ): Map<string, EdgeVolume> {
   const byGuest = !!guests && guests.rows.length > 0
   const claims: Claim[] = edges.flatMap(e => {
@@ -96,8 +98,9 @@ export function edgeVolumes(
     if (!d || d.kind === 'exception' || !volumeEnd(e.source) || !volumeEnd(e.target)) return []
     const source = byGuest ? guests.of(e.source) : undefined
     const target = byGuest ? guests.of(e.target) : undefined
+    const observed = d.kind === 'blocked' && since !== undefined ? d.observed.filter(o => !(Date.parse(o.last_seen) < since)) : d.observed
     return [{
-      id: e.id, allowed: d.kind !== 'unprotected' && d.kind !== 'blocked', rules: flowRules(d.flows, d.observed, zoneName),
+      id: e.id, allowed: d.kind !== 'unprotected' && d.kind !== 'blocked', rules: flowRules(d.flows, observed, zoneName),
       source, target, spec: (source ? 1 : 0) + (target ? 1 : 0),
     }]
   })

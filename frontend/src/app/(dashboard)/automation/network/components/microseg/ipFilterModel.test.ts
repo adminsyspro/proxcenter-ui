@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import type { GuestIPFilter, IPFilterGuest, MicrosegPolicy } from '@/lib/microseg/types'
 
 import {
-  allowedCount, guestFilterOf, guestFilterState, guestFiltersOf, heldKey, invalidAddress, ipFilterAvailable, ipFilterByGuest, ipFilterCounts, ipFilterRow,
+  allowedCount, guestFilterOf, guestFilterState, guestFiltersOf, heldByLabel, heldKey, invalidAddress, ipFilterAvailable, ipFilterByGuest, ipFilterCounts, ipFilterRow,
   isTechnicalAddress, needsAttention, nicKeys, parseAddresses, rowState, splitAddresses, withAllowedAddress, withGuestFilter,
 } from './ipFilterModel'
 
@@ -184,6 +184,13 @@ describe('why an address is held', () => {
     expect(heldKey({ reason: 'peer', by: 'x' })).toBe('peer')
     expect(heldKey({ reason: 'source', by: '10.0.0.0/24' })).toBe('source')
     expect(heldKey({ reason: 'source' })).toBe('other')
+    expect(heldKey({ reason: 'contested', by: 'lxc/102' })).toBe('contested')
+    expect(heldKey({ reason: 'contested' })).toBe('contestedPeer')
+    // The member is named for the reader when the engine sent its name; a network, or an engine that sends no name, stays as is.
+    expect(heldByLabel('lxc/102', 'db-1')).toBe('db-1 (102)')
+    expect(heldByLabel('lxc/102', undefined)).toBe('lxc/102')
+    expect(heldByLabel('10.0.0.0/24', undefined)).toBe('10.0.0.0/24')
+    expect(heldByLabel(undefined, 'db-1')).toBe('')
     expect(heldKey({ reason: 'later' })).toBe('other')
   })
 })

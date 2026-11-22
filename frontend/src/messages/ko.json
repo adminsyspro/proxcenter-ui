@@ -14345,7 +14345,9 @@
           "detail": "{nic}의 {addr}이(가) 이 게스트의 목록에 추가되지 않았습니다.",
           "detailGuest": "{nic}의 {addr}이(가) 추가되지 않았습니다: 다른 영역의 멤버 {by}이(가) 사용 중입니다.",
           "detailPeer": "{nic}의 {addr}이(가) 추가되지 않았습니다: 다른 클러스터의 다른 영역 멤버가 사용 중입니다.",
-          "detailSource": "{nic}의 {addr}이(가) 추가되지 않았습니다: 흐름의 출발지 네트워크 {by}에 포함됩니다."
+          "detailSource": "{nic}의 {addr}이(가) 추가되지 않았습니다: 흐름의 출발지 네트워크 {by}에 포함됩니다.",
+          "detailContested": "{nic}의 {addr}이(가) 추가되지 않았습니다: 다른 영역의 멤버 {by}도 이 주소를 보고하며 어느 쪽도 보유하고 있지 않습니다. 주소가 속한 게스트에 허용하세요.",
+          "detailContestedPeer": "{nic}의 {addr}이(가) 추가되지 않았습니다: 다른 클러스터의 다른 영역 멤버도 이 주소를 보고하며 어느 쪽도 보유하고 있지 않습니다. 주소가 속한 게스트에 허용하세요."
         },
         "ipfilter_manual": {
           "title": "수동으로 작성된 목록",
@@ -15039,6 +15041,7 @@
           "title": "IP 필터",
           "pass": "{count, plural, other {멤버 #개 준비됨}}",
           "notChecked": "계산하려면 검사를 실행하세요",
+          "notDeployed": "이 클러스터에 처음 적용한 후 계산됩니다",
           "part": {
             "no_address": "{count, plural, other {알려진 주소 없음 #개}}",
             "held": "{count, plural, other {보류된 주소 #개}}",
@@ -15643,6 +15646,8 @@
         "guestUnnamed": "{nic}의 {addr}: 다른 영역의 멤버가 사용 중",
         "peer": "{nic}의 {addr}: 다른 클러스터의 다른 영역 멤버가 사용 중",
         "source": "{nic}의 {addr}: 흐름의 출발지 네트워크 {by}에 포함됨",
+        "contested": "{nic}의 {addr}: 다른 영역의 멤버 {by}도 보고하며 어느 쪽도 보유하지 않음",
+        "contestedPeer": "{nic}의 {addr}: 다른 클러스터의 다른 영역 멤버도 보고하며 어느 쪽도 보유하지 않음",
         "other": "{nic}의 {addr}: 추가되지 않음"
       },
       "allow": "허용",

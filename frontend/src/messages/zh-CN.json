@@ -14345,7 +14345,9 @@
           "detail": "{nic} 上的 {addr} 未加入此客户机的列表。",
           "detailGuest": "{nic} 上的 {addr} 未添加：它被另一区域的成员 {by} 占用。",
           "detailPeer": "{nic} 上的 {addr} 未添加：它被另一集群上另一区域的成员占用。",
-          "detailSource": "{nic} 上的 {addr} 未添加：它位于某条流的源网络 {by} 内。"
+          "detailSource": "{nic} 上的 {addr} 未添加：它位于某条流的源网络 {by} 内。",
+          "detailContested": "{nic} 上的 {addr} 未添加：另一区域的成员 {by} 也上报了该地址，双方均未持有。请为其所属的客户机允许该地址。",
+          "detailContestedPeer": "{nic} 上的 {addr} 未添加：另一集群上另一区域的成员也上报了该地址，双方均未持有。请为其所属的客户机允许该地址。"
         },
         "ipfilter_manual": {
           "title": "手动创建的列表",
@@ -15039,6 +15041,7 @@
           "title": "IP 过滤",
           "pass": "{count, plural, other {# 个成员就绪}}",
           "notChecked": "运行一次检查以进行计算",
+          "notDeployed": "在此集群首次应用后计算",
           "part": {
             "no_address": "{count, plural, other {# 个没有已知地址}}",
             "held": "{count, plural, other {# 个地址被保留}}",
@@ -15643,6 +15646,8 @@
         "guestUnnamed": "{nic} 上的 {addr}：被另一区域的成员占用",
         "peer": "{nic} 上的 {addr}：被另一集群上另一区域的成员占用",
         "source": "{nic} 上的 {addr}：位于某条流的源网络 {by} 内",
+        "contested": "{nic} 上的 {addr}：另一区域的成员 {by} 也上报了该地址，双方均未持有",
+        "contestedPeer": "{nic} 上的 {addr}：另一集群上另一区域的成员也上报了该地址，双方均未持有",
         "other": "{nic} 上的 {addr}：未添加"
       },
       "allow": "允许",

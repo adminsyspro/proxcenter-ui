@@ -49,6 +49,8 @@ const SAMPLES: MicrosegDrift[] = [
   { kind: 'ipfilter_address_held', guest, detail: { zone: 'web', nic: 'net0', addr: '10.0.0.7', reason: 'guest', by: 'db-1' } },
   { kind: 'ipfilter_address_held', guest, detail: { zone: 'web', nic: 'net0', addr: '10.0.0.7', reason: 'peer', by: '' } },
   { kind: 'ipfilter_address_held', guest, detail: { zone: 'web', nic: 'net0', addr: '10.0.0.7', reason: 'source', by: '10.0.0.0/24' } },
+  { kind: 'ipfilter_address_held', guest, detail: { zone: 'web', nic: 'net0', addr: '10.0.0.7', reason: 'contested', by: 'lxc/102', by_name: 'app-1' } },
+  { kind: 'ipfilter_address_held', guest, detail: { zone: 'web', nic: 'net0', addr: '10.0.0.7', reason: 'contested', by: '' } },
   { kind: 'ipfilter_address_held', guest, detail: { zone: 'web', nic: 'net0', addr: '10.0.0.7', reason: 'later' } },
   { kind: 'ipfilter_manual', guest, detail: { zone: 'web', nics: ['net0'] } },
   { kind: 'unzoned_same_network', guest, detail: { name: 'stray-1', networks: ['vmbr0/20'], zones: ['web', 'db'] } },
@@ -173,10 +175,12 @@ describe('IP filter drifts', () => {
   })
 
   it('says who holds an address, by reason, and keeps a general sentence for a reason it does not know', () => {
-    const [guestHeld, peer, source, unknown] = by('ipfilter_address_held').map(d => driftLabel(d, t))
+    const [guestHeld, peer, source, contested, contestedPeer, unknown] = by('ipfilter_address_held').map(d => driftLabel(d, t))
     expect(guestHeld.detail).toBe('10.0.0.7 on net0 was not added: db-1, a member of another zone, holds it.')
     expect(peer.detail).toBe('10.0.0.7 on net0 was not added: a member of another zone on another cluster holds it.')
     expect(source.detail).toBe('10.0.0.7 on net0 was not added: it is inside the source network 10.0.0.0/24 of a flow.')
+    expect(contested.detail).toBe('10.0.0.7 on net0 was not added: app-1 (102), a member of another zone, reports it too and neither holds it. Allow it for the guest it belongs to.')
+    expect(contestedPeer.detail).toBe('10.0.0.7 on net0 was not added: a member of another zone on another cluster reports it too and neither holds it. Allow it for the guest it belongs to.')
     expect(unknown.detail).toBe('10.0.0.7 on net0 was not added to the list of this guest.')
     for (const label of [guestHeld, peer, source, unknown]) expect(label).toMatchObject({ fix: 'allow', fixable: true, hint: null })
   })

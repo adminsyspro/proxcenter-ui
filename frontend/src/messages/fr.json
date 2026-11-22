@@ -14346,7 +14346,9 @@
           "detail": "{addr} sur {nic} n'a pas été ajoutée à la liste de cette VM.",
           "detailGuest": "{addr} sur {nic} n'a pas été ajoutée : {by}, membre d'une autre zone, la détient.",
           "detailPeer": "{addr} sur {nic} n'a pas été ajoutée : un membre d'une autre zone sur un autre cluster la détient.",
-          "detailSource": "{addr} sur {nic} n'a pas été ajoutée : elle est comprise dans le réseau source {by} d'un flux."
+          "detailSource": "{addr} sur {nic} n'a pas été ajoutée : elle est comprise dans le réseau source {by} d'un flux.",
+          "detailContested": "{addr} sur {nic} n'a pas été ajoutée : elle est aussi relevée sur {by}, membre d'une autre zone, et aucun des deux ne la détient. Autorisez-la pour la VM à laquelle elle appartient.",
+          "detailContestedPeer": "{addr} sur {nic} n'a pas été ajoutée : elle est aussi relevée sur un membre d'une autre zone d'un autre cluster, et aucun des deux ne la détient. Autorisez-la pour la VM à laquelle elle appartient."
         },
         "ipfilter_manual": {
           "title": "Liste faite à la main",
@@ -15040,6 +15042,7 @@
           "title": "Filtre IP",
           "pass": "{count, plural, one {# membre prêt} other {# membres prêts}}",
           "notChecked": "Lancez une vérification pour le calculer",
+          "notDeployed": "Calculé après la première application sur ce cluster",
           "part": {
             "no_address": "{count, plural, one {# sans adresse connue} other {# sans adresse connue}}",
             "held": "{count, plural, one {# adresse retenue} other {# adresses retenues}}",
@@ -15644,6 +15647,8 @@
         "guestUnnamed": "{addr} sur {nic} : détenue par un membre d'une autre zone",
         "peer": "{addr} sur {nic} : détenue par un membre d'une autre zone sur un autre cluster",
         "source": "{addr} sur {nic} : comprise dans le réseau source {by} d'un flux",
+        "contested": "{addr} sur {nic} : relevée aussi sur {by}, membre d'une autre zone, et détenue par aucun des deux",
+        "contestedPeer": "{addr} sur {nic} : relevée aussi sur un membre d'une autre zone d'un autre cluster, et détenue par aucun des deux",
         "other": "{addr} sur {nic} : non ajoutée"
       },
       "allow": "Autoriser",

@@ -78,7 +78,7 @@ export type GuestIPFilter = {
 export type IPFilterMode = 'on' | 'excluded' | 'manual' | 'no_address' | (string & {})
 
 /** An address the guest reports that was not added: held by a member of another zone (here or on a peer cluster), or inside a source network of a flow. */
-export type IPFilterHeld = { nic: string; addr: string; reason: 'guest' | 'peer' | 'source' | (string & {}); by?: string }
+export type IPFilterHeld = { nic: string; addr: string; reason: 'guest' | 'peer' | 'source' | 'contested' | (string & {}); by?: string; by_name?: string }
 
 /** One member of a zone in GET /ipfilter. */
 export type IPFilterGuest = {

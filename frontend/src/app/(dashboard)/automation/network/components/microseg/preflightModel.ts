@@ -132,10 +132,13 @@ const count = (value: unknown): number => (typeof value === 'number' && Number.i
 
 /**
  * The IP filter check: how many members are ready, or, on a warning, each count that is not zero ("2 without a known
- * address, 1 address held, 3 on DHCP"), or that nothing is computed before a check has run.
+ * address, 1 address held, 3 on DHCP"), or that nothing is computed before a check has run (on a cluster the engine does
+ * not run yet: before the first application).
  */
 function ipFilterMessage(check: PreflightCheck, detail: Record<string, unknown>): Found {
   if (detail.reason === 'not_checked') return { key: 'checks.ip_filter.notChecked' }
+  // On a cluster the engine does not run yet a check run is refused: the first application computes it.
+  if (detail.reason === 'not_deployed') return { key: 'checks.ip_filter.notDeployed' }
   const ready = { key: 'checks.ip_filter.pass', values: { count: count(detail.ready) } }
   if (check.status === 'pass') return ready
   const parts = IP_FILTER_PARTS.filter(part => count(detail[part]) > 0).map(part => ({ key: `checks.ip_filter.part.${part}`, values: { count: count(detail[part]) } }))
@@ -243,6 +246,11 @@ export function preflightMessage(check: PreflightCheck): PreflightMessage {
   if (!found) return { title: KNOWN_IDS.has(check.id) ? check.id : null, detail: null }
   const { more, joiner, ...detail } = found
   return { title: KNOWN_IDS.has(check.id) ? check.id : null, detail, ...(more ? { more } : {}), ...(joiner ? { joiner } : {}) }
+}
+
+/** The IP filter check has nothing per member to show yet: no check has run, or the cluster is not deployed. */
+export function ipFilterNotComputed(check: PreflightCheck): boolean {
+  return check.detail?.reason === 'not_checked' || check.detail?.reason === 'not_deployed'
 }
 
 /** The cluster firewall is off because the emergency stop switched it off: lifting the stop is the fix, not the wizard. */

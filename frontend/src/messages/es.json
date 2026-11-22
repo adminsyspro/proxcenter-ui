@@ -14345,7 +14345,9 @@
           "detail": "{addr} en {nic} no se añadió a la lista de esta máquina.",
           "detailGuest": "{addr} en {nic} no se añadió: la tiene {by}, miembro de otra zona.",
           "detailPeer": "{addr} en {nic} no se añadió: la tiene un miembro de otra zona en otro clúster.",
-          "detailSource": "{addr} en {nic} no se añadió: está dentro de la red de origen {by} de un flujo."
+          "detailSource": "{addr} en {nic} no se añadió: está dentro de la red de origen {by} de un flujo.",
+          "detailContested": "{addr} en {nic} no se añadió: {by}, miembro de otra zona, también la notifica y ninguno de los dos la tiene. Permítala para la máquina a la que pertenece.",
+          "detailContestedPeer": "{addr} en {nic} no se añadió: un miembro de otra zona en otro clúster también la notifica y ninguno de los dos la tiene. Permítala para la máquina a la que pertenece."
         },
         "ipfilter_manual": {
           "title": "Lista hecha a mano",
@@ -15039,6 +15041,7 @@
           "title": "Filtro IP",
           "pass": "{count, plural, one {# miembro listo} other {# miembros listos}}",
           "notChecked": "Lance una comprobación para calcularlo",
+          "notDeployed": "Se calcula tras la primera aplicación en este clúster",
           "part": {
             "no_address": "{count, plural, one {# sin dirección conocida} other {# sin dirección conocida}}",
             "held": "{count, plural, one {# dirección retenida} other {# direcciones retenidas}}",
@@ -15643,6 +15646,8 @@
         "guestUnnamed": "{addr} en {nic}: la tiene un miembro de otra zona",
         "peer": "{addr} en {nic}: la tiene un miembro de otra zona en otro clúster",
         "source": "{addr} en {nic}: dentro de la red de origen {by} de un flujo",
+        "contested": "{addr} en {nic}: también la notifica {by}, miembro de otra zona, y ninguno de los dos la tiene",
+        "contestedPeer": "{addr} en {nic}: también la notifica un miembro de otra zona en otro clúster, y ninguno de los dos la tiene",
         "other": "{addr} en {nic}: no añadida"
       },
       "allow": "Permitir",

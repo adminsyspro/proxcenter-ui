@@ -12,7 +12,7 @@ import ClusterChip from './ClusterChip'
 import { shownClusterName } from './ClusterRunRow'
 import { ONE_LINE_SX } from './dialogParts'
 import IPFilterDetailsDialog from './IPFilterDetailsDialog'
-import { heldByStop, opensWizard, parseRate, preflightMessage, raisesLogRate } from './preflightModel'
+import { heldByStop, ipFilterNotComputed, opensWizard, parseRate, preflightMessage, raisesLogRate } from './preflightModel'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import TruncatedText from './TruncatedText'
 
@@ -50,7 +50,7 @@ function CheckRow({ check, onOpenWizard, onResume, rateLimit, cluster, onIPFilte
       <TruncatedText text={name} fontWeight={600} sx={{ flex: '0 0 auto', width: 170 }} />
       <TruncatedText text={planned ? plannedText : message} variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }} />
       {raisable && <RaiseLogRate onRaise={rateLimit!.onRaise!} />}
-      {onIPFilterDetails && check.id === 'ip_filter' && check.detail?.reason !== 'not_checked' && (
+      {onIPFilterDetails && check.id === 'ip_filter' && !ipFilterNotComputed(check) && (
         <Button size='small' variant='outlined' onClick={onIPFilterDetails} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{tFilter('button')}</Button>
       )}
       {onResume && heldByStop(check) && (

@@ -1,6 +1,7 @@
 import { serviceLabel } from '@/lib/network/serviceNames'
 import type { MicrosegDrift, MicrosegZone } from '@/lib/microseg/types'
 
+import { heldByLabel } from './ipFilterModel'
 import { guestKey } from './zoneModel'
 
 /** The group of the known destinations (the orchestrator's KnownGroup): a misplaced rule on it is the known rule. */
@@ -117,7 +118,7 @@ function valuesOf(d: MicrosegDrift, t: Translate): Record<string, string | numbe
     // The IP filter: the NIC and the address a drift is about, who holds it, what a list misses or has in excess.
     nic: text(detail.nic),
     addr: text(detail.addr),
-    by: text(detail.by),
+    by: heldByLabel(text(detail.by), typeof detail.by_name === 'string' ? detail.by_name : undefined),
     missing: list(detail.missing),
     extra: list(detail.extra),
     networks: list(detail.networks),
@@ -125,21 +126,28 @@ function valuesOf(d: MicrosegDrift, t: Translate): Record<string, string | numbe
   }
 }
 
-/** Why the IP filter held an address back, as the wording of its detail: a member here, a member of a peer cluster, a source network of a flow. */
-const HELD_VARIANT: Record<string, 'heldGuest' | 'heldPeer' | 'heldSource'> = { guest: 'heldGuest', peer: 'heldPeer', source: 'heldSource' }
+/** Why the IP filter held an address back, as the wording of its detail: a member here, a member of a peer cluster, a source network of a flow, a member of another zone that reports it too. */
+const HELD_VARIANT: Record<string, 'heldGuest' | 'heldPeer' | 'heldSource' | 'heldContested'> = { guest: 'heldGuest', peer: 'heldPeer', source: 'heldSource', contested: 'heldContested' }
+
+/** The wording of an address held back: by its reason; a contested one names the other member only when it is on this cluster. */
+function heldVariant(detail: MicrosegDrift['detail']): DetailVariant {
+  const variant = HELD_VARIANT[typeof detail?.reason === 'string' ? detail.reason : ''] ?? null
+  const named = typeof detail?.by === 'string' && detail.by !== ''
+  return variant === 'heldContested' && !named ? 'heldContestedPeer' : variant
+}
 
 /** The wording of an IP filter drift that has several: the option taken off (not only missing lists), the reason an address is held. */
 function filterVariant(d: MicrosegDrift): DetailVariant {
   if (d.kind === 'ipfilter_off') return d.detail?.option === false ? 'option' : null
-  if (d.kind === 'ipfilter_address_held') return HELD_VARIANT[typeof d.detail?.reason === 'string' ? d.detail.reason : ''] ?? null
+  if (d.kind === 'ipfilter_address_held') return heldVariant(d.detail)
   return null
 }
 
-type DetailVariant = 'group' | 'collision' | 'known' | 'dest' | 'option' | 'heldGuest' | 'heldPeer' | 'heldSource' | null
+type DetailVariant = 'group' | 'collision' | 'known' | 'dest' | 'option' | 'heldGuest' | 'heldPeer' | 'heldSource' | 'heldContested' | 'heldContestedPeer' | null
 
 const DETAIL_KEY: Record<Exclude<DetailVariant, null>, string> = {
   group: 'detailGroup', collision: 'detailCollision', known: 'detailKnown', dest: 'detailDest',
-  option: 'detailOption', heldGuest: 'detailGuest', heldPeer: 'detailPeer', heldSource: 'detailSource',
+  option: 'detailOption', heldGuest: 'detailGuest', heldPeer: 'detailPeer', heldSource: 'detailSource', heldContested: 'detailContested', heldContestedPeer: 'detailContestedPeer',
 }
 
 /** Which wording of the detail a drift takes: a foreign rule in a group, a zone that cannot block, a misplaced known rule, a rule aimed at another destination. */

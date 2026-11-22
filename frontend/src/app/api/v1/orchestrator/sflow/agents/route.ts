@@ -6,7 +6,7 @@ import { managedHostSshEndpoint } from "@/lib/ssh/node-endpoint-core"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { audit } from "@/lib/audit"
 import { applySFlowOnNode, type SFlowDesiredConfig } from "@/lib/sflow/configure"
-import { collectGuestMACs, probeHost, type NodeSFlowStatus } from "@/lib/sflow/probe"
+import { collectGuestMACs, mayClaimAgent, probeHost, type NodeSFlowStatus } from "@/lib/sflow/probe"
 import { saveDesiredSFlowConfig } from "@/lib/sflow/reconciler"
 import { reportExpectedAgents, type ExpectedAgentReport } from "@/lib/sflow/expectedAgents"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -143,7 +143,7 @@ export async function GET() {
         // Cluster-wide, so the first node that answers covers every guest.
         const guestMacs = await collectGuestMACs(conn.id, targets.map(h => h.endpoint))
 
-        return Promise.all(targets.map(t => probeHost(conn.id, conn.name, t.node, t.ip, t.endpoint, guestMacs)))
+        return Promise.all(targets.map(t => probeHost(conn.id, conn.name, t.node, t.ip, t.endpoint, guestMacs, mayClaimAgent(conn.tenantId, t.ip, t.endpoint))))
       })
     )
     const results: NodeSFlowStatus[] = nested.flat()

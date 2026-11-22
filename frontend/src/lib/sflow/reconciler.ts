@@ -23,7 +23,7 @@ import { executeSSH } from "@/lib/ssh/exec"
 import { managedHostSshEndpoint } from "@/lib/ssh/node-endpoint-core"
 import { applySFlowOnNode, SFLOW_PROBE_COMMAND, type SFlowDesiredConfig } from "@/lib/sflow/configure"
 import { reportExpectedAgents, type ExpectedAgentReport } from "@/lib/sflow/expectedAgents"
-import { collectGuestMACs, probeHost } from "@/lib/sflow/probe"
+import { collectGuestMACs, mayClaimAgent, probeHost } from "@/lib/sflow/probe"
 
 export const SFLOW_RECONCILE_INTERVAL_MS = 10 * 60 * 1000
 export const SFLOW_DESIRED_CONFIG_KEY = "sflow.desiredConfig"
@@ -237,11 +237,12 @@ export async function refreshPortMaps(): Promise<number> {
         const endpoint = managedHostSshEndpoint(h, conn.sshPort)
         return { node: h.node, ip: h.ip || endpoint.host, endpoint }
       })
-      .filter(t => heard.has(t.ip))
+      // A node its connection may not name as an agent has no map to push: it is not probed at all.
+      .filter(t => heard.has(t.ip) && mayClaimAgent(conn.tenantId, t.ip, t.endpoint))
     if (targets.length === 0) continue
     const guestMacs = await collectGuestMACs(conn.id, targets.map(t => t.endpoint))
     for (const t of targets) {
-      const status = await probeHost(conn.id, conn.name, t.node, t.ip, t.endpoint, guestMacs)
+      const status = await probeHost(conn.id, conn.name, t.node, t.ip, t.endpoint, guestMacs, true)
       if (status.hasOvs && !status.portMapError) pushed++
     }
   }

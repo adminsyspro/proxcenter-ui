@@ -39,6 +39,7 @@ import { orchestratorFetch } from '@/lib/orchestrator'
 import { audit } from '@/lib/audit'
 import { saveDesiredSFlowConfig } from '@/lib/sflow/reconciler'
 import { resolveSudo } from '@/lib/ssh/sudo'
+import { AGENT_NOT_CLAIMED } from '@/lib/sflow/probe'
 
 const getCurrentTenantIdMock = getCurrentTenantId as any
 const getSessionPrismaMock = getSessionPrisma as any
@@ -378,6 +379,33 @@ describe('GET /sflow/agents: node probing and port map push', () => {
         ],
       },
     })
+  })
+
+  it("pushes no port map for a node of a tenant's connection reached on another address than its own", async () => {
+    getCurrentTenantIdMock.mockResolvedValue('tenant-get-claim')
+    getSessionPrismaMock.mockResolvedValue({
+      connection: {
+        findMany: vi.fn().mockResolvedValue([
+          // The tenant sets both addresses of its node: what answers at 192.0.2.7 says nothing of who speaks at 10.0.0.1.
+          { id: 'theirs', name: 'TENANT', tenantId: 'tenant-a', sshKeyEnc: 'enc', hosts: [
+            { node: 'spoof', ip: '10.0.0.1', sshAddress: '192.0.2.7', enabled: true },
+            { node: 'own', ip: '10.0.0.2', enabled: true },
+          ] },
+          { id: 'ours', name: 'PROVIDER', tenantId: 'default', sshKeyEnc: 'enc', hosts: [{ node: 'nat', ip: '10.0.0.3', sshAddress: '192.0.2.9', enabled: true }] },
+        ]),
+      },
+    })
+    executeSSHMock.mockImplementation(sshByCommand({ macsFrom: null, ovsOn: ['192.0.2.7', '10.0.0.2', '192.0.2.9'], sflowOn: [] }))
+    orchestratorFetchMock.mockResolvedValue({})
+
+    const res = await callRoute(GET as any, { method: 'GET' })
+    const { data } = await readJson<any>(res)
+
+    const pushed = orchestratorFetchMock.mock.calls.filter((c: any[]) => c[0] === '/sflow/portmap').map((c: any[]) => [c[1].body.connection_id, c[1].body.agent_ip])
+    // The connections are probed side by side: whichever pushes first.
+    expect(pushed.sort()).toEqual([['ours', '10.0.0.3'], ['theirs', '10.0.0.2']])
+    // The node is still listed, with the reason its samples go to no guest.
+    expect(data.find((d: any) => d.node === 'spoof')).toEqual(expect.objectContaining({ hasOvs: true, portMapError: AGENT_NOT_CLAIMED }))
   })
 
   it('does not report a cluster as complete while one of its nodes is unreachable', async () => {

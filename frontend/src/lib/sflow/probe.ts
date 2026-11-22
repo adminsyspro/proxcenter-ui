@@ -8,6 +8,7 @@ import { orchestratorFetch } from "@/lib/orchestrator"
 import { executeSSH } from "@/lib/ssh/exec"
 import type { NodeSshEndpoint } from "@/lib/ssh/node-endpoint-core"
 import { asRoot } from "@/lib/ssh/sudo"
+import { DEFAULT_TENANT_ID } from "@/lib/tenant/constants"
 import { GUEST_MACS_COMMAND, parseGuestMACs } from "@/lib/sflow/guestMacs"
 
 export interface NodeSFlowStatus {
@@ -52,9 +53,24 @@ export async function collectGuestMACs(connId: string, ips: NodeSshEndpoint[]): 
   return {}
 }
 
+/**
+ * Whether a connection may name `ip` as the sFlow agent of one of its nodes. The port map push binds every sample of
+ * that agent to the connection, and the tenant of the connection reads the volume counted from them. A connection of
+ * a tenant therefore names only the address the probe itself reached over SSH: with an SSH address set apart from the
+ * node's own (the tenant sets both), nothing tells who speaks at `ip`. The provider's connections name their nodes as
+ * they always did.
+ */
+export function mayClaimAgent(tenantId: string | null | undefined, ip: string, ssh: NodeSshEndpoint): boolean {
+  return tenantId === DEFAULT_TENANT_ID || ssh.host === ip
+}
+
+/** What a node says when its port map is not pushed because its connection may not name its agent address. */
+export const AGENT_NOT_CLAIMED = "port map not pushed: this node is reached on an SSH address that is not its own"
+
 // Probe a single PVE node over its SSH endpoint (`ssh`): detect OVS, capture
 // version + sFlow config, and push the port map to the Go orchestrator, keyed
-// by `ip`, the node's own address (the sFlow agent address). Returns a status entry even on failure
+// by `ip`, the node's own address (the sFlow agent address), when the connection may name it (`claim`, see
+// mayClaimAgent). Returns a status entry even on failure
 // so the UI can show the node as offline. Independent SSH commands run in
 // parallel once OVS presence is confirmed.
 export async function probeHost(
@@ -64,6 +80,7 @@ export async function probeHost(
   ip: string,
   ssh: NodeSshEndpoint,
   guestMacs: Record<string, number>,
+  claim: boolean,
 ): Promise<NodeSFlowStatus> {
   const nodeStatus: NodeSFlowStatus = {
     node: nodeName,
@@ -130,7 +147,9 @@ export async function probeHost(
       // to a guest: by ifIndex when the guest port is on the sampled bridge, by
       // guest MAC otherwise. The failure is reported rather than swallowed,
       // because a silent failure here is indistinguishable from "no traffic".
-      if ((ipLinkResult.success && ipLinkResult.output) || Object.keys(guestMacs).length > 0) {
+      if (!claim) {
+        nodeStatus.portMapError = AGENT_NOT_CLAIMED
+      } else if ((ipLinkResult.success && ipLinkResult.output) || Object.keys(guestMacs).length > 0) {
         try {
           await orchestratorFetch("/sflow/portmap", {
             method: "POST",

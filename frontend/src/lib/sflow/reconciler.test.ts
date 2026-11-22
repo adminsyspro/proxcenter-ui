@@ -30,7 +30,8 @@ vi.mock("@/lib/orchestrator", () => ({
   orchestratorFetch: orchestratorFetchMock,
 }))
 
-vi.mock("@/lib/sflow/probe", () => ({
+vi.mock("@/lib/sflow/probe", async importOriginal => ({
+  mayClaimAgent: (await importOriginal<typeof import("@/lib/sflow/probe")>()).mayClaimAgent,
   collectGuestMACs: collectGuestMACsMock,
   probeHost: probeHostMock,
 }))
@@ -418,8 +419,21 @@ describe("refreshPortMaps", () => {
     expect(orchestratorFetchMock).toHaveBeenCalledWith("/sflow/status")
     expect(collectGuestMACsMock).toHaveBeenCalledTimes(1)
     expect(probeHostMock.mock.calls.map(c => c[2])).toEqual(["pve1", "pve2", "pve3"])
-    expect(probeHostMock.mock.calls[0]).toEqual(["prod", "PROD", "pve1", "10.0.0.1", expect.objectContaining({ host: "10.0.0.1" }), { "bc:24:11:00:00:01": 101 }])
+    expect(probeHostMock.mock.calls[0]).toEqual(["prod", "PROD", "pve1", "10.0.0.1", expect.objectContaining({ host: "10.0.0.1" }), { "bc:24:11:00:00:01": 101 }, true])
     isConnectionLicenseExcludedMock.mockImplementation(async () => false)
+  })
+
+  it("lets a tenant's connection name only the address it is reached on, the provider's any of its nodes", async () => {
+    orchestratorFetchMock.mockResolvedValue(heard("10.0.0.1", "10.0.0.2", "10.0.0.3"))
+    connectionFindManyMock.mockResolvedValue([
+      // The tenant sets both addresses: the node it says is 10.0.0.1 is reached elsewhere, and names no agent.
+      connection({ id: "theirs", tenantId: "tenant-a", hosts: [
+        { enabled: true, ip: "10.0.0.1", sshAddress: "192.0.2.7", node: "spoof" }, { enabled: true, ip: "10.0.0.2", node: "own" },
+      ] }),
+      connection({ id: "ours", tenantId: "default", hosts: [{ enabled: true, ip: "10.0.0.3", sshAddress: "192.0.2.9", node: "nat" }] }),
+    ])
+    await refreshPortMaps()
+    expect((probeHostMock.mock.calls as unknown[][]).map(c => [c[0], c[2], c[3]])).toEqual([["theirs", "own", "10.0.0.2"], ["ours", "nat", "10.0.0.3"]])
   })
 
   it("does nothing, not even a database read, when the collector hears no agent or is off", async () => {

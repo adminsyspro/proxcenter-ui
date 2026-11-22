@@ -6,12 +6,15 @@ import { useTranslations } from 'next-intl'
 import type { MicrosegZone } from '@/lib/microseg/types'
 
 import { useDialogAction } from './dialogParts'
+import IPFilterEnforceLine from './IPFilterEnforceLine'
 import TypedConfirmDialog from './TypedConfirmDialog'
 import { useReadinessCheck } from './useZoneReadiness'
 import ZoneStateGate from './ZoneStateGate'
 
 type Props = {
   connectionId: string
+  /** Names the clusters of a shared policy in the details of the IP filter line. */
+  clusterName?: (id: string) => string
   zone: MicrosegZone
   readyAfterHours: number
   /** The draft has unapplied changes: enforcing would apply them unseen, so it is refused until they are applied or discarded. */
@@ -29,10 +32,11 @@ type Props = {
  * Confirmation before a zone is enforced. "Ready" means observed for the whole
  * window with no pending would-block suggestion seen inside it. An indicator,
  * not a lock: a zone that is not ready (or whose readiness cannot be read) goes
- * ahead only once its name is typed.
+ * ahead only once its name is typed. Enforcing the first zone of a policy whose IP filter is on starts the filter:
+ * one more line says how many members are ready for it.
  */
 export default function ZoneEnforceDialog({
-  connectionId, zone, readyAfterHours, pending = false, pendingCount = null, onViewPlan, discard, onConfirm, onCancel,
+  connectionId, clusterName, zone, readyAfterHours, pending = false, pendingCount = null, onViewPlan, discard, onConfirm, onCancel,
 }: Props) {
   const t = useTranslations('microsegPilot.policy.enforce')
   const check = useReadinessCheck(connectionId, zone, readyAfterHours)
@@ -52,6 +56,7 @@ export default function ZoneEnforceDialog({
       onCancel={onCancel}
     >
       {check.line}
+      <IPFilterEnforceLine connectionId={connectionId} clusterName={clusterName} />
       <ZoneStateGate pending={pending} count={pendingCount} onViewPlan={onViewPlan} discard={discard} />
     </TypedConfirmDialog>
   )

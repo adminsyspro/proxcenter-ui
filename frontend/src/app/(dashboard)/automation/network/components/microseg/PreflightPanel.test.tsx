@@ -10,7 +10,7 @@ import { screen, fireEvent, renderWithProviders, waitFor } from '@/__tests__/set
 import { MicrosegApiError } from '@/lib/microseg/api'
 import type { PreflightCheck } from '@/lib/microseg/types'
 
-import { calls, mock, reply, resetMocks } from './microsegTestKit'
+import { calls, mock, renderTab, reply, resetMocks } from './microsegTestKit'
 import PreflightPanel from './PreflightPanel'
 import { RECOMMENDED_OBSERVE_LOG_RATE } from './preflightModel'
 
@@ -288,5 +288,47 @@ describe('errors', () => {
     await screen.findByRole('listitem', { name: 'Management access: failed' })
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalled()
+  })
+})
+
+describe('the IP filter check', () => {
+  const filter = (status: 'pass' | 'warn', detail: Record<string, unknown>): PreflightCheck => ({ id: 'ip_filter', status, detail })
+  const guest = { node: 'pve1', type: 'qemu', vmid: 100, name: 'web-1', zone: 'web', mode: 'no_address', applied: false, nics: {}, held: [], no_address: ['net0'], manual: [], dhcp: [], unknown: [], extra: [] }
+
+  it('counts the members ready when it passes', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, { checks: [filter('pass', { members: 12, ready: 12 })] })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'IP filter: passed' })
+    expect(within(line).getByText('12 members ready')).toBeTruthy()
+    expect(within(line).getByRole('button', { name: 'Details' })).toBeTruthy()
+  })
+
+  it('names the counts that are not zero on a warning, on one line', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, { checks: [filter('warn', { members: 12, ready: 6, excluded: 0, manual: 1, no_address: 2, held: 1, unknown: 0, dhcp: 3 })] })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'IP filter: warning' })
+    expect(within(line).getByText('2 without a known address, 1 address held, 1 managed by hand, 3 on DHCP')).toBeTruthy()
+  })
+
+  it('asks for a check while nothing is computed, without details to open', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, { checks: [filter('warn', { reason: 'not_checked' })] })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'IP filter: warning' })
+    expect(within(line).getByText('Run a check to compute it')).toBeTruthy()
+    expect(within(line).queryByRole('button', { name: 'Details' })).toBeNull()
+  })
+
+  it('opens the addresses per member from Details, read from the cluster of the line', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, { checks: [filter('warn', { members: 1, ready: 0, no_address: 1 })] })
+    mock.routes['GET /ipfilter'] = () => reply(200, { enabled: true, computed: true, computed_at: null, guests: [guest] })
+    // The details read through SWR: the tab's providers, which read on mount.
+    renderTab(<PreflightPanel open connectionId='c1' onClose={vi.fn()} />)
+    fireEvent.click(within(await screen.findByRole('listitem', { name: 'IP filter: warning' })).getByRole('button', { name: 'Details' }))
+    const details = await screen.findByRole('dialog', { name: 'IP filter: addresses per member' })
+    expect((await within(details).findByRole('listitem', { name: 'web-1' })).textContent).toBe('web-1100 · pve1webNo address0 addresses')
+    expect(calls('GET /ipfilter')).toHaveLength(1)
+    fireEvent.click(within(details).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'IP filter: addresses per member' })).toBeNull())
+    expect(screen.getByRole('dialog', { name: 'Pre-flight checks' })).toBeTruthy()
   })
 })

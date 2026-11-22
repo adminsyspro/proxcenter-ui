@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 
 import { zoneEgress, type EgressState, type MicrosegZone, type ZoneState } from '@/lib/microseg/types'
 
+import IPFilterEnforceLine from './IPFilterEnforceLine'
 import TypedConfirmDialog from './TypedConfirmDialog'
 import { useReadinessCheck } from './useZoneReadiness'
 import type { ZoneGate } from './zoneGate'
@@ -11,6 +12,8 @@ import ZoneStateGate from './ZoneStateGate'
 
 type Props = {
   connectionId: string
+  /** Names the clusters of a shared policy in the details of the IP filter line. */
+  clusterName?: (id: string) => string
   zone: MicrosegZone
   readyAfterHours: number
   /** The inbound state asked for, null when it does not change. */
@@ -33,7 +36,7 @@ type Texts = { title: string; line: string | null; confirm: string }
  * (inbound or outbound) checks the readiness and asks the zone name when not ready; the other moves say what they do;
  * every one is refused while the draft had pending changes (the change applies the whole draft).
  */
-export default function ZoneStatesConfirm({ connectionId, zone, readyAfterHours, inbound, outbound, isolationChanged, gate, busy, onConfirm, onCancel }: Props) {
+export default function ZoneStatesConfirm({ connectionId, clusterName, zone, readyAfterHours, inbound, outbound, isolationChanged, gate, busy, onConfirm, onCancel }: Props) {
   const t = useTranslations('microsegPilot.policy')
   const inCheck = useReadinessCheck(connectionId, zone, readyAfterHours, { enabled: inbound === 'enforce' })
   const outCheck = useReadinessCheck(connectionId, zone, readyAfterHours, { direction: 'out', enabled: outbound === 'enforce' })
@@ -70,6 +73,7 @@ export default function ZoneStatesConfirm({ connectionId, zone, readyAfterHours,
     >
       {inCheck.line}
       {outCheck.line}
+      {inbound === 'enforce' && <IPFilterEnforceLine connectionId={connectionId} clusterName={clusterName} />}
       <ZoneStateGate pending={!!gate?.pending} count={gate?.count ?? null} onViewPlan={gate?.onViewPlan} discard={gate?.discard} />
     </TypedConfirmDialog>
   )

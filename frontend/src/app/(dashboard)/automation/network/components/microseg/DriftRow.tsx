@@ -8,7 +8,7 @@ import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/component
 import type { MicrosegDrift, MicrosegZone } from '@/lib/microseg/types'
 
 import ClusterChip from './ClusterChip'
-import type { DriftLabel } from './driftLabels'
+import type { DriftFix, DriftLabel } from './driftLabels'
 import EnableClusterFirewallDialog from './EnableClusterFirewallDialog'
 import type { PolicyGuest } from './zoneModel'
 import { WriteTip, useMicrosegClusterWrite, useMicrosegWrite } from './microsegAccess'
@@ -45,6 +45,12 @@ export const KIND_CHIP: Record<string, { color: KindChipColor; icon: string }> =
   known_rule_extra: { color: 'info', icon: 'ri-bookmark-3-line' },
   local_set_desync: { color: 'info', icon: 'ri-database-2-line' },
   egress_no_subnet: { color: 'warning', icon: 'ri-map-pin-line' },
+  ipfilter_off: { color: 'error', icon: 'ri-filter-off-line' },
+  ipfilter_list_changed: { color: 'info', icon: 'ri-list-settings-line' },
+  ipfilter_no_address: { color: 'warning', icon: 'ri-map-pin-line' },
+  ipfilter_address_held: { color: 'warning', icon: 'ri-forbid-line' },
+  ipfilter_manual: { color: 'info', icon: 'ri-edit-line' },
+  unzoned_same_network: { color: 'warning', icon: 'ri-share-line' },
   peer_unreadable: { color: 'warning', icon: 'ri-link-unlink' },
   stop_lift_held: { color: 'error', icon: 'ri-shield-cross-line' },
   cluster_firewall_off: { color: 'error', icon: 'ri-shield-cross-line' },
@@ -52,6 +58,9 @@ export const KIND_CHIP: Record<string, { color: KindChipColor; icon: string }> =
 }
 /** The drifts of a cluster firewall that reads off: `object` is the connection ID, and the row offers to turn it back on. */
 const FIREWALL_OFF_KINDS: ReadonlySet<string> = new Set(['cluster_firewall_off', 'stop_lift_held'])
+
+/** The label of the Fix button of each fix (under microsegPilot.drifts). */
+const FIX_LABEL: Record<DriftFix, string> = { assign: 'fixAssign', plan: 'fixPlan', allow: 'fixAllow' }
 
 const UNKNOWN_KIND_CHIP = { color: 'error', icon: 'ri-alert-line' } as const
 
@@ -135,14 +144,15 @@ export type DriftRowProps = {
 
 /**
  * One drift on one row of the Drifts table: a checkbox, the object (glyph, name, vmid and node, or the cluster
- * object), its zone, what differs, since when, and Fix (assign to a zone or open the plan) and Ignore.
+ * object), its zone, what differs, since when, and Fix (assign to a zone, open the plan, or allow the address the IP
+ * filter held back) and Ignore.
  */
 export default function DriftRow({ drift, label, subject, guest, zone = null, since, ignored, hasZones, selected, onSelect, onFix, onIgnore, onRestore, cluster, ignorable = true, onChanged }: DriftRowProps) {
   const t = useTranslations('microsegPilot.drifts')
   const { canWrite: canPlan } = useMicrosegWrite()
   const { canWriteOn } = useMicrosegClusterWrite()
   const assign = label.fix === 'assign'
-  // Assigning writes the members of the guest's cluster (its own right); the plan is a write of the whole policy.
+  // Assigning writes the members of the guest's cluster (its own right); the plan and an allowed address are writes of the whole policy.
   const canWrite = assign ? canWriteOn(cluster?.id ?? '') : canPlan
   const noZone = assign && !hasZones
   const where = drift.guest ? `${drift.guest.vmid} · ${guest?.node ?? drift.guest.node}` : null
@@ -191,7 +201,7 @@ export default function DriftRow({ drift, label, subject, guest, zone = null, si
               onClick={e => onFix(e.currentTarget)}
               sx={{ whiteSpace: 'nowrap', mr: 0.5 }}
             >
-              {assign ? t('fixAssign') : t('fixPlan')}
+              {t(FIX_LABEL[label.fix])}
             </Button>
           </WriteTip>
         )}

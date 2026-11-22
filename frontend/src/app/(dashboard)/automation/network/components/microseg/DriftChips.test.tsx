@@ -26,6 +26,12 @@ const KINDS: Array<{ drift: MicrosegDrift; chip: string; colorClass: string; ico
   { drift: { kind: 'ipset_out_of_sync', object: 'pcz-web' }, chip: 'Out of sync', colorClass: 'MuiChip-colorInfo', icon: 'ri-database-2-line' },
   { drift: { kind: 'foreign_accept', object: 'pcz-web' }, chip: 'Foreign rule', colorClass: 'MuiChip-colorError', icon: 'ri-alert-line' },
   { drift: { kind: 'object_collision', object: 'pcz-db' }, chip: 'Name taken', colorClass: 'MuiChip-colorError', icon: 'ri-alert-line' },
+  { drift: { kind: 'ipfilter_off', guest: g }, chip: 'IP filter off', colorClass: 'MuiChip-colorError', icon: 'ri-filter-off-line' },
+  { drift: { kind: 'ipfilter_list_changed', guest: g }, chip: 'IP list changed', colorClass: 'MuiChip-colorInfo', icon: 'ri-list-settings-line' },
+  { drift: { kind: 'ipfilter_no_address', guest: g }, chip: 'No address to filter', colorClass: 'MuiChip-colorWarning', icon: 'ri-map-pin-line' },
+  { drift: { kind: 'ipfilter_address_held', guest: g }, chip: 'Address held', colorClass: 'MuiChip-colorWarning', icon: 'ri-forbid-line' },
+  { drift: { kind: 'ipfilter_manual', guest: g }, chip: 'List by hand', colorClass: 'MuiChip-colorInfo', icon: 'ri-edit-line' },
+  { drift: { kind: 'unzoned_same_network', guest: g }, chip: 'Unfiltered neighbour', colorClass: 'MuiChip-colorWarning', icon: 'ri-share-line' },
   { drift: { kind: 'brand_new_kind', object: 'x' }, chip: 'Drift', colorClass: 'MuiChip-colorError', icon: 'ri-alert-line' },
 ]
 

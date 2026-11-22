@@ -12,14 +12,16 @@ const LOCAL_DEST = '+pcz-_local'
 export const DRIFT_KINDS = [
   'unzoned_running', 'nic_firewall_off', 'foreign_accept', 'ipset_out_of_sync', 'member_without_ip', 'ambiguous_zone', 'object_collision',
   'egress_rule_missing', 'egress_rule_misplaced', 'egress_rule_verdict', 'known_rule_missing', 'known_rule_extra', 'local_set_desync', 'egress_no_subnet',
+  'ipfilter_off', 'ipfilter_list_changed', 'ipfilter_no_address', 'ipfilter_address_held', 'ipfilter_manual', 'unzoned_same_network',
 ] as const
 
 /**
  * What the Fix button does: "assign" opens the assign dialog for a chosen zone (a draft change), "plan" opens
  * the plan window, whose steps realign Proxmox. The drifts neither of them repairs (a rule or an object that
- * is not ours, a member without an IP) have no fix: they carry a hint on what to do in Proxmox instead.
+ * is not ours, a member without an IP) have no fix: they carry a hint on what to do in Proxmox instead. "allow" adds
+ * the address the IP filter held back to the additional addresses of the guest (a draft change, after a confirmation).
  */
-export type DriftFix = 'assign' | 'plan'
+export type DriftFix = 'assign' | 'plan' | 'allow'
 
 /** `note`: a remark on the row that is no error (a removal on hold while an associated cluster cannot be read). */
 export type DriftLabel = { title: string; detail: string; fixable: boolean; fix: DriftFix | null; hint: string | null; note?: string | null }
@@ -60,6 +62,14 @@ const FIX_OF: Record<(typeof DRIFT_KINDS)[number], DriftFix | null> = {
   known_rule_extra: 'plan',
   local_set_desync: 'plan',
   egress_no_subnet: null,
+  ipfilter_off: 'plan',
+  ipfilter_list_changed: 'plan',
+  // No automatic fix: the admin declares an address for the guest or leaves it without the filter.
+  ipfilter_no_address: null,
+  ipfilter_address_held: 'allow',
+  // Informational: a list made by hand is left alone.
+  ipfilter_manual: null,
+  unzoned_same_network: 'assign',
 }
 
 const isKnown = (kind: string): kind is (typeof DRIFT_KINDS)[number] => (DRIFT_KINDS as readonly string[]).includes(kind)
@@ -104,12 +114,33 @@ function valuesOf(d: MicrosegDrift, t: Translate): Record<string, string | numbe
     wantDest: destination(detail.want_dest),
     haveDest: destination(detail.have_dest),
     kind: d.kind,
+    // The IP filter: the NIC and the address a drift is about, who holds it, what a list misses or has in excess.
+    nic: text(detail.nic),
+    addr: text(detail.addr),
+    by: text(detail.by),
+    missing: list(detail.missing),
+    extra: list(detail.extra),
+    networks: list(detail.networks),
+    zones: list(detail.zones),
   }
 }
 
-type DetailVariant = 'group' | 'collision' | 'known' | 'dest' | null
+/** Why the IP filter held an address back, as the wording of its detail: a member here, a member of a peer cluster, a source network of a flow. */
+const HELD_VARIANT: Record<string, 'heldGuest' | 'heldPeer' | 'heldSource'> = { guest: 'heldGuest', peer: 'heldPeer', source: 'heldSource' }
 
-const DETAIL_KEY: Record<Exclude<DetailVariant, null>, string> = { group: 'detailGroup', collision: 'detailCollision', known: 'detailKnown', dest: 'detailDest' }
+/** The wording of an IP filter drift that has several: the option taken off (not only missing lists), the reason an address is held. */
+function filterVariant(d: MicrosegDrift): DetailVariant {
+  if (d.kind === 'ipfilter_off') return d.detail?.option === false ? 'option' : null
+  if (d.kind === 'ipfilter_address_held') return HELD_VARIANT[typeof d.detail?.reason === 'string' ? d.detail.reason : ''] ?? null
+  return null
+}
+
+type DetailVariant = 'group' | 'collision' | 'known' | 'dest' | 'option' | 'heldGuest' | 'heldPeer' | 'heldSource' | null
+
+const DETAIL_KEY: Record<Exclude<DetailVariant, null>, string> = {
+  group: 'detailGroup', collision: 'detailCollision', known: 'detailKnown', dest: 'detailDest',
+  option: 'detailOption', heldGuest: 'detailGuest', heldPeer: 'detailPeer', heldSource: 'detailSource',
+}
 
 /** Which wording of the detail a drift takes: a foreign rule in a group, a zone that cannot block, a misplaced known rule, a rule aimed at another destination. */
 function detailVariant(d: MicrosegDrift): DetailVariant {
@@ -118,7 +149,7 @@ function detailVariant(d: MicrosegDrift): DetailVariant {
   if (d.kind === 'egress_rule_misplaced' && d.object === KNOWN_GROUP) return 'known'
   // A rule at the right verdict but aimed at the wrong destination: the detail carries both (an empty one is "all").
   if (d.kind === 'egress_rule_verdict' && (typeof d.detail?.want_dest === 'string' || typeof d.detail?.have_dest === 'string')) return 'dest'
-  return null
+  return filterVariant(d)
 }
 
 function hintKeyOf(d: MicrosegDrift, collided: boolean): string {
@@ -183,10 +214,18 @@ export function driftLabel(d: MicrosegDrift, t: Translate, clusterName?: (id: st
   return { title: t(`${d.kind}.title`, values), detail: t(detailKey, values), fixable: fix !== null, fix, hint: fix === null ? t(hintKey, values) : null, note }
 }
 
-/** Identity of a drift for "Ignore": the kind, the guest (type and vmid, like the backend), the object and the rule position. */
+/** The kinds a guest can carry several times, once per NIC or per address: their key names both. */
+const PER_ADDRESS_KINDS: ReadonlySet<string> = new Set(['ipfilter_list_changed', 'ipfilter_address_held'])
+
+/**
+ * Identity of a drift for "Ignore": the kind, the guest (type and vmid, like the backend), the object and the rule
+ * position; for an IP filter drift reported per NIC or per address, the NIC and the address too.
+ */
 export function driftKey(d: MicrosegDrift): string {
   const pos = typeof d.detail?.pos === 'number' ? String(d.detail.pos) : ''
-  return [d.kind, d.guest ? guestKey(d.guest) : '', d.object ?? '', pos].join('|')
+  const base = [d.kind, d.guest ? guestKey(d.guest) : '', d.object ?? '', pos]
+  if (!PER_ADDRESS_KINDS.has(d.kind)) return base.join('|')
+  return [...base, text(d.detail?.nic, ''), text(d.detail?.addr, '')].join('|')
 }
 
 /** Identity of a drift of one cluster of a shared policy: two clusters can report the same guest or object. */

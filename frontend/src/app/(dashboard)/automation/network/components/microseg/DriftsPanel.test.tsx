@@ -418,3 +418,69 @@ describe('turning a cluster firewall back on', () => {
     expect(screen.queryByTestId('drift-enable-firewall')).toBeNull()
   })
 })
+
+describe('drifts of the IP filter', () => {
+  const HELD: MicrosegDrift = { kind: 'ipfilter_address_held', guest: g(103), detail: { zone: 'web', nic: 'net0', addr: '10.0.0.7', reason: 'guest', by: 'db-1' } }
+  const FILTER_DRIFTS: MicrosegDrift[] = [
+    HELD,
+    { kind: 'ipfilter_address_held', guest: g(103), detail: { zone: 'web', nic: 'net0', addr: '10.0.0.8', reason: 'peer' } },
+    { kind: 'ipfilter_off', guest: g(102), detail: { zone: 'web', option: false, nics: [] } },
+    { kind: 'ipfilter_no_address', guest: g(103), detail: { zone: 'web', nics: ['net1'] } },
+    { kind: 'unzoned_same_network', guest: g(101), detail: { name: 'web-1', networks: ['vmbr0/20'], zones: ['web'] } },
+  ]
+
+  /** The Drifts sub-tab on a draft that knows the IP filter and holds a setting for another guest (the routes are set before the tab renders). */
+  function setupFilter(drifts: MicrosegDrift[] = FILTER_DRIFTS) {
+    window.localStorage.setItem('microseg.subTab', 'drifts')
+    const base = policy({ zones: [zone('zw', { name: 'web' }), zone('zd', { name: 'db' })], last_revision: REVISION_HEAD })
+    mock.routes['GET /policy'] = () => reply(200, { ...base, policy: { ...base.policy, ip_filter: true, guest_filters: [{ connection_id: 'c1', type: 'lxc', vmid: 300, disabled: true }] } })
+    mock.routes['GET /drifts'] = () => reply(200, { drifts })
+    mock.routes[`GET ${GUESTS_ROUTE}`] = () => reply(200, { data: { vms: VMS } })
+    mock.routes['GET /status'] = () => reply(200, status())
+    return renderTab()
+  }
+
+  it('lists them in their groups, two addresses held on one guest on two rows', async () => {
+    setupFilter()
+    expect((await screen.findByTestId('drift-group-ipfilter_address_held')).textContent).toBe('Addresses held back by the IP filter (2)')
+    expect(screen.getByTestId('drift-group-unzoned_same_network').textContent).toBe('Guests outside every zone on the network of an enforced zone (1)')
+    expect(driftRows().filter(r => r.getAttribute('aria-label') === 'Address held back: app-1')).toHaveLength(2)
+    expect(differs(await row('Member not filtered: app-1'))).toBe('No address is known on net1: this member of web is not filtered.')
+  })
+
+  it('opens the plan for a filter taken off, and assigns a guest outside every zone', async () => {
+    setupFilter()
+    expect(within(await row('IP filter not applied: db-1')).getByRole('button', { name: 'Open the plan' })).toBeTruthy()
+    expect(within(await row('Guest outside every zone on a filtered network: web-1')).getByRole('button', { name: 'Assign to a zone' })).toBeTruthy()
+    expect(within(await row('Member not filtered: app-1')).queryByRole('button', { name: /Open the plan|Assign|Allow/ })).toBeNull()
+  })
+
+  it('allows the address held back after a themed confirmation: the whole list goes with the address added for that guest', async () => {
+    setupFilter([HELD])
+    mock.routes['PUT /policy'] = () => reply(200, { version: 4 })
+    fireEvent.click(within(await row('Address held back: app-1')).getByRole('button', { name: 'Allow this address' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Allow 10.0.0.7 for app-1?' })
+    expect(calls('PUT /policy')).toHaveLength(0)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Allow this address' }))
+    await waitFor(() => expect(calls('PUT /policy')).toHaveLength(1))
+    expect(JSON.parse(String((calls('PUT /policy')[0][1] as RequestInit).body))).toEqual({
+      version: 3,
+      guest_filters: [{ connection_id: 'c1', type: 'lxc', vmid: 300, disabled: true }, { connection_id: 'c1', type: 'qemu', vmid: 103, name: 'app-1', extra: ['10.0.0.7'] }],
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    // The drifts are read again once the address is allowed.
+    await waitFor(() => expect(calls('GET /drifts').length).toBeGreaterThan(1))
+  })
+
+  it('keeps the refusal of the server in the confirmation, and writes nothing on Cancel', async () => {
+    setupFilter([HELD])
+    mock.routes['PUT /policy'] = () => reply(400, { code: 'INVALID', error: 'guest_filters: 10.0.0.7 is held' })
+    fireEvent.click(within(await row('Address held back: app-1')).getByRole('button', { name: 'Allow this address' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Allow this address' }))
+    expect(await within(dialog).findByText(/10\.0\.0\.7 is held/)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(calls('PUT /policy')).toHaveLength(1)
+  })
+})

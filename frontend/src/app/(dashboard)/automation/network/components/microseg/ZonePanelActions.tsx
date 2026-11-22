@@ -70,6 +70,7 @@ export function ZoneStateConfirm({ zone, state, edits, onClose }: { zone: Micros
     return (
       <ZoneEnforceDialog
         connectionId={edits.connectionId}
+        clusterName={edits.clusterName}
         zone={zone}
         readyAfterHours={edits.readyAfterHours}
         pending={pendingChanges.pending}

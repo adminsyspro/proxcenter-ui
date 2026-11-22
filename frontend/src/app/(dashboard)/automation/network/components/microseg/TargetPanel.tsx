@@ -10,6 +10,7 @@ import { serviceTitle, sharedServiceNames } from '@/lib/network/serviceNames'
 
 import { OneLine } from './dialogParts'
 import FlowSummary from './FlowSummary'
+import GuestIPFilterSection from './GuestIPFilterSection'
 import { ObservedKindGlyph, ResolveActions, outboundZoneAcceptTip, ServiceHits, useResolveSuggestions } from './observationParts'
 import { destinationName } from './ObservationRow'
 import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
@@ -111,7 +112,7 @@ function ObservedLine({ row, peers, zonesById, sharedServices, busy, onResolve }
  * The guest the map is targeted on, as tall as the map with its body scrolling, in foldable sections (remembered per
  * browser): the guest (its zone, a button opens the zone panel, its addresses), its flows (the pending observed flows
  * its addresses are the sample source or destination of, each with the three ways out of the Observation sub-tab; one
- * line per row, five per page), the rules of its zone (the allowed flows, context, folded by default), and its
+ * line per row, five per page), its IP filter (state, addresses per NIC, its two settings), the rules of its zone (the allowed flows, context, folded by default), and its
  * observed traffic over time (its events in the orchestrator's memory).
  */
 export default function TargetPanel({ target, zonesById, suggestions, flows, peers, connectionId, version, reloadPolicy, reloadSuggestions, onResolved, onOpenZone, onClose, partialLimit = null }: Props) {
@@ -185,6 +186,8 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
         </Box>
         <PolicyPager count={observedPage.count} page={observedPage.page} size={observedPage.size} onPage={observedPage.setPage} />
       </PanelSection>
+
+      <GuestIPFilterSection connectionId={connectionId} guest={{ connectionId: target.connectionId, type: target.type, vmid: target.vmid, name: target.name }} />
 
       <PanelSection id='guest.zoneRules' title={t('sections.zoneRules')} count={zone ? allowed.length : null} defaultOpen={false}>
         {!zone && <Empty text={t('target.panel.noZoneFlows')} />}

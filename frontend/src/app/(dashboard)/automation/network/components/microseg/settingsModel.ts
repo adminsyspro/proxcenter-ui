@@ -52,6 +52,8 @@ export type SettingsForm = RateLimitForm & Record<SettingNumberKey, string> & Re
   selfIps: string
   /** The named networks, one per row of the form. */
   networks: NamedNetwork[]
+  /** The IP filter of the zone members; absent on an orchestrator that does not know it (no row is shown then). */
+  ipFilter?: boolean
 }
 
 /** A problem with one field: a key under microsegPilot.settings.validation and its values. */
@@ -92,7 +94,7 @@ export function selfIpsFallback(effective: string[] | undefined, source: SelfIps
   return { ips: effective.join(', '), source }
 }
 
-export function formFromSettings(tagPrefix: string, settings: Partial<MicrosegSettings> | undefined): SettingsForm {
+export function formFromSettings(tagPrefix: string, settings: Partial<MicrosegSettings> | undefined, ipFilter?: boolean): SettingsForm {
   const s = settings ?? {}
   const numbers = Object.fromEntries(SETTING_NUMBER_KEYS.map(k => [k, String(s[k] || DEFAULTS[k])])) as Record<SettingNumberKey, string>
   const notify = Object.fromEntries(NOTIFY_KEYS.map(k => [k, s[k] ?? true])) as Record<NotifyKey, boolean>
@@ -103,6 +105,7 @@ export function formFromSettings(tagPrefix: string, settings: Partial<MicrosegSe
     selfIps: (s.self_ips ?? []).join(', '),
     networks: (s.networks ?? []).map(n => ({ name: n.name, cidr: n.cidr })),
     ...notify,
+    ...(typeof ipFilter === 'boolean' ? { ipFilter } : {}),
   }
 }
 
@@ -166,7 +169,7 @@ export function associateBlock(count: number, max: number | undefined, candidate
 const trimmedNetworks = (rows: readonly NamedNetwork[]) => rows.map(n => ({ name: n.name.trim(), cidr: n.cidr.trim() }))
 const sameNetworks = (a: readonly NamedNetwork[], b: readonly NamedNetwork[]) => JSON.stringify(trimmedNetworks(a)) === JSON.stringify(trimmedNetworks(b))
 
-type Changes = Pick<PolicyUpdate, 'tag_prefix' | 'settings'>
+type Changes = Pick<PolicyUpdate, 'tag_prefix' | 'settings' | 'ip_filter'>
 
 const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((v, i) => v === b[i])
 
@@ -193,5 +196,7 @@ export function changedUpdate(baseline: SettingsForm, form: SettingsForm): Chang
   const out: Changes = {}
   if (form.tagPrefix !== baseline.tagPrefix) out.tag_prefix = form.tagPrefix
   if (Object.keys(settings).length > 0) out.settings = settings
+  // Sent only where the orchestrator knows the filter (the form then holds it) and the switch moved.
+  if (typeof form.ipFilter === 'boolean' && typeof baseline.ipFilter === 'boolean' && form.ipFilter !== baseline.ipFilter) out.ip_filter = form.ipFilter
   return Object.keys(out).length > 0 ? out : null
 }

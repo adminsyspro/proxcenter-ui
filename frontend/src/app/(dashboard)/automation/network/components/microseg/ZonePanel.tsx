@@ -5,8 +5,9 @@ import { Alert, Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/
 import { useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
-import { useMicrosegDrifts } from '@/lib/microseg/useMicrosegLists'
-import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
+import { useMergedClusters } from '@/lib/microseg/useMerged'
+import { useClusterIPFilter, useMicrosegDrifts } from '@/lib/microseg/useMicrosegLists'
+import type { IPFilterGuest, MicrosegFlow, MicrosegSuggestion, MicrosegZone, SuggestionAction } from '@/lib/microseg/types'
 
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { DirectionGlyph, ObservedKindGlyph, ResolveActions, outboundZoneAcceptTip, ServiceHits, useResolveSuggestions } from './observationParts'
@@ -26,6 +27,8 @@ import { useMicrosegClusterWrite } from './microsegAccess'
 import type { ZoneEdits } from './useZoneEdits'
 import { useIgnoredDrifts } from './driftIgnore'
 import { OneLine } from './dialogParts'
+import { FILTER_STATE_VISUAL } from './IPFilterLines'
+import { ipFilterAvailable, ipFilterByGuest, rowState } from './ipFilterModel'
 import { flowsOfZone, memberId, type ZoneMember } from './zoneModel'
 import { isFirewallOff, zoneDriftSignals, zoneSuggestions } from './zonePanelModel'
 import ClusterChip from './ClusterChip'
@@ -66,7 +69,23 @@ type Props = {
   membersNote?: ReactNode
 }
 
-function MemberLine({ member, zoneId, edits, firewallOff, cluster }: { member: ZoneMember; zoneId: string; edits: ZoneEdits; firewallOff: boolean; cluster?: string }) {
+const NO_CLUSTERS: string[] = []
+
+/** The mark of a member the IP filter of the policy does not filter (left out, no known address, a list made by hand), its reason in the tooltip. */
+function MemberFilterMark({ row }: Readonly<{ row: IPFilterGuest }>) {
+  const t = useTranslations('microsegPilot.ipFilter.memberTip')
+  const state = rowState(row)
+  if (state !== 'excluded' && state !== 'manual' && state !== 'noAddress') return null
+  const visual = FILTER_STATE_VISUAL[state]
+  const tip = t(state)
+  return (
+    <Tooltip title={tip}>
+      <Box component='i' className={visual.icon} data-testid='member-ipfilter' aria-label={tip} sx={{ color: visual.tone, flexShrink: 0 }} />
+    </Tooltip>
+  )
+}
+
+function MemberLine({ member, zoneId, edits, firewallOff, cluster, ipFilter }: { member: ZoneMember; zoneId: string; edits: ZoneEdits; firewallOff: boolean; cluster?: string; ipFilter?: IPFilterGuest }) {
   const t = useTranslations('microsegPilot.overview.panel')
   const tsec = useTranslations('microsegPilot.overview.sections')
   const { guest, ref } = member
@@ -86,6 +105,7 @@ function MemberLine({ member, zoneId, edits, firewallOff, cluster }: { member: Z
           <i className='ri-shield-flash-line' data-testid='member-firewall-off' style={{ color: 'var(--mui-palette-error-main)', flexShrink: 0 }} aria-label={tsec('memberFirewallOff')} />
         </Tooltip>
       )}
+      {ipFilter && <MemberFilterMark row={ipFilter} />}
       <TruncatedText text={name} sx={{ flex: '0 1 auto' }} />
       <Typography noWrap variant='body2' color='text.secondary' sx={{ flex: '1 1 0', minWidth: 0 }}>{`${ref.vmid} · ${ref.node}`}</Typography>
       {member.pending && <Chip size='small' color='warning' variant='outlined' label={t('pending')} sx={{ flexShrink: 0 }} />}
@@ -160,6 +180,12 @@ export function useZoneWork({
     () => zoneDriftSignals(zone, members, drifts?.computed ? drifts.drifts : null, zones, ignored, connectionId),
     [zone, members, drifts, zones, ignored, connectionId],
   )
+  // The IP filter of the members: one read per cluster that holds a member (the engine's memory), none on an
+  // orchestrator that does not know the filter. Only the members of a policy that filters get a mark.
+  const filterKey = ipFilterAvailable(edits.policy) ? [...new Set(members.map(m => m.connectionId))].sort((a, b) => a.localeCompare(b)).join('\n') : ''
+  const filterClusters = useMemo(() => (filterKey ? filterKey.split('\n') : NO_CLUSTERS), [filterKey])
+  const filterReads = useMergedClusters(filterClusters, useClusterIPFilter)
+  const filterRows = useMemo(() => ipFilterByGuest(filterReads.byCluster), [filterReads.byCluster])
   const pending = useMemo(() => zoneSuggestions(suggestions, zone.id), [suggestions, zone.id])
   const { busy, failure, clearFailure, resolve } = useResolveSuggestions(connectionId, version, reloadPolicy, reloadSuggestions)
 
@@ -217,6 +243,7 @@ export function useZoneWork({
               zoneId={zone.id}
               edits={edits}
               firewallOff={isFirewallOff(signals, m)}
+              ipFilter={filterRows.get(memberId(m))}
               cluster={clusterName?.(m.connectionId)}
             />
           ))}

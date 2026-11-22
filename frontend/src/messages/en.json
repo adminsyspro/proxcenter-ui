@@ -14325,6 +14325,36 @@
           "title": "Firewall service stopped on {node}",
           "detail": "The firewall service is stopped on {node}: nothing is filtered on this node",
           "hint": "Start the pve-firewall service on this node."
+        },
+        "ipfilter_off": {
+          "title": "IP filter not applied",
+          "detail": "The IP filter is not applied on {nics}: this member of {zone} can send from any address.",
+          "detailOption": "The IP filter option was taken off this member of {zone}: its lists no longer apply."
+        },
+        "ipfilter_list_changed": {
+          "title": "IP filter list changed",
+          "detail": "The list of {nic} differs from the policy (missing: {missing}; in excess: {extra})."
+        },
+        "ipfilter_no_address": {
+          "title": "Member not filtered",
+          "detail": "No address is known on {nics}: this member of {zone} is not filtered.",
+          "hint": "Declare an additional address for this guest or leave it without the filter (IP filter section of its panel)."
+        },
+        "ipfilter_address_held": {
+          "title": "Address held back",
+          "detail": "{addr} on {nic} was not added to the list of this guest.",
+          "detailGuest": "{addr} on {nic} was not added: {by}, a member of another zone, holds it.",
+          "detailPeer": "{addr} on {nic} was not added: a member of another zone on another cluster holds it.",
+          "detailSource": "{addr} on {nic} was not added: it is inside the source network {by} of a flow."
+        },
+        "ipfilter_manual": {
+          "title": "List made by hand",
+          "detail": "The list of {nics} was made by hand: the engine writes nothing on this member of {zone}.",
+          "hint": "Nothing to do: delete the hand-made list in Proxmox to let ProxCenter manage it."
+        },
+        "unzoned_same_network": {
+          "title": "Guest outside every zone on a filtered network",
+          "detail": "{name} is in no zone and shares {networks} with {zones}: it is not filtered."
         }
       },
       "chip": {
@@ -14346,7 +14376,13 @@
         "peer_unreadable": "Cluster unreadable",
         "stop_lift_held": "Firewall kept off",
         "cluster_firewall_off": "Cluster firewall off",
-        "firewall_service_stopped": "Service stopped"
+        "firewall_service_stopped": "Service stopped",
+        "ipfilter_off": "IP filter off",
+        "ipfilter_list_changed": "IP list changed",
+        "ipfilter_no_address": "No address to filter",
+        "ipfilter_address_held": "Address held",
+        "ipfilter_manual": "List by hand",
+        "unzoned_same_network": "Unfiltered neighbour"
       },
       "zoneFilter": "Zone {name} only",
       "zoneFilterClear": "Show every zone",
@@ -14369,7 +14405,13 @@
         "peer_unreadable": "Associated clusters that cannot be read ({count, number})",
         "stop_lift_held": "Cluster firewalls kept off ({count, number})",
         "cluster_firewall_off": "Cluster firewalls switched off ({count, number})",
-        "firewall_service_stopped": "Nodes with the firewall service stopped ({count, number})"
+        "firewall_service_stopped": "Nodes with the firewall service stopped ({count, number})",
+        "ipfilter_off": "IP filter not applied ({count, number})",
+        "ipfilter_list_changed": "IP filter lists changed ({count, number})",
+        "ipfilter_no_address": "Members not filtered for lack of an address ({count, number})",
+        "ipfilter_address_held": "Addresses held back by the IP filter ({count, number})",
+        "ipfilter_manual": "IP filter lists made by hand ({count, number})",
+        "unzoned_same_network": "Guests outside every zone on the network of an enforced zone ({count, number})"
       },
       "noneZone": "none",
       "select": "Select {name}",
@@ -14400,7 +14442,8 @@
         "stop": "Under an emergency stop, it is turned back on at the lift.",
         "refused": "A node whose own firewall is on does not let the web UI (8006) and SSH (22) in, so the cluster firewall was left off. Allow them in that node's firewall, or turn it off, then try again.",
         "refusedTraffic": "Left off: the node firewalls would cut traffic between the nodes."
-      }
+      },
+      "fixAllow": "Allow this address"
     },
     "observation": {
       "sampling": "Proxmox logs at most one line per second per chain by default, so busy flows may be under-counted.",
@@ -14991,6 +15034,19 @@
             "migration": "Migration network {network}: cut on {nodes}",
             "other": "{network}: cut on {nodes}"
           }
+        },
+        "ip_filter": {
+          "title": "IP filter",
+          "pass": "{count, plural, one {# member ready} other {# members ready}}",
+          "notChecked": "Run a check to compute it",
+          "part": {
+            "no_address": "{count, plural, one {# without a known address} other {# without a known address}}",
+            "held": "{count, plural, one {# address held} other {# addresses held}}",
+            "unknown": "{count, plural, one {# with an unknown source address} other {# with unknown source addresses}}",
+            "manual": "{count, plural, one {# managed by hand} other {# managed by hand}}",
+            "excluded": "{count, plural, one {# left without the filter} other {# left without the filter}}",
+            "dhcp": "{count, plural, one {# on DHCP} other {# on DHCP}}"
+          }
         }
       },
       "rateUnits": {
@@ -15028,7 +15084,8 @@
         "notify_drift": "Drifts",
         "notify_paused": "Engine paused",
         "notify_unprotected": "Unprotected guests",
-        "notify_blocked": "Blocked flows"
+        "notify_blocked": "Blocked flows",
+        "ip_filter": "IP filter on zone members"
       },
       "hints": {
         "tagPrefix": "The zone tags on the guests are this prefix followed by the zone name.",
@@ -15096,7 +15153,8 @@
         "logInterval": "Delay between two reads of the firewall log of each node: one read per node and per interval.",
         "readyAfter": "Time without a new flow that would be blocked before a zone is shown as ready; it is not a lock.",
         "writeCap": "Past it, the engine stops and asks for a confirmation.",
-        "selfIps": "Addresses ProxCenter reaches the nodes from. The preflight checks they are not cut off. Leave empty to use the detection."
+        "selfIps": "Addresses ProxCenter reaches the nodes from. The preflight checks they are not cut off. Leave empty to use the detection.",
+        "ipFilter": "Once a zone is enforced, each member may only send from its own addresses"
       },
       "clusters": {
         "row": "Associated clusters",
@@ -15558,6 +15616,79 @@
       "unreachableOther": "An associated cluster is unreachable: its state is unknown.",
       "unreadState": "Cannot be read: its state is not shown.",
       "unreadStateOther": "An associated cluster cannot be read: its state is not shown."
+    },
+    "ipFilter": {
+      "section": "IP filter",
+      "linesLabel": "IP filter of {name}",
+      "nicNoAddress": "no known address",
+      "state": {
+        "loading": "Reading the IP filter...",
+        "off": "The IP filter is off for this policy",
+        "notMember": "Not a member of a zone",
+        "filtered": "Filtered",
+        "willFilter": "Will be filtered once a zone is enforced and applied",
+        "excluded": "Left without the filter",
+        "manual": "Managed by hand",
+        "noAddress": "Not filtered: no known address on {nics}"
+      },
+      "chip": {
+        "filtered": "Filtered",
+        "willFilter": "Ready",
+        "excluded": "Left out",
+        "manual": "By hand",
+        "noAddress": "No address"
+      },
+      "held": {
+        "guest": "{addr} on {nic}: held by {by}, a member of another zone",
+        "guestUnnamed": "{addr} on {nic}: held by a member of another zone",
+        "peer": "{addr} on {nic}: held by a member of another zone on another cluster",
+        "source": "{addr} on {nic}: inside the source network {by} of a flow",
+        "other": "{addr} on {nic}: not added"
+      },
+      "allow": "Allow",
+      "allowAddr": "Allow {addr}",
+      "allowTitle": "Allow {addr} for {name}?",
+      "allowBody": "The address is added to the additional addresses of this guest; it applies with the next plan.",
+      "allowConfirm": "Allow this address",
+      "unknown": "Source addresses seen that the filter would drop: {addrs}",
+      "dhcp": "{nics} on DHCP: an address that changes is cut until the next address collection",
+      "leaveOut": "Leave without the filter",
+      "extra": "Additional addresses",
+      "extraNone": "None",
+      "extraCount": "{count, plural, one {# address} other {# addresses}}",
+      "extraEdit": "Edit",
+      "extraEditLabel": "Edit the additional addresses",
+      "extraTitle": "Additional addresses of {name}",
+      "extraHint": "One address or range per line (IPv4, IPv6 or CIDR).",
+      "extraLabel": "Addresses",
+      "extraInvalid": "{addr} is not an address or a range",
+      "memberTip": {
+        "excluded": "Left without the IP filter",
+        "manual": "IP filter list made by hand: the engine writes nothing",
+        "noAddress": "Not filtered: no known address"
+      },
+      "details": {
+        "title": "IP filter: addresses per member",
+        "button": "Details",
+        "onlyAttention": "Only those needing attention",
+        "empty": "No member of a zone",
+        "emptyAttention": "No member needs attention",
+        "addresses": "{count, plural, one {# address} other {# addresses}}",
+        "expand": "Show the addresses of {name}",
+        "collapse": "Hide the addresses of {name}",
+        "loading": "Reading the IP filter...",
+        "count": "{count, plural, one {# member} other {# members}}"
+      },
+      "enforce": {
+        "summary": "IP filter: {ready, plural, one {# member ready} other {# members ready}}, {attention, plural, =0 {none needs attention} one {# needs attention} other {# need attention}}",
+        "notComputed": "IP filter: not computed yet, run a check"
+      },
+      "banner": {
+        "off": "The IP filter is off: a member can send with the address of a member of another zone.",
+        "turnOn": "Turn on",
+        "unzoned": "{count, plural, one {# guest outside every zone shares the network of an enforced zone: it is not filtered.} other {# guests outside every zone share the network of an enforced zone: they are not filtered.}}",
+        "seeDrifts": "See the drifts"
+      }
     }
   },
   "bulkPower": {

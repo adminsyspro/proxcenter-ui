@@ -165,6 +165,11 @@ function parsePrefix(cidr: string): Prefix | null {
   return v6 && length <= 128 ? { groups: v6, width: 16, length } : null
 }
 
+/** True for an IPv4 or IPv6 prefix ("10.0.0.0/24", "fd00::/64"), host bits or not. */
+export function isCidr(value: string): boolean {
+  return parsePrefix(value) !== null
+}
+
 function maskGroups({ groups, width, length }: Prefix): number[] {
   return groups.map((g, i) => {
     const kept = Math.min(Math.max(length - i * width, 0), width)

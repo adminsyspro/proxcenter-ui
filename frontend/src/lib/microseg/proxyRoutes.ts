@@ -80,6 +80,8 @@ export const MICROSEG_ROUTES: MicrosegRoute[] = [
   // Names the peer clusters (an unreadable peer, its name and ID).
   read(/^drifts$/, 'policy'),
   read(/^preflight$/, 'cluster'),
+  // The IP filter of the zone members as the last full run computed it (the engine's memory): no Proxmox call.
+  read(/^ipfilter$/, 'cluster'),
   { method: 'POST', pattern: /^confirm-writes$/, write: true, audit: 'relay', auditAction: 'microseg.confirm_writes', scope: 'cluster' },
   { method: 'POST', pattern: /^emergency-stop$/, write: true, audit: 'orchestrator', auditAction: 'microseg.emergency_stop', scope: 'policy' },
   // On a shared policy the cluster leaves the policy and the other clusters drop its addresses from their ipsets: a

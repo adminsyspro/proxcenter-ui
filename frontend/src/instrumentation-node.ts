@@ -19,7 +19,7 @@ import { startBatchPump } from '@/lib/migration/batch-scheduler'
 import { startVdcMoveReconciler } from '@/lib/vdc/move/runner'
 import { resolveInstanceId, sweepOrphanedMigrationJobs } from '@/lib/migration/orphan-sweep'
 import { cleanupOrphanedWarmSources } from '@/lib/migration/warm/orphan-cleanup'
-import { startSFlowReconciler } from '@/lib/sflow/reconciler'
+import { startPortMapRefresher, startSFlowReconciler } from '@/lib/sflow/reconciler'
 import { startOrchestratorAuditRelay } from '@/lib/syslog/orchestratorRelay'
 import { startCatalogRefresher } from '@/lib/templates/catalogRefresher'
 import { isCatalogAutoUpdateEnabled } from '@/lib/templates/catalogStore'
@@ -102,6 +102,9 @@ export async function registerNode(): Promise<void> {
     // so a reboot silently stops the flow panels. Nothing used to notice.
     // Idempotent, so it runs on every replica without leader election.
     startSFlowReconciler()
+    // The port maps attribute the sFlow samples to guests, so to the zones of the volume history: pushed on a timer,
+    // not only when somebody opens Settings > sFlow.
+    startPortMapRefresher()
   } catch (err) {
     // Boot must never depend on this: the nodes simply stay as they are and
     // the next boot retries starting the reconciler.

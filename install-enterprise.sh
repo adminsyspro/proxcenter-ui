@@ -582,7 +582,6 @@ pull_and_init() {
     docker volume create proxcenter_data > /dev/null 2>&1 || true
     docker volume create orchestrator_data > /dev/null 2>&1 || true
     docker volume create postgres_data > /dev/null 2>&1 || true
-    docker volume create influxdb_data > /dev/null 2>&1 || true
 
     # Init the frontend data directory so the non-root container user
     # (uid 1001) can write into it. Postgres + Prisma migrations run on

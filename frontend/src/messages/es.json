@@ -5669,6 +5669,19 @@
       },
       "apiTokensTitle": "Tokens de API limitados a esta conexión",
       "apiTokensHint": "Ya no alcanzarán nada una vez eliminada. Esto no bloquea la eliminación."
+    },
+    "sflow": {
+      "tabLabel": "sFlow",
+      "description": "Los agentes sFlow de los nodos Proxmox en Open vSwitch. Sus muestras dan el volumen de los flujos entre las zonas de la microsegmentación (Seguridad de red).",
+      "noNode": "Ningún nodo Proxmox accesible por SSH",
+      "target": "Colector",
+      "sampling": "Muestreo",
+      "flowRate": "Tasa",
+      "samples": "Muestras",
+      "nodes": "{count, plural, one {# nodo} other {# nodos}}",
+      "noOvs": "Sin OVS",
+      "samplingRate": "Muestreo (1 paquete de cada N)",
+      "samplingLoad": "Carga en los nodos"
     }
   },
   "green": {
@@ -9757,7 +9770,18 @@
       "clustersDrifts": "{count, plural, =0 {Sin desviaciones} one {# desviación} other {# desviaciones}}",
       "clustersFiguresMissing": "Faltan cifras",
       "clustersOutOfScope": "Fuera de su ámbito",
-      "clustersHiddenTraffic": "{count, plural, one {El tráfico de # clúster fuera de su ámbito no está incluido.} other {El tráfico de # clústeres fuera de su ámbito no está incluido.}}"
+      "clustersHiddenTraffic": "{count, plural, one {El tráfico de # clúster fuera de su ámbito no está incluido.} other {El tráfico de # clústeres fuera de su ámbito no está incluido.}}",
+      "postureVolumeMeasured": "{bytes} medidos por sFlow",
+      "postureVolumeMeasuredHint": "Volumen de los flujos permitidos en el periodo, medido por sFlow en Open vSwitch ({packets} paquetes)",
+      "postureColVolume": "Volumen",
+      "postureTalkersTitle": "Invitados más activos",
+      "postureTalkersEmpty": "Ningún tráfico de invitado medido por sFlow en este momento",
+      "postureColGuest": "Invitado",
+      "postureColNode": "Nodo",
+      "postureColIn": "Recibido",
+      "postureColOut": "Enviado",
+      "postureUnitLabel": "Qué cuenta el gráfico",
+      "postureUnitEvents": "Conexiones"
     },
     "rulesOnDemand": {
       "chip": "Reglas al abrir",
@@ -14590,7 +14614,27 @@
         "exception": "Excepción: {services}",
         "exceptionCount": "{count, plural, one {# excepción} other {# excepciones}}",
         "exceptionsBetween": "{count, plural, one {# excepción} other {# excepciones}} entre VM de las dos zonas",
-        "pairsSampled": "Pares de ejemplo conservados por el motor:"
+        "pairsSampled": "Pares de ejemplo conservados por el motor:",
+        "volumeNone": "Ningún tráfico medido por sFlow en el periodo",
+        "volumeSpark": "En {range}, pico de {peak}",
+        "volumeSparkPair": "Todo el par {from} → {to} en {range}, pico de {peak}",
+        "statHits": "Ocurrencias",
+        "statVolume": "Volumen",
+        "statPackets": "Paquetes",
+        "statEdgeVolume": "Volumen de la arista",
+        "statPairVolume": "Todo el par",
+        "volumeNote": "Medido por sFlow en el periodo del mapa",
+        "volumeNoteRange": "Volumen medido por sFlow, en {range}",
+        "volumeBlockedNote": "Muestreado por sFlow antes del rechazo del cortafuegos",
+        "volumeBlockedNoteRange": "Volumen visto por sFlow antes del rechazo del cortafuegos, en {range}",
+        "volumeFewSamples": "≈ estimación sobre {count, plural, one {# muestra sFlow} other {# muestras sFlow}}",
+        "volumeShared": "Parte de su tráfico se cuenta en otra arista (cada byte una vez en el mapa)",
+        "volumeSharedAll": "Todo su tráfico se cuenta en otras aristas: el gráfico muestra todo el par",
+        "volumeUntold": "Resto del par no detallado por VM (contado antes, o por encima del límite)",
+        "colService": "Servicio",
+        "colHits": "Ocurrencias",
+        "colSeen": "Visto",
+        "hitsSampled": "Ocurrencias contadas entre las dos zonas (par de ejemplo mostrado)"
       },
       "panel": {
         "label": "Zona {name}",
@@ -14733,6 +14777,7 @@
       "sankey": {
         "label": "Tráfico entre las zonas como cintas",
         "note": "El ancho de una cinta sigue los impactos de los flujos observados. Los flujos permitidos no tienen contador: se dibujan finos.",
+        "noteVolume": "El ancho de una cinta sigue el volumen medido por sFlow para sus flujos. Una cinta sin volumen se dibuja fina.",
         "flows": "{count, plural, one {# flujo permitido} other {# flujos permitidos}}",
         "sources": "Orígenes",
         "destinations": "Destinos",
@@ -14818,7 +14863,8 @@
         "topBoth": "Fuentes y destinos principales",
         "topBothEmpty": "Ninguna fuente ni destino en este intervalo",
         "fromInto": "Hacia esta zona, desde {name}",
-        "toFrom": "Desde esta zona, hacia {name}"
+        "toFrom": "Desde esta zona, hacia {name}",
+        "volumeSummary": "Medido por sFlow en el periodo: {bytes}, {packets} paquetes"
       },
       "services": {
         "button": "Servicios",

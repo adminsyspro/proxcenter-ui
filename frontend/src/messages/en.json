@@ -5669,6 +5669,19 @@
       },
       "apiTokensTitle": "API tokens limited to this connection",
       "apiTokensHint": "They will no longer reach anything once it is deleted. This does not block the deletion."
+    },
+    "sflow": {
+      "tabLabel": "sFlow",
+      "description": "The sFlow agents of the Proxmox nodes on Open vSwitch. Their samples give the volume of the flows between the zones of the micro-segmentation (Network Security).",
+      "noNode": "No Proxmox node reachable over SSH",
+      "target": "Collector",
+      "sampling": "Sampling",
+      "flowRate": "Rate",
+      "samples": "Samples",
+      "nodes": "{count, plural, one {# node} other {# nodes}}",
+      "noOvs": "No OVS",
+      "samplingRate": "Sampling rate (1 packet in N)",
+      "samplingLoad": "Load on the nodes"
     }
   },
   "green": {
@@ -9757,7 +9770,18 @@
       "clustersDrifts": "{count, plural, =0 {No drift} one {# drift} other {# drifts}}",
       "clustersFiguresMissing": "Figures missing",
       "clustersOutOfScope": "Outside your scope",
-      "clustersHiddenTraffic": "{count, plural, one {The traffic of # cluster outside your scope is not included.} other {The traffic of # clusters outside your scope is not included.}}"
+      "clustersHiddenTraffic": "{count, plural, one {The traffic of # cluster outside your scope is not included.} other {The traffic of # clusters outside your scope is not included.}}",
+      "postureVolumeMeasured": "{bytes} measured by sFlow",
+      "postureVolumeMeasuredHint": "Volume of the allowed flows over the range, measured by sFlow on Open vSwitch ({packets} packets)",
+      "postureColVolume": "Volume",
+      "postureTalkersTitle": "Top talkers",
+      "postureTalkersEmpty": "No guest traffic measured by sFlow at the moment",
+      "postureColGuest": "Guest",
+      "postureColNode": "Node",
+      "postureColIn": "Received",
+      "postureColOut": "Sent",
+      "postureUnitLabel": "What the chart counts",
+      "postureUnitEvents": "Connections"
     },
     "rulesOnDemand": {
       "chip": "Rules read when opened",
@@ -14590,7 +14614,27 @@
         "exception": "Exception: {services}",
         "exceptionCount": "{count, plural, one {# exception} other {# exceptions}}",
         "exceptionsBetween": "{count, plural, one {# exception} other {# exceptions}} between VMs of the two zones",
-        "pairsSampled": "Sample pairs kept by the engine:"
+        "pairsSampled": "Sample pairs kept by the engine:",
+        "volumeNone": "No traffic measured by sFlow over the period",
+        "volumeSpark": "Over {range}, peak {peak}",
+        "volumeSparkPair": "Whole pair {from} → {to} over {range}, peak {peak}",
+        "statHits": "Log occurrences",
+        "statVolume": "Volume",
+        "statPackets": "Packets",
+        "statEdgeVolume": "Volume, this edge",
+        "statPairVolume": "Whole pair",
+        "volumeNote": "Measured by sFlow over the period of the map",
+        "volumeNoteRange": "Volume measured by sFlow, last {range}",
+        "volumeBlockedNote": "Sampled by sFlow before the firewall refused it",
+        "volumeBlockedNoteRange": "Volume seen by sFlow before the firewall refused it, last {range}",
+        "volumeFewSamples": "≈ estimate on {count, plural, one {# sFlow sample} other {# sFlow samples}}",
+        "volumeShared": "Part of its traffic is counted on another edge (each byte once on the map)",
+        "volumeSharedAll": "All its traffic is counted on other edges: the chart shows the whole pair",
+        "volumeUntold": "Rest of the pair not told by guest (counted before, or past the bound)",
+        "colService": "Service",
+        "colHits": "Hits",
+        "colSeen": "Last seen",
+        "hitsSampled": "Hits counted between the two zones (sample pair shown)"
       },
       "panel": {
         "label": "Zone {name}",
@@ -14733,6 +14777,7 @@
       "sankey": {
         "label": "Traffic between the zones as ribbons",
         "note": "Ribbon width follows the hits of the observed flows. Allowed flows have no counter: they are drawn thin.",
+        "noteVolume": "A ribbon is as wide as the volume sFlow measured for its flows. One without any is drawn thin.",
         "flows": "{count, plural, one {# allowed flow} other {# allowed flows}}",
         "sources": "Sources",
         "destinations": "Destinations",
@@ -14818,7 +14863,8 @@
         "topBoth": "Top sources and destinations",
         "topBothEmpty": "No source nor destination in this range",
         "fromInto": "Into this zone, from {name}",
-        "toFrom": "From this zone, to {name}"
+        "toFrom": "From this zone, to {name}",
+        "volumeSummary": "Measured by sFlow over the range: {bytes}, {packets} packets"
       },
       "services": {
         "button": "Services",

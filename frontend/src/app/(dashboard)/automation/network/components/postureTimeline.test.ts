@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import type { LensPair } from '@/lib/microseg/trafficLens'
 import type { MicrosegEvent, MicrosegTraffic, MicrosegZone } from '@/lib/microseg/types'
 
 import type { PostureGuest } from './dashboardPosture'
 import {
-  BUCKET_MS, MAX_BUCKETS, MAX_VOLUME_VMIDS, RANGE_SPEC, alignTimelines, TIMELINE_RANGES, accumulateVmids, areaPaths, asRange, bucketXs, busiestVmids, historyWindow, mergeEvents, nearestBucket, postureHistory, postureTimeline, postureVolume, stepMsOf, topSources, volumeWindow, type TimelineRange, type TimelineSeries, type VmSeries,
+  BUCKET_MS, MAX_BUCKETS, RANGE_SPEC, alignTimelines, TIMELINE_RANGES, areaPaths, asRange, bucketXs, historyWindow, mergeEvents, nearestBucket, postureHistory, postureTimeline, stepMsOf, topSources, volumeTimeline, type TimelineRange, type TimelineSeries,
 } from './postureTimeline'
 
 const NOW = Date.parse('2026-11-03T10:02:00Z')
@@ -143,90 +142,55 @@ describe('mergeEvents', () => {
   })
 })
 
-describe('sFlow volume', () => {
-  const { from, to } = volumeWindow(NOW, '1h')
-  /** A point as InfluxDB's aggregateWindow stamps it: at the END of its 5-minute window, `ago` windows before the last. */
-  const point = (ago: number, bytes_in: number, bytes_out: number) => ({ time: (to - ago * BUCKET_MS) / 1000, bytes_in, bytes_out })
-  const SERIES: VmSeries[] = [
-    { vmid: 101, points: [point(0, 10, 1000), point(1, 20, 2000)] },
-    { vmid: 102, points: [point(0, 500, 5)] },
-    { vmid: 104, points: [point(0, 30, 300)] },
-    { vmid: 999, points: [point(0, 1, 7)] },
-  ]
-  const vol = (over: Partial<Parameters<typeof postureVolume>[0]> = {}) => postureVolume({
-    series: SERIES, groupBy: 'zone', zones: ZONES, tagPrefix: 'zone-', guests: GUESTS, slices: [...ZONE_SLICES, slice('zone:zdb', 'zone', '#444444', 'db')], range: '1h', from, to, ...over,
+describe('sFlow volume (volume route)', () => {
+  const window = historyWindow(NOW, '1h')
+  const volume = (buckets: Array<{ at: string; src_zone: string; dst_zone: string; bytes: number }>) => ({
+    from: new Date(window.from).toISOString(), to: new Date(window.to).toISOString(),
+    buckets: buckets.map(b => ({ ...b, proto: '', port: 0, packets: 1 })),
+  })
+  const DST_SLICES = [slice('zone:zweb', 'zone', '#111111', 'web'), slice('zone:zdb', 'zone', '#222222', 'db'), slice('outside', 'outside', '#333333')]
+  const rows = volume([
+    { at: at(30), src_zone: 'web', dst_zone: 'db', bytes: 1000 },
+    { at: at(30), src_zone: '', dst_zone: 'web', bytes: 200 },
+    { at: at(5), src_zone: 'gone', dst_zone: 'web', bytes: 7 },
+    { at: at(5), src_zone: 'db', dst_zone: '', bytes: 50 },
+    { at: at(90), src_zone: 'web', dst_zone: 'db', bytes: 999 },
+  ])
+
+  it('stacks by source zone the bytes per bucket of the range, an end in no zone as Unknown, a zone gone as Other', () => {
+    const chart = volumeTimeline({ volume: rows, range: '1h', zones: ZONES, slices: ZONE_SLICES, by: 'src' })
+    expect(chart.buckets).toHaveLength(12)
+    expect(chart.total).toBe(1257)
+    const sum = (key: string) => chart.buckets.reduce((s, b) => s + (b.counts[key] ?? 0), 0)
+    expect(sum('zone:zweb')).toBe(1000)
+    expect(sum('external')).toBe(200)
+    // db is no slice of this donut: Other, with the zone gone.
+    expect(sum('other')).toBe(57)
+    expect(chart.series.map(s => s.key)).toEqual(['zone:zweb', 'external', 'other'])
+    expect(chart.range).toBe('1h')
   })
 
-  it('reads the range, ending on the edge of the InfluxDB window of that range and starting on the step grid', () => {
-    expect(to - from).toBe(RANGE_SPEC['1h'].ms)
-    expect(to % BUCKET_MS).toBe(0)
-    expect(to).toBeGreaterThan(NOW)
-    for (const range of TIMELINE_RANGES) {
-      const w = volumeWindow(NOW, range)
-      const granularity = { '5m': 300_000, '15m': 900_000, '1h': 3_600_000 }[RANGE_SPEC[range].granularity]
-      expect(w.to % granularity, range).toBe(0)
-      expect(w.to, range).toBeGreaterThan(NOW)
-      expect(w.to - w.from, range).toBeLessThanOrEqual(RANGE_SPEC[range].ms)
-      expect(w.to - w.from, range).toBeGreaterThan(RANGE_SPEC[range].ms - stepMsOf(range))
-      expect(w.from % stepMsOf(range), range).toBe(0)
-    }
+  it('stacks by destination zone, an end in no zone as Outside', () => {
+    const chart = volumeTimeline({ volume: rows, range: '1h', zones: ZONES, slices: DST_SLICES, by: 'dst' })
+    const sum = (key: string) => chart.buckets.reduce((s, b) => s + (b.counts[key] ?? 0), 0)
+    expect(sum('zone:zdb')).toBe(1000)
+    expect(sum('zone:zweb')).toBe(207)
+    expect(sum('outside')).toBe(50)
   })
 
-  it('puts a point in the window it closes: the one stamped with the window end is the last bucket, none is dropped', () => {
-    const v = vol({ series: [{ vmid: 101, points: [point(0, 0, 1), point(11, 0, 2), point(12, 0, 4)] }] })
-    // point(0) closes the last bucket; point(11) closes the first; point(12) closes the window before `from`.
-    expect(v.buckets.at(-1)!.total).toBe(1)
-    expect(v.buckets[0].total).toBe(2)
-    expect(v.total).toBe(3)
+  it('keeps one pair of zones (by name, any case), or the traffic into or out of a zone', () => {
+    const pair = volumeTimeline({ volume: rows, range: '1h', zones: ZONES, slices: ZONE_SLICES, by: 'src', pair: { emitter: 'WEB', receiver: 'db' } })
+    expect(pair.total).toBe(1000)
+    const into = volumeTimeline({ volume: rows, range: '1h', zones: ZONES, slices: ZONE_SLICES, by: 'src', zone: 'web' })
+    expect(into.total).toBe(207)
+    const out = volumeTimeline({ volume: rows, range: '1h', zones: ZONES, slices: DST_SLICES, by: 'dst', zone: 'db' })
+    expect(out.total).toBe(50)
   })
 
-  it('stacks by zone the bytes the members sent, per 5-minute bucket, a VM the connection does not hold as Unknown', () => {
-    const v = vol()
-    expect(v.buckets).toHaveLength(RANGE_SPEC['1h'].ms / BUCKET_MS)
-    expect(v.buckets.at(-1)!.counts).toEqual({ 'zone:zweb': 1000, 'zone:zdb': 5, unzoned: 300, external: 7 })
-    expect(v.buckets.at(-2)!.counts).toEqual({ 'zone:zweb': 2000 })
-    expect(v.series.map(s => s.key)).toEqual(['zone:zweb', 'external', 'unzoned', 'zone:zdb'])
-    expect(v.total).toBe(3312)
-  })
-
-  it('stacks by VLAN or node the bytes the guests received', () => {
-    const slices = [slice('vlan:10', 'vlan', '#1', '10'), slice('vlan:20', 'vlan', '#2', '20'), slice('vlan:none', 'novlan', '#3'), slice('external', 'external', '#4')]
-    expect(vol({ groupBy: 'vlan', slices }).buckets.at(-1)!.counts).toEqual({ 'vlan:10': 10, 'vlan:20': 500, 'vlan:none': 30, external: 1 })
-    expect(vol({ groupBy: 'node', slices: [slice('node:pve2', 'node', '#5', 'pve2')] }).buckets.at(-1)!.counts).toEqual({ 'node:pve2': 530, other: 11 })
-  })
-
-  it('leaves out the points outside the window', () => {
-    expect(vol({ series: [{ vmid: 101, points: [point(13, 1, 1)] }, { vmid: 102, points: null }] }).total).toBe(0)
-  })
-})
-
-describe('sFlow volume over a long range', () => {
-  const HOUR = 3_600_000
-  const w = volumeWindow(NOW, '7d')
-  const vol = (range: TimelineRange, series: VmSeries[]) => {
-    const win = volumeWindow(NOW, range)
-    return postureVolume({ series, groupBy: 'zone', zones: ZONES, tagPrefix: 'zone-', guests: GUESTS, slices: ZONE_SLICES, range, ...win })
-  }
-
-  it('sums the 1-hour windows into the 3-hour buckets of a week, by the window each one closes', () => {
-    // Windows closing at w.to, w.to - 1 h, w.to - 2 h are one bucket when they share the same 3-hour step (to is an hour edge).
-    const stepStart = Math.floor((w.to - 1) / (3 * HOUR)) * 3 * HOUR
-    const closes = [w.to, w.to - HOUR].filter(t => t - HOUR >= stepStart)
-    const v = vol('7d', [{ vmid: 101, points: [...closes.map(t => ({ time: t / 1000, bytes_in: 0, bytes_out: 10 })), { time: (stepStart) / 1000, bytes_in: 0, bytes_out: 5 }] }])
-    expect(v.stepMs).toBe(3 * HOUR)
-    expect(v.buckets.every((b, i) => i === 0 || b.start - v.buckets[i - 1].start === 3 * HOUR)).toBe(true)
-    expect(v.buckets.at(-1)!.start).toBe(stepStart)
-    expect(v.buckets.at(-1)!.total).toBe(closes.length * 10)
-    // The window closing at stepStart belongs to the previous bucket.
-    expect(v.buckets.at(-2)!.total).toBe(5)
-    expect(v.windowMinutes).toBe(7 * 24 * 60)
-  })
-
-  it('draws 12 buckets for an hour and 56 or 57 for a week', () => {
-    expect(vol('1h', []).buckets).toHaveLength(12)
-    expect([56, 57]).toContain(vol('7d', []).buckets.length)
-    expect(vol('24h', []).buckets).toHaveLength(48)
-    expect(vol('6h', []).buckets).toHaveLength(24)
+  it('has its buckets and no byte for an empty answer', () => {
+    const chart = volumeTimeline({ volume: volume([]), range: '7d', zones: ZONES, slices: ZONE_SLICES, by: 'src' })
+    expect(chart.total).toBe(0)
+    expect(chart.max).toBe(0)
   })
 })
 
@@ -254,7 +218,6 @@ describe('the persisted history (UA55)', () => {
     expect(RANGE_SPEC['24h'].stepSec).toBe(1800)
     expect(RANGE_SPEC['7d'].stepSec).toBe(10_800)
     expect(Object.values(RANGE_SPEC).every(r => r.stepSec % 300 === 0 && r.stepSec >= 300 && r.stepSec <= 21_600)).toBe(true)
-    expect(Object.values(RANGE_SPEC).every(r => r.stepSec * 1000 % { '5m': 300_000, '15m': 900_000, '1h': 3_600_000 }[r.granularity] === 0)).toBe(true)
   })
 
   it('keeps only the flows logged in the zone of a map panel (its name, any case)', () => {
@@ -351,38 +314,6 @@ describe('the persisted history (UA55)', () => {
     expect(TIMELINE_RANGES.map(asRange)).toEqual(['1h', '6h', '24h', '7d'])
     expect(asRange('30d')).toBe('1h')
     expect(asRange(null)).toBe('1h')
-  })
-})
-
-describe('the VMIDs of the volume read', () => {
-  const pair = (over: Partial<LensPair>): LensPair => ({ src_ip: '10.0.0.1', dst_ip: '10.0.0.2', src_vmid: 101, dst_vmid: 102, bytes: 100, packets: 1, protocol: 'TCP', dst_port: 22, ...over })
-  const NO_IPS = GUESTS.map(g => ({ ...g, ips: [] }))
-
-  it('takes the guests of the connection the pairs name, either end, with the most bytes seen', () => {
-    const seen = accumulateVmids(new Map(), [pair({}), pair({ src_vmid: 999, src_ip: '10.9.9.9', bytes: 300 })], GUESTS)
-    expect([...seen.keys()]).toEqual([101, 102])
-    expect(seen.get(102)!.bytes).toBe(300)
-    expect(busiestVmids(seen, GUESTS)).toEqual([101, 102])
-  })
-
-  it('takes a VMID for a guest only when a pair carried one of its addresses, once they are known', () => {
-    // Another connection's VM 101 at 172.16.0.1: not this connection's web1 (10.0.0.1).
-    const other = accumulateVmids(new Map(), [pair({ src_ip: '172.16.0.1', dst_vmid: undefined })], NO_IPS)
-    // Without addresses (guest list not read), the VMID alone; once they are read, it no longer counts.
-    expect(busiestVmids(other, NO_IPS)).toEqual([101])
-    expect(busiestVmids(other, GUESTS)).toEqual([])
-  })
-
-  it('keeps every VMID seen so far (the read keeps its key), and asks the busiest 100 in number order', () => {
-    const first = accumulateVmids(new Map(), [pair({})], GUESTS)
-    const next = accumulateVmids(first, [pair({ src_vmid: 104, src_ip: '10.0.0.4', dst_vmid: undefined })], GUESTS)
-    expect(busiestVmids(next, GUESTS)).toEqual([101, 102, 104])
-    const guests = Array.from({ length: 150 }, (_, i) => ({ key: `qemu/${1000 + i}`, node: 'pve1', tags: [], vlans: [], ips: [] }))
-    const many = new Map(guests.map((g, i) => [1000 + i, { bytes: i, ips: new Set<string>() }] as const))
-    const ids = busiestVmids(many, guests)
-    expect(ids).toHaveLength(MAX_VOLUME_VMIDS)
-    expect(ids[0]).toBe(1050)
-    expect(ids.at(-1)).toBe(1149)
   })
 })
 

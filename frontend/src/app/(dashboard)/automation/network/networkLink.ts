@@ -1,7 +1,7 @@
 import { isMicrosegSubTab, type MicrosegSubTab } from './components/microseg/microsegTabTypes'
 
 /** The tabs of /automation/network as a link names them (`?tab=`), in the order of the page. */
-export const NETWORK_TABS = ['dashboard', 'microseg', 'flows', 'firewalling', 'logging', 'groups', 'ipsets', 'aliases'] as const
+export const NETWORK_TABS = ['dashboard', 'microseg', 'firewalling', 'logging', 'groups', 'ipsets', 'aliases'] as const
 /** The index of each tab by its link name: the page compares `activeTab` to these, never to a number. */
 export const TAB = Object.fromEntries(NETWORK_TABS.map((name, i) => [name, i])) as Record<(typeof NETWORK_TABS)[number], number>
 export const MICROSEG_TAB_INDEX = TAB.microseg
@@ -29,7 +29,9 @@ export function parseNetworkLink(params: Pick<URLSearchParams, 'get'> | null): N
   const connection = text(params, 'connection')
   if (vm !== null) return { tab: MICROSEG_TAB_INDEX, sub: 'overview', connection, vm }
 
-  const index = NETWORK_TABS.indexOf(text(params, 'tab') as (typeof NETWORK_TABS)[number])
+  // The Network flows tab is gone: its volumes are in the Dashboard, where an old link or bookmark lands.
+  const asked = text(params, 'tab')
+  const index = NETWORK_TABS.indexOf((asked === 'flows' ? 'dashboard' : asked) as (typeof NETWORK_TABS)[number])
   const tab = index >= 0 ? index : null
   const sub = text(params, 'sub')
   return { tab, sub: tab === MICROSEG_TAB_INDEX && isMicrosegSubTab(sub) ? sub : null, connection, vm: null }

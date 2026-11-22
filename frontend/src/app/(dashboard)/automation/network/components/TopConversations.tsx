@@ -5,6 +5,7 @@ import { Box, Chip, Link, Skeleton, Table, TableBody, TableCell, TableHead, Tabl
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { MicrosegSuggestion, MicrosegZone, SuggestionKind } from '@/lib/microseg/types'
+import { volumeText, type VolumeFigure } from '@/lib/microseg/volume'
 
 import PostureCard from './PostureCard'
 import type { BlockPhase } from './dashboardModel'
@@ -18,6 +19,9 @@ import { EDGE_COLORS } from './microseg/zoneGraph'
 const KIND_COLOR: Record<SuggestionKind, string> = { would_block: EDGE_COLORS.unprotected, blocked: EDGE_COLORS.blocked }
 const KIND_LABEL: Record<SuggestionKind, string> = { would_block: 'postureWouldBlock', blocked: 'postureBlocked' }
 const ONE_LINE = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } as const
+
+/** The volume of a conversation, or a dash when it cannot be told. */
+const conversationVolume = (volume: VolumeFigure | null) => (volume === null ? '-' : volumeText(volume, 1))
 
 function KindChip({ part, several }: { part: ConversationPart; several: boolean }) {
   const t = useTranslations('networkPage.dashboard')
@@ -82,7 +86,7 @@ function PeerCluster({ cluster }: { cluster: { id: string; name: string } }) {
  * one way, with their services, flows, hits and types. A row opens the Observation list on the zone it enters (or
  * leaves when outbound); under the table, how many pairs it leaves out and a link to every observed flow.
  */
-export default function TopConversations({ phase, rows, total, zones, guestName, peerCluster, onOpen, onOpenAll }: {
+export default function TopConversations({ phase, rows, total, zones, guestName, peerCluster, volumeOf, onOpen, onOpenAll }: {
   phase: BlockPhase
   rows: Conversation[]
   total: number
@@ -93,6 +97,11 @@ export default function TopConversations({ phase, rows, total, zones, guestName,
   peerCluster?: (cluster: RemotePeer['cluster']) => { id: string; name: string }
   onOpen?: (focus: ObservationFocus) => void
   onOpenAll?: () => void
+  /**
+   * The bytes sFlow measured for a conversation over the range, null when it cannot be told (an end in no zone: the
+   * volume is kept per pair of zones); absent when sFlow does not measure the connection (no column).
+   */
+  volumeOf?: (c: Conversation) => VolumeFigure | null
 }) {
   const t = useTranslations('networkPage.dashboard')
   const format = useFormatter()
@@ -120,6 +129,7 @@ export default function TopConversations({ phase, rows, total, zones, guestName,
               <TableCell>{t('postureColServices')}</TableCell>
               <TableCell align='right' sx={{ width: 64 }}>{t('postureColFlows')}</TableCell>
               <TableCell align='right' sx={{ width: 104 }}>{t('postureColHits')}</TableCell>
+              {volumeOf && <TableCell align='right' sx={{ width: 96 }}>{t('postureColVolume')}</TableCell>}
               <TableCell sx={{ width: 250 }}>{t('postureColStatus')}</TableCell>
             </TableRow>
           </TableHead>
@@ -167,6 +177,7 @@ export default function TopConversations({ phase, rows, total, zones, guestName,
                   </TableCell>
                   <TableCell align='right'>{format.number(c.flows)}</TableCell>
                   <TableCell align='right'>{format.number(c.hits)}</TableCell>
+                  {volumeOf && <TableCell align='right' sx={{ whiteSpace: 'nowrap' }} data-testid='conversation-volume'>{conversationVolume(volumeOf(c))}</TableCell>}
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'nowrap', overflow: 'hidden' }}>
                       {c.parts.map(part => <KindChip key={part.kind} part={part} several={c.parts.length > 1} />)}

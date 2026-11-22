@@ -66,7 +66,6 @@ vi.mock('./components/RulesTab', async () => {
 vi.mock('./components/ObjectsTab', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>objects tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
 vi.mock('./components/rules/SecurityGroupsPanel', () => ({ default: ({ loadError }: { loadError?: string | null }) => <div>groups tab{loadError ? ` (error: ${loadError})` : ''}</div> }))
 vi.mock('./components/LoggingTab', () => ({ default: () => <div>logging tab</div> }))
-vi.mock('./components/flows/FlowsTab', () => ({ default: () => <div>flows tab</div> }))
 vi.mock('./components/microseg/MicrosegTab', () => ({ default: ({ initialSubTab }: { initialSubTab?: string }) => <div data-subtab={initialSubTab ?? ''}>microseg tab</div> }))
 
 import RBACContext, { type RBACContextValue } from '@/contexts/RBACContext'
@@ -114,7 +113,7 @@ describe('network page header', () => {
     expect(await screen.findByText(/dashboard tab/)).toBeInTheDocument()
     expectNoSummary()
 
-    for (const [tab, content] of [['Logging', 'logging tab'], ['Micro-segmentation', 'microseg tab'], ['Network Flows', 'flows tab'], ['Aliases', 'objects tab']] as const) {
+    for (const [tab, content] of [['Logging', 'logging tab'], ['Micro-segmentation', 'microseg tab'], ['Aliases', 'objects tab']] as const) {
       fireEvent.click(screen.getByRole('tab', { name: tab }))
       expect(await screen.findByText(new RegExp(content))).toBeInTheDocument()
       expectNoSummary()

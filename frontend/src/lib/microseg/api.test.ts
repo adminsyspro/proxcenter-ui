@@ -219,6 +219,37 @@ describe('microsegApi traffic history', () => {
   })
 })
 
+describe('microsegApi sFlow volume', () => {
+  it('asks the totals or the steps of a window, an empty zone filter included, and fills the envelope', async () => {
+    const api = microsegApi('c1')
+    const body = { step: 300, from: '2026-11-20T09:00:00Z', to: '2026-11-20T10:00:00Z', covered: true, buckets: [{ at: '2026-11-20T09:55:00Z', src_zone: 'web', dst_zone: 'db', proto: 'tcp', port: 5432, bytes: 10, packets: 1 }] }
+    fetchMock.mockResolvedValue(reply(200, body))
+    expect(await api.getMicrosegVolume({ from: body.from, to: body.to, totals: true })).toEqual(body)
+    expect(lastCall().url).toBe('/api/v1/firewall/microseg/c1/volume?from=2026-11-20T09%3A00%3A00Z&to=2026-11-20T10%3A00%3A00Z&totals=1')
+    await api.getMicrosegVolume({ from: 'a', to: 'b', step: 900, group: 'pair', src_zone: '', dst_zone: 'db', proto: 'tcp', port: 22 })
+    expect(lastCall().url).toBe('/api/v1/firewall/microseg/c1/volume?from=a&to=b&step=900&group=pair&src_zone=&dst_zone=db&proto=tcp&port=22')
+    fetchMock.mockResolvedValue(reply(200, { buckets: null }))
+    expect(await api.getMicrosegVolume({ from: 'a', to: 'b' })).toEqual({ step: 300, from: 'a', to: 'b', covered: false, buckets: [] })
+    fetchMock.mockResolvedValue(reply(400, { code: 'TOO_MANY_BUCKETS', error: 'raise step' }))
+    expect(await api.getMicrosegVolume({ from: 'a', to: 'b', step: 300 }).catch(e => e)).toMatchObject({ status: 400, code: 'TOO_MANY_BUCKETS' })
+  })
+
+  it('asks the same volume by pair of guests, narrowed to guests (0: no guest), and leaves out a bucket naming none', async () => {
+    const api = microsegApi('c1')
+    const pair = { at: '2026-11-20T09:55:00Z', src_zone: 'web', dst_zone: 'db', proto: 'tcp', port: 5432, bytes: 10, packets: 1, src_vmid: 101, dst_vmid: 0 }
+    const { src_vmid: _src, dst_vmid: _dst, ...byZone } = pair
+    fetchMock.mockResolvedValue(reply(200, { step: 300, from: 'a', to: 'b', covered: true, buckets: [pair, byZone] }))
+    expect(await api.getMicrosegVolumeGuests({ from: 'a', to: 'b', totals: true })).toEqual({ step: 300, from: 'a', to: 'b', covered: true, buckets: [pair] })
+    expect(lastCall().url).toBe('/api/v1/firewall/microseg/c1/volume?group=guest&from=a&to=b&totals=1')
+    await api.getMicrosegVolumeGuests({ from: 'a', to: 'b', step: 900, src_vmid: 101, dst_vmid: 0 })
+    expect(lastCall().url).toBe('/api/v1/firewall/microseg/c1/volume?group=guest&from=a&to=b&step=900&src_vmid=101&dst_vmid=0')
+    fetchMock.mockResolvedValue(reply(200, null))
+    expect(await api.getMicrosegVolumeGuests({ from: 'a', to: 'b' })).toEqual({ step: 300, from: 'a', to: 'b', covered: false, buckets: [] })
+    fetchMock.mockResolvedValue(reply(400, { code: 'TOO_MANY_BUCKETS', error: 'raise step' }))
+    expect(await api.getMicrosegVolumeGuests({ from: 'a', to: 'b', totals: true }).catch(e => e)).toMatchObject({ status: 400, code: 'TOO_MANY_BUCKETS' })
+  })
+})
+
 describe('microsegApi manual check', () => {
   it('posts an empty object to /check and returns the queued answer', async () => {
     fetchMock.mockResolvedValue(reply(202, { queued: true, requested_at: '2026-11-03T10:00:00Z' }))

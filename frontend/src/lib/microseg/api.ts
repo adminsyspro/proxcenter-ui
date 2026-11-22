@@ -6,7 +6,7 @@
 import type {
   CheckQueued, EgressState, MicrosegCluster, RunStarted, ExceptionInput, FlowDirection, EmergencyStopResult, FlowInput, MembersInput, MicrosegDrift, MicrosegDriftList, MicrosegEventList, MicrosegException,
   MicrosegFlow, MicrosegPolicy,
-  MicrosegRevision, MicrosegRun, MicrosegStatus, MicrosegSuggestion, MicrosegTraffic, MicrosegZone, PolicyUpdate,
+  MicrosegRevision, MicrosegRun, MicrosegStatus, MicrosegSuggestion, MicrosegGuestVolume, MicrosegTraffic, MicrosegVolume, MicrosegZone, PolicyUpdate,
   PreflightCheck, ResolveSuggestionsInput, SuggestionKind, SuggestionStatus, ZoneInput, ZoneState,
 } from './types'
 
@@ -105,6 +105,44 @@ export type ListEventsParams = {
 }
 /** `from` and `to` in RFC3339, `step` in seconds (a multiple of 300, 300 to 21600). */
 export type TrafficParams = { from: string; to: string; step: number; direction?: FlowDirection }
+/**
+ * The volume read: the buckets of the window cut in `step` seconds, or summed (`totals`). A filter given, even empty,
+ * keeps its value only: `src_zone: ''` keeps the sources in no zone.
+ */
+export type VolumeParams = {
+  from: string
+  to: string
+  step?: number
+  totals?: boolean
+  group?: 'pair'
+  src_zone?: string
+  dst_zone?: string
+  proto?: string
+  port?: number
+}
+
+/** A read of the volume by pair of guests: the window, and the guests it is narrowed to (0: an end that is no guest). */
+export type VolumeGuestParams = Pick<VolumeParams, 'from' | 'to' | 'step' | 'totals'> & { src_vmid?: number; dst_vmid?: number }
+
+/** The query string of a read by pair of guests. */
+export function volumeGuestQuery(p: VolumeGuestParams): string {
+  const qs = new URLSearchParams({ group: 'guest', from: p.from, to: p.to })
+  if (p.totals) qs.set('totals', '1')
+  else if (p.step) qs.set('step', String(p.step))
+  for (const k of ['src_vmid', 'dst_vmid'] as const) if (p[k] !== undefined) qs.set(k, String(p[k]))
+  return `?${qs}`
+}
+
+/** The query string of a volume read: unlike query(), an empty zone filter is sent (it asks for no zone). */
+export function volumeQuery(p: VolumeParams): string {
+  const qs = new URLSearchParams({ from: p.from, to: p.to })
+  if (p.totals) qs.set('totals', '1')
+  else if (p.step) qs.set('step', String(p.step))
+  if (p.group) qs.set('group', p.group)
+  for (const k of ['src_zone', 'dst_zone', 'proto'] as const) if (p[k] !== undefined) qs.set(k, p[k] as string)
+  if (p.port !== undefined) qs.set('port', String(p.port))
+  return `?${qs}`
+}
 export type ListSuggestionsParams = PageParams & {
   kind?: SuggestionKind
   status?: SuggestionStatus
@@ -270,6 +308,23 @@ export function microsegApi(connId: string) {
     getMicrosegTraffic: async (params: TrafficParams, signal?: AbortSignal): Promise<MicrosegTraffic> => {
       const body = await call<Partial<MicrosegTraffic> | null>('GET', `traffic${query(params)}`, undefined, signal)
       return { step: body?.step ?? params.step, from: body?.from ?? params.from, to: body?.to ?? params.to, buckets: body?.buckets ?? [] }
+    },
+    /** The sFlow volume between the zones per bucket (the orchestrator's database, no Proxmox call). */
+    getMicrosegVolume: async (params: VolumeParams, signal?: AbortSignal): Promise<MicrosegVolume> => {
+      const body = await call<Partial<MicrosegVolume> | null>('GET', `volume${volumeQuery(params)}`, undefined, signal)
+      return {
+        step: body?.step ?? params.step ?? 300, from: body?.from ?? params.from, to: body?.to ?? params.to,
+        covered: body?.covered === true, buckets: Array.isArray(body?.buckets) ? body.buckets : [],
+      }
+    },
+    /**
+     * The same volume by pair of guests (the orchestrator's database, no Proxmox call). A bucket that names no guest
+     * (an orchestrator that does not keep them) is left out.
+     */
+    getMicrosegVolumeGuests: async (params: VolumeGuestParams, signal?: AbortSignal): Promise<MicrosegGuestVolume> => {
+      const body = await call<Partial<MicrosegGuestVolume> | null>('GET', `volume${volumeGuestQuery(params)}`, undefined, signal)
+      const buckets = Array.isArray(body?.buckets) ? body.buckets.filter(b => Number.isInteger(b?.src_vmid) && Number.isInteger(b?.dst_vmid)) : []
+      return { step: body?.step ?? params.step ?? 300, from: body?.from ?? params.from, to: body?.to ?? params.to, covered: body?.covered === true, buckets }
     },
   }
 }

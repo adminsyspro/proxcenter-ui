@@ -14,6 +14,7 @@ import {
   lastSeenOf,
   type GuestNodeData, type MapEdgeData, type MapMember, type MoreNodeData, type ZoneNodeData,
 } from './zoneGraph'
+import { GAUGE_W } from './zoneGraphEdges'
 import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W, MIN_R } from './zoneLayout'
 
 const zone = (id: string, name: string, over: Partial<MicrosegZone> = {}): MicrosegZone => ({
@@ -661,5 +662,19 @@ describe('how far back the observed flows of a map go', () => {
     expect(lastSeenOf(data(observed))).toBe(Date.parse('2026-11-18T14:50:00Z'))
     expect(NOW - lastSeenOf(data(observed))!).toBeLessThan(STALE_AFTER_MS)
     expect(lastSeenOf(data(graph.edges.find(e => data(e).kind === 'allowed')!))).toBeNull()
+  })
+})
+
+describe('room for the volume gauge', () => {
+  it('widens the label of an edge by the gauge once sFlow measures the map, one of a guest in no zone too', () => {
+    const members = new Map([['zw', [member(100, 'web-1', ['10.0.0.1'])]], ['zd', [member(200, 'db-1', ['10.0.0.2'])]]])
+    const input = { zones: [web, db], flows: [flow('f1')], suggestions: [seen('s1', { src_ip: '10.0.0.1', dst_ip: '10.0.0.2' })], members }
+    const plain = buildZoneGraph(input).edges
+    const gauged = buildZoneGraph({ ...input, gauges: true }).edges
+    const width = (edges: Edge[], kind: string) => data(edges.find(e => data(e).kind === kind)!).label_w
+    expect(width(gauged, 'allowed')).toBe(width(plain, 'allowed') + GAUGE_W)
+    expect(width(gauged, 'unprotected')).toBe(width(plain, 'unprotected') + GAUGE_W)
+    const unzoned = { ...input, members: new Map([['zd', [member(200, 'db-1', ['10.0.0.2'])]]]), unzoned: [member(100, 'loose', ['10.0.0.1'])], suggestions: [seen('s2', { src_zone_id: '', src_ip: '10.0.0.1', dst_ip: '10.0.0.2' })] }
+    expect(width(buildZoneGraph({ ...unzoned, gauges: true }).edges, 'unprotected')).toBe(width(buildZoneGraph(unzoned).edges, 'unprotected') + GAUGE_W)
   })
 })

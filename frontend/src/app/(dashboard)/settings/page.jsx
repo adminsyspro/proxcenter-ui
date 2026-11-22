@@ -182,6 +182,10 @@ const PlatformStatusTab = dynamic(() => import('@/components/settings/platform/P
   ssr: false,
   loading: tabLoading
 })
+const SFlowSettingsTab = dynamic(() => import('@/components/settings/SFlowSettingsTab'), {
+  ssr: false,
+  loading: tabLoading
+})
 
 const DatacentersSection = dynamic(() => import('@/components/settings/green/DatacentersSection'), {
   ssr: false,
@@ -2569,6 +2573,7 @@ export default function SettingsPage() {
     { name: 'notifications', group: 'monitoring', label: t('settings.notifications'), icon: 'ri-notification-3-line', component: NotificationsTab, requiredFeature: Features.NOTIFICATIONS, providerOnly: true },
     { name: 'syslog', group: 'monitoring', label: t('settings.syslog.tabLabel'), icon: 'ri-broadcast-line', component: SyslogTab, requiredFeature: Features.SYSLOG_FORWARDING, providerOnly: true },
     { name: 'availability', group: 'monitoring', label: t('availability.settings.tabLabel'), icon: 'ri-heart-pulse-line', component: AvailabilitySettingsTab, requiredFeature: Features.SLA_MONITORING, providerOnly: true },
+    { name: 'sflow', group: 'monitoring', label: t('settings.sflow.tabLabel'), icon: 'ri-radar-line', component: SFlowSettingsTab, requiredFeature: Features.SFLOW_MONITORING, providerOnly: true },
     { name: 'broadcast', group: 'monitoring', label: t('settings.broadcast.tabLabel'), icon: 'ri-megaphone-line', component: BroadcastTab, providerOnly: true },
     { name: 'ai', group: 'insights', label: t('settings.ai'), icon: 'ri-robot-line', component: AITab, requiredFeature: Features.AI_INSIGHTS, providerOnly: true },
     { name: 'green', group: 'insights', label: 'RSE / Green IT', icon: 'ri-leaf-line', component: GreenTab, requiredFeature: Features.GREEN_METRICS, providerOnly: true },

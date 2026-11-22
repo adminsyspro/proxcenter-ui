@@ -6,6 +6,7 @@ import { Box, Chip, Tooltip, Typography, alpha, type Theme } from '@mui/material
 import { useTranslations } from 'next-intl'
 
 import { serviceTokenLabel, serviceTokenTitle } from '@/lib/network/serviceNames'
+import { volumeText, type VolumeFigure } from '@/lib/microseg/volume'
 
 import type { CellTone, CellView, ObservedChip } from './matrixModel'
 import { EDGE_COLORS } from './zoneGraph'
@@ -45,8 +46,8 @@ function ChipLine({ items, color, dashed, draft, shown }: { items: ChipItem[]; c
   )
 }
 
-/** What a cell holds: the hits in its corner, the allowed ports, the unprotected ones, the blocked ones. */
-function CellBody({ view, chips }: { view: CellView; chips: number }) {
+/** What a cell holds: the hits in its corner, the bytes sFlow measured in the other, the allowed ports, the unprotected ones, the blocked ones. */
+function CellBody({ view, chips, volume }: { view: CellView; chips: number; volume: VolumeFigure | null }) {
   const t = useTranslations('microsegPilot.overview.matrix')
   const allowed = view.services.map(s => ({ key: s, label: serviceTokenLabel(s), tip: serviceTokenTitle(s) }))
   const chip = (c: ObservedChip) => ({ key: c.service, label: serviceTokenLabel(c.service), tip: t('observedChip', { service: serviceTokenTitle(c.service), count: c.hits }) })
@@ -55,6 +56,11 @@ function CellBody({ view, chips }: { view: CellView; chips: number }) {
       {view.hits > 0 && (
         <Typography variant='caption' fontWeight={700} sx={{ position: 'absolute', top: 2, right: 6, color: EDGE_COLORS[view.tone] }}>
           {t('hits', { count: view.hits })}
+        </Typography>
+      )}
+      {volume !== null && volume.bytes > 0 && (
+        <Typography variant='caption' color='text.secondary' data-testid='matrix-volume' sx={{ position: 'absolute', top: 2, left: 6 }}>
+          {volumeText(volume, 1)}
         </Typography>
       )}
       <ChipLine items={allowed} color={EDGE_COLORS.allowed} dashed={false} draft={view.draft} shown={chips} />
@@ -97,6 +103,8 @@ export type MatrixCellProps = {
   handlers: CellHandlers
   /** The name of the marker of a cell whose observed flows the targeted guest is an end of (none: no marker). */
   marker?: string
+  /** The volume sFlow measured for the flows of the cell over the period of the map; null when not measured. */
+  volume?: VolumeFigure | null
 }
 
 /** The small marker of a cell the targeted guest has observed flows in. */
@@ -114,7 +122,7 @@ function TargetMarker({ label }: { label: string }) {
  * A cell of the matrix. Its props are plain values and handlers shared by the whole grid, so a cell renders again
  * only when it changes: lighting a row and a column is done by the grid's CSS, not by the cells.
  */
-export function MatrixCellView({ id, r, c, rowId, colId, view, aria, selected, tabbable, diagonal, chips, handlers, marker }: MatrixCellProps) {
+export function MatrixCellView({ id, r, c, rowId, colId, view, aria, selected, tabbable, diagonal, chips, handlers, marker, volume }: MatrixCellProps) {
   return (
     <Box
       role='gridcell'
@@ -141,7 +149,7 @@ export function MatrixCellView({ id, r, c, rowId, colId, view, aria, selected, t
       })}
     >
       {marker && <TargetMarker label={marker} />}
-      {view ? <CellBody view={view} chips={chips} /> : <Typography variant='caption' color='text.disabled' aria-hidden sx={{ textAlign: 'center' }}>·</Typography>}
+      {view ? <CellBody view={view} chips={chips} volume={volume ?? null} /> : <Typography variant='caption' color='text.disabled' aria-hidden sx={{ textAlign: 'center' }}>·</Typography>}
     </Box>
   )
 }

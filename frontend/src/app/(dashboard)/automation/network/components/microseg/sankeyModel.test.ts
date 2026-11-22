@@ -89,7 +89,7 @@ describe('buildSankey', () => {
     const blockedOnly = buildSankey(matrix, { allowed: false, unprotected: false, blocked: true })
     expect(blockedOnly.ribbons.map(r => r.id)).toEqual(['blocked:cell:zone:zw>zone:zd'])
     expect(blockedOnly.ribbons[0].width).toBe(MAX_W)
-    expect(buildSankey(matrix, { allowed: false, unprotected: false, blocked: false })).toEqual({ sources: [], targets: [], ribbons: [], height: 0, width: COMPACT_W, leftX: LABEL_W, rightX: COMPACT_W - LABEL_W - BAR_W, fill: false })
+    expect(buildSankey(matrix, { allowed: false, unprotected: false, blocked: false })).toEqual({ sources: [], targets: [], ribbons: [], height: 0, width: COMPACT_W, leftX: LABEL_W, rightX: COMPACT_W - LABEL_W - BAR_W, fill: false, byBytes: false })
   })
 
   it('is deterministic on the demo-like draft', () => {
@@ -151,5 +151,47 @@ describe('buildSankey filling the map box', () => {
     expect(Math.max(...short.ribbons.map(r => r.width))).toBe(MAX_W)
     expect(short.height).toBeGreaterThan(120 - HEAD - FOOT)
     expect(short.sources[1].y - short.sources[0].y - Math.max(short.sources[0].height, MIN_PITCH)).toBeCloseTo(NODE_GAP, 0)
+  })
+})
+
+describe('buildSankey measured by sFlow', () => {
+  const matrix = buildMatrix({
+    zones: [web, db, app],
+    flows: [flow('f1'), flow('f2', { src_zone_id: 'za', dst_zone_id: 'zd', dport: '5432' })],
+    suggestions: [seen('s1', { hits: 100 })],
+  })
+  const names: Record<string, string> = { zw: 'web', zd: 'db', za: 'app' }
+  const rows = [
+    { at: 'x', src_zone: 'web', dst_zone: 'db', proto: 'tcp', port: 443, bytes: 4_000_000, packets: 1 },
+    { at: 'x', src_zone: 'app', dst_zone: 'db', proto: 'tcp', port: 5432, bytes: 1_000_000, packets: 1 },
+  ]
+
+  it('sizes every ribbon by its bytes, an observed one without bytes at the minimum, and says the bytes', () => {
+    const layout = buildSankey(matrix, ALL_FLOWS, null, { rows, zoneName: id => names[id] })
+    const byId = new Map(layout.ribbons.map(r => [r.id, r]))
+    const webDb = byId.get('allowed:cell:zone:zw>zone:zd')!
+    expect(webDb.bytes).toBe(4_000_000)
+    expect(webDb.width).toBe(MAX_W)
+    expect(byId.get('allowed:cell:zone:za>zone:zd')!.width).toBe(MAX_W / 2)
+    expect(byId.get('unprotected:cell:zone:zw>zone:zd')).toMatchObject({ bytes: 0, width: MIN_W })
+  })
+
+  it('tells each measured byte on one ribbon: the allowed one when it covers an observed flow of the same pair', () => {
+    // The observed flow web -> db tcp/443 is what the allowed flow f1 covers: 4 MB on the allowed ribbon only.
+    const covered = buildMatrix({ zones: [web, db], flows: [flow('f1')], suggestions: [seen('s1', { dport: '443', hits: 100 })] })
+    const layout = buildSankey(covered, ALL_FLOWS, null, { rows, zoneName: id => names[id] })
+    const byId = new Map(layout.ribbons.map(r => [r.id, r]))
+    expect(byId.get('allowed:cell:zone:zw>zone:zd')).toMatchObject({ bytes: 4_000_000, volumeShared: false })
+    expect(byId.get('unprotected:cell:zone:zw>zone:zd')).toMatchObject({ bytes: 0, volumeShared: true })
+    expect(layout.ribbons.reduce((n, r) => n + (r.bytes ?? 0), 0)).toBe(4_000_000)
+    // A ribbon carries the flows and observed flows its card lists.
+    expect(byId.get('allowed:cell:zone:zw>zone:zd')!.flows.map(f => f.id)).toEqual(['f1'])
+    expect(byId.get('unprotected:cell:zone:zw>zone:zd')!.observed.map(o => o.id)).toEqual(['s1'])
+  })
+
+  it('keeps the hits when nothing was measured, and says no bytes without the volume', () => {
+    const measuredNothing = buildSankey(matrix, ALL_FLOWS, null, { rows: [], zoneName: id => names[id] })
+    expect(measuredNothing.ribbons.find(r => r.kind === 'unprotected')!.width).toBe(MAX_W)
+    expect(buildSankey(matrix, ALL_FLOWS).ribbons.every(r => r.bytes === null)).toBe(true)
   })
 })

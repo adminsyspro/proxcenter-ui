@@ -12,7 +12,7 @@ import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { DirectionGlyph, ObservedKindGlyph, ResolveActions, outboundZoneAcceptTip, ServiceHits, useResolveSuggestions } from './observationParts'
 import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
 import { PagedList, POLICY_PAGE_SIZE } from './PolicyPager'
-import { SelectionTrafficChart, TOP_TITLE, TopSourcesList, TrafficSummaryLine, useSelectionTraffic } from './SelectionTraffic'
+import { SelectionTrafficChart, TOP_TITLE, TopSourcesList, TrafficSummaryLine, VolumeSummaryLine, useSelectionTraffic } from './SelectionTraffic'
 import { MemberChangeChip } from './ZoneRow'
 import EgressChip, { useZoneEgress } from './EgressChip'
 import ExpandDialog, { withCount, type DataTab } from './ExpandDialog'
@@ -173,6 +173,7 @@ export function useZoneWork({
       <PanelSection id='zone.traffic' title={tsec('traffic')} state={trafficSection}>
         <SelectionTrafficChart traffic={traffic} />
         <TrafficSummaryLine traffic={traffic} />
+        <VolumeSummaryLine traffic={traffic} />
       </PanelSection>
 
       <PanelSection

@@ -5658,6 +5658,19 @@
       },
       "apiTokensTitle": "Auf diese Verbindung beschränkte API-Tokens",
       "apiTokensHint": "Sie erreichen nach dem Löschen nichts mehr. Das Löschen wird dadurch nicht blockiert."
+    },
+    "sflow": {
+      "tabLabel": "sFlow",
+      "description": "Die sFlow-Agenten der Proxmox-Nodes auf Open vSwitch. Ihre Stichproben liefern das Volumen der Flüsse zwischen den Zonen der Mikrosegmentierung (Netzwerksicherheit).",
+      "noNode": "Kein Proxmox-Node per SSH erreichbar",
+      "target": "Collector",
+      "sampling": "Stichprobe",
+      "flowRate": "Rate",
+      "samples": "Stichproben",
+      "nodes": "{count, plural, one {# Node} other {# Nodes}}",
+      "noOvs": "Kein OVS",
+      "samplingRate": "Stichprobenrate (1 Paket von N)",
+      "samplingLoad": "Last auf den Nodes"
     }
   },
   "green": {
@@ -9704,7 +9717,18 @@
       "clustersDrifts": "{count, plural, =0 {Keine Abweichung} one {# Abweichung} other {# Abweichungen}}",
       "clustersFiguresMissing": "Zahlen fehlen",
       "clustersOutOfScope": "Außerhalb Ihres Bereichs",
-      "clustersHiddenTraffic": "{count, plural, one {Der Verkehr von # Cluster außerhalb Ihres Bereichs ist nicht enthalten.} other {Der Verkehr von # Clustern außerhalb Ihres Bereichs ist nicht enthalten.}}"
+      "clustersHiddenTraffic": "{count, plural, one {Der Verkehr von # Cluster außerhalb Ihres Bereichs ist nicht enthalten.} other {Der Verkehr von # Clustern außerhalb Ihres Bereichs ist nicht enthalten.}}",
+      "postureVolumeMeasured": "{bytes} von sFlow gemessen",
+      "postureVolumeMeasuredHint": "Volumen der erlaubten Flüsse im Zeitraum, von sFlow auf Open vSwitch gemessen ({packets} Pakete)",
+      "postureColVolume": "Volumen",
+      "postureTalkersTitle": "Aktivste Gäste",
+      "postureTalkersEmpty": "Derzeit kein von sFlow gemessener Gastverkehr",
+      "postureColGuest": "Gast",
+      "postureColNode": "Node",
+      "postureColIn": "Empfangen",
+      "postureColOut": "Gesendet",
+      "postureUnitLabel": "Was das Diagramm zählt",
+      "postureUnitEvents": "Verbindungen"
     },
     "rulesOnDemand": {
       "chip": "Regeln beim Öffnen",
@@ -14161,7 +14185,27 @@
         "exception": "Ausnahme: {services}",
         "exceptionCount": "{count, plural, one {# Ausnahme} other {# Ausnahmen}}",
         "exceptionsBetween": "{count, plural, one {# Ausnahme} other {# Ausnahmen}} zwischen VMs der beiden Zonen",
-        "pairsSampled": "Vom Dienst behaltene Beispielpaare:"
+        "pairsSampled": "Vom Dienst behaltene Beispielpaare:",
+        "volumeNone": "Kein von sFlow gemessener Verkehr im Zeitraum",
+        "volumeSpark": "Über {range}, Spitze {peak}",
+        "volumeSparkPair": "Ganzes Paar {from} → {to} über {range}, Spitze {peak}",
+        "statHits": "Protokolltreffer",
+        "statVolume": "Volumen",
+        "statPackets": "Pakete",
+        "statEdgeVolume": "Volumen der Kante",
+        "statPairVolume": "Ganzes Paar",
+        "volumeNote": "Von sFlow über den Zeitraum der Karte gemessen",
+        "volumeNoteRange": "Volumen von sFlow gemessen, über {range}",
+        "volumeBlockedNote": "Von sFlow erfasst, bevor die Firewall ablehnte",
+        "volumeBlockedNoteRange": "Volumen von sFlow erfasst, bevor die Firewall ablehnte, über {range}",
+        "volumeFewSamples": "≈ Schätzung aus {count, plural, one {# sFlow-Stichprobe} other {# sFlow-Stichproben}}",
+        "volumeShared": "Ein Teil des Verkehrs wird auf einer anderen Kante gezählt (jedes Byte einmal auf der Karte)",
+        "volumeSharedAll": "Der gesamte Verkehr wird auf anderen Kanten gezählt: das Diagramm zeigt das ganze Paar",
+        "volumeUntold": "Rest des Paars nicht nach VM aufgeschlüsselt (vorher gezählt oder über der Grenze)",
+        "colService": "Dienst",
+        "colHits": "Treffer",
+        "colSeen": "Zuletzt",
+        "hitsSampled": "Treffer zwischen den beiden Zonen gezählt (Beispielpaar gezeigt)"
       },
       "panel": {
         "label": "Zone {name}",
@@ -14304,6 +14348,7 @@
       "sankey": {
         "label": "Verkehr zwischen den Zonen als Bänder",
         "note": "Die Bandbreite folgt den Treffern der beobachteten Flüsse. Erlaubte Flüsse haben keinen Zähler: sie werden dünn gezeichnet.",
+        "noteVolume": "Die Breite eines Bandes folgt dem von sFlow gemessenen Volumen seiner Flüsse. Ein Band ohne Volumen wird dünn gezeichnet.",
         "flows": "{count, plural, one {# erlaubter Fluss} other {# erlaubte Flüsse}}",
         "sources": "Quellen",
         "destinations": "Ziele",
@@ -14389,7 +14434,8 @@
         "topBoth": "Wichtigste Quellen und Ziele",
         "topBothEmpty": "Weder Quelle noch Ziel in diesem Zeitraum",
         "fromInto": "In diese Zone, von {name}",
-        "toFrom": "Aus dieser Zone, nach {name}"
+        "toFrom": "Aus dieser Zone, nach {name}",
+        "volumeSummary": "Von sFlow im Zeitraum gemessen: {bytes}, {packets} Pakete"
       },
       "services": {
         "button": "Dienste",

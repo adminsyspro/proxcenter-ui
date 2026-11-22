@@ -26,7 +26,6 @@ import ObjectsTab from './components/ObjectsTab'
 import SecurityGroupsPanel from './components/rules/SecurityGroupsPanel'
 import LoggingTab from './components/LoggingTab'
 import MicrosegTab from './components/microseg/MicrosegTab'
-import FlowsTab from './components/flows/FlowsTab'
 import ClusterGroupProbe from './components/microseg/ClusterGroupProbe'
 import { entryOf, selectionAfterDissociation, selectorEntries, sharedConnections, visible } from './components/microseg/clusterModel'
 import { ConnectionKindsContext, ConnectionsLabel, useConnectionKinds } from './components/microseg/ConnectionGlyph'
@@ -34,8 +33,9 @@ import { MicrosegWriteContext, useCanManageMicroseg } from './components/microse
 import { connectionOfVm, parseNetworkLink, pickConnection, readStoredConnection, storeConnection, TAB } from './networkLink'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   MAIN PAGE, 8 tabs: Dashboard, Micro-segmentation, Network flows (sFlow licence), Firewalling, Logging, Security Groups,
-   IP Sets, Aliases (order = NETWORK_TABS; each Tab carries its index, so the flows tab can be missing)
+   MAIN PAGE, 7 tabs: Dashboard, Micro-segmentation, Firewalling, Logging, Security Groups, IP Sets, Aliases
+   (order = NETWORK_TABS; each Tab carries its index). The sFlow volumes are in the Dashboard and the map, the agents in
+   Settings > sFlow
 ═══════════════════════════════════════════════════════════════════════════ */
 
 
@@ -45,16 +45,13 @@ export default function NetworkAutomationPage() {
   const theme = useTheme()
   const { setPageInfo } = usePageTitle()
   const t = useTranslations()
-  const { isEnterprise, hasFeature } = useLicense()
-  const flowsLicensed = hasFeature(Features.SFLOW_MONITORING)
+  const { isEnterprise } = useLicense()
 
   // ── State ──
   // A link (?tab, ?sub, ?connection, ?vm) decides the tab, the sub-tab and the connection the page opens on; read once.
   const params = useSearchParams()
   const [link] = useState(() => parseNetworkLink(params))
-  const [chosenTab, setActiveTab] = useState(link.tab ?? 0)
-  // A link to the flows tab without the sFlow licence opens the Dashboard.
-  const activeTab = chosenTab === TAB.flows && !flowsLicensed ? TAB.dashboard : chosenTab
+  const [activeTab, setActiveTab] = useState(link.tab ?? 0)
   const [rulesSubTab, setRulesSubTab] = useState(0)
   // The connection picked in the selector; until then the link's, the one remembered in the browser, or the first.
   const [pickedConnection, setPickedConnection] = useState('')
@@ -195,7 +192,6 @@ export default function NetworkAutomationPage() {
           <Tabs value={activeTab} onChange={(_, v) => changeTab(v)} variant="scrollable" scrollButtons="auto" sx={{ px: 2, flex: '1 1 460px', minWidth: 0 }}>
             <Tab value={TAB.dashboard} icon={<i className="ri-dashboard-line" />} iconPosition="start" label={t('firewall.dashboard')} sx={TAB_SX} />
             <Tab value={TAB.microseg} icon={<i className="ri-shield-keyhole-line" />} iconPosition="start" label={t('microsegPilot.tab.title')} sx={TAB_SX} />
-            {flowsLicensed && <Tab value={TAB.flows} icon={<i className="ri-flow-chart" />} iconPosition="start" label={t('navigation.networkFlows')} sx={TAB_SX} />}
             <Tab value={TAB.firewalling} icon={<i className="ri-shield-flash-line" />} iconPosition="start" label={t('networkPage.tabFirewalling')} sx={TAB_SX} />
             <Tab value={TAB.logging} icon={<i className="ri-terminal-box-line" />} iconPosition="start" label={t('networkPage.tabLogging')} sx={TAB_SX} />
             <Tab value={TAB.groups} icon={<i className="ri-shield-check-line" />} iconPosition="start" label={t('networkPage.tabSecurityGroups')} sx={TAB_SX} />
@@ -334,8 +330,6 @@ export default function NetworkAutomationPage() {
             />
           )}
 
-          {/* Tab: Network flows (sFlow), the zones of the connection selected above grouping its pairs */}
-          {activeTab === TAB.flows && <FlowsTab connectionId={selectedConnection || undefined} />}
 
           {/* Tab: Micro-segmentation (keyed: another connection starts from no state) */}
           {activeTab === TAB.microseg && (

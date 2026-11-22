@@ -2,7 +2,7 @@
  * The shape of every edge of the zone map and the place of its label: lanes keep the edges between the same two
  * circles (or boxes) side by side, and the edges between the same two guests too, each still ending on its guest,
  * a bow keeps an edge clear of the circles it does not belong to, and each label goes to the first place along its
- * edge where it covers no circle, no box and no other label.
+ * edge (or, when none is free, just off its side) where it covers no circle, no box and no other label.
  */
 
 import {
@@ -14,7 +14,7 @@ export type Obstacle = { id: string; center: Point; shape: EndShape }
 /** Where an edge end is: its center, the outline it clips on, and the circle (or box) it belongs to. */
 export type EdgeEnds = { center: Point; shape: EndShape; group: string }
 
-export type EdgeSpec = { id: string; source: string; target: string; label: string; small: boolean }
+export type EdgeSpec = { id: string; source: string; target: string; label: string; small: boolean; gauge?: boolean }
 /** `label` is centered on (x, y). */
 export type PlacedEdge = { path: string; points: Point[]; label: { x: number; y: number; w: number; h: number } }
 
@@ -36,10 +36,14 @@ const LABEL_BOXES: Record<LabelSize, { perChar: number; pad: number; maxW: numbe
   regular: { perChar: 7.2, pad: 16, maxW: 150, h: 22 },
 }
 
-/** The size of a label: an upper bound of the text width (the label ellipsizes past it). */
-export function labelSize(text: string, size: LabelSize): { w: number; h: number } {
+/** The room the volume gauge of an edge takes at the head of its label (bars and bytes, "844 GiB", "≈ 39 KiB"). */
+export const GAUGE_W = 80
+
+/** The size of a label: an upper bound of the text width (the label ellipsizes past it), the gauge's room ahead of it. */
+export function labelSize(text: string, size: LabelSize, gauge = false): { w: number; h: number } {
   const box = LABEL_BOXES[size]
-  return { w: Math.min(box.maxW, Math.ceil(text.length * box.perChar + box.pad)), h: box.h }
+  const extra = gauge ? GAUGE_W : 0
+  return { w: Math.min(box.maxW, Math.ceil(text.length * box.perChar + box.pad)) + extra, h: box.h }
 }
 
 function crosses(points: Point[], o: Obstacle): boolean {
@@ -161,12 +165,30 @@ function pairShapes(key: string, group: EdgeSpec[], ends: Map<string, EdgeEnds>,
   return best.shapes
 }
 
-/** The first place along the edge, from `start`, where a label covers nothing (else the one that covers least). */
-function placeLabel(shape: EdgeShape, w: number, h: number, start: number, labels: Rect[], obstacles: Obstacle[]): { point: Point; rect: Rect } {
-  const candidates = [start, ...AT.filter(t => t !== start)]
+/** The steps, in label heights, a label is moved off the side of its edge when no place on the edge is free. */
+const SIDE_STEPS = [-1, 1, -2, 2]
+
+/** The point at `t` moved `by` pixels off the side of the edge (along its normal). */
+function sideOf(shape: EdgeShape, t: number, by: number): Point {
+  const point = shape.pointAt(t)
+  if (by === 0) return point
+  const a = shape.pointAt(Math.max(0, t - 0.01))
+  const b = shape.pointAt(Math.min(1, t + 0.01))
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
+  return { x: point.x - ((b.y - a.y) / len) * by, y: point.y + ((b.x - a.x) / len) * by }
+}
+
+/**
+ * The first place along the edge, from `start`, where a label covers nothing; when none is free (edges side by side
+ * between two close circles), the same places a label height or two off the side of the edge; else the one that
+ * covers least.
+ */
+export function placeLabel(shape: EdgeShape, w: number, h: number, start: number, labels: Rect[], obstacles: Obstacle[]): { point: Point; rect: Rect } {
+  const along = [start, ...AT.filter(t => t !== start)]
+  const candidates = [0, ...SIDE_STEPS].flatMap(step => along.map(t => ({ t, by: step * (h + LABEL_MARGIN) })))
   let chosen: { point: Point; rect: Rect; bad: number } | null = null
-  for (const t of candidates) {
-    const point = shape.pointAt(t)
+  for (const { t, by } of candidates) {
+    const point = sideOf(shape, t, by)
     const rect = rectAround(point, w, h)
     const bad = labels.filter(l => rectsOverlap(l, rect, LABEL_MARGIN)).length + obstacles.filter(o => covers(rect, o)).length
     if (!chosen || bad < chosen.bad) chosen = { point, rect, bad }
@@ -188,7 +210,7 @@ export function placeEdges(specs: EdgeSpec[], ends: Map<string, EdgeEnds>, obsta
   for (const s of specs) {
     const shape = shapes.get(s.id)
     if (!shape) continue
-    const { w, h } = labelSize(s.label, s.small ? 'small' : 'regular')
+    const { w, h } = labelSize(s.label, s.small ? 'small' : 'regular', s.gauge)
     const { point, rect } = placeLabel(shape, w, h, lanes.get(s)!.at, labels, obstacles)
     labels.push(rect)
     result.set(s.id, { path: shape.path, points: shape.points, label: { x: point.x, y: point.y, w, h } })

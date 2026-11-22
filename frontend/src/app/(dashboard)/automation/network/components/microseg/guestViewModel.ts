@@ -288,7 +288,7 @@ export function buildZoneInside(input: GuestViewInput): ZoneGraph {
   return buildAround(input, true)
 }
 
-function buildAround({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null, clusters = null, networks = null, centre, externalAddresses = true }: GuestViewInput, inside: boolean): ZoneGraph {
+function buildAround({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null, clusters = null, networks = null, centre, externalAddresses = true, gauges = false }: GuestViewInput, inside: boolean): ZoneGraph {
   const sorted = [...zones].sort((a, b) => byText(a.name, b.name) || byText(a.id, b.id))
   const known = new Map(sorted.map(z => [z.id, z]))
   const zone = known.get(centre)
@@ -357,5 +357,5 @@ function buildAround({ zones, flows, suggestions, members = null, unzoned = null
     else placeBoundary(out, cell.id, c, outsideEgress)
   }
 
-  return { nodes: out.nodes, edges: placePairs(ordered, out.endShapes, out.obstacles, unapplied) }
+  return { nodes: out.nodes, edges: placePairs(ordered, out.endShapes, out.obstacles, unapplied, gauges) }
 }

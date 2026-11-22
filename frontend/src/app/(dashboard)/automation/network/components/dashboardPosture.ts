@@ -1,5 +1,5 @@
 import type { FirewallCoverage } from '@/hooks/useZeroTrust'
-import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, OUTSIDE_KEY, UNZONED_KEY, zoneKey } from '@/lib/microseg/trafficLens'
+import { EXTERNAL_KEY, GROUP_COLORS, OTHER_KEY, OUTSIDE_KEY, UNZONED_KEY, zoneKey } from '@/lib/microseg/trafficGroups'
 import type { MicrosegFlow, MicrosegSuggestion, MicrosegZone } from '@/lib/microseg/types'
 import { serviceTokenLabel } from '@/lib/network/serviceNames'
 

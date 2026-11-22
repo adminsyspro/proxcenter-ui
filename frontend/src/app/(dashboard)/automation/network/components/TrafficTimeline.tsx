@@ -9,7 +9,7 @@ import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationD
 import { formatBytes } from '@/utils/format'
 
 import type { BlockPhase } from './dashboardModel'
-import { TIMELINE_RANGES, areaPaths, bucketXs, nearestBucket, type PostureTimeline, type TimelineRange, type TimelineVerdict } from './postureTimeline'
+import { RANGE_LABEL, TIMELINE_RANGES, areaPaths, bucketXs, nearestBucket, type PostureTimeline, type TimelineRange, type TimelineVerdict } from './postureTimeline'
 import { objectDotSx } from './microseg/objectColour'
 import { useBoxSize } from './microseg/useBoxSize'
 import { useSliceName } from './TrafficByZone'
@@ -35,6 +35,8 @@ type Props = {
   compact?: boolean
   /** Grows with the card it is in: the chart takes the free height, never under its usual height. */
   fill?: boolean
+  /** Opens on the Volume (once sFlow measures it): a panel opened from the map, whose tooltips told the bytes. */
+  volumeFirst?: boolean
   /** False for a chart of the orchestrator's memory only (a guest): no range chips. */
   showRange?: boolean
   /** A map panel's direction (inbound / outbound), on the line of the verdict; none on the Dashboard. */
@@ -56,7 +58,13 @@ type Unit = 'events' | 'bytes'
 
 export const TIMELINE_HEIGHT = 160
 export const COMPACT_TIMELINE_HEIGHT = 120
+/** A compact chart grows with its width (a map panel, or the same panel in its expanded dialog), up to this height. */
+export const COMPACT_TIMELINE_MAX_HEIGHT = 280
+/** The height of a compact chart per pixel of width. */
+const COMPACT_RATIO = 0.25
 const LEFT = 36
+/** A byte scale ("57 GiB") needs a wider gutter than a count. */
+const LEFT_BYTES = 52
 const RIGHT = 4
 const TOP = 8
 const BOTTOM = 20
@@ -69,7 +77,6 @@ const TIP_WIDTH = 240
 const TIP_GAP = 12
 const VERDICTS: readonly TimelineVerdict[] = ['all', 'would_block', 'blocked']
 const VERDICT_LABEL: Record<TimelineVerdict, string> = { all: 'postureTimelineAll', would_block: 'postureWouldBlock', blocked: 'postureBlocked' }
-const RANGE_LABEL: Record<TimelineRange, string> = { '1h': 'postureRange1h', '6h': 'postureRange6h', '24h': 'postureRange24h', '7d': 'postureRange7d' }
 const RANGE_LOCK_MESSAGE = { grouping: 'postureRangeGrouping', unavailable: 'postureRangeUnavailable' } as const
 /** Past a day of buckets the time labels carry the day. */
 const DAY_MS = DAY_MINUTES * 60_000
@@ -119,7 +126,8 @@ function Areas({ timeline, below = null, measured, unit, height = TIMELINE_HEIGH
   const t = useTranslations('networkPage.dashboard')
   const [hover, setHover] = useState<number | null>(null)
   const { buckets, max } = timeline
-  const box = { left: LEFT, width: Math.max(40, width - LEFT - RIGHT), top: TOP, height: height - TOP - BOTTOM }
+  const left = unit === 'bytes' ? LEFT_BYTES : LEFT
+  const box = { left, width: Math.max(40, width - left - RIGHT), top: TOP, height: height - TOP - BOTTOM }
   const half = below ? box.height / 2 : box.height
   const baseline = TOP + half
   const xs = bucketXs(buckets.length, box)
@@ -159,9 +167,9 @@ function Areas({ timeline, below = null, measured, unit, height = TIMELINE_HEIGH
         style={{ display: 'block' }}
       >
         <line data-testid='timeline-baseline' x1={box.left} x2={box.left + box.width} y1={baseline} y2={baseline} stroke={paletteAlpha(theme, 'text.primary', 0.3)} />
-        <text x={LEFT - 6} y={TOP + 4} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary} data-testid='timeline-max'>{scaleText}</text>
-        <text x={LEFT - 6} y={baseline + (below ? 3 : 0)} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary}>0</text>
-        {below && <text x={LEFT - 6} y={TOP + box.height} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary} data-testid='timeline-max-below'>{scaleText}</text>}
+        <text x={left - 6} y={TOP + 4} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary} data-testid='timeline-max'>{scaleText}</text>
+        <text x={left - 6} y={baseline + (below ? 3 : 0)} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary}>0</text>
+        {below && <text x={left - 6} y={TOP + box.height} textAnchor='end' fontSize={10} fill={theme.palette.text.secondary} data-testid='timeline-max-below'>{scaleText}</text>}
         {layers.map(p => (
           <g key={p.id} data-testid={`area-${p.id}`}>
             {/* As the inventory charts: a light fill under a 2 px line. */}
@@ -252,14 +260,16 @@ function LegendChips({ timeline, below = null }: { timeline: PostureTimeline; be
  * second tab, "Volume (sFlow)", shows the sFlow bytes of the same groups over the same range, only when sFlow has data
  * for the connection.
  */
-export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null, compact = false, fill = false, showRange = true, direction, onDirection, emptyText, hideVerdict = false, emptyAction, mirror = null }: Props) {
+export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null, compact = false, fill = false, showRange = true, direction, onDirection, emptyText, hideVerdict = false, emptyAction, mirror = null, volumeFirst = false }: Props) {
   const t = useTranslations('networkPage.dashboard')
   const [ref, size] = useBoxSize<HTMLDivElement>()
-  const [chosen, setChosen] = useState<Unit>('events')
+  const [chosen, setChosen] = useState<Unit>(volumeFirst ? 'bytes' : 'events')
   // The Volume tab only exists while sFlow has data for the connection.
   const unit: Unit = volume ? chosen : 'events'
   const measured = size?.width ?? null
-  const base = compact ? COMPACT_TIMELINE_HEIGHT : TIMELINE_HEIGHT
+  const base = compact
+    ? Math.min(COMPACT_TIMELINE_MAX_HEIGHT, Math.max(COMPACT_TIMELINE_HEIGHT, Math.round((size?.width ?? 0) * COMPACT_RATIO)))
+    : TIMELINE_HEIGHT
   const height = fill ? Math.max(base, size?.height ?? 0) : base
 
   let body: React.ReactNode
@@ -293,12 +303,12 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
 
   // The memory chart (a grouping by VLAN or node, or no history served) has one window; the Volume tab follows the range.
   const locked = unit === 'events' && rangeLock !== null
-  // The map panel is narrow: its toggles are smaller, and the verdict a select, so they hold on one row.
+  // The map panel is narrow: its toggles are smaller, and the verdict a select, so they hold on two rows.
   // The selected button is filled with the primary colour, the others outlined in the secondary text colour: legible
   // in both themes (the default selected tint is too faint on a dark paper).
   const toggleSx = {
     '& .MuiToggleButton-root': {
-      ...(compact ? { py: 0, px: 1, height: 30, fontSize: '0.8125rem' } : { py: 0.25, px: 1, fontSize: 12 }),
+      ...(compact ? { py: 0, px: 1, height: 30, fontSize: '0.8125rem', flex: '1 1 auto' } : { py: 0.25, px: 1, fontSize: 12 }),
       textTransform: 'none',
       color: 'text.secondary',
     },
@@ -310,7 +320,7 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
   }
   const chips = (
     <Tooltip title={locked ? t(RANGE_LOCK_MESSAGE[rangeLock]) : ''}>
-      <span data-testid='timeline-range-wrap' style={{ flexShrink: 0 }}>
+      <span data-testid='timeline-range-wrap' style={compact ? { display: 'flex' } : { flexShrink: 0 }}>
         <ToggleButtonGroup
           size='small'
           exclusive
@@ -318,7 +328,7 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
           disabled={locked}
           onChange={(_, next: TimelineRange | null) => { if (next) onRange(next) }}
           aria-label={t('postureRangeLabel')}
-          sx={toggleSx}
+          sx={{ ...toggleSx, ...(compact && { flex: 1 }) }}
         >
           {TIMELINE_RANGES.map(r => <ToggleButton key={r} value={r} data-testid={`range-${r}`}>{t(RANGE_LABEL[r])}</ToggleButton>)}
         </ToggleButtonGroup>
@@ -343,7 +353,7 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
   if (hideVerdict) verdictControl = null
   else if (unit === 'events' && compact) {
     verdictControl = (
-      <FormControl size='small' sx={{ minWidth: 96, flexShrink: 0 }}>
+      <FormControl size='small' sx={{ minWidth: 96 }}>
         <Select
           value={verdict}
           onChange={e => onVerdict(e.target.value as TimelineVerdict)}
@@ -379,11 +389,24 @@ export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, v
   const chart = <Box ref={ref} data-testid='timeline-chart' sx={{ position: 'relative', width: '100%', minWidth: 0, ...(fill && { flex: '1 1 0', minHeight: base, overflow: 'hidden' }) }}>{body}</Box>
 
   if (compact) {
-    // Two rows at most: the caption, then the toggles on one row (scrolled sideways rather than wrapped).
+    // The groups of controls share the full width, their buttons at the small size: two rows in a map panel, one row
+    // in the expanded dialog, never scrolled sideways. What the chart counts, its range, its direction and, for the
+    // connections only, the verdict.
+    const unitToggle = volume && (
+      <ToggleButtonGroup size='small' exclusive value={unit} onChange={(_, next: Unit | null) => { if (next) setChosen(next) }} aria-label={t('postureUnitLabel')} sx={toggleSx}>
+        <ToggleButton value='events'>{t('postureUnitEvents')}</ToggleButton>
+        <ToggleButton value='bytes' data-testid='volume-tab'>{t('postureColVolume')}</ToggleButton>
+      </ToggleButtonGroup>
+    )
     return (
       <Box data-testid='timeline' sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, minWidth: 0 }}>
         {captionLine}
-        <Box data-testid='timeline-toggles' sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'nowrap', overflowX: 'auto', minWidth: 0 }}>{toggles}</Box>
+        <Box data-testid='timeline-toggles' sx={{ display: 'flex', alignItems: 'center', columnGap: 1, rowGap: 0.75, flexWrap: 'wrap', minWidth: 0, '& > *': { flex: '1 1 auto' } }}>
+          {unitToggle}
+          {showRange && chips}
+          {directionToggle}
+          {verdictControl}
+        </Box>
         {chart}
         {phase === 'ready' && (timeline.total > 0 || !!mirror?.total) && <LegendChips timeline={timeline} below={mirror} />}
       </Box>

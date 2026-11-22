@@ -61,8 +61,12 @@ type Stub = {
   traffic?: { buckets: unknown[] } | 'error' | 'pending'
   /** The history of one connection, over `traffic`. */
   trafficBy?: Record<string, { buckets: unknown[] } | 'error'>
-  pairs?: unknown[]
-  sflowSeries?: unknown[] | 'error'
+  /** The sFlow volume route; absent: sFlow measures nothing (covered false). */
+  volume?: { covered: boolean; buckets: unknown[] } | 'error'
+  /** The volume of one connection, over `volume`. */
+  volumeBy?: Record<string, { covered: boolean; buckets: unknown[] }>
+  /** The top talkers of the collector; 'error' for a refusal (a user outside the provider tenant). */
+  talkers?: unknown[] | 'error'
 }
 
 const pending = () => new Promise<never>(() => {})
@@ -104,9 +108,14 @@ function stubReads(over: Stub = {}) {
       return answer({ drifts: [], computed: true, ...(over.drifts ?? {}) })
     }
     if (url.startsWith('/api/v1/orchestrator/sflow?')) {
-      if (url.includes('endpoint=ip-pairs')) return answer(over.pairs ?? [])
-      if (over.sflowSeries === 'error') return answer({ error: 'InfluxDB not configured' }, 500)
-      return answer(over.sflowSeries ?? [])
+      if (over.talkers === 'error') return answer({ error: 'forbidden' }, 403)
+      return answer(over.talkers ?? [])
+    }
+    if (url.includes('/volume?')) {
+      const volume = over.volumeBy?.[connOf('/microseg/')] ?? over.volume
+      if (volume === 'error') return answer({ code: 'NOT_LEADER', error: 'not the leader' }, 503)
+      const q = new URL(url, 'http://x').searchParams
+      return answer({ step: Number(q.get('step')) || 300, from: q.get('from'), to: q.get('to'), ...(volume ?? { covered: false, buckets: [] }) })
     }
     if (url.includes('/traffic?')) {
       const traffic = over.trafficBy?.[connOf('/microseg/')] ?? over.traffic
@@ -523,85 +532,111 @@ describe('DashboardTab: time range (UA55)', () => {
     expect((await screen.findByTestId('timeline-empty')).textContent).toBe('No observed event in this range')
   })
 
-  it('follows the range on the Volume tab, with the InfluxDB window of the range, and keeps the chips on it for any grouping', async () => {
-    const windowEnd = Math.floor(Date.now() / 3_600_000) * 3600 + 3600
+  it('follows the range on the Volume tab, in the steps of the history, and keeps the chips on it', async () => {
     postureReads({
       traffic: { buckets: [row(0)] },
-      pairs: [{ src_ip: '10.0.0.1', dst_ip: '10.0.0.2', src_vmid: 101, dst_vmid: 102, bytes: 1000, packets: 10, protocol: 'TCP', dst_port: 5432 }],
-      sflowSeries: [{ vmid: 101, vm_name: 'web1', points: [{ time: windowEnd, bytes_in: 100, bytes_out: 2048 }] }],
+      volume: { covered: true, buckets: [{ at: new Date(Math.floor(Date.now() / 300_000) * 300_000).toISOString(), src_zone: 'web', dst_zone: 'db', proto: '', port: 0, bytes: 2048, packets: 2 }] },
     })
     renderDashboard({ enable: 1 })
 
     fireEvent.click(await screen.findByTestId('volume-tab'))
     expect(screen.getByTestId('timeline-caption').textContent).toBe('bytes sent per group, last 1 h (sFlow)')
-    const series = () => fetchedUrls().filter(u => u.includes('endpoint=timeseries%2Fall-vms'))
-    expect(series().at(-1)).toContain('granularity=5m')
+    const series = () => fetchedUrls().filter(u => u.includes('/volume?') && u.includes('group=pair'))
+    expect(series().at(-1)).toContain('step=300')
 
     fireEvent.click(chip('7d'))
-    await waitFor(() => expect(series().some(u => u.includes('granularity=1h'))).toBe(true))
-    const q = new URL(series().at(-1)!, 'http://x').searchParams
-    expect(Date.parse(q.get('to')!) - Date.parse(q.get('from')!)).toBeLessThanOrEqual(7 * 24 * 3_600_000)
-    expect(Date.parse(q.get('to')!) - Date.parse(q.get('from')!)).toBeGreaterThan(7 * 24 * 3_600_000 - 3 * 3_600_000)
+    await waitFor(() => expect(series().some(u => u.includes('step=10800'))).toBe(true))
     expect(screen.getByTestId('timeline-caption').textContent).toBe('bytes sent per group, last 7 d (sFlow)')
     expect(chip('7d')).toBeEnabled()
 
     fireEvent.click(chip('6h'))
-    await waitFor(() => expect(series().some(u => u.includes('granularity=15m'))).toBe(true))
+    await waitFor(() => expect(series().some(u => u.includes('step=900'))).toBe(true))
   })
 })
 
 describe('DashboardTab: Volume (sFlow)', () => {
-  const PAIRS = [{ src_ip: '10.0.0.1', dst_ip: '10.0.0.2', src_vmid: 101, dst_vmid: 102, bytes: 1000, packets: 10, protocol: 'TCP', dst_port: 5432 }]
-  // InfluxDB stamps each 5-minute sum with the end of its window: the window holding now ends at the next edge.
-  const windowEnd = (Math.floor(Date.now() / 300_000) + 1) * 300
-  const SERIES = [
-    { vmid: 101, vm_name: 'web1', points: [{ time: windowEnd, bytes_in: 100, bytes_out: 2048 }] },
-    { vmid: 102, vm_name: 'db1', points: [{ time: windowEnd, bytes_in: 2048, bytes_out: 1024 }] },
-  ]
+  const bucket = () => new Date(Math.floor(Date.now() / 300_000) * 300_000).toISOString()
+  /** web sends 2 KiB to db on PostgreSQL and 1 KiB on the allowed node exporter, db sends 1 KiB to web on HTTPS (blocked). */
+  const MEASURED = () => ({
+    covered: true,
+    buckets: [
+      { at: bucket(), src_zone: 'web', dst_zone: 'db', proto: 'tcp', port: 5432, bytes: 2048, packets: 2 },
+      { at: bucket(), src_zone: 'web', dst_zone: 'db', proto: 'tcp', port: 9100, bytes: 1024, packets: 1 },
+      { at: bucket(), src_zone: 'db', dst_zone: 'web', proto: 'tcp', port: 443, bytes: 1024, packets: 1 },
+    ],
+  })
 
-  it('adds the Volume tab when sFlow has data for the connection: bytes sent per zone over the range (1 h by default)', async () => {
-    postureReads({ events: [ev(0)], pairs: PAIRS, sflowSeries: SERIES })
+  it('adds the Volume tab when sFlow measures the connection: bytes sent per zone over the range (1 h by default)', async () => {
+    postureReads({ events: [ev(0)], volume: MEASURED() })
     renderDashboard({ enable: 1 })
 
     fireEvent.click(await screen.findByTestId('volume-tab'))
     expect(screen.getByTestId('timeline-caption').textContent).toBe('bytes sent per group, last 1 h (sFlow)')
-    expect(screen.getByTestId('timeline-max').textContent).toBe('3 KiB')
+    expect(screen.getByTestId('timeline-max').textContent).toBe('4 KiB')
     expect(screen.getByRole('img', { name: 'sFlow bytes over time, stacked per group' })).toBeInTheDocument()
-    const series = fetchedUrls().find(u => u.includes('endpoint=timeseries%2Fall-vms'))!
-    expect(series).toContain('vmids=101%2C102')
-    expect(series).toContain('granularity=5m')
+    const series = fetchedUrls().find(u => u.includes('/volume?') && u.includes('group=pair'))!
+    expect(series).toContain('step=300')
+    expect(fetchedUrls().some(u => u.includes('timeseries') || u.includes('ip-pairs'))).toBe(false)
     // The verdict toggle belongs to the events only.
     expect(within(screen.getByTestId('timeline')).queryByRole('button', { name: 'Blocked' })).not.toBeInTheDocument()
   })
 
-  it('shows no Volume tab when sFlow sees none of the connection guests, and reads no time series then', async () => {
-    postureReads({ events: [ev(0)], pairs: [{ ...PAIRS[0], src_vmid: 777, dst_vmid: 778 }], sflowSeries: SERIES })
+  it('gives the allowed flows, each service and each conversation between two zones their volume, and lists the top talkers', async () => {
+    postureReads({
+      events: [ev(0)], volume: MEASURED(),
+      talkers: [{ vmid: 101, vm_name: 'web1', node: 'pve1', bytes_in: 1024, bytes_out: 4096, packets: 5, connection_id: 'conn-1' }, { vmid: 999, vm_name: 'other', node: 'x', bytes_in: 1, bytes_out: 1, packets: 1, connection_id: 'conn-9' }],
+    })
+    renderDashboard({ enable: 1 })
+
+    // The allowed flow web -> db tcp/9100 carried 1 KiB.
+    await waitFor(() => expect(within(screen.getByTestId('tile-allowed')).getByText('1 KiB measured by sFlow')).toBeInTheDocument())
+    expect(screen.getByTestId('service-volume-PostgreSQL').textContent).toBe('2 KiB')
+    const volumes = screen.getAllByTestId('conversation-row').map(r => [within(r).getByTestId('conversation-source').textContent, within(r).getByTestId('conversation-volume').textContent])
+    // web -> db (PostgreSQL) 2 KiB; the unknown source has no zone: no figure; db -> web (HTTPS) 1 KiB.
+    expect(volumes).toEqual([['web', '2 KiB'], ['203.0.113.9', '-'], ['db', '1 KiB']])
+    const talkers = await screen.findAllByTestId('talker-row')
+    expect(talkers).toHaveLength(1)
+    expect(talkers[0].textContent).toContain('web1')
+    expect(talkers[0].textContent).toContain('4 KiB')
+    expect(fetchedUrls()).toContain('/api/v1/orchestrator/sflow?endpoint=top-talkers&n=100&connection_id=conn-1')
+  })
+
+  it('writes a volume estimated on a few samples with "≈": the allowed flows, a service, a conversation', async () => {
+    const few = MEASURED()
+    // PostgreSQL stands on 3 samples and the allowed flow on 1; HTTPS on 40: a measure.
+    postureReads({ events: [ev(0)], volume: { covered: true, buckets: [{ ...few.buckets[0], samples: 3 }, { ...few.buckets[1], samples: 1 }, { ...few.buckets[2], samples: 40 }] } })
+    renderDashboard({ enable: 1 })
+    await waitFor(() => expect(within(screen.getByTestId('tile-allowed')).getByText('≈ 1 KiB measured by sFlow')).toBeInTheDocument())
+    expect(screen.getByTestId('service-volume-PostgreSQL').textContent).toBe('≈ 2 KiB')
+    const volumes = screen.getAllByTestId('conversation-row').map(r => within(r).getByTestId('conversation-volume').textContent)
+    expect(volumes).toEqual(['≈ 2 KiB', '-', '1 KiB'])
+  })
+
+  it('shows no Volume tab, no Volume column and no top talkers when sFlow does not measure the connection', async () => {
+    postureReads({ events: [ev(0)] })
     renderDashboard({ enable: 1 })
 
     await screen.findByTestId('timeline-caption')
-    await waitFor(() => expect(fetchedUrls().some(u => u.includes('endpoint=ip-pairs'))).toBe(true))
+    await waitFor(() => expect(fetchedUrls().some(u => u.includes('/volume?'))).toBe(true))
     expect(screen.queryByTestId('volume-tab')).not.toBeInTheDocument()
-    expect(fetchedUrls().some(u => u.includes('timeseries'))).toBe(false)
+    expect(within(screen.getByTestId('tile-allowed')).getByText('no counter')).toBeInTheDocument()
+    expect(screen.queryByTestId('service-volume-PostgreSQL')).toBeNull()
+    expect(screen.queryByTestId('talkers-card')).toBeNull()
+    expect(fetchedUrls().some(u => u.includes('endpoint=top-talkers'))).toBe(false)
   })
 
-  it('does not take another connection\'s VM with the same VMID once the guest addresses are known', async () => {
-    postureReads({ events: [ev(0)], pairs: [{ ...PAIRS[0], src_ip: '172.16.0.1', dst_ip: '172.16.0.2' }], sflowSeries: SERIES, vms: VMS })
+  it('shows no Volume tab when the volume cannot be read, and no top talkers when their route refuses', async () => {
+    postureReads({ events: [ev(0)], volume: 'error' })
     renderDashboard({ enable: 1 })
-
-    // Group by VLAN reads the guest addresses (10.0.0.1, 10.0.0.2): the pair's addresses are not theirs.
-    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Group by' }))
-    fireEvent.click(await screen.findByRole('option', { name: 'VLAN' }))
-    await screen.findByTestId('legend-vlan:20')
-    await waitFor(() => expect(fetchedUrls().filter(u => u.includes('endpoint=ip-pairs')).length).toBeGreaterThan(0))
+    await waitFor(() => expect(fetchedUrls().some(u => u.includes('/volume?'))).toBe(true))
     expect(screen.queryByTestId('volume-tab')).not.toBeInTheDocument()
-  })
+    cleanup()
 
-  it('shows no Volume tab when the time series cannot be read', async () => {
-    postureReads({ events: [ev(0)], pairs: PAIRS, sflowSeries: 'error' })
+    postureReads({ events: [ev(0)], volume: MEASURED(), talkers: 'error' })
     renderDashboard({ enable: 1 })
-
-    await waitFor(() => expect(fetchedUrls().some(u => u.includes('timeseries'))).toBe(true))
-    expect(screen.queryByTestId('volume-tab')).not.toBeInTheDocument()
+    await screen.findByTestId('volume-tab')
+    await waitFor(() => expect(fetchedUrls().some(u => u.includes('endpoint=top-talkers'))).toBe(true))
+    expect(screen.queryByTestId('talkers-card')).toBeNull()
   })
 })
 
@@ -1045,7 +1080,7 @@ describe('DashboardTab: a policy shared by several clusters', () => {
     renderDashboard({ enable: 1 }, { connections: CONNECTIONS })
     await waitFor(() => expect(screen.getAllByTestId('conversation-row')).toHaveLength(3))
 
-    expect(microsegUrls().filter(u => !u.includes('/events?') && !u.includes('/traffic?'))).toEqual([
+    expect(microsegUrls().filter(u => !u.includes('/events?') && !u.includes('/traffic?') && !u.includes('/volume?'))).toEqual([
       '/api/v1/firewall/microseg/conn-1/policy',
       '/api/v1/firewall/microseg/conn-1/suggestions?status=pending&limit=200',
     ])
@@ -1063,13 +1098,14 @@ describe('DashboardTab: a policy shared by several clusters', () => {
     expect(screen.queryByTestId('dashboard-clusters')).toBeNull()
     const blocks = [...screen.getByTestId('dashboard').querySelectorAll('[data-testid$="-card"]')].map(b => b.getAttribute('data-testid'))
     expect(blocks).toEqual(['traffic-card', 'distribution-card', 'services-card', 'conversations-card'])
-    const shown = fetchedUrls().map(u => (u.includes('/traffic?') ? u.slice(0, u.indexOf('?')) : u)).sort()
+    const shown = [...new Set(fetchedUrls().map(u => (u.includes('/traffic?') || u.includes('/volume?') ? u.slice(0, u.indexOf('?')) : u)))].sort()
+    // The volume route answers sFlow's totals and history (no top talkers read: sFlow measures nothing here).
     expect(shown).toEqual([
       '/api/v1/firewall/coverage/conn-1',
       '/api/v1/firewall/microseg/conn-1/policy',
       '/api/v1/firewall/microseg/conn-1/suggestions?status=pending&limit=200',
       '/api/v1/firewall/microseg/conn-1/traffic',
-      '/api/v1/orchestrator/sflow?endpoint=ip-pairs&n=500',
+      '/api/v1/firewall/microseg/conn-1/volume',
     ])
   })
 })

@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
 
 import type { GuestRefLite, MicrosegException, MicrosegFlow, MicrosegSuggestion, MicrosegZone, ZoneState } from '@/lib/microseg/types'
+import type { VolumeFigure, VolumeRule } from '@/lib/microseg/volume'
 import { serviceLabelIn, serviceName, sharedServiceNames } from '@/lib/network/serviceNames'
 
 import { flowService } from './FlowSummary'
@@ -146,6 +147,29 @@ export type MapEdgeData = {
   exceptionCount: number
   /** Every flow of the edge is in the draft only (not applied yet). */
   draft: boolean
+  /**
+   * What sFlow measured on the edge over the period of the map (an edge between zones of a cluster on Open vSwitch);
+   * absent or null when it is not measured. Set by the map, not by the graph.
+   */
+  volume?: VolumeFigure | null
+  /** The bars lit on its volume gauge, against the largest edge of the map (0: no gauge). Set by the map. */
+  volumeLevel?: number
+  /** Some of the traffic its flows stand for is shown on another edge, or on none (drawn on several). Set by the map. */
+  volumeShared?: boolean
+  /** Shared only with traffic of its zones no guest is named for, none of it on another edge. Set by the map. */
+  volumeUntold?: boolean
+  /** The pairs of zones and services whose traffic the edge shows, one rule each: what its chart draws. Set by the map. */
+  volumeRules?: VolumeRule[]
+  /**
+   * Shared, between one pair of zones: that pair (by zone name, '' for no zone) and its whole volume, the figure of its
+   * panel. Set by the map.
+   */
+  volumePair?: { from: string; to: string; figure: VolumeFigure } | null
+  /**
+   * The edge is drawn from or to a guest: its cluster and the VMIDs of its ends that are guests, which its chart reads
+   * the volume by pair of guests with. Set by the map.
+   */
+  volumeGuest?: { conn: string; src?: number; dst?: number }
   /** The ends, and the circles (or boxes) they belong to: the focus mode keeps them lit. */
   fromGroup: string
   toGroup: string
@@ -182,6 +206,8 @@ export type MapInput = {
   unzoned?: MapMember[] | null
   /** Ids of the flows of the draft that are not applied yet. */
   unapplied?: ReadonlySet<string> | null
+  /** sFlow measures the map: the labels of the edges between zones keep room for a volume gauge. */
+  gauges?: boolean
   /** The exceptions of the draft; drawn only once the members are known. */
   exceptions?: readonly MicrosegException[] | null
   /**
@@ -689,7 +715,7 @@ function toEdge(p: Pair, place: PlacedEdge, endShapes: Map<string, EdgeEnds>, un
  * to guest, resolved from their addresses (the circle when the address is no drawn guest's). Circles on a grid:
  * longest-path layer as the column, barycenter order as the row. Pure and deterministic.
  */
-export function buildZoneGraph({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null, clusters = null }: MapInput): ZoneGraph {
+export function buildZoneGraph({ zones, flows, suggestions, members = null, unzoned = null, unapplied = null, exceptions = null, clusters = null, gauges = false }: MapInput): ZoneGraph {
   const { sorted, known, columns } = zoneColumns(zones, flows)
   const { groups, books } = buildGroups(sorted, members, unzoned)
 
@@ -703,7 +729,7 @@ export function buildZoneGraph({ zones, flows, suggestions, members = null, unzo
   // Grid: longest-path layer as the column, barycenter order as the row; the columns of a map too tall to read are folded.
   const grid = foldColumns(buildGrid(columns, groups, ordered.some(p => p.source === EXTERNAL_ID), ordered.some(p => p.target === OUTSIDE_ID)), COL_GAP, ROW_GAP)
   const { nodes, obstacles, endShapes } = buildNodes(grid, cellCenters(grid), groups, outsideEgressOf(flows, known))
-  return { nodes, edges: placePairs(ordered, endShapes, obstacles, unapplied) }
+  return { nodes, edges: placePairs(ordered, endShapes, obstacles, unapplied, gauges) }
 }
 
 /**
@@ -722,9 +748,24 @@ export function zoneColumns(zones: MicrosegZone[], flows: MicrosegFlow[]): { sor
 }
 
 /** The edges of the pairs, in their order, each placed (lanes, bows, label) between the outlines of its ends. */
-export function placePairs(ordered: Pair[], endShapes: Map<string, EdgeEnds>, obstacles: Obstacle[], unapplied: ReadonlySet<string> | null): Edge[] {
+/** A zone circle (or box), Unknown / External or Outside: an end whose edges stand for a pair of zones. */
+export const zoneLevelEnd = (id: string) => id.startsWith('zone:') || id === EXTERNAL_ID || id === OUTSIDE_ID
+
+/**
+ * An end of an edge the sFlow volume can be told for: an end of a pair of zones, a guest (or "+N") of a zone or in no
+ * zone, the guests in no zone, an address. The volume is kept per pair of zones and service, every end in no zone
+ * counted as no zone: the edges drawing the same traffic share it (edgeVolume), each byte shown once.
+ */
+export const volumeEnd = (id: string) =>
+  zoneLevelEnd(id) || id === UNZONED_ID || id.startsWith('guest:') || id.startsWith('more:') || id.startsWith('ip:')
+
+/** An edge that may carry a volume gauge when sFlow measures the map: not an exception, both ends told for. */
+const hasGauge = (p: Pair) => p.kind !== 'exception' && volumeEnd(p.source) && volumeEnd(p.target)
+
+/** `gauges`: sFlow measures the map, so the labels of the edges between zones keep room for their volume gauge. */
+export function placePairs(ordered: Pair[], endShapes: Map<string, EdgeEnds>, obstacles: Obstacle[], unapplied: ReadonlySet<string> | null, gauges = false): Edge[] {
   const placed = placeEdges(
-    ordered.map(p => ({ id: pairKey(p), source: p.source, target: p.target, label: labelText(p), small: isGuestEdge(p) })),
+    ordered.map(p => ({ id: pairKey(p), source: p.source, target: p.target, label: labelText(p), small: isGuestEdge(p), gauge: gauges && hasGauge(p) })),
     endShapes,
     obstacles,
   )

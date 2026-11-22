@@ -5669,6 +5669,19 @@
       },
       "apiTokensTitle": "이 연결로 제한된 API 토큰",
       "apiTokensHint": "연결이 삭제되면 더 이상 아무것도 사용할 수 없습니다. 삭제를 막지는 않습니다."
+    },
+    "sflow": {
+      "tabLabel": "sFlow",
+      "description": "Open vSwitch를 사용하는 Proxmox 노드의 sFlow 에이전트. 샘플로 마이크로 세그멘테이션(네트워크 보안) 영역 간 흐름의 양을 구합니다.",
+      "noNode": "SSH로 접근 가능한 Proxmox 노드가 없습니다",
+      "target": "수집기",
+      "sampling": "샘플링",
+      "flowRate": "속도",
+      "samples": "샘플",
+      "nodes": "노드 {count}개",
+      "noOvs": "OVS 없음",
+      "samplingRate": "샘플링 비율 (N개 중 1개 패킷)",
+      "samplingLoad": "노드 부하"
     }
   },
   "green": {
@@ -9757,7 +9770,18 @@
       "clustersDrifts": "{count, plural, =0 {편차 없음} other {편차 #개}}",
       "clustersFiguresMissing": "수치 누락",
       "clustersOutOfScope": "권한 범위 밖",
-      "clustersHiddenTraffic": "{count, plural, other {권한 범위 밖 클러스터 #개의 트래픽은 포함되지 않습니다.}}"
+      "clustersHiddenTraffic": "{count, plural, other {권한 범위 밖 클러스터 #개의 트래픽은 포함되지 않습니다.}}",
+      "postureVolumeMeasured": "sFlow 측정 {bytes}",
+      "postureVolumeMeasuredHint": "기간 동안 허용된 흐름의 양, Open vSwitch의 sFlow로 측정 ({packets}개 패킷)",
+      "postureColVolume": "양",
+      "postureTalkersTitle": "가장 활발한 게스트",
+      "postureTalkersEmpty": "현재 sFlow로 측정된 게스트 트래픽이 없습니다",
+      "postureColGuest": "게스트",
+      "postureColNode": "노드",
+      "postureColIn": "수신",
+      "postureColOut": "송신",
+      "postureUnitLabel": "차트가 세는 항목",
+      "postureUnitEvents": "연결"
     },
     "rulesOnDemand": {
       "chip": "열 때 규칙 로드",
@@ -14590,7 +14614,27 @@
         "exception": "예외: {services}",
         "exceptionCount": "{count, plural, other {예외 #개}}",
         "exceptionsBetween": "{count, plural, other {두 영역의 VM 사이 예외 #개}}",
-        "pairsSampled": "엔진이 보관한 예시 쌍:"
+        "pairsSampled": "엔진이 보관한 예시 쌍:",
+        "volumeNone": "기간 동안 sFlow로 측정된 트래픽이 없습니다",
+        "volumeSpark": "{range} 동안 최대 {peak}",
+        "volumeSparkPair": "{from} → {to} 쌍 전체, {range} 동안 최대 {peak}",
+        "statHits": "로그 발생",
+        "statVolume": "볼륨",
+        "statPackets": "패킷",
+        "statEdgeVolume": "이 간선 볼륨",
+        "statPairVolume": "쌍 전체",
+        "volumeNote": "지도 기간 동안 sFlow로 측정",
+        "volumeNoteRange": "sFlow로 측정한 볼륨, {range} 기준",
+        "volumeBlockedNote": "방화벽이 거부하기 전에 sFlow가 샘플링",
+        "volumeBlockedNoteRange": "방화벽 거부 전에 sFlow가 본 볼륨, {range} 기준",
+        "volumeFewSamples": "≈ sFlow 샘플 {count, plural, other {#개}} 기준 추정",
+        "volumeShared": "트래픽의 일부는 다른 간선에서 집계됩니다(각 바이트는 지도에서 한 번)",
+        "volumeSharedAll": "모든 트래픽이 다른 간선에서 집계됩니다. 차트는 쌍 전체를 보여줍니다",
+        "volumeUntold": "쌍의 나머지는 VM별로 구분되지 않음(이전에 집계되었거나 한도 초과)",
+        "colService": "서비스",
+        "colHits": "발생",
+        "colSeen": "마지막 확인",
+        "hitsSampled": "발생 횟수는 두 영역 사이에서 집계됩니다(예시 쌍 표시)"
       },
       "panel": {
         "label": "영역 {name}",
@@ -14733,6 +14777,7 @@
       "sankey": {
         "label": "영역 간 트래픽을 띠로 표시",
         "note": "띠의 너비는 관찰된 흐름의 히트 수를 따릅니다. 허용된 흐름은 카운터가 없어 가늘게 그립니다.",
+        "noteVolume": "리본의 너비는 sFlow가 측정한 흐름의 볼륨을 따릅니다. 볼륨이 없는 리본은 가늘게 그려집니다.",
         "flows": "{count, plural, other {허용된 흐름 #개}}",
         "sources": "출발지",
         "destinations": "목적지",
@@ -14818,7 +14863,8 @@
         "topBoth": "주요 출발지 및 목적지",
         "topBothEmpty": "이 기간에 출발지나 목적지 없음",
         "fromInto": "{name}에서 이 영역으로",
-        "toFrom": "이 영역에서 {name}(으)로"
+        "toFrom": "이 영역에서 {name}(으)로",
+        "volumeSummary": "기간 동안 sFlow 측정: {bytes}, {packets}개 패킷"
       },
       "services": {
         "button": "서비스",

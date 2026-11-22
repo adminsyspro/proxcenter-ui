@@ -4126,9 +4126,7 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
   // --- sFlow mock data ---
   if (cleanPath === '/api/v1/orchestrator/sflow') {
     const endpoint = urlObj.searchParams.get('endpoint') || 'status'
-    const now = Math.floor(Date.now() / 1000)
     const demoNodes = ['pve-node-01', 'pve-node-02', 'pve-node-03']
-    const demoIPs = ['10.10.10.1', '10.10.10.2', '10.10.10.3', '10.10.10.10', '10.10.10.20', '10.10.10.30', '192.168.1.100', '192.168.1.200']
 
     if (endpoint === 'status') {
       return NextResponse.json({
@@ -4155,69 +4153,6 @@ export function demoResponse(req: Request): NextResponse | Response | Promise<Ne
       return NextResponse.json(vms.map(vm => ({
         ...vm, bytes_in: Math.floor(Math.random() * 5e9 + 1e8), bytes_out: Math.floor(Math.random() * 1e9 + 1e7), packets: Math.floor(Math.random() * 1e6),
       })), { headers: demoHeaders })
-    }
-
-    if (endpoint === 'top-ports') {
-      const portList = [
-        { port: 443, protocol: 'TCP', service: 'HTTPS' },
-        { port: 80, protocol: 'TCP', service: 'HTTP' },
-        { port: 22, protocol: 'TCP', service: 'SSH' },
-        { port: 5432, protocol: 'TCP', service: 'PostgreSQL' },
-        { port: 8006, protocol: 'TCP', service: 'PVE API' },
-        { port: 53, protocol: 'UDP', service: 'DNS' },
-        { port: 3306, protocol: 'TCP', service: 'MySQL' },
-        { port: 9090, protocol: 'TCP', service: 'Prometheus' },
-      ]
-      const total = portList.length
-      return NextResponse.json(portList.map((p, i) => {
-        const bytes = Math.floor((total - i) * 1e9 * Math.random() + 5e7)
-        return { ...p, bytes, packets: Math.floor(bytes / 1000), percent: (total - i) * 10 + Math.random() * 5 }
-      }), { headers: demoHeaders })
-    }
-
-    if (endpoint === 'ip-pairs') {
-      // Deterministic pairs with one dominant flow (web-prod-01 → db-primary via PostgreSQL)
-      const pairs = [
-        // Dominant flow: web server hammering database
-        { src_ip: '10.10.10.10', dst_ip: '10.10.10.20', bytes: 18_500_000_000, packets: 12_000_000, protocol: 'TCP', dst_port: 5432 },
-        { src_ip: '10.10.10.10', dst_ip: '10.10.10.30', bytes: 8_200_000_000, packets: 5_500_000, protocol: 'TCP', dst_port: 443 },
-        { src_ip: '10.10.10.10', dst_ip: '192.168.1.100', bytes: 4_100_000_000, packets: 2_800_000, protocol: 'TCP', dst_port: 443 },
-        // Secondary flows
-        { src_ip: '10.10.10.20', dst_ip: '10.10.10.30', bytes: 2_500_000_000, packets: 1_600_000, protocol: 'TCP', dst_port: 443 },
-        { src_ip: '10.10.10.3', dst_ip: '10.10.10.10', bytes: 1_800_000_000, packets: 1_200_000, protocol: 'TCP', dst_port: 8006 },
-        { src_ip: '192.168.1.100', dst_ip: '10.10.10.10', bytes: 1_500_000_000, packets: 980_000, protocol: 'TCP', dst_port: 80 },
-        { src_ip: '10.10.10.2', dst_ip: '10.10.10.20', bytes: 1_200_000_000, packets: 750_000, protocol: 'TCP', dst_port: 5432 },
-        { src_ip: '10.10.10.30', dst_ip: '10.10.10.1', bytes: 950_000_000, packets: 620_000, protocol: 'TCP', dst_port: 22 },
-        { src_ip: '192.168.1.200', dst_ip: '10.10.10.10', bytes: 800_000_000, packets: 520_000, protocol: 'TCP', dst_port: 443 },
-        { src_ip: '10.10.10.1', dst_ip: '10.10.10.2', bytes: 650_000_000, packets: 430_000, protocol: 'UDP', dst_port: 53 },
-        { src_ip: '10.10.10.10', dst_ip: '10.10.10.1', bytes: 500_000_000, packets: 320_000, protocol: 'TCP', dst_port: 9090 },
-        { src_ip: '10.10.10.3', dst_ip: '10.10.10.20', bytes: 380_000_000, packets: 250_000, protocol: 'TCP', dst_port: 3306 },
-        { src_ip: '10.10.10.2', dst_ip: '10.10.10.3', bytes: 280_000_000, packets: 180_000, protocol: 'TCP', dst_port: 22 },
-        { src_ip: '192.168.1.100', dst_ip: '10.10.10.30', bytes: 220_000_000, packets: 140_000, protocol: 'TCP', dst_port: 443 },
-        { src_ip: '10.10.10.20', dst_ip: '10.10.10.1', bytes: 180_000_000, packets: 115_000, protocol: 'UDP', dst_port: 53 },
-      ]
-      return NextResponse.json(pairs, { headers: demoHeaders })
-    }
-
-    if (endpoint === 'timeseries/vm') {
-      const points = Array.from({ length: 60 }, (_, i) => ({
-        time: now - (59 - i) * 60, bytes_in: Math.floor(Math.random() * 5e7 + 1e6), bytes_out: Math.floor(Math.random() * 1e7 + 5e5), packets: Math.floor(Math.random() * 50000),
-      }))
-      return NextResponse.json(points, { headers: demoHeaders })
-    }
-
-    if (endpoint === 'timeseries/all-vms') {
-      return NextResponse.json([
-        { vmid: 100, vm_name: 'web-prod-01', points: Array.from({ length: 60 }, (_, i) => ({ time: now - (59 - i) * 60, bytes_in: Math.floor(Math.random() * 3e7), bytes_out: Math.floor(Math.random() * 5e6) })) },
-        { vmid: 200, vm_name: 'db-primary', points: Array.from({ length: 60 }, (_, i) => ({ time: now - (59 - i) * 60, bytes_in: Math.floor(Math.random() * 8e7), bytes_out: Math.floor(Math.random() * 2e7) })) },
-      ], { headers: demoHeaders })
-    }
-
-    if (endpoint === 'timeseries/ip') {
-      const points = Array.from({ length: 60 }, (_, i) => ({
-        time: now - (59 - i) * 60, bytes_in: Math.floor(Math.random() * 2e7 + 5e5),
-      }))
-      return NextResponse.json(points, { headers: demoHeaders })
     }
 
     if (endpoint === 'agents') {

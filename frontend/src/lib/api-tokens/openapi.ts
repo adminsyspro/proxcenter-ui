@@ -7,7 +7,7 @@ import { SCOPE_DEFINITIONS } from "./scopes"
 // Same order as the ApiTag union.
 const API_TAGS: ApiTag[] = [
   "Monitoring", "VMs", "Snapshots", "Backups", "Storage", "HA", "Pools", "Network", "Firewall", "Tasks",
-  "Tenants", "vDCs", "RBAC", "Users", "Identity",
+  "Tenants", "vDCs", "RBAC", "Users", "Identity", "Templates",
 ]
 
 const REFUSAL_METHODS: HttpMethod[] = ["POST", "DELETE", "PUT", "PATCH", "GET"]
@@ -54,6 +54,7 @@ function successResponse(entry: AllowlistEntry, schemas: SchemaSets) {
       "RateLimit-Limit": { description: "Requests allowed per minute", schema: { type: "integer" } },
       "RateLimit-Remaining": { description: "Requests left in the window", schema: { type: "integer" } },
       "RateLimit-Reset": { description: "Seconds until the window resets", schema: { type: "integer" } },
+      "ProxCenter-Version": { description: "ProxCenter version that served the request", schema: { type: "string" } },
     },
     content: { [mediaType]: { schema } },
   }

@@ -227,6 +227,19 @@ export const VM_RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
         additionalProperties: true,
       },
       movedTo: { type: ["string", "null"], description: "Current node when the guest left the URL node" },
+      provisioning: {
+        type: "object",
+        description: "Present while a clone still sets up its IPAM addresses, storage QoS or HA after its task ended (running): wait for it to disappear before changing the config. `failed` is final: one of those steps failed, `failures` says which; the clone exists but needs attention.",
+        properties: { state: { type: "string", enum: ["running", "failed"] }, failures: STRINGS },
+      },
+    },
+  },
+  VmNextIdResponse: {
+    type: "object",
+    properties: {
+      data: { type: "integer", description: "The VMID picked, or the one checked" },
+      available: { type: "boolean" },
+      error: { type: "string", description: "Why a checked VMID is not available" },
     },
   },
   VmLockStateResponse: dataObject({ locked: { type: "boolean" }, lockType: { type: ["string", "null"] } }),

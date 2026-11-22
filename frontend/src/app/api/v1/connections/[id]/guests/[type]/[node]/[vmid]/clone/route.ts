@@ -28,6 +28,7 @@ import {
 } from "@/lib/vdc/drives"
 import { restampGuestDrives } from "@/lib/vdc/driveGuard"
 import { guardSessionGuest } from "@/lib/vdc/guestGuard"
+import { beginProvisioning } from "@/lib/vdc/guestProvisioning"
 import { safeLog } from "@/lib/log/sanitize"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
@@ -314,13 +315,25 @@ async function handler(
     releaseGpuLock?.()
     releaseGpuLock = null
 
+    // What the clone still goes through once its task ended (roadmap#265):
+    // the config read reports it, so an API client waits before writing.
+    const clonePolicies = isIaas ? (iaasScope!.storagePoliciesByConnection.get(id) ?? new Map()) : new Map()
+    const cloneTouchesIpamQemu = cloneTouchesIpam && type === 'qemu' && !!body.newid
+    const provisioned = body.newid
+      ? beginProvisioning(id, String(body.newid), [
+          ...(cloneTouchesIpamQemu ? ['ipam'] : []),
+          ...(clonePolicies.size > 0 ? ['qos'] : []),
+          ...(body.ha ? ['ha'] : []),
+        ])
+      : () => {}
+
     // ── Post-clone IPAM sync ──
     // The clone runs as a PVE task (UPID returned in `result`). We schedule
     // the IPAM reconciliation in after() so the HTTP response goes back to
     // the client immediately and the sync runs once PVE actually finished
     // cloning. Failures are logged + auto-rollback'd; we don't try to roll
     // back the clone itself (data loss risk).
-    if (cloneTouchesIpam && type === 'qemu' && body.newid) {
+    if (cloneTouchesIpamQemu) {
       const newVmid = Number(body.newid)
       const upid = String(result || '')
       const cloneNode = String(body.target || node)
@@ -329,6 +342,7 @@ async function handler(
       const cloneConfigPath = `/nodes/${encodeURIComponent(cloneNode)}/qemu/${encodeURIComponent(String(newVmid))}/config`
 
       after(async () => {
+        let ipamError: string | undefined
         try {
           if (upid) await waitForTask(conn, taskNode, upid)
           let cloneConfig = await pveFetch<any>(conn, cloneConfigPath)
@@ -339,12 +353,14 @@ async function handler(
           // the sync below would hit, so strip the pinned MAC and let PVE
           // assign a fresh one, then re-read the config before allocating.
           const macPatch = new URLSearchParams()
+          const managedSlots: string[] = []
           for (const k of Object.keys(cloneConfig || {})) {
             if (!/^net\d+$/.test(k)) continue
             const val = String(cloneConfig[k] || '')
             const bridge = parseBridgeFromNet(val)
             if (bridge && await resolveSubnetForBridge(id, bridge)) {
               macPatch.set(k, stripMacFromNet(val))
+              managedSlots.push(k.slice(3))
             }
           }
           if (Array.from(macPatch.keys()).length > 0) {
@@ -356,9 +372,15 @@ async function handler(
             cloneConfig = await pveFetch<any>(conn, cloneConfigPath)
           }
 
+          // The ipconfigN of a managed NIC is the source's address, held by
+          // the source: handed to the allocator as a wish it fails the whole
+          // sync and the clone kept that address (roadmap#265). Without it the
+          // allocator picks a free one and the override below writes it.
+          const cloneAfter = { ...cloneConfig }
+          for (const slot of managedSlots) delete cloneAfter[`ipconfig${slot}`]
           const sync = await syncIpamForVmConfig({
             before: null,
-            after: cloneConfig,
+            after: cloneAfter,
             conn,
             connectionId: id,
             vmid: newVmid,
@@ -379,15 +401,19 @@ async function handler(
               })
             } catch (err: any) {
               console.error(`[clone-ipam-sync] PVE PUT config failed for vmid=${newVmid}: ${err?.message ?? err}`)
+              ipamError = `the clone config could not take its addresses: ${err?.message ?? err}`
               try { await sync.rollback() } catch { /* tolerate */ }
               try { await releaseAllocationsForVm(id, newVmid) } catch { /* tolerate */ }
             }
           }
         } catch (err: any) {
           console.error(`[clone-ipam-sync] post-clone IPAM sync failed for vmid=${body.newid}: ${err?.message ?? err}`)
+          ipamError = String(err?.message ?? err)
           // Best-effort cleanup so a failed sync doesn't leak partial
           // allocations. The clone itself stays, data loss > drift.
           try { await releaseAllocationsForVm(id, newVmid) } catch { /* tolerate */ }
+        } finally {
+          provisioned('ipam', ipamError)
         }
       })
     }
@@ -397,7 +423,6 @@ async function handler(
     // runs outside the request context. Separate from the IPAM after() block
     // above: gated on the tenant actually having tier policies, runs its own
     // waitForTask on the clone's UPID, and only PUTs if something changed.
-    const clonePolicies = isIaas ? (iaasScope!.storagePoliciesByConnection.get(id) ?? new Map()) : new Map()
     if (clonePolicies.size > 0 && body.newid) {
       const stampNode = String(body.target || node)
       const stampPath = `/nodes/${encodeURIComponent(stampNode)}/${type}/${encodeURIComponent(String(body.newid))}/config`
@@ -408,11 +433,18 @@ async function handler(
           if (stampUpid) await waitForTask(conn, taskNode, stampUpid)
         } catch (err: any) {
           console.error(`${cloneLogTag} waitForTask failed: ${safeLog(err?.message ?? err)}`)
+          provisioned('qos', `the clone task did not end: ${err?.message ?? err}`)
           return
         }
-        await restampGuestDrives({
-          conn, configPath: stampPath, policies: clonePolicies, logTag: cloneLogTag,
-        })
+        try {
+          await restampGuestDrives({
+            conn, configPath: stampPath, policies: clonePolicies, logTag: cloneLogTag,
+          })
+          provisioned('qos')
+        } catch (err: any) {
+          provisioned('qos', String(err?.message ?? err))
+          throw err
+        }
       })
     }
 
@@ -428,8 +460,10 @@ async function handler(
         try {
           if (haUpid) await waitForTask(conn, taskNode, haUpid, { acceptWarnings: true })
           await registerHaResource(conn, haVmid, 'started', type as 'qemu' | 'lxc')
+          provisioned('ha')
         } catch (err: any) {
           console.error(`[clone-ha] vmid=${safeLog(haVmid)} HA registration failed: ${safeLog(err?.message ?? err)}`)
+          provisioned('ha', String(err?.message ?? err))
         }
       })
     }

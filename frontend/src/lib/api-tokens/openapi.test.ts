@@ -43,6 +43,20 @@ describe('buildOpenApiDocument', () => {
     expect(doc.paths['/api/v1/public/health'].get.description).toMatch(/Required scope: any valid token$/)
   })
 
+  it('documents the ProxCenter-Version header on every success (roadmap#265)', () => {
+    const op = doc.paths['/api/v1/vms'].get
+    expect(op.responses['200'].headers['ProxCenter-Version']).toEqual({
+      description: expect.stringContaining('ProxCenter version'), schema: { type: 'string' },
+    })
+  })
+
+  it('documents the catalogue as the { images, vendors, meta } object its route answers (roadmap#265)', () => {
+    const schema = doc.paths['/api/v1/templates/catalog'].get.responses['200'].content['application/json'].schema
+    expect(schema.properties.data.type).toBe('object')
+    expect(schema.properties.data.properties.images.type).toBe('array')
+    expect(schema.properties.data.properties.images.items.properties.slug.type).toBe('string')
+  })
+
   it('declares the dynamic segment as a required path parameter', () => {
     const params = doc.paths['/api/v1/pbs/{id}/backups'].get.parameters
     expect(params).toEqual(expect.arrayContaining([
@@ -113,7 +127,7 @@ describe('buildOpenApiDocument', () => {
       expect(mdoc.paths[post.pattern].get.tags).toEqual(['Snapshots'])
       expect(wdoc.tags.map((t: any) => t.name)).toEqual([
         'Monitoring', 'VMs', 'Snapshots', 'Backups', 'Storage', 'HA', 'Pools', 'Network', 'Firewall', 'Tasks',
-        'Tenants', 'vDCs', 'RBAC', 'Users', 'Identity',
+        'Tenants', 'vDCs', 'RBAC', 'Users', 'Identity', 'Templates',
       ])
     })
 

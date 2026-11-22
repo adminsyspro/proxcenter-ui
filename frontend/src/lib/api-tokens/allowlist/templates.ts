@@ -1,0 +1,82 @@
+// PURE data module: imported by BOTH the proxy (D7) and
+// principal.ts (D8). NO DB access, ever.
+// ── Template catalogue domain (roadmap#265) ─────────────────────────────────
+// What a vDC tenant deploys from: the catalogue granted to it, and the
+// blueprints it owns or was granted. The handlers apply the same grants as
+// the deployment wizard.
+import type { AllowlistEntry } from "./types"
+import { VM_READ_SCOPES } from "./vms"
+
+const TEMPLATES_FILE = "src/app/api/v1/templates"
+
+type TemplateEntry = Omit<AllowlistEntry, "tag" | "routeFile" | "pattern"> & { file: string }
+
+function templateEntry({ file, ...entry }: TemplateEntry): AllowlistEntry {
+  return {
+    ...entry,
+    tag: "Templates",
+    pattern: `/api/v1/templates/${file.replaceAll(/\[(\w+)\]/g, "{$1}")}`,
+    routeFile: `${TEMPLATES_FILE}/${file}/route.ts`,
+  }
+}
+
+export const TEMPLATE_ENTRIES: AllowlistEntry[] = [
+  templateEntry({
+    id: "templates-catalog",
+    method: "GET",
+    file: "catalog",
+    requiredScopes: VM_READ_SCOPES,
+    summary: "Images a deployment can start from",
+    description:
+      "The built-in cloud images (unless the provider turned them off for the tenant) and the custom images the caller owns, sees as shared, or was granted. A deployment names one by its `slug`.",
+    queryParams: [{ name: "vendor", description: "Only the images of this vendor" }],
+    responseSchemaRef: "TemplateCatalogResponse",
+  }),
+  templateEntry({
+    id: "templates-blueprints",
+    method: "GET",
+    file: "blueprints",
+    requiredScopes: VM_READ_SCOPES,
+    summary: "Blueprints the caller can deploy",
+    description:
+      "Deployment recipes (image, hardware, cloud-init defaults) the caller owns, sees as shared, or was granted. A cloud-init password is never returned.",
+    responseSchemaRef: "TemplateBlueprintListResponse",
+  }),
+  templateEntry({
+    id: "templates-blueprint-get",
+    method: "GET",
+    file: "blueprints/[id]",
+    requiredScopes: VM_READ_SCOPES,
+    summary: "One blueprint",
+    description: "A blueprint the caller owns, sees as shared, or was granted; 404 otherwise. A cloud-init password is never returned.",
+    responseSchemaRef: "TemplateBlueprintResponse",
+  }),
+  templateEntry({
+    id: "template-deploy",
+    method: "POST",
+    file: "deploy",
+    requiredScopes: ["vms:write"],
+    connectionField: { source: "body", field: "connectionId" },
+    // Checked by the handler beyond vms:write: starting the VM (vms:power),
+    // HA registration, and a VLAN tag or MAC chosen by the caller (vms:nic).
+    secondaryPermissions: ["vm.start", "node.manage", "vm.config.nic.mac", "vm.config.nic.vlan"],
+    summary: "Deploy a VM from the catalogue",
+    description:
+      "Creates a QEMU VM from a catalogue image (`imageSlug`) or a blueprint (`blueprintId` plus the image it names), then imports, configures and, unless `start` is false, starts it. Answers at once with a `deploymentId`: follow it with GET /api/v1/templates/deployments/{id} until `status` is `completed` or `failed`. A vDC tenant deploys only what its vDC was granted, on its own nodes, storages and networks, within its quota and VMID range. A token needs vms:power as well to start the VM, and vms:nic to set a VLAN tag.",
+    requestSchemaRef: "TemplateDeployRequest",
+    responseSchemaRef: "TemplateDeployResponse",
+  }),
+  templateEntry({
+    id: "template-deployment-get",
+    method: "GET",
+    file: "deployments/[id]",
+    requiredScopes: VM_READ_SCOPES,
+    // The connection is read from the deployment record: the handler
+    // answers 404 when a restricted token does not hold it.
+    perimeter: "handler",
+    summary: "Progress of a catalogue deployment",
+    description:
+      "The deployment started by POST /api/v1/templates/deploy: `status` goes pending, downloading, creating, configuring, starting, then `completed` or `failed` (with `error` and the `currentStep` it stopped at). A deployment of another tenant, or on a connection outside the token perimeter, is 404.",
+    responseSchemaRef: "TemplateDeploymentResponse",
+  }),
+]

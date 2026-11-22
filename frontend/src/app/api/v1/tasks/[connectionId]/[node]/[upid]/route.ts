@@ -792,12 +792,20 @@ async function handler(
       return NextResponse.json({ error: `Failed to fetch task status: ${e.message}` }, { status: 500 })
     }
 
+    // ?log=0 (an API client that only waits for the outcome, roadmap#265):
+    // the log of a running or successful task is not read from Proxmox at
+    // all; a failed one still is, for its failure reason. ?summary=1 still
+    // reads it: the in-app action cards show the progress parsed from it.
+    const failed = status?.status === 'stopped' && status?.exitstatus !== 'OK'
+    const readLog = query.get('log') !== '0' || failed
     let logs: TaskLogEntry[] = []
 
-    try {
-      logs = await fetchTaskLog(connection, node, decodedUpid) as TaskLogEntry[]
-    } catch (e: any) {
-      console.warn('Failed to fetch task logs:', e.message)
+    if (readLog) {
+      try {
+        logs = await fetchTaskLog(connection, node, decodedUpid) as TaskLogEntry[]
+      } catch (e: any) {
+        console.warn('Failed to fetch task logs:', e.message)
+      }
     }
 
     const now = Math.floor(Date.now() / 1000)
@@ -872,7 +880,7 @@ async function handler(
 
     // Send at most 5000 log lines to the frontend to avoid huge payloads
     // ?summary=1 (lists that only want the outcome) skips the lines entirely.
-    const MAX_FRONTEND_LOGS = query.get('summary') === '1' ? 0 : 5000
+    const MAX_FRONTEND_LOGS = query.get('summary') === '1' || query.get('log') === '0' ? 0 : 5000
     const totalLogLines = logs.length
     const truncatedLogs = totalLogLines > MAX_FRONTEND_LOGS
       ? logs.slice(totalLogLines - MAX_FRONTEND_LOGS)

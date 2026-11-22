@@ -32,6 +32,7 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
     'vm-remote-migrate-check', 'vm-remote-migrate-prepare', 'vm-delete', 'vm-notes-update',
     'vm-snapshot-create', 'vm-snapshot-delete', 'vm-snapshot-rollback', 'vm-snapshot-update',
   ],
+  templates: ['template-deploy'],
   backups: [
     'backup-job-create', 'backup-job-update', 'backup-job-delete', 'backup-job-run', 'backup-job-guests',
     'vm-backup-now', 'vm-restore', 'pbs-backup-delete', 'pbs-backup-verify',
@@ -87,7 +88,7 @@ const HANDLER_PERIMETER_IDS = [
   'vdc-vnet-ipam', 'vdc-vnet-ipam-next-free', 'vdcs-list', 'admin-vdcs-list', 'admin-vdc-get',
   'vdc-evpn-networks', 'evpn-zones-list', 'evpn-zone-get', 'vdc-moves-list', 'vdc-move-get',
   // Lot 2: the GPU quota read, and the EVPN network update judged per vDC.
-  'vdc-gpu-quota-get', 'vdc-evpn-network-update',
+  'vdc-gpu-quota-get', 'vdc-evpn-network-update', 'template-deployment-get',
 ]
 
 /** GET handlers of a file opened in write that stay closed (spec: consoles only). */

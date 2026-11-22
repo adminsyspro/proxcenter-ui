@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 
 import { getSessionPrisma } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
+import { withoutStoredSecrets } from "@/lib/templates/blueprintSecrets"
 
 export const runtime = "nodejs"
 
@@ -34,7 +35,8 @@ export async function GET(req: Request) {
       take: limit,
     })
 
-    return NextResponse.json({ data: deployments })
+    // Rows saved before roadmap#265 may still hold a cloud-init password.
+    return NextResponse.json({ data: deployments.map(withoutStoredSecrets) })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }

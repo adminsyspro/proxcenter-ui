@@ -1,12 +1,15 @@
 // src/app/api/v1/templates/deploy/route.ts
 import { NextResponse, after } from "next/server"
-import { getServerSession } from "next-auth"
 
 import { getSessionPrisma, getCurrentTenantId } from "@/lib/tenant"
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { sensitiveNicPermissions, NicConfigError } from "@/lib/rbac/nicPermissions"
-import { authOptions } from "@/lib/auth/config"
+import { getActingUser } from "@/lib/auth/actingUser"
+import type { Principal } from "@/lib/auth/principal"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
+import { runWithBackgroundTenant } from "@/lib/tenant/background"
 import { deploySchema } from "@/lib/schemas"
+import { withoutCloudInitSecrets } from "@/lib/templates/blueprintSecrets"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { refreshCachedGuests } from "@/lib/cache/guestSetRefresh"
 import { pveFetch } from "@/lib/proxmox/client"
@@ -65,7 +68,7 @@ async function updateDeployment(id: string, status: DeploymentStatus, extra: Rec
   })
 }
 
-async function handlePost(req: Request) {
+async function handlePost(req: Request, ctx?: { principal?: Principal }) {
   // Quota of the new VM (roadmap#265): reserved from the check until the
   // pipeline ends, released here when the deployment is not started.
   let releaseQuota: (() => void) | null = null
@@ -74,7 +77,7 @@ async function handlePost(req: Request) {
     const denied = await checkPermission(PERMISSIONS.VM_CREATE)
     if (denied) return denied
 
-    const session = await getServerSession(authOptions)
+    const actingUser = await getActingUser()
     const rawBody = await req.json().catch(() => null)
     if (!rawBody) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
 
@@ -87,6 +90,19 @@ async function handlePost(req: Request) {
     }
 
     const body = parseResult.data
+
+    // An API token (roadmap#265) starts the VM only when it may power it on
+    // (vms:power): vms:write alone deploys it stopped with `start: false`.
+    // Saving a blueprint stays a wizard feature: a token has no author.
+    const isToken = ctx?.principal?.kind === "token"
+    const startVm = body.start !== false
+    if (isToken && body.saveAsBlueprint) {
+      return NextResponse.json({ error: "saveAsBlueprint is not available to API tokens" }, { status: 400 })
+    }
+    if (isToken && startVm) {
+      const startDenied = await checkPermission(PERMISSIONS.VM_START, "vm", `${body.connectionId}:${body.node}:qemu:${body.vmid}`)
+      if (startDenied) return startDenied
+    }
 
     // Two tenants are in play. The caller's own (callerTenantId) owns the
     // deployment record, the catalogue it picked the image from and any
@@ -385,7 +401,9 @@ async function handlePost(req: Request) {
       storage: body.storage,
       vmName: body.vmName,
       hardware: body.hardware,
-      cloudInit: body.cloudInit,
+      // The retry record: never the cloud-init password (roadmap#265). The
+      // pipeline reads the request body, not this.
+      cloudInit: body.cloudInit ? withoutCloudInitSecrets({ cloudInit: body.cloudInit }).cloudInit : body.cloudInit,
       ...(body.ha ? { ha: true } : {}),
       // Kept for the history and for a retry, which must land in the same
       // vDC. The record itself stays the caller's, where its progress is read.
@@ -416,8 +434,8 @@ async function handlePost(req: Request) {
           name: body.blueprintName,
           imageSlug: body.imageSlug,
           hardware: body.hardware,
-          cloudInit: body.cloudInit ?? null,
-          createdBy: session?.user?.id || null,
+          cloudInit: body.cloudInit ? withoutCloudInitSecrets({ cloudInit: body.cloudInit }).cloudInit : null,
+          createdBy: actingUser?.id || null,
         },
       }).catch(() => {}) // Non-blocking
     }
@@ -437,9 +455,11 @@ async function handlePost(req: Request) {
 
     // Run the deployment pipeline asynchronously after the response is sent.
     // The VM joins the pool inside the pipeline: its quota goes with it.
+    // It runs with the tenant of the request: a token revoked or expired in
+    // the meantime must not leave the deployment record unfinished.
     const releasePipelineQuota = releaseQuota
     releaseQuota = null
-    after(async () => {
+    after(() => runWithBackgroundTenant(callerTenantId, async () => {
       // Hoisted so the catch below can release the IPAM reservation if
       // the pipeline throws after we've claimed an IP. `let` inside the
       // try wouldn't be visible from the sibling catch block.
@@ -754,18 +774,20 @@ async function handlePost(req: Request) {
           )
         }
 
-        // Step 5: Start VM
-        await updateDeployment(deployment.id, "starting", { taskUpid: null })
+        // Step 5: Start VM, unless the caller deploys it stopped (roadmap#265)
+        if (startVm) {
+          await updateDeployment(deployment.id, "starting", { taskUpid: null })
 
-        await pveFetch<any>(
-          conn,
-          `/nodes/${encodeURIComponent(body.node)}/qemu/${body.vmid}/status/start`,
-          { method: "POST" }
-        )
+          await pveFetch<any>(
+            conn,
+            `/nodes/${encodeURIComponent(body.node)}/qemu/${body.vmid}/status/start`,
+            { method: "POST" }
+          )
+        }
 
-        // The VM exists and runs: an HA registration failure is reported on
-        // the deployment, it does not turn a working VM into a failed one.
-        const haError = body.ha ? await registerHaOrReason(conn, body.vmid, 'started') : null
+        // The VM exists: an HA registration failure is reported on the
+        // deployment, it does not turn a working VM into a failed one.
+        const haError = body.ha ? await registerHaOrReason(conn, body.vmid, startVm ? 'started' : 'stopped') : null
 
         // Done!
         await updateDeployment(deployment.id, "completed", haError ? { error: haError } : {})
@@ -797,7 +819,7 @@ async function handlePost(req: Request) {
       } finally {
         releasePipelineQuota?.()
       }
-    })
+    }))
 
     // Return immediately — the pipeline runs in after()
     return NextResponse.json({ data: { deploymentId: deployment.id, status: "pending", vmid: body.vmid } })
@@ -1045,4 +1067,4 @@ async function registerHaOrReason(conn: any, vmid: number, state: 'started' | 's
   }
 }
 
-export const POST = withAudit({ category: "templates", resourceType: "template", action: "create" }, handlePost)
+export const POST = withAudit({ category: "templates", resourceType: "template", action: "create" }, withPublicApiGuard("template-deploy", handlePost))

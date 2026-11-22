@@ -737,3 +737,69 @@ describe('POST clone: the vDC quota stays reserved until the task ends (roadmap#
     expect(releaseQuotaMock).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('POST clone: a clone on a managed VNet gets its own address (roadmap#265)', () => {
+  it('never hands the IPAM the address the clone inherited from its source', async () => {
+    pveFetchMock.mockImplementation(async (_conn, _path, opts?: any) => {
+      if (opts?.method === 'POST') return 'UPID:clone:1'
+      if (opts?.method === 'PUT') return null
+      return { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA', net1: 'virtio=AA:00:00:00:00:02,bridge=vmbr0', ipconfig0: 'ip=10.15.15.3/24,gw=10.15.15.254', ipconfig1: 'ip=192.0.2.10/24' }
+    })
+    resolveSubnetForBridgeMock.mockImplementation(async (_id, bridge) => (bridge === 'tenantA' ? { subnetId: 's1' } : null))
+    syncIpamForVmConfigMock.mockResolvedValue({ bodyOverrides: { ipconfig0: 'ip=10.15.15.4/24,gw=10.15.15.254' }, rollback: vi.fn() })
+
+    await callRoute(await loadPost(), { params: baseParams, body: { newid: 101, full: true } })
+    for (const cb of h.afterCbs) await cb()
+
+    const after = syncIpamForVmConfigMock.mock.calls[0][0].after
+    expect(after.ipconfig0).toBeUndefined()
+    expect(after.ipconfig1).toBe('ip=192.0.2.10/24')
+    const ipPut = pveFetchMock.mock.calls.filter(c => String(c[1]).endsWith('/qemu/101/config') && c[2]?.method === 'PUT').pop()
+    expect(new URLSearchParams(String(ipPut?.[2]?.body)).get('ipconfig0')).toBe('ip=10.15.15.4/24,gw=10.15.15.254')
+  })
+})
+
+describe('POST clone: provisioning after the task (roadmap#265)', () => {
+  beforeEach(async () => {
+    const { resetGuestProvisioning } = await import('@/lib/vdc/guestProvisioning')
+    resetGuestProvisioning()
+  })
+  const state = async () => (await import('@/lib/vdc/guestProvisioning')).provisioningState('conn-1', '101')
+
+  function ipamSource() {
+    pveFetchMock.mockImplementation(async (_conn, _path, opts?: any) => {
+      if (opts?.method === 'POST') return 'UPID:clone:1'
+      if (opts?.method === 'PUT') return null
+      return { net0: 'virtio=AA:00:00:00:00:01,bridge=tenantA' }
+    })
+    resolveSubnetForBridgeMock.mockImplementation(async (_id, bridge) => (bridge === 'tenantA' ? { subnetId: 's1' } : null))
+  }
+
+  it('is running until the IPAM step ran, then gone', async () => {
+    ipamSource()
+    const res = await callRoute(await loadPost(), { params: baseParams, body: { newid: 101, full: true } })
+    expect(res.status).toBe(200)
+    expect(await state()).toEqual({ state: 'running', failures: [] })
+    for (const cb of h.afterCbs) await cb()
+    expect(await state()).toBeNull()
+  })
+
+  it('reports an IPAM step that failed', async () => {
+    ipamSource()
+    syncIpamForVmConfigMock.mockRejectedValue(new Error('subnet exhausted'))
+    await callRoute(await loadPost(), { params: baseParams, body: { newid: 101, full: true } })
+    for (const cb of h.afterCbs) await cb()
+    expect(await state()).toEqual({ state: 'failed', failures: ['ipam: subnet exhausted'] })
+  })
+
+  it('counts the HA registration as a step', async () => {
+    const res = await callRoute(await loadPost(), { params: baseParams, body: { newid: 101, ha: true } })
+    expect(res.status).toBe(200)
+    expect(await state()).toEqual({ state: 'running', failures: [] })
+  })
+
+  it('opens nothing for a clone with no work after its task', async () => {
+    await callRoute(await loadPost(), { params: baseParams, body: { newid: 101 } })
+    expect(await state()).toBeNull()
+  })
+})

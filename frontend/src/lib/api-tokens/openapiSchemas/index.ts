@@ -9,6 +9,7 @@ import { MONITORING_RESPONSE_SCHEMAS } from "./monitoring"
 import { NETWORK_REQUEST_SCHEMAS, NETWORK_RESPONSE_SCHEMAS } from "./network"
 import { POOLS_REQUEST_SCHEMAS, POOLS_RESPONSE_SCHEMAS } from "./pools"
 import { STORAGE_REQUEST_SCHEMAS, STORAGE_RESPONSE_SCHEMAS } from "./storage"
+import { TEMPLATE_REQUEST_SCHEMAS, TEMPLATE_RESPONSE_SCHEMAS } from "./templates"
 import { TENANCY_RESPONSE_SCHEMAS } from "./tenancy"
 import { TENANCY_WRITE_REQUEST_SCHEMAS, TENANCY_WRITE_RESPONSE_SCHEMAS } from "./tenancyWrite"
 import { VM_REQUEST_SCHEMAS, VM_RESPONSE_SCHEMAS } from "./vms"
@@ -25,6 +26,7 @@ export const REQUEST_SCHEMAS: Record<string, Record<string, unknown>> = {
   ...FIREWALL_REQUEST_SCHEMAS,
   ...TENANCY_WRITE_REQUEST_SCHEMAS,
   ...IDENTITY_REQUEST_SCHEMAS,
+  ...TEMPLATE_REQUEST_SCHEMAS,
 }
 
 export const RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
@@ -39,4 +41,5 @@ export const RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
   ...TENANCY_RESPONSE_SCHEMAS,
   ...TENANCY_WRITE_RESPONSE_SCHEMAS,
   ...IDENTITY_RESPONSE_SCHEMAS,
+  ...TEMPLATE_RESPONSE_SCHEMAS,
 }

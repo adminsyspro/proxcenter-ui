@@ -18,8 +18,9 @@ vi.mock('@/lib/tenant', () => ({
   getCurrentTenantId: m.getCurrentTenantId,
   DEFAULT_TENANT_ID: 'default',
 }))
-vi.mock('next-auth', () => ({ getServerSession: async () => ({ user: { id: 'u1' } }) }))
-vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
+vi.mock('@/lib/auth/actingUser', () => ({ getActingSession: async () => ({ user: { id: 'u1' } }) }))
+// The API token guard is covered by routeGuard.test.ts and writeContract.test.ts.
+vi.mock('@/lib/api-tokens/routeGuard', () => ({ withPublicApiGuard: (_id: string, handler: any) => handler }))
 vi.mock('@/lib/audit', () => ({ audit: m.audit }))
 vi.mock('@/lib/templates/catalogGrants', () => ({
   listVisibleBlueprints: m.listVisibleBlueprints,
@@ -67,6 +68,21 @@ describe('GET /api/v1/templates/blueprints (#903)', () => {
     const json = await readJson<any>(await callRoute(GET as any, { method: 'GET' }))
     expect(json.data[0]).toMatchObject({ ownedByCaller: true, grants: { tenantIds: ['tenant-1'], vdcIds: [] } })
     expect(m.loadGrantSummaries).toHaveBeenCalledWith('blueprint', ['prov'])
+  })
+})
+
+describe('blueprints never hand out a cloud-init password (roadmap#265)', () => {
+  it('a row saved before with a password is listed without it', async () => {
+    m.listVisibleBlueprints.mockResolvedValue([{ id: 'bp-1', tenantId: 'tenant-1', cloudInit: { ciuser: 'ops', cipassword: 's3cret' } }])
+    const json = await readJson<any>(await callRoute(GET as any, { method: 'GET' }))
+    expect(json.data[0].cloudInit).toEqual({ ciuser: 'ops' })
+  })
+
+  it('a new blueprint is saved without the password it was sent', async () => {
+    const res = await callRoute(POST as any, { body: { ...body, cloudInit: { ciuser: 'ops', cipassword: 's3cret', ipconfig0: 'ip=dhcp' } } })
+    expect(res.status).toBe(201)
+    expect(m.create.mock.calls[0][0].data.cloudInit).toEqual({ ciuser: 'ops', ipconfig0: 'ip=dhcp' })
+    expect(JSON.stringify(await readJson<any>(res))).not.toContain('s3cret')
   })
 })
 

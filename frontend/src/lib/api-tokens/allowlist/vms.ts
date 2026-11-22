@@ -10,7 +10,7 @@ const GUEST_SCOPE: GuestScopeSpec = { connection: "id", node: "node", type: "typ
 const VM_KEY = "/api/v1/guests/{vmid}"
 const VM_KEY_FILE = "src/app/api/v1/guests/[vmid]"
 /** GET neighbours of the VM write routes: the read scope or any VM write scope. */
-const VM_READ_SCOPES = ["vms:read", "vms:power", "vms:write", "vms:snapshot", "vms:migrate", "vms:delete"]
+export const VM_READ_SCOPES = ["vms:read", "vms:power", "vms:write", "vms:snapshot", "vms:migrate", "vms:delete"]
 const NIC_IDENTITY_PERMISSIONS = ["vm.config.nic.mac", "vm.config.nic.vlan"]
 const VM_POWER_ACTIONS = ["start", "stop", "shutdown", "reboot", "reset", "suspend", "resume"] as const
 const TARGET_CONNECTION = [{ source: "body", field: "targetConnectionId" }] satisfies BodyOrQueryField[]
@@ -80,6 +80,23 @@ export const VM_ENTRIES: AllowlistEntry[] = [
     description: "Starts, stops (hard), shuts down (ACPI), reboots, resets, suspends or resumes the guest. No body.",
     responseSchemaRef: "VmPowerResponse",
   }),
+  {
+    id: "vm-nextid",
+    method: "GET",
+    tag: "VMs",
+    pattern: `${CONN}/cluster/nextid`,
+    requiredScopes: VM_READ_SCOPES,
+    connectionSegment: "id",
+    routeFile: "src/app/api/v1/connections/[id]/cluster/nextid/route.ts",
+    summary: "Next free VMID",
+    description:
+      "The next free VMID for a create or a clone. A tenant with a VMID range gets one inside its range, unique across all its clusters (503 when one of them cannot be reached, so a duplicate cannot hide). With `vmid`, tells whether that VMID is free without reserving it.",
+    queryParams: [
+      { name: "vmid", description: "Check this VMID instead of picking one" },
+      { name: "targetVdcId", description: "Provider only: pick inside the VMID range of this vDC's tenant" },
+    ],
+    responseSchemaRef: "VmNextIdResponse",
+  },
   guestEntry({
     id: "vm-clone",
     method: "POST",
@@ -88,7 +105,7 @@ export const VM_ENTRIES: AllowlistEntry[] = [
     requiredScopes: ["vms:write"],
     summary: "Clone a guest",
     description:
-      "Clones the guest (or a template) to `newid`. Other Proxmox clone parameters pass through. A vDC tenant clone stays in its pool, storages and quota.",
+      "Clones the guest (or a template) to `newid`. Other Proxmox clone parameters pass through. A vDC tenant clone stays in its pool, storages and quota. Once the task ends, read the clone config: `provisioning` tells when the clone still sets up its IPAM addresses, storage QoS or HA.",
     requestSchemaRef: "VmCloneRequest",
     responseSchemaRef: "VmTaskMessageResponse",
   }),
@@ -324,7 +341,10 @@ export const VM_ENTRIES: AllowlistEntry[] = [
     summary: "Status of a Proxmox task",
     description:
       "Status, progress and log of the task {upid} started on {node}, as returned by every write that answers with a UPID. Poll it until `status` is `stopped`, then read `exitstatus` (`OK` on success) and `failureReason`. Any write scope opens it. A vDC tenant token only reads the tasks of its own guests.",
-    queryParams: [{ name: "summary", description: "Set to '1' to skip the log lines" }],
+    queryParams: [
+      { name: "summary", description: "Set to '1' to skip the log lines (the progress is still parsed from the log)" },
+      { name: "log", description: "Set to '0' when only the outcome matters: no log lines, no progress, and the Proxmox log is read only for a failed task (its failureReason)" },
+    ],
     responseSchemaRef: "TaskStatusResponse",
   },
 ]

@@ -11988,6 +11988,16 @@
               }
             }
           },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
           "405": {
             "description": "Method not allowed for this API token route",
             "content": {
@@ -12181,6 +12191,16 @@
               }
             }
           },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
           "405": {
             "description": "Method not allowed for this API token route",
             "content": {
@@ -12361,6 +12381,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -12734,6 +12764,16 @@
               }
             }
           },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
           "405": {
             "description": "Method not allowed for this API token route",
             "content": {
@@ -12890,6 +12930,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -13079,6 +13129,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -13279,6 +13339,16 @@
               }
             }
           },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
           "405": {
             "description": "Method not allowed for this API token route",
             "content": {
@@ -13443,6 +13513,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -13619,6 +13699,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -13812,6 +13902,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -14160,6 +14260,16 @@
               }
             }
           },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
           "405": {
             "description": "Method not allowed for this API token route",
             "content": {
@@ -14390,6 +14500,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -14634,6 +14754,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -14926,6 +15056,16 @@
               }
             }
           },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
           "405": {
             "description": "Method not allowed for this API token route",
             "content": {
@@ -15111,6 +15251,16 @@
               }
             }
           },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
           "405": {
             "description": "Method not allowed for this API token route",
             "content": {
@@ -15242,6 +15392,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -15391,6 +15551,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -15560,6 +15730,16 @@
               }
             }
           },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
           "405": {
             "description": "Method not allowed for this API token route",
             "content": {
@@ -15721,6 +15901,16 @@
               }
             }
           },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
           "405": {
             "description": "Method not allowed for this API token route",
             "content": {
@@ -15874,6 +16064,16 @@
               }
             }
           },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
           "405": {
             "description": "Method not allowed for this API token route",
             "content": {
@@ -16016,6 +16216,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -16171,6 +16381,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -16362,6 +16582,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -18150,6 +18380,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -35358,6 +35598,16 @@
               }
             }
           },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
           "405": {
             "description": "Method not allowed for this API token route",
             "content": {
@@ -35602,6 +35852,16 @@
               }
             }
           },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
           "405": {
             "description": "Method not allowed for this API token route",
             "content": {
@@ -35817,6 +36077,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -36069,6 +36339,16 @@
               }
             }
           },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
           "405": {
             "description": "Method not allowed for this API token route",
             "content": {
@@ -36229,6 +36509,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }
@@ -36404,6 +36694,16 @@
                       "error": "Guest outside your vDC scope"
                     }
                   }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
                 }
               }
             }

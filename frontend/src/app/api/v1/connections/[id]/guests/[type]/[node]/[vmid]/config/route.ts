@@ -6,7 +6,7 @@ import { invalidateGuestDiskTotal } from "@/lib/inventory/guestDiskTotals"
 import { writeGuestConfig, type GuestConfigWriteResult } from "@/lib/proxmox/guestConfigWrite"
 import { mergeMemoryProperty } from "@/lib/proxmox/memoryProperty"
 import { enforceGuestTagAccess } from "@/lib/proxmox/tagAccessServer"
-import { isVmConfigNotFoundError, locateVmInCluster, type GuestType } from "@/lib/proxmox/locateVm"
+import { isVmConfigNotFoundError, locateVmOrMissing, type GuestType } from "@/lib/proxmox/locateVm"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, checkPermissions, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { sensitiveNicPermissions, hasNicMutation, hasNicRevert, NicConfigError } from "@/lib/rbac/nicPermissions"
@@ -153,7 +153,8 @@ async function getHandler(
       )
     } catch (err: any) {
       if (!isVmConfigNotFoundError(err)) throw err
-      const located = await locateVmInCluster(conn, vmid, type as GuestType)
+      const located = await locateVmOrMissing(conn, vmid, type as GuestType).catch(() => null)
+      if (located === "missing") return NextResponse.json({ error: "Guest not found" }, { status: 404 })
       if (!located || located.node === node) throw err
       const destinationDenied = await checkPermission(PERMISSIONS.VM_VIEW, "vm", buildVmResourceId(id, located.node, type, vmid))
       if (destinationDenied) return destinationDenied

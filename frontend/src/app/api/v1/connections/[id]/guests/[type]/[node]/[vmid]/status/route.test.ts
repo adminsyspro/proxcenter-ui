@@ -84,8 +84,8 @@ describe('GET .../status', () => {
     m.getTenantInfrastructureScope.mockResolvedValue(iaas())
     cluster([{ vmid: 100, type: 'qemu', node: 'pve1', pool: 'provider' }])
     const res = await call()
-    expect(res.status).toBe(403)
-    expect(await readJson(res)).toEqual({ error: 'Guest outside your vDC scope' })
+    expect(res.status).toBe(404)
+    expect(await readJson(res)).toEqual({ error: 'Guest not found' })
     expect(statusCalls()).toHaveLength(0)
   })
 

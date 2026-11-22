@@ -46,10 +46,19 @@ describe('checkTenantGuestScope', () => {
     expect(getTenantInfrastructureScopeMock).toHaveBeenCalledWith('tenant-1', { ignoreVdcContext: true })
   })
 
-  it('refuses a guest outside the vDC pools with 403', async () => {
+  // roadmap#265: a guest another tenant owns and a guest that does not exist
+  // get the same 404, so a tenant can neither probe the VMIDs of others nor
+  // be stuck on a guest deleted behind its back.
+  it('answers 404 for a guest of another tenant', async () => {
     const res = await checkTenantGuestScope('tenant-1', conn, 'conn-1', 'qemu', 'pve3', '200')
-    expect(res?.status).toBe(403)
-    expect(await res?.json()).toEqual({ error: 'Guest outside your vDC scope' })
+    expect(res?.status).toBe(404)
+    expect(await res?.json()).toEqual({ error: 'Guest not found' })
+  })
+
+  it('answers the same 404 for a guest that does not exist', async () => {
+    const res = await checkTenantGuestScope('tenant-1', conn, 'conn-1', 'qemu', 'pve3', '999')
+    expect(res?.status).toBe(404)
+    expect(await res?.json()).toEqual({ error: 'Guest not found' })
   })
 
   it('a null type accepts both qemu and lxc guests', async () => {
@@ -59,18 +68,26 @@ describe('checkTenantGuestScope', () => {
 
   it('a typed lookup never matches a guest of the other type', async () => {
     const res = await checkTenantGuestScope('tenant-1', conn, 'conn-1', 'qemu', 'pve3', '101')
-    expect(res?.status).toBe(403)
+    expect(res?.status).toBe(404)
   })
 
   it('a null node accepts any vDC node but still confines the guest to the vDC pools', async () => {
     expect(await checkTenantGuestScope('tenant-1', conn, 'conn-1', null, null, '100')).toBeNull()
     const res = await checkTenantGuestScope('tenant-1', conn, 'conn-1', null, null, '200')
-    expect(res?.status).toBe(403)
+    expect(res?.status).toBe(404)
   })
 
   it('a null node still refuses a guest running on a node outside the vDC', async () => {
     pveFetchMock.mockResolvedValue([{ vmid: 100, type: 'qemu', node: 'pve9', pool: 'pool-1' }])
     const res = await checkTenantGuestScope('tenant-1', conn, 'conn-1', null, null, '100')
+    expect(res?.status).toBe(403)
+    expect(await res?.json()).toEqual({ error: 'Guest outside your vDC scope' })
+  })
+
+  it('refuses an own guest that left the named node when it may not have moved', async () => {
+    pveFetchMock.mockResolvedValue([{ vmid: 100, type: 'qemu', node: 'pve3', pool: 'pool-1' }])
+    getTenantInfrastructureScopeMock.mockResolvedValue({ ...iaasInfra(), vdcScope: { ...iaasInfra().vdcScope, nodesByConnection: new Map([['conn-1', new Set(['pve3', 'pve4'])]]) } })
+    const res = await checkTenantGuestScope('tenant-1', conn, 'conn-1', 'qemu', 'pve4', '100')
     expect(res?.status).toBe(403)
   })
 
@@ -103,8 +120,8 @@ describe('checkTenantGuestsScope (a vmid list)', () => {
 
   it('refuses the list when one guest is outside the vDC pools', async () => {
     const res = await checkTenantGuestsScope('tenant-1', conn, 'conn-1', null, null, ['100', '200', '101'])
-    expect(res?.status).toBe(403)
-    expect(await res?.json()).toEqual({ error: 'Guest outside your vDC scope' })
+    expect(res?.status).toBe(404)
+    expect(await res?.json()).toEqual({ error: 'Guest not found' })
     expect(pveFetchMock).toHaveBeenCalledTimes(1)
   })
 

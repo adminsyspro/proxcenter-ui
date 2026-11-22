@@ -754,14 +754,14 @@ describe("POST restore -- backup.restore and the guest that force overwrites", (
 
   // Every caller of a vDC tenant (session or token) is judged on the guest
   // it would overwrite, not only on the node it restores to.
-  it("iaas session with force on a guest outside its vDC: 403, nothing restored", async () => {
+  it("iaas session with force on a guest outside its vDC: 404, nothing restored", async () => {
     iaasTenant()
     wireGuests([{ vmid: 111, node: "node2", type: "qemu", pool: "other-tenant-pool" }])
 
     const res = await restore({ force: true })
 
-    expect(res.status).toBe(403)
-    expect((await readJson<{ error: string }>(res))?.error).toMatch(/outside your vDC/i)
+    expect(res.status).toBe(404)
+    expect((await readJson<{ error: string }>(res))?.error).toMatch(/Guest not found/)
     expect(restorePosts()).toHaveLength(0)
   })
 

@@ -142,13 +142,13 @@ describe('POST vzdump: destination judged on the storage (#921)', () => {
 })
 
 describe('POST vzdump: guest ownership (tenant may only back up its own guests)', () => {
-  it('403: a vmid outside the vDC pool is refused and PVE is never called', async () => {
+  it('404: a vmid outside the vDC pool is refused and PVE is never called', async () => {
     const { POST } = await import('./route')
     const res = await callRoute(POST as Parameters<typeof callRoute>[0], {
       method: 'POST', params, body: { vmid: 999, storage: 'ceph' },
     })
-    expect(res.status).toBe(403)
-    expect(((await res.json()) as { error: string }).error).toMatch(/vDC scope/)
+    expect(res.status).toBe(404)
+    expect(((await res.json()) as { error: string }).error).toMatch(/Guest not found/)
     expect(pveFetchMock).not.toHaveBeenCalledWith(expect.anything(), expect.stringContaining('/vzdump'), expect.anything())
   })
 

@@ -57,6 +57,9 @@ async function handler(
       // DRS moved is named so the caller deletes it where it is.
       const located = await locateVmOrMissing(conn, vmid, type as GuestType)
       if (located === "missing") return NextResponse.json({ error: "Guest not found" }, { status: 404 })
+      // The new node is named only to a caller who may view the guest there.
+      const destinationDenied = await checkPermission(PERMISSIONS.VM_VIEW, "vm", buildVmResourceId(id, located.node, type, vmid))
+      if (destinationDenied) return destinationDenied
       return NextResponse.json({ error: `The guest is now on node ${located.node}`, code: "vm_moved", node: located.node }, { status: 409 })
     }
 

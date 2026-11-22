@@ -29,6 +29,7 @@ vi.mock('@/lib/rbac', () => ({
   ),
   PERMISSIONS: {
     VM_DELETE: 'vm.delete',
+    VM_VIEW: 'vm.view',
   },
 }))
 
@@ -127,6 +128,19 @@ describe('DELETE /api/v1/connections/[id]/guests/[type]/[node]/[vmid]', () => {
       expect(res.status).toBe(409)
       expect(await readJson<any>(res)).toMatchObject({ code: 'vm_moved', node: 'pve-other' })
       expect(pveFetchMock.mock.calls.some((c: unknown[]) => (c[2] as { method?: string } | undefined)?.method === 'DELETE')).toBe(false)
+    })
+
+    it('names the new node only to a caller who may view the guest there', async () => {
+      pveFetchMock.mockImplementation(async (_conn: unknown, path: string) => {
+        if (path === '/cluster/resources?type=vm') return [{ vmid: Number(VMID), type: 'qemu', node: 'pve-other' }]
+        throw missing()
+      })
+      const forbidden = new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 })
+      checkPermissionMock.mockImplementation(async (perm: string, _t: string, resource: string) =>
+        perm === 'vm.view' && resource.includes('pve-other') ? forbidden : null)
+      const res = await DELETE(makeReq(), { params: Promise.resolve(baseParams) })
+      expect(res.status).toBe(403)
+      expect(JSON.stringify(await readJson<any>(res))).not.toContain('pve-other')
     })
 
     it('500, never 404, when the cluster cannot be listed', async () => {

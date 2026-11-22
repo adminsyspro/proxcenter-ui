@@ -4553,6 +4553,49 @@
           }
         }
       },
+      "VmStatusResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "description": "running, stopped, paused... (unknown when Proxmox gave none)"
+              },
+              "name": {
+                "type": "string"
+              },
+              "uptime": {
+                "type": "integer",
+                "description": "Seconds"
+              },
+              "cpu": {
+                "type": "number"
+              },
+              "mem": {
+                "type": "integer"
+              },
+              "maxmem": {
+                "type": "integer"
+              },
+              "disk": {
+                "type": "integer"
+              },
+              "maxdisk": {
+                "type": "integer"
+              }
+            }
+          },
+          "movedTo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Current node when the guest left the URL node"
+          }
+        }
+      },
       "VmNextIdResponse": {
         "type": "object",
         "properties": {
@@ -12174,6 +12217,208 @@
                     "value": {
                       "error": "Route not available to API tokens",
                       "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/config"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/status": {
+      "get": {
+        "operationId": "vm-status",
+        "summary": "Guest power status",
+        "description": "The live status of the guest (`running`, `stopped`, `paused`...) read from Proxmox, with its uptime and usage. Unlike GET /api/v1/vms, it reflects a power change at once. When the guest has moved to another node of the cluster, it is read there and `movedTo` names it; a guest in no node of the cluster is 404.\n\nRequired scope: `vms:read` or `vms:power` or `vms:write` or `vms:snapshot` or `vms:migrate` or `vms:delete`",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:read",
+          "vms:power",
+          "vms:write",
+          "vms:snapshot",
+          "vms:migrate",
+          "vms:delete"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "description": "running, stopped, paused... (unknown when Proxmox gave none)"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "uptime": {
+                          "type": "integer",
+                          "description": "Seconds"
+                        },
+                        "cpu": {
+                          "type": "number"
+                        },
+                        "mem": {
+                          "type": "integer"
+                        },
+                        "maxmem": {
+                          "type": "integer"
+                        },
+                        "disk": {
+                          "type": "integer"
+                        },
+                        "maxdisk": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "movedTo": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Current node when the guest left the URL node"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/status"
                     }
                   },
                   "perimeter": {

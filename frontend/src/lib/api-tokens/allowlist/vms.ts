@@ -57,6 +57,17 @@ export const VM_ENTRIES: AllowlistEntry[] = [
     responseSchemaRef: "VmConfigResponse",
   }, { ...GUEST_SCOPE, allowMovedNode: true }),
   guestEntry({
+    id: "vm-status",
+    method: "GET",
+    file: "/status",
+    pattern: `${GUEST}/status`,
+    requiredScopes: VM_READ_SCOPES,
+    summary: "Guest power status",
+    description:
+      "The live status of the guest (`running`, `stopped`, `paused`...) read from Proxmox, with its uptime and usage. Unlike GET /api/v1/vms, it reflects a power change at once. When the guest has moved to another node of the cluster, it is read there and `movedTo` names it; a guest in no node of the cluster is 404.",
+    responseSchemaRef: "VmStatusResponse",
+  }, { ...GUEST_SCOPE, allowMovedNode: true }),
+  guestEntry({
     id: "vm-config-update",
     method: "PUT",
     file: "/config",

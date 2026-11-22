@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
-import { isVmConfigNotFoundError, locateVmInCluster, type GuestType } from "@/lib/proxmox/locateVm"
+import { isVmConfigNotFoundError, locateVmOrMissing, type GuestType } from "@/lib/proxmox/locateVm"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { guardSessionGuest } from "@/lib/vdc/guestGuard"
+import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 
 export const runtime = "nodejs"
 
@@ -15,9 +16,10 @@ type RouteContext = {
 /**
  * GET /api/v1/connections/[id]/guests/[type]/[node]/[vmid]/status
  *
- * Récupère le status actuel d'une VM (running, stopped, paused, etc.)
+ * Récupère le status actuel d'une VM (running, stopped, paused, etc.).
+ * Open to API tokens (roadmap#265): /api/v1/vms lags a power change.
  */
-export async function GET(_req: Request, ctx: RouteContext) {
+async function handler(_req: Request, ctx: RouteContext) {
   try {
     const { id, type, node, vmid } = await ctx.params
 
@@ -53,7 +55,8 @@ export async function GET(_req: Request, ctx: RouteContext) {
       )
     } catch (err: any) {
       if (!isVmConfigNotFoundError(err)) throw err
-      const located = await locateVmInCluster(conn, vmid, type as GuestType)
+      const located = await locateVmOrMissing(conn, vmid, type as GuestType).catch(() => null)
+      if (located === "missing") return NextResponse.json({ error: "Guest not found" }, { status: 404 })
       if (!located || located.node === node) throw err
       // vm.view was checked on the URL node: the node the guest moved to
       // must be covered too, as the config route does (roadmap#223).
@@ -86,3 +89,5 @@ export async function GET(_req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   }
 }
+
+export const GET = withPublicApiGuard("vm-status", handler)

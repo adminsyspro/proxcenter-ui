@@ -117,6 +117,8 @@ describe('the lines of a member', () => {
         { nic: 'net0', addr: '10.0.0.7', reason: 'guest', by: 'db-1' },
         { nic: 'net0', addr: '10.0.0.8', reason: 'peer' },
         { nic: 'net1', addr: '10.0.1.9', reason: 'source', by: '10.0.1.0/24' },
+        { nic: 'net0', addr: '10.0.0.201', reason: 'contested', by: 'lxc/102', by_name: 'app-1' },
+        { nic: 'net0', addr: '10.0.0.202', reason: 'contested' },
       ],
     })]))
     render()
@@ -125,6 +127,8 @@ describe('the lines of a member', () => {
       '10.0.0.7 on net0: held by db-1, a member of another zoneAllow',
       '10.0.0.8 on net0: held by a member of another zone on another clusterAllow',
       '10.0.1.9 on net1: inside the source network 10.0.1.0/24 of a flowAllow',
+      '10.0.0.201 on net0: also reported by app-1 (102), a member of another zone, and held by neitherAllow',
+      '10.0.0.202 on net0: also reported by a member of another zone on another cluster, and held by neitherAllow',
     ])
   })
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { heldByStop, isTrafficRefusal, opensWizard, parseRate, preflightMessage, socleRefusalLines } from './preflightModel'
+import { heldByStop, ipFilterNotComputed, isTrafficRefusal, opensWizard, parseRate, preflightMessage, socleRefusalLines } from './preflightModel'
 
 describe('parseRate', () => {
   it('splits the rate PVE writes into a count and a unit', () => {
@@ -206,6 +206,11 @@ describe('the IP filter check', () => {
 
   it('asks for a check while nothing is computed, and says a read failure as the other checks do', () => {
     expect(preflightMessage({ id: 'ip_filter', status: 'warn', detail: { reason: 'not_checked' } }).detail).toEqual({ key: 'checks.ip_filter.notChecked' })
+    // On a cluster the engine does not run yet a check run is refused: the message names the first application.
+    expect(preflightMessage({ id: 'ip_filter', status: 'warn', detail: { reason: 'not_deployed' } }).detail).toEqual({ key: 'checks.ip_filter.notDeployed' })
+    expect(ipFilterNotComputed({ id: 'ip_filter', status: 'warn', detail: { reason: 'not_checked' } })).toBe(true)
+    expect(ipFilterNotComputed({ id: 'ip_filter', status: 'warn', detail: { reason: 'not_deployed' } })).toBe(true)
+    expect(ipFilterNotComputed({ id: 'ip_filter', status: 'warn', detail: { ready: 3, dhcp: 2 } })).toBe(false)
     expect(preflightMessage({ id: 'ip_filter', status: 'fail', detail: { error: 'boom' } }).detail).toEqual({ key: 'readFailed', values: { error: 'boom' } })
   })
 })

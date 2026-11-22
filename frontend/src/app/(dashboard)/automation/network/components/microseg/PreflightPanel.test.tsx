@@ -318,6 +318,14 @@ describe('the IP filter check', () => {
     expect(within(line).queryByRole('button', { name: 'Details' })).toBeNull()
   })
 
+  it('names the first application on a cluster that is not deployed, where no check can run, without details to open', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, { checks: [filter('warn', { reason: 'not_deployed' })] })
+    open()
+    const line = await screen.findByRole('listitem', { name: 'IP filter: warning' })
+    expect(within(line).getByText('Computed after the first application on this cluster')).toBeTruthy()
+    expect(within(line).queryByRole('button', { name: 'Details' })).toBeNull()
+  })
+
   it('opens the addresses per member from Details, read from the cluster of the line', async () => {
     mock.routes['GET /preflight'] = () => reply(200, { checks: [filter('warn', { members: 1, ready: 0, no_address: 1 })] })
     mock.routes['GET /ipfilter'] = () => reply(200, { enabled: true, computed: true, computed_at: null, guests: [guest] })

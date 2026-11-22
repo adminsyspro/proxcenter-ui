@@ -14345,7 +14345,9 @@
           "detail": "{addr} on {nic} was not added to the list of this guest.",
           "detailGuest": "{addr} on {nic} was not added: {by}, a member of another zone, holds it.",
           "detailPeer": "{addr} on {nic} was not added: a member of another zone on another cluster holds it.",
-          "detailSource": "{addr} on {nic} was not added: it is inside the source network {by} of a flow."
+          "detailSource": "{addr} on {nic} was not added: it is inside the source network {by} of a flow.",
+          "detailContested": "{addr} on {nic} was not added: {by}, a member of another zone, reports it too and neither holds it. Allow it for the guest it belongs to.",
+          "detailContestedPeer": "{addr} on {nic} was not added: a member of another zone on another cluster reports it too and neither holds it. Allow it for the guest it belongs to."
         },
         "ipfilter_manual": {
           "title": "List made by hand",
@@ -15039,6 +15041,7 @@
           "title": "IP filter",
           "pass": "{count, plural, one {# member ready} other {# members ready}}",
           "notChecked": "Run a check to compute it",
+          "notDeployed": "Computed after the first application on this cluster",
           "part": {
             "no_address": "{count, plural, one {# without a known address} other {# without a known address}}",
             "held": "{count, plural, one {# address held} other {# addresses held}}",
@@ -15643,6 +15646,8 @@
         "guestUnnamed": "{addr} on {nic}: held by a member of another zone",
         "peer": "{addr} on {nic}: held by a member of another zone on another cluster",
         "source": "{addr} on {nic}: inside the source network {by} of a flow",
+        "contested": "{addr} on {nic}: also reported by {by}, a member of another zone, and held by neither",
+        "contestedPeer": "{addr} on {nic}: also reported by a member of another zone on another cluster, and held by neither",
         "other": "{addr} on {nic}: not added"
       },
       "allow": "Allow",

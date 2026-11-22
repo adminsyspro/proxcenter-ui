@@ -13916,7 +13916,9 @@
           "detail": "{addr} auf {nic} wurde der Liste dieses Gasts nicht hinzugefügt.",
           "detailGuest": "{addr} auf {nic} wurde nicht hinzugefügt: sie gehört {by}, einem Mitglied einer anderen Zone.",
           "detailPeer": "{addr} auf {nic} wurde nicht hinzugefügt: sie gehört einem Mitglied einer anderen Zone auf einem anderen Cluster.",
-          "detailSource": "{addr} auf {nic} wurde nicht hinzugefügt: sie liegt im Quellnetz {by} eines Flusses."
+          "detailSource": "{addr} auf {nic} wurde nicht hinzugefügt: sie liegt im Quellnetz {by} eines Flusses.",
+          "detailContested": "{addr} auf {nic} wurde nicht hinzugefügt: {by}, ein Mitglied einer anderen Zone, meldet sie ebenfalls und keiner von beiden hält sie. Erlauben Sie sie für den Gast, dem sie gehört.",
+          "detailContestedPeer": "{addr} auf {nic} wurde nicht hinzugefügt: ein Mitglied einer anderen Zone auf einem anderen Cluster meldet sie ebenfalls und keiner von beiden hält sie. Erlauben Sie sie für den Gast, dem sie gehört."
         },
         "ipfilter_manual": {
           "title": "Von Hand erstellte Liste",
@@ -14610,6 +14612,7 @@
           "title": "IP-Filter",
           "pass": "{count, plural, one {# Mitglied bereit} other {# Mitglieder bereit}}",
           "notChecked": "Eine Prüfung starten, um ihn zu berechnen",
+          "notDeployed": "Wird nach der ersten Anwendung auf diesem Cluster berechnet",
           "part": {
             "no_address": "{count, plural, one {# ohne bekannte Adresse} other {# ohne bekannte Adresse}}",
             "held": "{count, plural, one {# Adresse zurückgehalten} other {# Adressen zurückgehalten}}",
@@ -15214,6 +15217,8 @@
         "guestUnnamed": "{addr} auf {nic}: gehört einem Mitglied einer anderen Zone",
         "peer": "{addr} auf {nic}: gehört einem Mitglied einer anderen Zone auf einem anderen Cluster",
         "source": "{addr} auf {nic}: liegt im Quellnetz {by} eines Flusses",
+        "contested": "{addr} auf {nic}: auch von {by}, einem Mitglied einer anderen Zone, gemeldet; keiner von beiden hält sie",
+        "contestedPeer": "{addr} auf {nic}: auch von einem Mitglied einer anderen Zone auf einem anderen Cluster gemeldet; keiner von beiden hält sie",
         "other": "{addr} auf {nic}: nicht hinzugefügt"
       },
       "allow": "Erlauben",

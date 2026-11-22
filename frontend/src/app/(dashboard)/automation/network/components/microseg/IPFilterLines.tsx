@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 
 import type { IPFilterGuest, IPFilterHeld } from '@/lib/microseg/types'
 
-import { heldKey, nicKeys, splitAddresses, type RowState } from './ipFilterModel'
+import { heldByLabel, heldKey, nicKeys, splitAddresses, type RowState } from './ipFilterModel'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import TruncatedText from './TruncatedText'
 
@@ -45,7 +45,7 @@ function NicLine({ nic, addresses, missing }: Readonly<{ nic: string; addresses:
 /** The sentence of an address that was not added. */
 export function useHeldText(): (held: IPFilterHeld) => string {
   const t = useTranslations('microsegPilot.ipFilter.held')
-  return held => t(heldKey(held), { addr: held.addr, nic: held.nic, by: held.by ?? '' })
+  return held => t(heldKey(held), { addr: held.addr, nic: held.nic, by: heldByLabel(held.by, held.by_name) })
 }
 
 type LinesProps = {

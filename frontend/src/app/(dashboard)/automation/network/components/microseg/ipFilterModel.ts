@@ -145,9 +145,23 @@ export function ipFilterCounts(guests: readonly IPFilterGuest[]): { members: num
   return { members: guests.length, ready, attention }
 }
 
+/**
+ * Who holds (or also reports) an address, for the reader: the name of the member with its VMID ("db-1 (102)") when the
+ * engine sent it, else what it names the member or the network with ("lxc/102", "10.0.0.0/24").
+ */
+export function heldByLabel(by: string | undefined, byName: string | undefined): string {
+  if (!by) return ''
+  if (!byName) return by
+  const vmid = by.slice(by.lastIndexOf('/') + 1)
+  return `${byName} (${vmid})`
+}
+
 /** The i18n key (under microsegPilot.ipFilter.held) of why an address was not added. */
-export function heldKey(held: Pick<IPFilterHeld, 'reason' | 'by'>): 'guest' | 'guestUnnamed' | 'peer' | 'source' | 'other' {
+export function heldKey(held: Pick<IPFilterHeld, 'reason' | 'by'>): 'guest' | 'guestUnnamed' | 'peer' | 'source' | 'contested' | 'contestedPeer' | 'other' {
   if (held.reason === 'guest') return held.by ? 'guest' : 'guestUnnamed'
   if (held.reason === 'peer') return 'peer'
+  // A member of another zone reports the address too and neither holds it: the admin allows it for its guest. That
+  // member is named on this cluster, not on another cluster of a shared policy.
+  if (held.reason === 'contested') return held.by ? 'contested' : 'contestedPeer'
   return held.reason === 'source' && held.by ? 'source' : 'other'
 }

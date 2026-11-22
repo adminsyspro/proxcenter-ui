@@ -137,8 +137,8 @@ describe('POST .../console audit', () => {
       m.getTenantInfrastructureScope.mockResolvedValue(iaas())
       cluster('provider')
       const res = await call()
-      expect(res.status).toBe(403)
-      expect(await res.json()).toEqual({ error: 'Guest outside your vDC scope' })
+      expect(res.status).toBe(404)
+      expect(await res.json()).toEqual({ error: 'Guest not found' })
       expect(m.pveFetch.mock.calls.map(c => c[1])).toEqual(['/cluster/resources?type=vm'])
       expect(m.audit).toHaveBeenCalledTimes(1)
       expect(m.audit.mock.calls[0][0]).toMatchObject({

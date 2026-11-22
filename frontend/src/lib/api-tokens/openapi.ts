@@ -124,6 +124,11 @@ function operation(entry: AllowlistEntry, refusedMethod: HttpMethod, schemas: Sc
       error: "Invalid or expired API token",
     }),
     "403": forbiddenResponse(entry),
+    ...(entry.guestScope ? {
+      "404": jsonError("vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)", {
+        error: "Guest not found",
+      }),
+    } : {}),
     "405": jsonError("Method not allowed for this API token route", {
       error: "Method not allowed for this API token route",
       method: refusedMethod,

@@ -552,17 +552,19 @@ describe('GET/PUT config: tenant vDC guest containment', () => {
       expect((await request(method)).status).toBe(200)
       expect(getTenantInfrastructureScopeMock).toHaveBeenCalledWith('tenant-1', { ignoreVdcContext: true })
     })
-    for (const [label, resources] of [
-      ['another tenant pool', [{ ...mine, pool: 'pool-b' }]],
-      ['no pool', [{ ...mine, pool: '' }]],
-      ['foreign node on the same connection', [{ ...mine, node: 'pve9' }]],
-      ['wrong guest type', [{ ...mine, type: 'lxc' }]],
-      ['unknown VM', [{ ...mine, vmid: 101 }]],
+    // A guest that is not the tenant's answers 404 like a missing one
+    // (roadmap#265); its own guest on a node outside the vDC stays a 403.
+    for (const [label, resources, status] of [
+      ['another tenant pool', [{ ...mine, pool: 'pool-b' }], 404],
+      ['no pool', [{ ...mine, pool: '' }], 404],
+      ['foreign node on the same connection', [{ ...mine, node: 'pve9' }], 403],
+      ['wrong guest type', [{ ...mine, type: 'lxc' }], 404],
+      ['unknown VM', [{ ...mine, vmid: 101 }], 404],
     ] as const) {
       it(`${method}: refuses ${label} before reading or writing config`, async () => {
         getTenantInfrastructureScopeMock.mockResolvedValue(tenantScope())
         inventory(resources)
-        expect((await request(method)).status).toBe(403)
+        expect((await request(method)).status).toBe(status)
         expect(pveFetchMock.mock.calls.some(c => String(c[1]).includes('/config'))).toBe(false)
       })
     }
@@ -600,6 +602,23 @@ describe('GET/PUT config: tenant vDC guest containment', () => {
     expect(res.status).toBe(200)
     expect(pveFetchMock.mock.calls.some(c => String(c[1]).startsWith('/nodes/pve4/'))).toBe(true)
   })
+  it('GET: 404 when the guest is in no node of the cluster (roadmap#265)', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+    pveFetchMock.mockImplementation(async (_conn, path: string) => {
+      if (path === '/cluster/resources?type=vm') return []
+      throw new Error("PVE 500 /nodes/pve3/qemu/100/config: Configuration file 'nodes/pve3/qemu-server/100.conf' does not exist")
+    })
+    const res = await request('GET')
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'Guest not found' })
+  })
+  it('GET: 500, never 404, when the cluster cannot be listed after a missing config', async () => {
+    getTenantInfrastructureScopeMock.mockResolvedValue({ kind: 'provider' })
+    pveFetchMock.mockImplementation(async () => {
+      throw new Error("PVE 500 /nodes/pve3/qemu/100/config: Configuration file 'nodes/pve3/qemu-server/100.conf' does not exist")
+    })
+    expect((await request('GET')).status).toBe(500)
+  })
   it('GET: refuses a VM moved outside the tenant pool before the fallback config read', async () => {
     getTenantInfrastructureScopeMock.mockResolvedValue(tenantScope(['pve3', 'pve4']))
     let lookups = 0
@@ -611,7 +630,7 @@ describe('GET/PUT config: tenant vDC guest containment', () => {
       if (path.startsWith('/nodes/pve3/')) throw new Error('Configuration file does not exist')
       return { sata0: 'none,media=cdrom' }
     })
-    expect((await request('GET')).status).toBe(403)
+    expect((await request('GET')).status).toBe(404)
     expect(pveFetchMock.mock.calls.some(c => String(c[1]).startsWith('/nodes/pve4/'))).toBe(false)
   })
 

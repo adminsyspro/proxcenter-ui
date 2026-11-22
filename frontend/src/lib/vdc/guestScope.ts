@@ -4,6 +4,10 @@ import { pveFetch } from "@/lib/proxmox/client"
 import { getTenantInfrastructureScope, maskingScope, type InfraScope } from "@/lib/tenant/infraScope"
 
 const outside = () => NextResponse.json({ error: 'Guest outside your vDC scope' }, { status: 403 })
+// A guest of another tenant and a guest that does not exist answer alike: a
+// tenant cannot probe the VMIDs of others, and an API client (Terraform)
+// sees a guest deleted behind its back as gone rather than forbidden.
+const notFound = () => NextResponse.json({ error: 'Guest not found' }, { status: 404 })
 const unverifiable = () => NextResponse.json({ error: 'Unable to verify guest vDC scope' }, { status: 503 })
 
 /**
@@ -58,10 +62,8 @@ export async function checkTenantGuestsScope(
   if (!Array.isArray(resources)) return unverifiable()
   for (const vmid of vmids) {
     const guest = resources.find(row => (type === null || row?.type === type) && String(row?.vmid) === vmid)
-    if (!guest || !nodes.has(guest.node) || !guest.pool || !pools.has(guest.pool) ||
-      (!allowMovedNode && node !== null && guest.node !== node)) {
-      return outside()
-    }
+    if (!guest?.pool || !pools.has(guest.pool)) return notFound()
+    if (!nodes.has(guest.node) || (!allowMovedNode && node !== null && guest.node !== node)) return outside()
   }
   return null
 }

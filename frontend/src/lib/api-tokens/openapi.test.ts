@@ -26,7 +26,8 @@ describe('buildOpenApiDocument', () => {
       expect(op.operationId).toBe(entry.id)
       expect(op.summary).toBe(entry.summary)
       expect(op['x-required-scopes']).toEqual(entry.requiredScopes)
-      expect(Object.keys(op.responses).sort()).toEqual(['200', '401', '403', '405', '429'])
+      const expected = entry.guestScope ? ['200', '401', '403', '404', '405', '429'] : ['200', '401', '403', '405', '429']
+      expect(Object.keys(op.responses).sort(), entry.id).toEqual(expected)
     }
   })
 
@@ -154,6 +155,12 @@ describe('buildOpenApiDocument', () => {
       expect(ex.guestScope.value).toEqual({ error: 'Guest outside your vDC scope' })
       expect(ex.scope.value).toEqual({ error: 'Route not available to API tokens', route: post.pattern })
       expect(ex.clusterObject).toBeUndefined()
+    })
+
+    it('documents a guest that is not the tenant\'s, or gone, as 404 (roadmap#265)', () => {
+      const res = wdoc.paths[post.pattern].post.responses['404']
+      expect(res.description).toMatch(/another tenant/)
+      expect(res.content['application/json'].example).toEqual({ error: 'Guest not found' })
     })
 
     it('throws on an unknown request or response schema ref', () => {

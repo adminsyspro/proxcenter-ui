@@ -27,6 +27,8 @@ vi.mock('@/lib/rbac', () => ({
   PERMISSIONS: { VM_VIEW: 'vm.view' },
 }))
 vi.mock('@/lib/tenant', () => ({ getCurrentTenantId: async () => 'tenant-1' }))
+// The token guard is covered by the allowlist contract tests.
+vi.mock('@/lib/api-tokens/routeGuard', () => ({ withPublicApiGuard: (_id: string, h: unknown) => h }))
 vi.mock('@/lib/tenant/infraScope', async io => ({
   ...await io<typeof import('@/lib/tenant/infraScope')>(),
   getTenantInfrastructureScope: (...a: unknown[]) => m.getTenantInfrastructureScope(...a),
@@ -68,6 +70,20 @@ beforeEach(() => {
 })
 
 describe('GET .../status', () => {
+  // roadmap#265: an API client reads power here (the guest list lags a power
+  // change); a guest in no node of the cluster is gone, 404.
+  it('answers 404 when the guest is in no node of the cluster', async () => {
+    cluster([], 'no-node-serves-it')
+    const res = await call()
+    expect(res.status).toBe(404)
+    expect(await readJson<any>(res)).toEqual({ error: 'Guest not found' })
+  })
+
+  it('is open to API tokens as vm-status', async () => {
+    const { getAllowlistEntryById } = await import('@/lib/api-tokens/allowlist')
+    expect(getAllowlistEntryById('vm-status')?.requiredScopes).toContain('vms:read')
+  })
+
   it('returns the guest status for a provider session', async () => {
     const res = await call()
     expect(res.status).toBe(200)
@@ -84,8 +100,8 @@ describe('GET .../status', () => {
     m.getTenantInfrastructureScope.mockResolvedValue(iaas())
     cluster([{ vmid: 100, type: 'qemu', node: 'pve1', pool: 'provider' }])
     const res = await call()
-    expect(res.status).toBe(403)
-    expect(await readJson(res)).toEqual({ error: 'Guest outside your vDC scope' })
+    expect(res.status).toBe(404)
+    expect(await readJson(res)).toEqual({ error: 'Guest not found' })
     expect(statusCalls()).toHaveLength(0)
   })
 

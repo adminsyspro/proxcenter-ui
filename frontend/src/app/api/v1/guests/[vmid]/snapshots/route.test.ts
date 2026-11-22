@@ -449,25 +449,25 @@ describe('snapshots of a guest outside the tenant vDC pools (session)', () => {
   it('GET refuses a guest outside the pools and reads no snapshot', async () => {
     cluster('provider')
     const res = await GET(new Request('http://test.local/_'), { params: Promise.resolve({ vmid: VM_KEY }) })
-    expect(res.status).toBe(403)
-    expect(await readJson<any>(res)).toEqual({ error: 'Guest outside your vDC scope' })
+    expect(res.status).toBe(404)
+    expect(await readJson<any>(res)).toEqual({ error: 'Guest not found' })
     expect(pveFetchMock.mock.calls.map(c => c[1])).toEqual(['/cluster/resources?type=vm'])
   })
 
   it('POST refuses before the quota is even consulted', async () => {
     cluster('provider')
     const res = await callRoute(POST as any, { method: 'POST', params: { vmid: VM_KEY }, body: { name: 'snap1' } })
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(404)
     expect(resolveVdcForTenantMock).not.toHaveBeenCalled()
     // The route never reached its own audit(): the refusal row is withAudit()'s.
     expect(auditMock).toHaveBeenCalledTimes(1)
-    expect(auditMock.mock.calls[0][0]).toMatchObject({ status: 'failure', errorMessage: 'Guest outside your vDC scope' })
+    expect(auditMock.mock.calls[0][0]).toMatchObject({ status: 'failure', errorMessage: 'Guest not found' })
   })
 
   it('DELETE refuses and sends Proxmox no delete', async () => {
     cluster('provider')
     const res = await callRoute(DELETE as any, { method: 'DELETE', params: { vmid: VM_KEY }, searchParams: { name: 'snap1' } })
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(404)
     expect(pveFetchMock.mock.calls.map(c => c[1])).toEqual(['/cluster/resources?type=vm'])
   })
 

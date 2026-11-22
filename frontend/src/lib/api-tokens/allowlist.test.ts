@@ -108,6 +108,7 @@ describe('shared canonical matcher', () => {
       'public-health': '/api/v1/public/health',
       'vm-create': '/api/v1/connections/c1/guests/qemu/pve1',
       'vm-config-get': `${guest}/config`,
+      'vm-status': `${guest}/status`,
       'vm-config-update': `${guest}/config`,
       'vm-power': `${guest}/shutdown`,
       'vm-clone': `${guest}/clone`,

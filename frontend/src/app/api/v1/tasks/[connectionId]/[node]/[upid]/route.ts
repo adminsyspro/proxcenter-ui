@@ -675,7 +675,8 @@ async function taskOutsideVdcScope(
     }
     const refused = await checkTenantGuestScope(principal.tenantId, connection, connectionId, null, node, task.vmid, true)
     // null: inside the vDC (or not a vDC tenant). A 503 (scope unverifiable) is returned as is.
-    if (!refused || refused.status !== 403) return refused
+    // 404 is a guest gone (or another tenant's): its destroy task may be ours.
+    if (!refused || (refused.status !== 403 && refused.status !== 404)) return refused
     return (await startedByCaller(principal, upid)) ? null : outside()
   } catch {
     return NextResponse.json({ error: 'Unable to verify guest vDC scope' }, { status: 503 })

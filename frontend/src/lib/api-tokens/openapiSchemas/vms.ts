@@ -234,6 +234,25 @@ export const VM_RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
       },
     },
   },
+  VmStatusResponse: {
+    type: "object",
+    properties: {
+      data: {
+        type: "object",
+        properties: {
+          status: { type: "string", description: "running, stopped, paused... (unknown when Proxmox gave none)" },
+          name: { type: "string" },
+          uptime: { type: "integer", description: "Seconds" },
+          cpu: { type: "number" },
+          mem: { type: "integer" },
+          maxmem: { type: "integer" },
+          disk: { type: "integer" },
+          maxdisk: { type: "integer" },
+        },
+      },
+      movedTo: { type: ["string", "null"], description: "Current node when the guest left the URL node" },
+    },
+  },
   VmNextIdResponse: {
     type: "object",
     properties: {

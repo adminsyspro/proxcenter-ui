@@ -30,14 +30,30 @@ export async function locateVmInCluster(
     return null
   }
   if (!Array.isArray(resources)) return null
+  return findGuest(resources, vmid, type)
+}
+
+function findGuest(resources: any[], vmid: string | number, type: GuestType): LocatedVm | null {
   const target = Number(vmid)
   if (!Number.isFinite(target)) return null
-  for (const r of resources) {
-    if (r?.type === type && Number(r?.vmid) === target && typeof r?.node === "string") {
-      return { node: r.node, status: r.status, name: r.name }
-    }
-  }
-  return null
+  const r = resources.find(row => row?.type === type && Number(row?.vmid) === target && typeof row?.node === "string")
+  return r ? { node: r.node, status: r.status, name: r.name } : null
+}
+
+/**
+ * locateVmInCluster for callers that answer "not found": `missing` only when
+ * the cluster listing came back and holds no such guest; a listing that
+ * fails throws, so a transient error is never reported as a deleted guest
+ * (an API client such as Terraform forgets a guest on 404, roadmap#265).
+ */
+export async function locateVmOrMissing(
+  conn: ProxmoxClientOptions,
+  vmid: string | number,
+  type: GuestType = "qemu"
+): Promise<LocatedVm | "missing"> {
+  const resources = await pveFetch<any>(conn, "/cluster/resources?type=vm")
+  if (!Array.isArray(resources)) throw new Error("Unexpected answer to /cluster/resources")
+  return findGuest(resources, vmid, type) ?? "missing"
 }
 
 /**

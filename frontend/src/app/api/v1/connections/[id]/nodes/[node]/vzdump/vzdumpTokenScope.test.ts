@@ -94,22 +94,22 @@ beforeEach(() => {
 })
 
 describe('POST vzdump with a vDC tenant API token', () => {
-  it('403 for a body vmid of another tenant, before the handler runs', async () => {
+  it('404 for a body vmid of another tenant, before the handler runs', async () => {
     const res = await vzdump({ vmid: 200, storage: 'ceph-a' })
 
-    expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: 'Guest outside your vDC scope' })
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'Guest not found' })
     expect(checkPermissionMock).not.toHaveBeenCalled()
     expect(vzdumpCalls()).toEqual([])
     expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'apitoken.denied', details: expect.objectContaining({ entry: 'vm-backup-now', reason: 'Guest outside your vDC scope' }),
+      action: 'apitoken.denied', details: expect.objectContaining({ entry: 'vm-backup-now', reason: 'Guest not found' }),
     }))
   })
 
-  it('403 when a comma-separated vmid list smuggles a foreign guest next to an own one', async () => {
+  it('404 when a comma-separated vmid list smuggles a foreign guest next to an own one', async () => {
     const res = await vzdump({ vmid: '100,200', storage: 'ceph-a' })
 
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(404)
     expect(vzdumpCalls()).toEqual([])
   })
 

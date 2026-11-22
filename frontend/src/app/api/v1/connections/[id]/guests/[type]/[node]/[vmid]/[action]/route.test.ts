@@ -87,8 +87,8 @@ describe('POST .../[action]', () => {
   it('refuses a guest outside the tenant vDC pools and sends Proxmox no action', async () => {
     m.getTenantInfrastructureScope.mockResolvedValue(iaas())
     const res = await call({ ...PARAMS, vmid: '200' })
-    expect(res.status).toBe(403)
-    expect(await readJson(res)).toEqual({ error: 'Guest outside your vDC scope' })
+    expect(res.status).toBe(404)
+    expect(await readJson(res)).toEqual({ error: 'Guest not found' })
     expect(powerCalls()).toHaveLength(0)
   })
 

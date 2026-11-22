@@ -54,10 +54,10 @@ describe('guardSessionGuest: vDC confinement', () => {
     expect(pveFetchMock).toHaveBeenCalledWith(conn, '/cluster/resources?type=vm')
   })
 
-  it('refuses a guest outside the vDC pools with 403', async () => {
+  it('refuses a guest outside the vDC pools with 404, like a missing one', async () => {
     const res = await guardSessionGuest({ ...target, vmid: '200' })
-    expect(res?.status).toBe(403)
-    expect(await res?.json()).toEqual({ error: 'Guest outside your vDC scope' })
+    expect(res?.status).toBe(404)
+    expect(await res?.json()).toEqual({ error: 'Guest not found' })
   })
 
   it('refuses a guest that moved to another vDC node unless allowMovedNode is set', async () => {
@@ -68,7 +68,7 @@ describe('guardSessionGuest: vDC confinement', () => {
 
   it('a null type and node confine a body vmid to the vDC pools only', async () => {
     expect(await guardSessionGuest({ ...target, type: null, node: null, vmid: '101' })).toBeNull()
-    expect((await guardSessionGuest({ ...target, type: null, node: null, vmid: '200' }))?.status).toBe(403)
+    expect((await guardSessionGuest({ ...target, type: null, node: null, vmid: '200' }))?.status).toBe(404)
   })
 
   it('resolves the connection thunk only for a vDC tenant', async () => {

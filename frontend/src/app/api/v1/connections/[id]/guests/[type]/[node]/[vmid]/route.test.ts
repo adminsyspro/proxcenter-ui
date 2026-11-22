@@ -29,6 +29,7 @@ vi.mock('@/lib/rbac', () => ({
   ),
   PERMISSIONS: {
     VM_DELETE: 'vm.delete',
+    VM_VIEW: 'vm.view',
   },
 }))
 
@@ -101,6 +102,52 @@ describe('DELETE /api/v1/connections/[id]/guests/[type]/[node]/[vmid]', () => {
     const body = await readJson<any>(res)
     expect(body.code).toBe('vm_locked')
     expect(body.lock).toBe('snapshot')
+  })
+
+  // roadmap#265: Terraform takes a 404 as "already deleted". A guest DRS moved
+  // is not gone: its config is missing on the URL node only.
+  describe('a guest whose config is missing on the URL node', () => {
+    const missing = () => new Error(`PVE 500 /nodes/${NODE}/qemu/${VMID}/status/current: Configuration file 'nodes/${NODE}/qemu-server/${VMID}.conf' does not exist`)
+
+    it('404 when the cluster hosts no such guest', async () => {
+      pveFetchMock.mockImplementation(async (_conn: unknown, path: string) => {
+        if (path === '/cluster/resources?type=vm') return []
+        throw missing()
+      })
+      const res = await DELETE(makeReq(), { params: Promise.resolve(baseParams) })
+      expect(res.status).toBe(404)
+      expect(await readJson<any>(res)).toEqual({ error: 'Guest not found' })
+    })
+
+    it('409 naming the node when the guest moved, and nothing deleted', async () => {
+      pveFetchMock.mockImplementation(async (_conn: unknown, path: string) => {
+        if (path === '/cluster/resources?type=vm') return [{ vmid: Number(VMID), type: 'qemu', node: 'pve-other' }]
+        throw missing()
+      })
+      const res = await DELETE(makeReq(), { params: Promise.resolve(baseParams) })
+      expect(res.status).toBe(409)
+      expect(await readJson<any>(res)).toMatchObject({ code: 'vm_moved', node: 'pve-other' })
+      expect(pveFetchMock.mock.calls.some((c: unknown[]) => (c[2] as { method?: string } | undefined)?.method === 'DELETE')).toBe(false)
+    })
+
+    it('names the new node only to a caller who may view the guest there', async () => {
+      pveFetchMock.mockImplementation(async (_conn: unknown, path: string) => {
+        if (path === '/cluster/resources?type=vm') return [{ vmid: Number(VMID), type: 'qemu', node: 'pve-other' }]
+        throw missing()
+      })
+      const forbidden = new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 })
+      checkPermissionMock.mockImplementation(async (perm: string, _t: string, resource: string) =>
+        perm === 'vm.view' && resource.includes('pve-other') ? forbidden : null)
+      const res = await DELETE(makeReq(), { params: Promise.resolve(baseParams) })
+      expect(res.status).toBe(403)
+      expect(JSON.stringify(await readJson<any>(res))).not.toContain('pve-other')
+    })
+
+    it('500, never 404, when the cluster cannot be listed', async () => {
+      pveFetchMock.mockImplementation(async () => { throw missing() })
+      const res = await DELETE(makeReq(), { params: Promise.resolve(baseParams) })
+      expect(res.status).toBe(500)
+    })
   })
 
   it('400 when VM is running', async () => {

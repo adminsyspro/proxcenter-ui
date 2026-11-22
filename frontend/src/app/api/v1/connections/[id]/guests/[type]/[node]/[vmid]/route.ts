@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { isVmConfigNotFoundError, locateVmOrMissing, type GuestType } from "@/lib/proxmox/locateVm"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
@@ -42,11 +43,25 @@ async function handler(
     if (scopeDenied) return scopeDenied
 
     // Vérifier que la VM est arrêtée et non verrouillée
-    const status = await pveFetch<any>(
-      conn,
-      `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/status/current`,
-      { method: "GET" }
-    )
+    let status: any
+    try {
+      status = await pveFetch<any>(
+        conn,
+        `/nodes/${encodeURIComponent(node)}/${type}/${encodeURIComponent(vmid)}/status/current`,
+        { method: "GET" }
+      )
+    } catch (err) {
+      if (!isVmConfigNotFoundError(err)) throw err
+      // Gone from the URL node: 404 only when no node of the cluster hosts it
+      // (an API client takes 404 as "already deleted", roadmap#265); a guest
+      // DRS moved is named so the caller deletes it where it is.
+      const located = await locateVmOrMissing(conn, vmid, type as GuestType)
+      if (located === "missing") return NextResponse.json({ error: "Guest not found" }, { status: 404 })
+      // The new node is named only to a caller who may view the guest there.
+      const destinationDenied = await checkPermission(PERMISSIONS.VM_VIEW, "vm", buildVmResourceId(id, located.node, type, vmid))
+      if (destinationDenied) return destinationDenied
+      return NextResponse.json({ error: `The guest is now on node ${located.node}`, code: "vm_moved", node: located.node }, { status: 409 })
+    }
 
     // A residual lock (postmigrate, snapshot, backup, ...) makes PVE refuse the
     // delete even if the VM looks stopped. Surface this distinctly so the UI

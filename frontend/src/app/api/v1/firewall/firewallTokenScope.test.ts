@@ -155,14 +155,14 @@ describe('firewall routes with an API token', () => {
     expect(h.orchPost).toHaveBeenCalledWith('/firewall/vms/c1/pve1/qemu/100/rules', RULE)
   })
 
-  it('a rule on another tenant guest from a vDC tenant token: 403, nothing reached', async () => {
+  it('a rule on another tenant guest from a vDC tenant token: 404, nothing reached', async () => {
     h.getPrincipal.mockResolvedValue({ ok: true, principal: IAAS_TOKEN })
     h.infra.mockResolvedValue({ kind: 'iaas', vdcScope: VDC_SCOPE })
 
     const res = await addVmRule('200')
 
-    expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: 'Guest outside your vDC scope' })
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'Guest not found' })
     expect(h.checkPermission).not.toHaveBeenCalled()
     expect(h.orchPost).not.toHaveBeenCalled()
   })

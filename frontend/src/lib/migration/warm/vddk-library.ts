@@ -3,13 +3,10 @@
 // OpenVDDK (https://github.com/openvddk/openvddk, Apache 2.0) is THE library: a
 // drop-in libvixDiskLib.so.8 that ProxCenter installs on its own, without the
 // Enterprise package Broadcom's VDDK needs since its public download closed.
-// ProxCenter installs its own build of it, from its fork
-// (https://github.com/adminsyspro/openvddk, branch `proxcenter`): the upstream
-// release plus the fixes ProxCenter could not wait for, so a host the upstream
-// release cannot read does not wait on a project that takes no contributions. It
-// lives in its own directory: a Broadcom VDDK already on a node stays where it
-// is, untouched, and nbdkit loads whichever library the `libdir=` it is given
-// holds (an explicit `vddkLibdir` from the API can still point at one).
+// ProxCenter installs the upstream release as published. It lives in its own
+// directory: a Broadcom VDDK already on a node stays where it is, untouched,
+// and nbdkit loads whichever library the `libdir=` it is given holds (an
+// explicit `vddkLibdir` from the API can still point at one).
 // Pure: no database, no SSH, so client components can import the constants.
 
 /** Where ProxCenter installs OpenVDDK, and the directory every warm run hands to nbdkit. */
@@ -24,15 +21,15 @@ export const BROADCOM_DEFAULT_LIBDIR = "/usr/lib/vmware-vix-disklib"
  * Bumping the version means bumping all of it.
  */
 export const OPENVDDK_KIT = {
-  // 0.7.4 with the fixes for ESXi 7.0.0 GA hosts (openvddk/openvddk#1) and for
-  // a '+' in a datastore file path, e.g. a VM named "web+db" (NET-0006).
-  version: "0.7.4-pxc2",
-  commit: "79ba2662c28a",
-  file: "openvddk-evalkit-0.7.4-pxc2-79ba2662c28a.tar.gz",
-  sha256: "ec7191d6a4d020c4f85b47560cfd52cd92728a6feff076522f34e0bcfd333b87",
+  // 0.7.5 carries the fixes for ESXi 7.0.0 GA hosts (openvddk/openvddk#1) and
+  // for a '+' in a datastore file path, e.g. a VM named "web+db" (openvddk/openvddk#4).
+  version: "0.7.5",
+  commit: "d7262efa169c",
+  file: "openvddk-runtime-0.7.5-d7262efa169c.tar.gz",
+  sha256: "69d835a52dd88ac89e5ab55140476e3f4b6b74292eb7a589cbe3214445aae59e",
   /** The library inside the kit (lib/), the file nbdkit ends up loading. */
   libFile: "libvixDiskLib.so.8.0.3",
-  libSha256: "2b91b346f8b35e357acac73a6b414f12c4270442b64efec5c6151c24de659ac9",
+  libSha256: "d8256c7a19712a27f53702402250c9c52c97a1231479b0b398f57be3f401443b",
   /** Download size, for the confirmation text. */
   sizeMB: 17,
   /** Size once extracted on the node. */
@@ -40,7 +37,7 @@ export const OPENVDDK_KIT = {
 } as const
 
 export const OPENVDDK_KIT_URL =
-  `https://github.com/adminsyspro/openvddk/releases/download/v${OPENVDDK_KIT.version}/${OPENVDDK_KIT.file}`
+  `https://github.com/openvddk/openvddk/releases/download/v${OPENVDDK_KIT.version}/${OPENVDDK_KIT.file}`
 
 // System directories a library directory must never be: the OpenVDDK install
 // replaces its directory as a whole, so one of these would take the host down.

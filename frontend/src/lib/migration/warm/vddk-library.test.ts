@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest"
 import { BROADCOM_DEFAULT_LIBDIR, libdirError, OPENVDDK_DEFAULT_LIBDIR, OPENVDDK_KIT, OPENVDDK_KIT_URL } from "./vddk-library"
 
 describe("OpenVDDK pin (roadmap#177)", () => {
-  it("installs ProxCenter's pinned build from its fork into its own directory, never Broadcom's", () => {
+  it("installs the pinned upstream release into its own directory, never Broadcom's", () => {
     expect(OPENVDDK_DEFAULT_LIBDIR).toBe("/usr/lib/openvddk")
     expect(OPENVDDK_DEFAULT_LIBDIR).not.toBe(BROADCOM_DEFAULT_LIBDIR)
     expect(OPENVDDK_KIT_URL).toBe(
-      "https://github.com/adminsyspro/openvddk/releases/download/v0.7.4-pxc2/openvddk-evalkit-0.7.4-pxc2-79ba2662c28a.tar.gz",
+      "https://github.com/openvddk/openvddk/releases/download/v0.7.5/openvddk-runtime-0.7.5-d7262efa169c.tar.gz",
     )
-    expect(OPENVDDK_KIT.file).toBe(`openvddk-evalkit-${OPENVDDK_KIT.version}-${OPENVDDK_KIT.commit}.tar.gz`)
+    expect(OPENVDDK_KIT.file).toBe(`openvddk-runtime-${OPENVDDK_KIT.version}-${OPENVDDK_KIT.commit}.tar.gz`)
     expect(OPENVDDK_KIT.sha256).toMatch(/^[0-9a-f]{64}$/)
     expect(OPENVDDK_KIT.libSha256).toMatch(/^[0-9a-f]{64}$/)
   })

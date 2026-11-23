@@ -67,7 +67,7 @@ vi.mock("@/lib/license/exclusions", async (importOriginal) => ({
 }))
 
 import {
-  buildConnectConfig, isOrchestratorTimeoutError, isOrchestratorNotReachedError, createInactivityTimer,
+  buildConnectConfig, isOrchestratorTimeoutError, isOrchestratorNotReachedError, createInactivityTimer, clampTimerMs, MAX_TIMER_MS,
   executeSSH, executeSSHDirect,
 } from "./exec"
 import { PveLicenseExcludedError } from "@/lib/license/exclusions"
@@ -150,6 +150,14 @@ describe("createInactivityTimer", () => {
   })
 })
 
+describe("clampTimerMs", () => {
+  it("leaves a budget a timer can hold and caps a longer one at the timer limit", () => {
+    expect(clampTimerMs(30_000)).toBe(30_000)
+    expect(clampTimerMs(MAX_TIMER_MS)).toBe(MAX_TIMER_MS)
+    expect(clampTimerMs(3_188_928_000)).toBe(2_147_483_647)
+  })
+})
+
 describe("executeSSHDirect (ssh2 wiring)", () => {
   afterEach(() => { h.clients.length = 0; h.state.failExec = false })
 
@@ -187,6 +195,20 @@ describe("executeSSHDirect (ssh2 wiring)", () => {
     const r = await p
     expect(r.success).toBe(false)
     expect(r.error).toMatch(/inactivity/i)
+  })
+
+  it("holds a budget past the 32-bit timer limit instead of cutting the command off at once (3 TiB copy)", async () => {
+    const warn = vi.spyOn(process, "emitWarning")
+    // applyTimeoutMs(3 TiB): 12 h plus one second per MiB.
+    const p = executeSSHDirect({ host: "h", port: 22, user: "root", password: "pw", command: "dd …", timeoutMs: 3_188_928_000, inactivityMs: 3_188_928_000 })
+    await flush()
+    await new Promise(r => setTimeout(r, 30))
+    const c = h.clients.at(-1)!
+    c._stream!.emit("data", Buffer.from("copied"))
+    c._stream!.emit("close", 0)
+    await expect(p).resolves.toMatchObject({ success: true, output: "copied" })
+    expect(warn.mock.calls.some(a => String(a[0]).includes("32-bit"))).toBe(false)
+    warn.mockRestore()
   })
 
   it("replaces ssh2's opaque handshake error with the host-key refusal and hands the key over", async () => {

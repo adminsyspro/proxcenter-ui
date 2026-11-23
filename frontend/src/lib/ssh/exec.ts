@@ -154,7 +154,7 @@ export function createInactivityTimer(ms: number, onFire: () => void): { bump: (
   let handle: ReturnType<typeof setTimeout> | null = null
   const bump = () => {
     if (handle) clearTimeout(handle)
-    handle = setTimeout(onFire, ms)
+    handle = setTimeout(onFire, clampTimerMs(ms))
   }
   const clear = () => {
     if (handle) { clearTimeout(handle); handle = null }
@@ -183,6 +183,19 @@ export function explainSudoRefusal(result: SSHResult, wrapped: boolean): SSHResu
   }
 }
 
+/** Longest delay a Node timer takes: a 32-bit signed count of milliseconds, 24.8 days. */
+export const MAX_TIMER_MS = 2 ** 31 - 1
+
+/**
+ * A timeout a Node timer can hold. Past MAX_TIMER_MS setTimeout does not wait
+ * longer, it fires after 1 ms (TimeoutOverflowWarning): the copy budget of a
+ * disk with more than 2 TiB to copy, which grows with its bytes, cut the dd off
+ * as it started and failed the migration on that disk (v1.5.0 field case).
+ */
+export function clampTimerMs(ms: number): number {
+  return Math.min(ms, MAX_TIMER_MS)
+}
+
 /**
  * Execute an SSH command with orchestrator-first, ssh2-fallback strategy.
  *
@@ -201,9 +214,10 @@ export async function executeSSH(
   connectionId: string,
   target: SshTarget,
   command: string,
-  timeoutMs: number = 30_000,
+  requestedTimeoutMs: number = 30_000,
   execOpts: SSHExecOpts = {}
 ): Promise<SSHResult> {
+  const timeoutMs = clampTimerMs(requestedTimeoutMs)
   // A connection outside the license is read-only for ProxCenter
   // (roadmap#58): only a command its caller vouches for as read-only may run
   // there. Decided first, before any credential is read or any call is made.
@@ -388,7 +402,7 @@ export async function executeSSHDirect(opts: {
     // falls back to 30s for plain execs. This is the backstop — the keepalive
     // (buildConnectConfig) and the optional inactivity guard catch a dead/stalled
     // transfer long before this fires.
-    const overallTimeoutMs = opts.timeoutMs ?? 30_000
+    const overallTimeoutMs = clampTimerMs(opts.timeoutMs ?? 30_000)
 
     // Set by the host-key verifier when it refuses the key. ssh2 reports that
     // rejection as a bare "Handshake failed" on the error event, so without

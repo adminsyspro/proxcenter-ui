@@ -158,10 +158,10 @@ describe("buildOpenVddkInstallScript (roadmap#177)", () => {
     expect(s().startsWith("set -eo pipefail")).toBe(true)
   })
 
-  it("installs OpenVDDK into /usr/lib/openvddk from the pinned release on ProxCenter's fork, no token involved", () => {
+  it("installs OpenVDDK into /usr/lib/openvddk from the pinned upstream release, no token involved", () => {
     const script = s()
     expect(script).toContain("LIB='/usr/lib/openvddk'")
-    expect(script).toContain(`KIT_URL='https://github.com/adminsyspro/openvddk/releases/download/v0.7.4-pxc2/${OPENVDDK_KIT.file}'`)
+    expect(script).toContain(`KIT_URL='https://github.com/openvddk/openvddk/releases/download/v${OPENVDDK_KIT.version}/${OPENVDDK_KIT.file}'`)
     expect(script).not.toContain("Bearer")
     expect(script).not.toContain("vmware-vix-disklib")
     // The library step sits between the plugin and the nbd module.
@@ -201,9 +201,9 @@ describe("buildOpenVddkInstallScript (roadmap#177)", () => {
     expect(script.indexOf("refusing to replace it")).toBeLessThan(script.indexOf("curl -fsSL"))
   })
 
-  it("links lib64 to lib, stages next to the target and swaps the directory whole", () => {
+  it("links lib64 to lib unless the kit ships the link, stages next to the target and swaps the directory whole", () => {
     const script = s()
-    expect(script).toContain('ln -s lib "$STAGE/kit/lib64"')
+    expect(script).toContain('[ -e "$STAGE/kit/lib64" ] || ln -s lib "$STAGE/kit/lib64"')
     expect(script).toContain('STAGE="$(mktemp -d "$PARENT/.proxcenter-openvddk.XXXXXX")"')
     expect(script).toContain(`trap 'rm -rf "$STAGE"' EXIT`)
     expect(script).toContain('mv "$STAGE/kit" "$LIB"')

@@ -82,7 +82,7 @@ describe("parsePreflightOutput", () => {
   it("points at OpenVDDK and its automated setup in OpenVDDK's directory", () => {
     const out = ALL_PRESENT.replace(/vddk-lib=.*/, "vddk-lib=")
     const r = parsePreflightOutput(out, "/usr/lib/openvddk")
-    expect(r.error).toContain("install OpenVDDK 0.7.4")
+    expect(r.error).toContain(`install OpenVDDK ${OPENVDDK_KIT.version}`)
     expect(r.error).toContain("Prepare this node")
     expect(r.error).not.toContain("Broadcom")
     expect(r.libdir).toBe("/usr/lib/openvddk")
@@ -90,7 +90,7 @@ describe("parsePreflightOutput", () => {
   it("names both libraries for an explicit libdir, which may hold either", () => {
     const out = ALL_PRESENT.replace(/vddk-lib=.*/, "vddk-lib=")
     const r = parsePreflightOutput(out, "/usr/lib/vmware-vix-disklib")
-    expect(r.error).toContain("install OpenVDDK 0.7.4")
+    expect(r.error).toContain(`install OpenVDDK ${OPENVDDK_KIT.version}`)
     expect(r.error).toContain("install the Broadcom VDDK")
   })
 })

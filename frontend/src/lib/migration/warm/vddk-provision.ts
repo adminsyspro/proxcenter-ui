@@ -38,8 +38,8 @@ export interface OpenVddkInstallScriptOpts {
  *    (OPENVDDK_LOCAL_KIT_PATHS), else from the GitHub release;
  *  - its SHA-256 is checked against the pinned value BEFORE extraction, then
  *    every file of the kit against its own SHA256SUMS;
- *  - lib64 -> lib, because nbdkit looks for <libdir>/lib64/libvixDiskLib.so.8
- *    and the kit ships lib/;
+ *  - lib64 -> lib, because nbdkit looks for <libdir>/lib64/libvixDiskLib.so.8:
+ *    kits from 0.7.5 on ship that link, older ones only lib/;
  *  - the directory is swapped in whole, LICENSE, NOTICE and THIRD-PARTY-NOTICES
  *    included. It is only ever replaced when it is absent, empty or already an
  *    OpenVDDK install: anything else (a Broadcom VDDK, an unrelated directory)
@@ -89,7 +89,8 @@ export function buildOpenVddkInstallScript(opts: OpenVddkInstallScriptOpts = {})
     `    echo "proxcenter: A file of the OpenVDDK ${k.version} kit does not match the kit's own SHA256SUMS: nothing was installed." >&2`,
     "    exit 1",
     "  fi",
-    '  ln -s lib "$STAGE/kit/lib64"',
+    // A plain `ln -s` onto the kit's own lib64 link would land inside lib/.
+    '  [ -e "$STAGE/kit/lib64" ] || ln -s lib "$STAGE/kit/lib64"',
     '  chmod 755 "$STAGE/kit"',
     '  if [ -e "$LIB" ]; then mv "$LIB" "$STAGE/previous"; fi',
     '  mv "$STAGE/kit" "$LIB"',

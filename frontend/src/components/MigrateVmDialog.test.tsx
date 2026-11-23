@@ -525,7 +525,11 @@ async function submitCrossCluster(onCrossClusterMigrate: ReturnType<typeof vi.fn
   })
 }
 
-async function renderPrereqs(rowLabel = /High Availability|Replication|Snapshots|Site Recovery/) {
+// `rowLabel` must match a check row only. A pattern that also matches the
+// dialog itself returns at once and waits for nothing: /VMID/ matched the
+// "VMID 100" of the source card, so the row was then looked up with the 1 s
+// default and missed on a slow run. Pass the exact label for such a row.
+async function renderPrereqs(rowLabel: RegExp | string = /High Availability|Replication|Snapshots|Site Recovery/) {
   useLicenseMock.mockReturnValue({ hasFeature: () => true, loading: false })
   const props = { ...makeProps(), isCluster: false, onCrossClusterMigrate: vi.fn().mockResolvedValue(undefined) }
   const view = renderWithProviders(<MigrateVmDialog {...props} />)
@@ -594,7 +598,7 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
     // English whatever the locale. The route sends the values, the row renders
     // them under its label.
     seedPrereqHandlers({ issues: [vmidCollision] })
-    await renderPrereqs(/VMID/)
+    await renderPrereqs('VMID')
 
     const row = (await screen.findByText('VMID')).closest('div') as HTMLElement
     expect(within(row).getByText('100 already used on remote1')).toBeInTheDocument()
@@ -612,7 +616,7 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
         return HttpResponse.json({ issues: body.targetVmid ? [] : [vmidCollision] })
       }),
     )
-    const { props } = await renderPrereqs(/VMID/)
+    const { props } = await renderPrereqs('VMID')
 
     fireEvent.click(await screen.findByRole('button', { name: 'Use next free ID' }, { timeout: 10_000 }))
 
@@ -629,7 +633,7 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
     seedPrereqHandlers({ issues: [vmidCollision] })
     server.use(http.get(`*/api/v1/connections/${REMOTE_CONN_ID}/cluster/nextid`, () =>
       HttpResponse.json({ error: 'Target unreachable' }, { status: 503 })))
-    await renderPrereqs(/VMID/)
+    await renderPrereqs('VMID')
 
     fireEvent.click(await screen.findByRole('button', { name: 'Use next free ID' }, { timeout: 10_000 }))
 
@@ -648,7 +652,7 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
     // the pattern would leave holes in the line, so the sentence stays.
     const { context, ...withoutContext } = vmidCollision
     seedPrereqHandlers({ issues: [withoutContext] })
-    await renderPrereqs(/VMID/)
+    await renderPrereqs('VMID')
 
     expect(await screen.findByText('VMID 100 already exists on target cluster', {}, { timeout: 10_000 })).toBeInTheDocument()
   })

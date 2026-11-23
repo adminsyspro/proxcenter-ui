@@ -23,7 +23,7 @@ import { type AllocatedVolume } from "../pvesm-alloc"
 import { getNodeSshEndpointForMigration } from "../pve-tasks"
 import { decideNextPass, type PassStat, type ConvergenceConfig, type ConvergenceDecision } from "./convergence"
 import { initDiskState, recordPass, type DiskWarmState } from "./state"
-import { startVddkReader, stopVddkReader, buildJobReaderSweepCmd, type VddkReaderHandle } from "./vddk-reader"
+import { startVddkReader, stopVddkReader, withReaderLog, buildJobReaderSweepCmd, type VddkReaderHandle } from "./vddk-reader"
 import type { VddkOpts } from "./vddk-cmd"
 import { detectChangedExtentsByChecksum } from "./checksum-detector"
 import { checkVddkPreflight } from "./vddk-preflight"
@@ -506,6 +506,8 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
           extents, capacityBytes: disk.capacityBytes, label: "block apply failed", diskIndex, pass,
         })
         return bytes
+      } catch (e) {
+        throw await withReaderLog(config.targetConnectionId, nodeIp, reader, e)
       } finally {
         await governor?.stop()
         await stopVddkReader(config.targetConnectionId, nodeIp, reader).catch(() => {})
@@ -885,6 +887,8 @@ export async function runWarmMigration(jobId: string, config: WarmMigrationConfi
               },
             })
             copiedBytes += extents.reduce((s, e) => s + e.length, 0)
+          } catch (e) {
+            throw await withReaderLog(config.targetConnectionId, nodeIp, reader, e)
           } finally {
             await governor?.stop()
             await stopVddkReader(config.targetConnectionId, nodeIp, reader).catch(() => {})

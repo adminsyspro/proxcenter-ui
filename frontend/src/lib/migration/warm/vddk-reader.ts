@@ -78,7 +78,7 @@ export const NBD_SERVER_REFUSED = "NBD_SERVER_REFUSED:"
 export function nbdAttachError(connectOutput: string, nbdkitLog: string): string {
   const log = nbdkitLog.trim()
   if (connectOutput.includes(NBD_SERVER_REFUSED)) {
-    const errors = [...new Set(log.split("\n").map(l => l.trim()).filter(l => /\berror:/.test(l)))]
+    const errors = nbdkitLogErrors(log)
     return `nbdkit could not open the source disk: ${errors.length ? errors.join("\n") : log || "(empty)"}`
   }
   return `nbd-client failed to attach a free NBD device: ${connectOutput.trim()} | nbdkit log: ${log || "(empty)"}`
@@ -218,6 +218,31 @@ export async function startVddkReader(
   }
 
   return { nbdDev, sock: opts.sock, pwFile: opts.passwordFile, logFile }
+}
+
+/** The distinct `error:` lines of an nbdkit log, in order (the retry filter repeats each one). */
+export function nbdkitLogErrors(nbdkitLog: string): string[] {
+  return [...new Set(nbdkitLog.split("\n").map(l => l.trim()).filter(l => /\berror:/.test(l)))]
+}
+
+/**
+ * The error of a copy that failed while its reader was up, with what nbdkit
+ * logged about it. The copy's own message is dd's ("Input/output error" on the
+ * nbd device); the reason, the VDDK library's answer, is in the reader's log,
+ * which the teardown removes. Call it before stopVddkReader. Returns the error
+ * unchanged for a cancellation, a reader without a log, or a log without errors.
+ */
+export async function withReaderLog(connectionId: string, nodeIp: SshTarget, handle: VddkReaderHandle, error: unknown): Promise<unknown> {
+  if (!(error instanceof Error) || !handle.logFile || error.message === "Migration cancelled") return error
+  let log = ""
+  try {
+    log = (await executeSSH(connectionId, nodeIp, `tail -n 40 ${shellEscape(handle.logFile)} 2>/dev/null`)).output ?? ""
+  } catch {
+    // The log could not be read: the copy's own error stands.
+  }
+  const errors = nbdkitLogErrors(log)
+  if (errors.length === 0) return error
+  return new Error(`${error.message} | nbdkit log: ${errors.join(" | ")}`, { cause: error })
 }
 
 /** Tear down a reader started by startVddkReader. Best-effort; safe to call twice. */

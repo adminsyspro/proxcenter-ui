@@ -37,7 +37,7 @@
     "lib/migration/warm/target-provision.ts": 2,
     "lib/migration/warm/vddk-preflight.ts": 1,
     "lib/migration/warm/vddk-provision.ts": 1,
-    "lib/migration/warm/vddk-reader.ts": 6,
+    "lib/migration/warm/vddk-reader.ts": 7,
     "lib/migration/warm/warm-pipeline.ts": 2,
     "lib/migration/warm/xapi-reader.ts": 7,
     "lib/migration/warm/xcpng-node-preflight.ts": 1,

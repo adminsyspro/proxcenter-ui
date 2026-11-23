@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { buildJobReaderSweepCmd, buildNbdConnectCmd, buildReaderTeardownCmd, nbdAttachError, startVddkReader, stopVddkReader, VDDK_ATTACH_TIMEOUT_MS, VDDK_LAUNCH_TIMEOUT_MS } from "./vddk-reader"
+import { buildJobReaderSweepCmd, buildNbdConnectCmd, buildReaderTeardownCmd, nbdAttachError, startVddkReader, stopVddkReader, withReaderLog, VDDK_ATTACH_TIMEOUT_MS, VDDK_LAUNCH_TIMEOUT_MS } from "./vddk-reader"
 import type { VddkOpts } from "./vddk-cmd"
 
 // Mock only executeSSH; keep the real shellEscape (vddk-cmd uses it transitively).
@@ -246,5 +246,37 @@ describe("buildJobReaderSweepCmd", () => {
     expect(buildJobReaderSweepCmd("a*")).toBeNull()
     expect(buildJobReaderSweepCmd("a b")).toBeNull()
     expect(buildJobReaderSweepCmd("a/../b")).toBeNull()
+  })
+})
+
+describe("withReaderLog", () => {
+  const handle = { nbdDev: "/dev/nbd0", sock: "/tmp/v.sock", pwFile: "/tmp/pw", logFile: "/tmp/v.sock.log" }
+  beforeEach(() => mockSSH.mockReset())
+
+  it("adds each distinct nbdkit error line to a failed copy, read before the teardown removes the log", async () => {
+    const line = "nbdkit: vddk[1]: error: VixDiskLib_Read: Unknown error"
+    mockSSH.mockResolvedValue({ success: true, output: `${line}\nnbdkit: debug: retry\n${line}\n` })
+    const cause = new Error("block apply failed on disk 2: dd: error reading '/dev/nbd0': Input/output error")
+    const e = await withReaderLog("conn", "10.99.99.201", handle, cause) as Error
+    expect(e.message).toBe(`${cause.message} | nbdkit log: ${line}`)
+    expect(e.cause).toBe(cause)
+    expect(mockSSH.mock.calls[0][2]).toBe("tail -n 40 '/tmp/v.sock.log' 2>/dev/null")
+  })
+
+  it("returns the error as it is when the log holds no error line or could not be read", async () => {
+    const cause = new Error("block apply failed on disk 1: SSH connection timeout (43200s)")
+    mockSSH.mockResolvedValue({ success: true, output: "nbdkit: debug: starting\n" })
+    expect(await withReaderLog("conn", "10.99.99.201", handle, cause)).toBe(cause)
+    mockSSH.mockResolvedValue({ success: false, error: "Exit code 1" })
+    expect(await withReaderLog("conn", "10.99.99.201", handle, cause)).toBe(cause)
+  })
+
+  it("reads nothing for a cancellation, a reader without a log, or a non-Error", async () => {
+    const cancelled = new Error("Migration cancelled")
+    expect(await withReaderLog("conn", "10.99.99.201", handle, cancelled)).toBe(cancelled)
+    const failed = new Error("x")
+    expect(await withReaderLog("conn", "10.99.99.201", { ...handle, logFile: undefined }, failed)).toBe(failed)
+    expect(await withReaderLog("conn", "10.99.99.201", handle, "boom")).toBe("boom")
+    expect(mockSSH).not.toHaveBeenCalled()
   })
 })

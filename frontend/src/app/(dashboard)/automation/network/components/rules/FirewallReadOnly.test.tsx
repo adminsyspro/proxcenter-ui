@@ -45,7 +45,7 @@ function renderAs(canWrite: boolean, ui: ReactElement) {
 const groups = () => (
   <SecurityGroupsPanel
     securityGroups={[{ group: 'sg-web', rules: [RULE] }]} vmFirewallData={[MEMBER]} loadingVMRules={false} guestsNotScanned={0}
-    clusterRules={[]} hostRulesByNode={{}} firewallMode='cluster' selectedConnection={CONN} totalRules={1} aliases={[]} ipsets={[]}
+    clusterRules={[]} hostRulesByNode={{}} selectedConnection={CONN} totalRules={1} aliases={[]} ipsets={[]}
     reload={vi.fn()} loadGuestRules={vi.fn().mockResolvedValue([])} reloadVMFirewallRules={vi.fn()}
     groupUsage={null} groupUsageLoading={false} reloadGroupUsage={vi.fn()} checkGroupUsage={vi.fn()}
   />

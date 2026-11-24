@@ -159,6 +159,24 @@ export function usageForceFloorMs(lastMs: number): number {
   return Math.max(USAGE_FORCE_MIN_MS, 10 * lastMs)
 }
 
+/** What is known of a guest is asked again once older than `maxAge` (the TTL, or the force floor when forced). */
+function isStale(read: Known | undefined, nowMs: number, maxAge: number): boolean {
+  return !read || nowMs - read.at >= Math.min(maxAge, USAGE_TTL_MS)
+}
+
+/**
+ * Keeps what a read brought back. A guest asked and not answered is forgotten, so it counts as unread; an answer is
+ * kept only when no write touched the guest since the read started (`untouched`).
+ */
+function keepReads(known: Map<string, Known>, asked: CoverageGuest[], read: Map<string, Known>, untouched: (g: CoverageGuest) => boolean) {
+  for (const guest of asked) {
+    const got = read.get(placedKey(guest))
+
+    if (!got) known.delete(placedKey(guest))
+    else if (untouched(guest)) known.set(placedKey(guest), got)
+  }
+}
+
 function build(guests: CoverageGuest[], known: Map<string, Known>, readAt: number): GroupUsage {
   const groups: Record<string, UsageMember[]> = {}
   let measured = 0
@@ -167,8 +185,13 @@ function build(guests: CoverageGuest[], known: Map<string, Known>, readAt: numbe
     const read = known.get(placedKey(guest))
     if (!read) continue
     measured++
+    const member: UsageMember = { type: guest.type, vmid: guest.vmid, node: guest.node, name: guest.name || `${guest.type}/${guest.vmid}` }
+
     for (const group of read.groups) {
-      (groups[group] ??= []).push({ type: guest.type, vmid: guest.vmid, node: guest.node, name: guest.name || `${guest.type}/${guest.vmid}` })
+      const carriers = groups[group] ?? []
+
+      carriers.push(member)
+      groups[group] = carriers
     }
   }
 
@@ -191,14 +214,7 @@ function begin(connId: string, deps: UsageDeps, opts: { force: boolean; all: boo
     const state: State = cache().get(connId) ?? { known: new Map(), lastMs: 0, readAt: now(), last: null }
     const scope = opts.all ? guests : sampleGuests(guests, USAGE_MAX_GUESTS)
     const floor = usageForceFloorMs(state.lastMs)
-    const stale = (g: CoverageGuest) => {
-      const read = state.known.get(placedKey(g))
-      if (!read) return true
-      const age = now() - read.at
-
-      return age >= USAGE_TTL_MS || (opts.force && age >= floor)
-    }
-    const toRead = scope.filter(g => !g.offline && stale(g))
+    const toRead = scope.filter(g => !g.offline && isStale(state.known.get(placedKey(g)), now(), opts.force ? floor : USAGE_TTL_MS))
     const read = new Map<string, Known>()
 
     if (toRead.length > 0) {
@@ -214,11 +230,7 @@ function begin(connId: string, deps: UsageDeps, opts: { force: boolean; all: boo
       // A guest not reached or whose read failed is no longer known: what was kept of it is too old to be told as
       // read (its TTL ran out, or new figures were asked), so it counts as unread and is asked again next time.
       if (generationOf(connId) === connGen) {
-        for (const guest of toRead) {
-          const got = read.get(placedKey(guest))
-          if (!got) state.known.delete(placedKey(guest))
-          else if (generationOf(genKey(guest)) === startGen.get(genKey(guest))) state.known.set(placedKey(guest), got)
-        }
+        keepReads(state.known, toRead, read, guest => generationOf(genKey(guest)) === startGen.get(genKey(guest)))
       } else {
         state.known.clear()
       }

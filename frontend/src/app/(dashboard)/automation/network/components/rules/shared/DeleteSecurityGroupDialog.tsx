@@ -34,12 +34,40 @@ interface DeleteSecurityGroupDialogProps {
 
 type Checked = { members: UsageMember[]; unread: number; nodesNaming: string[]; nodesUnread: string[] }
 
+const memberLabel = (m: UsageMember) => `${m.name} (${m.vmid}) · ${m.node}`
+
+/** What the check found, one line each: the guests carrying the group, then what could not be read. */
+function checkedLines(
+  checked: Checked,
+  t: ReturnType<typeof useTranslations>,
+  guestStatus?: Record<string, string>,
+  nodeStatus?: Record<string, string>,
+): ConfirmInfoLine[] {
+  const lines: ConfirmInfoLine[] = []
+
+  if (checked.members.length === 0) lines.push({ icon: 'ri-checkbox-circle-line', text: t('networkPage.groupUsage.noMember') })
+  for (const m of checked.members.slice(0, DELETE_GROUP_LISTED)) {
+    lines.push({
+      icon: '',
+      text: memberLabel(m),
+      content: <GuestOnNodeLine guest={m} guestStatus={guestStatus?.[`${m.type}/${m.vmid}`]} nodeStatus={nodeStatus?.[m.node]} />,
+    })
+  }
+  if (checked.members.length > DELETE_GROUP_LISTED) {
+    lines.push({ icon: 'ri-more-line', text: t('networkPage.groupUsage.moreMembers', { count: checked.members.length - DELETE_GROUP_LISTED }) })
+  }
+  if (checked.unread > 0) lines.push({ icon: 'ri-error-warning-line', text: t('networkPage.groupUsage.unchecked', { count: checked.unread }) })
+  if (checked.nodesUnread.length > 0) lines.push({ icon: 'ri-error-warning-line', text: t('networkPage.groupUsage.nodesUnchecked', { nodes: checked.nodesUnread.join(', ') }) })
+
+  return lines
+}
+
 /**
  * Deleting a security group. Proxmox deletes an empty group even while guests still name it, and their rule then
  * points at nothing. So the guests are read first: those carrying the group are listed, and confirming detaches the
  * group from each of them, deletes its rules, then the group. A group a cluster or node rule names is kept.
  */
-export default function DeleteSecurityGroupDialog({ groupName, connectionId, rules, scope, nodes, check, guestStatus, nodeStatus, onClose, onDeleted }: DeleteSecurityGroupDialogProps) {
+export default function DeleteSecurityGroupDialog({ groupName, connectionId, rules, scope, nodes, check, guestStatus, nodeStatus, onClose, onDeleted }: Readonly<DeleteSecurityGroupDialogProps>) {
   const t = useTranslations()
   const [checked, setChecked] = useState<Checked | null>(null)
   const [checkError, setCheckError] = useState<string | null>(null)
@@ -55,11 +83,11 @@ export default function DeleteSecurityGroupDialog({ groupName, connectionId, rul
       ([usage, ofNodes]) => {
         if (listened) setChecked({ members: usage.groups[groupName] ?? [], unread: usage.unread, nodesNaming: ofNodes.naming, nodesUnread: ofNodes.unread })
       },
-      (err: unknown) => { if (listened) setCheckError(err instanceof Error ? err.message : String(err)) },
+      (err: unknown) => { if (listened) setCheckError(err instanceof Error && err.message ? err.message : t('networkPage.error')) },
     )
 
     return () => { listened = false }
-  }, [check, connectionId, nodes, groupName, attempt])
+  }, [check, connectionId, nodes, groupName, attempt, t])
   const retry = () => {
     setChecked(null)
     setCheckError(null)
@@ -68,27 +96,12 @@ export default function DeleteSecurityGroupDialog({ groupName, connectionId, rul
 
   const scopeNodes = [...new Set([...scope.nodes, ...(checked?.nodesNaming ?? [])])].sort((a, b) => a.localeCompare(b))
   const scoped = scope.cluster || scopeNodes.length > 0
-  const label = (m: UsageMember) => `${m.name} (${m.vmid}) · ${m.node}`
 
   const lines: ConfirmInfoLine[] = []
   if (scope.cluster) lines.push({ icon: 'ri-server-line', text: t('networkPage.groupUsage.scopeCluster') })
   if (scopeNodes.length > 0) lines.push({ icon: 'ri-server-line', text: t('networkPage.groupUsage.scopeNodes', { nodes: scopeNodes.join(', ') }) })
   if (!checked && !checkError) lines.push({ icon: 'ri-loader-4-line', text: t('networkPage.groupUsage.checking') })
-  if (checked) {
-    if (checked.members.length === 0) lines.push({ icon: 'ri-checkbox-circle-line', text: t('networkPage.groupUsage.noMember') })
-    for (const m of checked.members.slice(0, DELETE_GROUP_LISTED)) {
-      lines.push({
-        icon: '',
-        text: label(m),
-        content: <GuestOnNodeLine guest={m} guestStatus={guestStatus?.[`${m.type}/${m.vmid}`]} nodeStatus={nodeStatus?.[m.node]} />,
-      })
-    }
-    if (checked.members.length > DELETE_GROUP_LISTED) {
-      lines.push({ icon: 'ri-more-line', text: t('networkPage.groupUsage.moreMembers', { count: checked.members.length - DELETE_GROUP_LISTED }) })
-    }
-    if (checked.unread > 0) lines.push({ icon: 'ri-error-warning-line', text: t('networkPage.groupUsage.unchecked', { count: checked.unread }) })
-    if (checked.nodesUnread.length > 0) lines.push({ icon: 'ri-error-warning-line', text: t('networkPage.groupUsage.nodesUnchecked', { nodes: checked.nodesUnread.join(', ') }) })
-  }
+  if (checked) lines.push(...checkedLines(checked, t, guestStatus, nodeStatus))
 
   const confirm = async () => {
     if (!checked) return
@@ -103,7 +116,7 @@ export default function DeleteSecurityGroupDialog({ groupName, connectionId, rul
           await detachGroup(connectionId, member, groupName)
           detached.push(member)
         } catch {
-          throw new Error(t('networkPage.groupUsage.detachFailed', { guest: label(member) }))
+          throw new Error(t('networkPage.groupUsage.detachFailed', { guest: memberLabel(member) }))
         }
       }
       // From the last position to the first, so no deletion shifts the next one.

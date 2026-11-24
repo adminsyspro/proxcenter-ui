@@ -118,14 +118,16 @@ export default function NetworkAutomationPage() {
   const {
     vmFirewallData, loadingVMRules, vmRulesError, guestsNotScanned, loadVMFirewallData, loadGuestRules, reloadVMFirewallRules, setVMFirewallData,
   } = useVMFirewallRules(isEnterprise ? selectedConnection || null : null)
+  const enterpriseConnection = isEnterprise ? selectedConnection || null : null
+
   // Which guests carry which security group: read by the server (bounded there), only once this tab is shown.
   const {
     usage: groupUsage, loading: groupUsageLoading, reload: reloadGroupUsage, check: checkGroupUsage,
-  } = useGroupUsage(isEnterprise ? selectedConnection || null : null, activeTab === TAB.groups)
+  } = useGroupUsage(enterpriseConnection, activeTab === TAB.groups)
 
   const {
     hostRulesByNode, hostRulesError, setHostRulesByNode,
-  } = useHostFirewallRules(isEnterprise ? selectedConnection || null : null, nodesList)
+  } = useHostFirewallRules(enterpriseConnection, nodesList)
 
   // The firewall tabs write with node.manage on the connection, like the micro-segmentation: a read-only user sees
   // every write control of Firewalling, Aliases, IP Sets and Security Groups disabled, with the reason (WriteTip).
@@ -311,7 +313,6 @@ export default function NetworkAutomationPage() {
               guestsNotScanned={guestsNotScanned}
               clusterRules={clusterRules}
               hostRulesByNode={hostRulesByNode}
-              firewallMode={firewallMode}
               selectedConnection={selectedConnection}
               totalRules={totalRules}
               aliases={aliases}

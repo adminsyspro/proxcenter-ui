@@ -5,7 +5,7 @@ import { Fragment, useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Alert, Avatar, Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
+  Alert, Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
   IconButton, Paper, Stack, Table, TableBody, TableCell,
   TableContainer, TableRow, TextField, Tooltip, Typography,
   useTheme, alpha
@@ -45,7 +45,6 @@ interface SecurityGroupsPanelProps {
   guestsNotScanned: number
   clusterRules: firewallAPI.FirewallRule[]
   hostRulesByNode: Record<string, firewallAPI.FirewallRule[]>
-  firewallMode: firewallAPI.FirewallMode
   selectedConnection: string
   totalRules: number
   aliases: firewallAPI.Alias[]
@@ -299,6 +298,13 @@ export default function SecurityGroupsPanel({
 
   // ── Rules naming a group that no longer exists ──
   const orphans = useMemo(() => orphanGroups(groupUsage, securityGroups.map(g => g.group)), [groupUsage, securityGroups])
+  const orphansTitle = orphans
+    .map(o => {
+      const carriers = (groupUsage?.groups[o.group] ?? []).map(m => `${m.name} (${m.vmid})`).join(', ')
+
+      return `${o.group}: ${carriers}`
+    })
+    .join(' · ')
   const orphanGuests = useMemo(() => {
     const byKey = new Map<string, { type: string; vmid: string; node: string; name: string }>()
     for (const o of orphans) for (const m of groupUsage?.groups[o.group] ?? []) byKey.set(`${m.type}/${m.vmid}`, m)
@@ -578,7 +584,7 @@ export default function SecurityGroupsPanel({
             </WriteTip>
           )}
         >
-          <Tooltip title={orphans.map(o => `${o.group}: ${(groupUsage?.groups[o.group] ?? []).map(m => `${m.name} (${m.vmid})`).join(', ')}`).join(' · ')}>
+          <Tooltip title={orphansTitle}>
             <Typography variant='body2' noWrap>
               {t('networkPage.groupUsage.orphans', { count: orphanGuests.length, groups: orphans.map(o => o.group).join(', ') })}
             </Typography>

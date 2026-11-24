@@ -43,5 +43,8 @@ export async function nodesNamingGroup(connectionId: string, nodes: string[], gr
 
   const byName = (a: string, b: string) => a.localeCompare(b)
 
-  return { naming: naming.sort(byName), unread: unread.sort(byName) }
+  naming.sort(byName)
+  unread.sort(byName)
+
+  return { naming, unread }
 }

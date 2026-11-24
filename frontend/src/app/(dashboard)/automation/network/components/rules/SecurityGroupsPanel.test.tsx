@@ -130,7 +130,6 @@ function props(overrides: Partial<React.ComponentProps<typeof SecurityGroupsPane
     guestsNotScanned: 0,
     clusterRules: [] as firewallAPIType.FirewallRule[],
     hostRulesByNode: {} as Record<string, firewallAPIType.FirewallRule[]>,
-    firewallMode: 'cluster' as firewallAPIType.FirewallMode,
     selectedConnection: CONN,
     totalRules: 2,
     aliases: [{ name: 'net-mgmt', cidr: '10.99.99.0/24' }] as firewallAPIType.Alias[],
@@ -470,10 +469,10 @@ describe('SecurityGroupsPanel', () => {
     })).toBeInTheDocument()
   })
 
-  it('lists the groups of a standalone node like those of a cluster', () => {
-    renderPanel({ firewallMode: 'standalone' })
+  it('lists the groups of a single node like those of a cluster', () => {
+    renderPanel({ nodeStatus: { 'pve-solo': 'online' } })
 
-    // A single node has the same Datacenter firewall as a cluster, groups included.
+    // A single node has the same Datacenter firewall as a cluster, groups included: nothing depends on the node count.
     expect(screen.getByText('sg-web')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'New Policy' })).toBeInTheDocument()
   })

@@ -73,7 +73,7 @@ export function NotDeployedLine({ profiles }: { profiles: SudoProfile[] }) {
  * a sudo too old for the restricted template, then the profiles held, the
  * features unavailable and the rules the file lacks.
  */
-export default function SudoCheckLines({ check, user, absentEverywhere = [], summaryCount, showNotDeployed = true, scope = PVE_SUDO_PROFILES }: Props) {
+export default function SudoCheckLines({ check, user, absentEverywhere = [], summaryCount, showNotDeployed = true, scope = PVE_SUDO_PROFILES }: Readonly<Props>) {
   const t = useTranslations()
   const sx = summaryCount ? SUMMARY_SX : CAPTION_SX
 

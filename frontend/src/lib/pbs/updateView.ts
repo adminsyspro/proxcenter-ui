@@ -109,7 +109,51 @@ export function findingValues(finding: PbsFinding): Record<string, string | numb
 
 /** apt's own reason reads "... 401 Unauthorized" when an enterprise repository refuses a server without a subscription. */
 export function isSubscriptionRefusal(finding: PbsFinding): boolean {
-  return finding.code === 'pbs_apt_update_failed' && /\b401\b|unauthori[sz]ed/i.test(String(finding.context?.error ?? finding.message))
+  const reason = finding.context?.error
+  const text = typeof reason === 'string' ? reason : finding.message
+
+  return finding.code === 'pbs_apt_update_failed' && /\b401\b|unauthori[sz]ed/i.test(text)
+}
+
+export type PbsTone = 'ok' | 'warning' | 'error' | 'info'
+
+/** How a check row reads given the findings raised under these codes: an error wins over a warning. */
+export function findingTone(findings: PbsFinding[], ...codes: string[]): PbsTone {
+  const found = findings.filter(f => codes.includes(f.code))
+
+  if (found.some(f => f.severity === 'error')) return 'error'
+
+  return found.length > 0 ? 'warning' : 'ok'
+}
+
+/** The tone of the pending updates row. */
+export function updatesTone(preflight: Pick<PbsPreflight, 'findings' | 'updates'>): PbsTone {
+  if (preflight.findings.some(f => f.code === 'pbs_apt_update_failed')) return 'error'
+  if (preflight.findings.some(f => f.code === 'pbs_dpkg_interrupted')) return 'warning'
+
+  return preflight.updates.updates_available ? 'info' : 'ok'
+}
+
+export type PbsOutcome = 'failed' | 'cancelled' | 'upToDate' | 'completed'
+
+const OUTCOME_TONE: Record<PbsOutcome, PbsTone> = { failed: 'error', cancelled: 'warning', upToDate: 'info', completed: 'ok' }
+
+/** How an ended run reads on the status row of its report. */
+export function runOutcome(run: PbsRun): { outcome: PbsOutcome, tone: PbsTone } {
+  let outcome: PbsOutcome = 'completed'
+
+  if (run.status === 'failed') outcome = 'failed'
+  else if (run.status === 'cancelled') outcome = 'cancelled'
+  else if (run.node_statuses?.[0]?.status === 'skipped') outcome = 'upToDate'
+
+  return { outcome, tone: OUTCOME_TONE[outcome] }
+}
+
+/** What the report says about the reboot. */
+export function rebootState(node: Pick<PbsRunNode, 'did_reboot' | 'reboot_required'>): 'done' | 'pending' | 'notNeeded' {
+  if (node.did_reboot) return 'done'
+
+  return node.reboot_required ? 'pending' : 'notNeeded'
 }
 
 export type PbsStep = 'maintenance' | 'upgrade' | 'reboot' | 'verify' | 'release'
@@ -150,10 +194,22 @@ export function runSteps(run: PbsRun): { step: PbsStep, state: PbsStepState }[] 
   const at = Math.max(0, steps.indexOf(current))
   const failed = node.status === 'failed'
 
-  return steps.map((step, i) => ({
-    step,
-    state: i < at ? 'done' : i === at ? (failed ? 'failed' : 'active') : 'pending',
-  }))
+  const stateAt = (i: number): PbsStepState => {
+    if (i < at) return 'done'
+    if (i > at) return 'pending'
+
+    return failed ? 'failed' : 'active'
+  }
+
+  return steps.map((step, i) => ({ step, state: stateAt(i) }))
+}
+
+/** Share of the upgrade step done: unpacking is the first half, configuring the second. */
+function upgradeShare(p: { phase: string, done: number, total: number }): number {
+  if (p.phase === 'configure') return 0.5 + 0.5 * (p.done / p.total)
+  if (p.phase === 'unpack') return 0.5 * (p.done / p.total)
+
+  return 0
 }
 
 /** Share of the run done, for the progress bar: steps done plus apt's own position inside the upgrade. */
@@ -167,10 +223,7 @@ export function runPercent(run: PbsRun): number {
   const active = steps.find(s => s.state === 'active')
 
   if (active?.step === 'upgrade' && node?.package_progress && node.package_progress.total > 0) {
-    const p = node.package_progress
-    const weight = p.phase === 'configure' ? 0.5 + 0.5 * (p.done / p.total) : p.phase === 'unpack' ? 0.5 * (p.done / p.total) : 0
-
-    done += Math.min(1, Math.max(0, weight))
+    done += Math.min(1, Math.max(0, upgradeShare(node.package_progress)))
   }
 
   return Math.round(Math.min(100, (done / steps.length) * 100))

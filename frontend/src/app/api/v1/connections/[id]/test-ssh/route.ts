@@ -10,7 +10,7 @@ import { buildOrchestratorSshOverrides, normalizeSshAddress, pickNodeSshEndpoint
 import { executeSSHDirect } from "@/lib/ssh/exec"
 import { orchestratorHeaders } from "@/lib/orchestrator/headers"
 import { denyIaasTenant } from "@/lib/tenant/iaasGuard"
-import { buildSudoCheckCommand, parseSudoCheck } from "@/lib/ssh/sudo"
+import { buildSudoCheckCommand, parseSudoCheck, sudoProfilesFor } from "@/lib/ssh/sudo"
 import { loadSudoRules } from "@/lib/ssh/loadSudoRules"
 import type { HostKeyRefusal } from "@/lib/ssh/host-key-store"
 
@@ -32,9 +32,13 @@ type SshCreds = { user: string, port: number, key?: string, password?: string, p
  * features that will fail and the rules the node's file lacks. One extra SSH
  * session per node, on the test only; no Proxmox API call.
  */
-async function withSudoCheck(result: any, creds: SshCreds) {
+async function withSudoCheck(result: any, creds: SshCreds, connectionType: string) {
   if (!Array.isArray(result?.nodes)) return result
-  const { rules, orchestratorAvailable } = await loadSudoRules()
+  const loaded = await loadSudoRules()
+  const orchestratorAvailable = loaded.orchestratorAvailable
+  // A backup server is asked about its own profile only, a cluster about the others.
+  const scope = sudoProfilesFor(connectionType)
+  const rules = loaded.rules.filter(r => scope.includes(r.profile))
   const command = buildSudoCheckCommand(rules)
   const nodes = await Promise.all(result.nodes.map(async (n: any) => {
     if (n?.status !== 'ok') return n
@@ -123,10 +127,11 @@ export async function POST(
     const effectiveSshUser = (typeof body?.sshUser === 'string' && body.sshUser.trim()) ? body.sshUser.trim() : (connection.sshUser || 'root')
 
     const effectiveUseSudo = typeof body?.sshUseSudo === 'boolean' ? body.sshUseSudo : !!connection.sshUseSudo
-    const probeSudo = effectiveUseSudo && effectiveSshUser !== 'root' && connection.type === 'pve'
+    const sudoChecked = connection.type === 'pve' || connection.type === 'pbs'
+    const probeSudo = effectiveUseSudo && effectiveSshUser !== 'root' && sudoChecked
     // root never goes through sudo, whatever the switch says: say so rather
     // than leave a green test that checked nothing.
-    const sudoIgnoredForRoot = effectiveUseSudo && effectiveSshUser === 'root' && connection.type === 'pve'
+    const sudoIgnoredForRoot = effectiveUseSudo && effectiveSshUser === 'root' && sudoChecked
 
     const effectiveAuthMethod = (body?.sshAuthMethod === 'key' || body?.sshAuthMethod === 'password')
       ? body.sshAuthMethod
@@ -202,8 +207,9 @@ export async function POST(
       }, { status: 400 })
     }
 
-    // For non-PVE connections (VMware ESXi, XCP-ng), test SSH directly to the host
-    if (connection.type !== 'pve' && connection.type !== 'pbs') {
+    // Single-host connections (VMware ESXi, XCP-ng, Proxmox Backup Server):
+    // test SSH directly to the host of the connection URL.
+    if (connection.type !== 'pve') {
       const host = connection.baseUrl.replace(/^https?:\/\//, '').split(/[:/]/)[0]
       const port = effectiveSshPort
       const user = effectiveSshUser
@@ -219,7 +225,7 @@ export async function POST(
           command: 'hostname',
         })
 
-        return NextResponse.json({
+        const single = {
           success: result.success,
           nodes: [{
             node: connection.name,
@@ -230,7 +236,11 @@ export async function POST(
             error: result.success ? undefined : result.error,
             host_key: hostKeyWire(result.hostKey),
           }],
-        })
+        }
+
+        return NextResponse.json(probeSudo
+          ? await withSudoCheck(single, { user, port, key: sshKey, password: sshPassword, passphrase: sshPassphrase }, connection.type)
+          : withSudoSkipped(single, sudoIgnoredForRoot))
       } catch (e: any) {
         return NextResponse.json({
           success: false,
@@ -281,7 +291,7 @@ export async function POST(
       const result = await res.json()
       console.log(`[test-ssh] tested via orchestrator`)
       return NextResponse.json(probeSudo
-        ? await withSudoCheck(result, { user: effectiveSshUser, port: effectiveSshPort, key: sshKey, password: sshPassword, passphrase: sshPassphrase })
+        ? await withSudoCheck(result, { user: effectiveSshUser, port: effectiveSshPort, key: sshKey, password: sshPassword, passphrase: sshPassphrase }, connection.type)
         : withSudoSkipped(result, sudoIgnoredForRoot))
     } catch (fetchError: any) {
       if (fetchError.name === 'AbortError') {
@@ -365,7 +375,7 @@ export async function POST(
     const fallbackResult = { success: allOk, nodes: nodeResults }
 
     return NextResponse.json(probeSudo
-      ? await withSudoCheck(fallbackResult, { user, port: effectiveSshPort, key: sshKey, password: sshPassword, passphrase: sshPassphrase })
+      ? await withSudoCheck(fallbackResult, { user, port: effectiveSshPort, key: sshKey, password: sshPassword, passphrase: sshPassphrase }, connection.type)
       : withSudoSkipped(fallbackResult, sudoIgnoredForRoot))
   } catch (e: any) {
     console.error('[test-ssh] Error:', e)

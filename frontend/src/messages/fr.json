@@ -2487,7 +2487,95 @@
     "guestPoolVdc": "Géré par son vDC",
     "rootOnlyOption": "Proxmox ne laisse que root@pam modifier ce réglage, pas un jeton API",
     "lxcCores": "Cœurs",
-    "lxcCpuCount": "{count, plural, one {# cœur} other {# cœurs}}"
+    "lxcCpuCount": "{count, plural, one {# cœur} other {# cœurs}}",
+    "pbsUpdate": {
+      "title": "Mettre à jour le serveur de sauvegarde",
+      "titleNamed": "Mettre à jour {name}",
+      "checking": "Vérification du serveur…",
+      "rowVersion": "Version de Proxmox Backup Server",
+      "rowKernel": "Noyau en cours",
+      "rowUpdates": "Mises à jour en attente",
+      "rowTasks": "Tâches en cours",
+      "rowDatastores": "Datastores",
+      "rowDisk": "Espace libre sur le système racine",
+      "rowServices": "Services de sauvegarde",
+      "rowBackupJobs": "Jobs de sauvegarde Proxmox VE qui écrivent ici",
+      "kernelUpdate": "noyau",
+      "packageCount": "{count, plural, =0 {aucun paquet} one {# paquet} other {# paquets}}",
+      "noTask": "aucune",
+      "taskCount": "{count, plural, one {# tâche} other {# tâches}}",
+      "datastoreCount": "{count, plural, =0 {aucun} one {# datastore} other {# datastores}}",
+      "datastoreCountMaintenance": "{count, plural, one {# datastore} other {# datastores}}, {maintained} déjà en maintenance",
+      "diskFree": "{free} sur {total}",
+      "servicesRunning": "en marche",
+      "noBackupJob": "aucun",
+      "backupJobCount": "{count, plural, one {# job} other {# jobs}}",
+      "upcomingJobs": "{count, plural, one {Un job de sauvegarde de {cluster} est prévu à {time}} other {# jobs de sauvegarde sont prévus dans l'heure, le premier à {time} sur {cluster}}} : une sauvegarde qui démarre pendant la mise à jour échoue.",
+      "optAutoReboot": "Redémarrer le serveur si la mise à jour l'exige",
+      "optRebootTimeout": "Délai laissé au serveur pour revenir",
+      "minutes": "min",
+      "optReadOnly": "Passer les datastores en lecture seule pendant la mise à jour",
+      "readOnlyHint": "Les sauvegardes, les purges et les garbage collections sont refusées tant que les datastores sont en lecture seule ; les restaurations restent possibles. Les datastores déjà en maintenance sont laissés tels quels.",
+      "readOnlyOffHint": "Rien n'empêche une sauvegarde de démarrer pendant la mise à jour ; elle échoue si les services redémarrent ou si le serveur redémarre.",
+      "recheck": "Revérifier",
+      "start": "Lancer",
+      "lastReport": "Dernier rapport",
+      "backToChecks": "Retour aux vérifications",
+      "cancelRun": "Annuler la mise à jour",
+      "cancelTitle": "Annuler la mise à jour ?",
+      "cancelMessage": "La mise à jour s'arrête là où elle en est. Interrompue pendant la mise à niveau des paquets, elle peut laisser des paquets à moitié configurés ; la prochaine mise à jour commence par les configurer. Les datastores passés en lecture seule sont libérés.",
+      "runInProgress": "Mise à jour en cours",
+      "reportStatus": "État de la mise à jour",
+      "statusCompleted": "réussie",
+      "statusUpToDate": "déjà à jour, rien d'installé",
+      "statusFailed": "échouée",
+      "statusCancelled": "annulée",
+      "resultFailed": "La mise à jour a échoué : {error}",
+      "rebootStillRequired": "Un redémarrage est nécessaire pour utiliser le nouveau noyau et n'a pas été fait : le redémarrage automatique était désactivé.",
+      "steps": {
+        "maintenance": "Datastores en lecture seule",
+        "upgrade": "Mise à niveau des paquets",
+        "reboot": "Redémarrage",
+        "verify": "Contrôle des services et des datastores",
+        "release": "Datastores de nouveau en écriture"
+      },
+      "stepStates": {
+        "pending": "en attente",
+        "active": "en cours",
+        "done": "fait",
+        "failed": "échec",
+        "skipped": "ignoré"
+      },
+      "reportVersion": "Version de Proxmox Backup Server",
+      "reportKernel": "Noyau",
+      "reportReboot": "Redémarrage",
+      "reportPackages": "Paquets mis à niveau",
+      "paneLabel": "Détail de l'exécution",
+      "paneLog": "Journal",
+      "panePackages": "Paquets",
+      "paneApt": "Sortie apt",
+      "reportReadOnly": "Datastores passés en lecture seule",
+      "reportFinished": "Terminée le",
+      "reportDuration": "Durée",
+      "rebootDone": "fait",
+      "rebootPending": "nécessaire, non fait",
+      "rebootNotNeeded": "inutile",
+      "duration": "{minutes} min {seconds} s",
+      "findings": {
+        "pbs_apt_update_failed": "Les listes de paquets n'ont pas pu être rafraîchies : {error}",
+        "pbs_apt_update_subscription": "Un dépôt de paquets a refusé le serveur ({error}). Le dépôt enterprise exige un abonnement valide : ajoutez la clé d'abonnement, ou désactivez ce dépôt et activez le dépôt no-subscription dans l'onglet Dépôts.",
+        "pbs_tasks_running": "{count, plural, one {Une tâche est en cours sur le serveur et serait interrompue} other {# tâches sont en cours sur le serveur et seraient interrompues}} : {tasks}. Attendez leur fin, ou arrêtez-les.",
+        "pbs_disk_space": "Le système racine a {free} libres sur {total} ; il en faut au moins {needed} pour la mise à niveau.",
+        "pbs_disk_space_low": "Le système racine manque d'espace : {free} libres sur {total}.",
+        "pbs_service_inactive": "Arrêté avant la mise à jour : {services}.",
+        "pbs_no_updates": "Le serveur est à jour, il n'y a rien à installer.",
+        "pbs_state_unreadable": "Lecture impossible ({what}) sur le serveur : {error}",
+        "pbs_reboot_pending": "Un redémarrage est déjà en attente sur le serveur.",
+        "pbs_dpkg_interrupted": "Une mise à niveau précédente a été interrompue : {count, plural, one {# paquet est dépaqueté mais pas configuré} other {# paquets sont dépaquetés mais pas configurés}}. La mise à jour commence par les configurer.",
+        "pbs_datastore_offline": "Le datastore {datastore} est hors ligne pour maintenance et reste tel quel."
+      }
+    },
+    "pbsUpdatesUpgradeSshHint": "Activez SSH sur cette connexion (Paramètres > Connexions) pour installer les mises à jour depuis ProxCenter."
   },
   "inventoryPage": {
     "newTag": "Nouveau tag...",
@@ -5216,6 +5304,10 @@
         "migrations": {
           "label": "Migrations",
           "features": "migrations depuis VMware, Hyper-V, Nutanix et XCP-ng (équivalent à root)"
+        },
+        "pbsOps": {
+          "label": "Serveur de sauvegarde",
+          "features": "mises à jour du serveur de sauvegarde : mise à niveau des paquets, redémarrage, mode maintenance des datastores"
         }
       }
     },
@@ -5682,7 +5774,8 @@
       "noOvs": "Pas d'OVS",
       "samplingRate": "Échantillonnage (1 paquet sur N)",
       "samplingLoad": "Charge sur les nodes"
-    }
+    },
+    "sshInfoPbs": "L'accès SSH permet à ProxCenter d'installer les mises à jour de ce serveur de sauvegarde et de le redémarrer si nécessaire, ce que l'API de Proxmox Backup Server ne permet pas."
   },
   "green": {
     "score": {

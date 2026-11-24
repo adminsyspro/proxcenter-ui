@@ -12,7 +12,7 @@ import ClusterChip from './ClusterChip'
 import { shownClusterName } from './ClusterRunRow'
 import { ONE_LINE_SX } from './dialogParts'
 import IPFilterDetailsDialog from './IPFilterDetailsDialog'
-import { heldByStop, ipFilterNotComputed, opensWizard, parseRate, preflightMessage, raisesLogRate } from './preflightModel'
+import { heldByStop, ipFilterNotComputed, logSettingsHref, opensLogSettings, opensWizard, parseRate, preflightMessage, raisesLogRate } from './preflightModel'
 import { WriteTip, useMicrosegWrite } from './microsegAccess'
 import TruncatedText from './TruncatedText'
 
@@ -24,7 +24,7 @@ const STATUS_ICON: Record<PreflightStatus, { icon: string; color: string }> = {
 
 type ChipOf = { id: string; name: string }
 
-function CheckRow({ check, onOpenWizard, onResume, rateLimit, cluster, onIPFilterDetails }: { check: PreflightCheck; onOpenWizard?: () => void; onResume?: () => void; rateLimit?: RateLimitFix; cluster?: ChipOf; onIPFilterDetails?: () => void }) {
+function CheckRow({ check, onOpenWizard, onResume, rateLimit, cluster, onIPFilterDetails, connectionId }: { check: PreflightCheck; onOpenWizard?: () => void; onResume?: () => void; rateLimit?: RateLimitFix; cluster?: ChipOf; onIPFilterDetails?: () => void; connectionId: string }) {
   const t = useTranslations('microsegPilot.preflight')
   const tStop = useTranslations('microsegPilot.stop')
   const tFilter = useTranslations('microsegPilot.ipFilter.details')
@@ -58,6 +58,10 @@ function CheckRow({ check, onOpenWizard, onResume, rateLimit, cluster, onIPFilte
       )}
       {onOpenWizard && opensWizard(check) && (
         <Button size='small' variant='outlined' onClick={onOpenWizard} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{t('openWizard')}</Button>
+      )}
+      {/* The collection mode is a setting of the cluster connection: the fix opens it there, it switches nothing. */}
+      {opensLogSettings(check) && (
+        <Button size='small' variant='outlined' href={logSettingsHref(connectionId)} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{t('openLogSettings')}</Button>
       )}
     </Box>
   )
@@ -187,7 +191,7 @@ export default function PreflightPanel({ open, connectionId, clusterIds, anchor,
       )]
     }
     return (reads.byCluster[id] ?? []).map(check => (
-      <CheckRow key={`${id}:${check.id}`} check={check} cluster={chipOf(id)} onOpenWizard={id === connectionId ? onOpenWizard : undefined} onResume={onResume} rateLimit={rateLimit} onIPFilterDetails={() => setFilterOf(id)} />
+      <CheckRow key={`${id}:${check.id}`} check={check} connectionId={id} cluster={chipOf(id)} onOpenWizard={id === connectionId ? onOpenWizard : undefined} onResume={onResume} rateLimit={rateLimit} onIPFilterDetails={() => setFilterOf(id)} />
     ))
   }) : []
 
@@ -210,7 +214,7 @@ export default function PreflightPanel({ open, connectionId, clusterIds, anchor,
         )}
         {checks && (
           <Box role='list'>
-            {checks.map(check => <CheckRow key={check.id} check={check} onOpenWizard={onOpenWizard} onResume={onResume} rateLimit={rateLimit} onIPFilterDetails={() => setFilterOf(connectionId)} />)}
+            {checks.map(check => <CheckRow key={check.id} check={check} connectionId={connectionId} onOpenWizard={onOpenWizard} onResume={onResume} rateLimit={rateLimit} onIPFilterDetails={() => setFilterOf(connectionId)} />)}
           </Box>
         )}
       </DialogContent>

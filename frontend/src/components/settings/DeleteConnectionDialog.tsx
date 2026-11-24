@@ -27,6 +27,7 @@ const KIND_ICONS: Record<UsageKind, string> = {
   complianceProfiles: 'ri-shield-check-line',
   slaWindows: 'ri-heart-pulse-line',
   restoreDrillSchedules: 'ri-calendar-schedule-line',
+  logForwarders: 'ri-send-plane-line',
 }
 
 const fetchUsage = async (url: string): Promise<ConnectionUsage> => {

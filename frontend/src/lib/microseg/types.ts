@@ -211,6 +211,8 @@ export type MicrosegSuggestion = {
    * two zones. Absent on a row recorded before it: `src_ip` and `dst_ip` then hold one sample pair.
    */
   pairs?: Array<{ src_ip: string; dst_ip: string; hits: number }>
+  /** The node whose firewall log last showed the flow; absent on a row recorded before it. */
+  node?: string
 }
 
 /** The aggregate outbound row: "many destinations". */
@@ -439,6 +441,25 @@ export type MicrosegLogNode = {
   lines_per_min_15m: number
   lag_seconds: number
   full_pages_24h: number
+  /**
+   * How the log of the node reaches the engine: read through the Proxmox API, or sent by the forwarder installed on the
+   * node (a setting of the cluster connection). Absent on an orchestrator without the forwarder: the API. The fields
+   * below are those of a forwarder.
+   */
+  source?: 'api' | 'forwarder'
+  /** `installed` once the forwarder runs; anything else, it does not. */
+  state?: string
+  /** Nothing came from the node for two minutes: its lines wait on it, nothing is read through the API meanwhile. */
+  silent?: boolean
+  /** The ingestion budget is reached: the node keeps its lines until the next pass. */
+  paused?: boolean
+  /** When the last line was received (ISO), absent before the first one. */
+  last_line_at?: string
+  queue_bytes?: number
+  dropped?: number
+  budget_hits_24h?: number
+  /** What the last check found changed on the node, absent when it is as installed. */
+  drift?: string
 }
 
 export type SuggestionAction = 'accept' | 'accept_cidr' | 'dismiss'

@@ -26,6 +26,7 @@ const requiredKeys = [
   'settings.connectionUsage.titles.complianceProfiles',
   'settings.connectionUsage.titles.slaWindows',
   'settings.connectionUsage.titles.restoreDrillSchedules',
+  'settings.connectionUsage.titles.logForwarders',
   'siteRecovery.orphan.connectionName',
   'siteRecovery.orphan.jobHint',
   'siteRecovery.orphan.planHint',

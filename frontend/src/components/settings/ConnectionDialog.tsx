@@ -53,6 +53,7 @@ import { formatSshEndpoint } from '@/lib/ssh/node-endpoint-core'
 import { sudoProfilesFor, type SudoCheck } from '@/lib/ssh/sudo'
 import SudoCheckLines, { NotDeployedLine, profilesAbsentEverywhere, uniformSudoCheck } from './SudoCheckLines'
 import { useLicense, Features } from '@/contexts/LicenseContext'
+import LogCollectionTab from './connection/LogCollectionTab'
 import { isZeroRateLimitValid, ZERO_RATE_LIMIT_MAX_MBPS } from '@/lib/migration/warm/zero-rate'
 import ZeroRateSlider from '@/components/migration/ZeroRateSlider'
 import CopyRateLimitField from '@/components/migration/CopyRateLimitField'
@@ -125,6 +126,8 @@ type ConnectionDialogProps = {
     sshPassConfigured?: boolean 
   }
   mode?: 'create' | 'edit'
+  /** The tab the dialog opens on (General when absent, or when that tab is not shown for this connection). */
+  initialTab?: ConnectionTabId
 }
 
 const defaultFormData: ConnectionFormData = {
@@ -197,7 +200,7 @@ function InfoTooltip({ text, size = 14 }: { text: string; size?: number }) {
   )
 }
 
-type ConnectionTabId = 'general' | 'auth' | 'ssh' | 'siteRecovery' | 'migrations' | 'location'
+export type ConnectionTabId = 'general' | 'auth' | 'ssh' | 'siteRecovery' | 'migrations' | 'location' | 'logs'
 
 function SectionTitle({ icon, title, optional, info }: { icon: string; title: string; optional: string; info: string }) {
   return (
@@ -218,9 +221,10 @@ export default function ConnectionDialog({
   initialData,
   mode = 'create',
   migrationSourcesConfigured = false,
+  initialTab,
 }: ConnectionDialogProps) {
   const t = useTranslations()
-  const [tab, setTab] = useState<ConnectionTabId>('general')
+  const [tab, setTab] = useState<ConnectionTabId>(initialTab ?? 'general')
   // Warm migration settings are Enterprise: hidden, never sent, on Community.
   const { hasFeature } = useLicense()
   const migrationAvailable = hasFeature(Features.VMWARE_MIGRATION)
@@ -288,7 +292,7 @@ export default function ConnectionDialog({
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
-      setTab('general')
+      setTab(initialTab ?? 'general')
       if (initialData) {
         // XCP-ng rows created before the direct-pool mode existed are XO connections,
         // so an absent subType means "xo".
@@ -352,7 +356,7 @@ export default function ConnectionDialog({
       setPbsFingerprint((initialData as any)?.fingerprint ?? null)
       setFingerprintError(null)
     }
-  }, [open, initialData])
+  }, [open, initialData, initialTab])
 
   const handleChange = (field: keyof ConnectionFormData, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -686,6 +690,10 @@ export default function ConnectionDialog({
   // no warm hold, so nothing to set here.
   const showMigrationsTab = migrationAvailable && ((type === 'pve' && migrationSourcesConfigured) || isVmware || (isXcpng && !isXcpngXo))
   const showSshTab = !isXcpng && !isHyperv && !isNutanix && !(isVmware && form.subType === 'vcenter')
+  // How the firewall logs of the cluster reach the micro-segmentation: a
+  // setting of an existing Proxmox VE cluster (its nodes are what the
+  // forwarders are installed on), under the micro-segmentation licence.
+  const logsConnectionId = type === 'pve' && isEdit && hasFeature(Features.MICROSEGMENTATION) ? initialData?.id : undefined
   const visibleTabs: { id: ConnectionTabId; label: string; icon: string }[] = [
     { id: 'general', label: t('settings.connectionTabGeneral'), icon: 'ri-settings-3-line' },
     { id: 'auth', label: t('settings.connectionTabAuth'), icon: 'ri-key-2-line' },
@@ -693,6 +701,7 @@ export default function ConnectionDialog({
     ...(type === 'pve' ? [{ id: 'siteRecovery' as const, label: t('settings.siteRecovery'), icon: 'ri-refresh-line' }] : []),
     ...(showMigrationsTab ? [{ id: 'migrations' as const, label: t('settings.connectionTabMigrations'), icon: 'ri-exchange-line' }] : []),
     ...(!isExternalHypervisor ? [{ id: 'location' as const, label: t('settings.location'), icon: 'ri-map-pin-line' }] : []),
+    ...(logsConnectionId ? [{ id: 'logs' as const, label: t('settings.connectionTabLogs'), icon: 'ri-file-list-3-line' }] : []),
   ]
   // A tab that no longer applies (e.g. ESXi switched to vCenter) falls back to General.
   const currentTab: ConnectionTabId = visibleTabs.some(tb => tb.id === tab) ? tab : 'general'
@@ -723,12 +732,16 @@ export default function ConnectionDialog({
         value={currentTab}
         onChange={(_e, v) => setTab(v)}
         // Every tab visible at once, no scroll arrows: equal widths across the
-        // (md) dialog, compact padding so six labels fit.
-        variant="fullWidth"
+        // (md) dialog, compact padding so six labels fit. A seventh tab (Logs)
+        // leaves 124 px each, less than "Authentifizierung" and its icon need:
+        // the tabs then take their own width, which fits in the six locales
+        // (measured), and scroll if a longer label ever does not.
+        variant={visibleTabs.length > 6 ? 'scrollable' : 'fullWidth'}
+        scrollButtons="auto"
         sx={{ px: 2, borderBottom: 1, borderColor: 'divider' }}
       >
         {visibleTabs.map(tb => (
-          <Tab key={tb.id} value={tb.id} label={tb.label} icon={<i className={tb.icon} />} iconPosition="start" sx={{ minHeight: 48, minWidth: 0, px: 1, textTransform: 'none', whiteSpace: 'nowrap' }} data-testid={`connection-tab-${tb.id}`} />
+          <Tab key={tb.id} value={tb.id} label={tb.label} icon={<i className={tb.icon} />} iconPosition="start" sx={{ minHeight: 48, minWidth: 0, px: visibleTabs.length > 6 ? 2 : 1, textTransform: 'none', whiteSpace: 'nowrap', '& .MuiTab-icon': { flexShrink: 0 } }} data-testid={`connection-tab-${tb.id}`} />
         ))}
       </Tabs>
 
@@ -1814,6 +1827,14 @@ export default function ConnectionDialog({
           </>
         )}
         </Box>
+
+        {/* The log collection has its own Apply: it installs or removes a
+            forwarder on the nodes, which saving the connection must not do. */}
+        {logsConnectionId && (
+          <Box role="tabpanel" hidden={currentTab !== 'logs'} sx={{ pt: 1 }}>
+            <LogCollectionTab connectionId={logsConnectionId} active={open && currentTab === 'logs'} />
+          </Box>
+        )}
       </DialogContent>
 
       <DialogActions>

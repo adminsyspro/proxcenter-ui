@@ -7,7 +7,7 @@ import en from '@/messages/en.json'
 import fr from '@/messages/fr.json'
 import ko from '@/messages/ko.json'
 
-import LogNodeLines, { lagParts } from './LogNodeLines'
+import LogNodeLines, { forwarderTrouble, lagParts } from './LogNodeLines'
 
 const nodes = [
   { node: 'pve1', lines_last: 1, lines_per_min_15m: 1234.4, lag_seconds: 12, full_pages_24h: 0 },
@@ -20,6 +20,37 @@ const view = (locale: string, messages: unknown) => render(
     <LogNodeLines nodes={nodes} />
   </NextIntlClientProvider>,
 )
+
+describe('LogNodeLines of a cluster in forwarder mode', () => {
+  const last = new Date(Date.now() - 300_000).toISOString()
+  const forwarded = [
+    { node: 'pve1', lines_last: 5, lines_per_min_15m: 1234.4, lag_seconds: 12, full_pages_24h: 0, source: 'forwarder' as const, state: 'installed', last_line_at: last },
+    { node: 'pve2', lines_last: 0, lines_per_min_15m: 0, lag_seconds: 300, full_pages_24h: 0, source: 'forwarder' as const, state: 'installed', silent: true, last_line_at: last },
+    { node: 'pve3', lines_last: 0, lines_per_min_15m: 0, lag_seconds: 0, full_pages_24h: 0, source: 'forwarder' as const, state: 'installed', silent: true },
+    { node: 'pve4', lines_last: 0, lines_per_min_15m: 0, lag_seconds: 0, full_pages_24h: 0, source: 'forwarder' as const, state: 'failed' },
+    { node: 'pve5', lines_last: 0, lines_per_min_15m: 2, lag_seconds: 4, full_pages_24h: 0, source: 'forwarder' as const, state: 'installed', drift: 'binary', last_line_at: last },
+    { node: 'pve6', lines_last: 0, lines_per_min_15m: 0, lag_seconds: 0, full_pages_24h: 0, source: 'forwarder' as const, state: 'installed' },
+  ]
+
+  it('says the source of each node and what is wrong with its forwarder', () => {
+    render(
+      <NextIntlClientProvider locale='en' messages={en as Record<string, unknown>} timeZone='UTC'>
+        <LogNodeLines nodes={forwarded} />
+      </NextIntlClientProvider>,
+    )
+    expect(screen.getByText('pve1 · forwarder · 1,234 lines/min · 12 sec behind')).toBeTruthy()
+    expect(screen.getByText('pve2 · forwarder silent · last line 5 min ago')).toBeTruthy()
+    expect(screen.getByText('pve3 · forwarder silent · no line received')).toBeTruthy()
+    expect(screen.getByText('pve4 · no forwarder')).toBeTruthy()
+    expect(screen.getByText('pve5 · forwarder changed on the node')).toBeTruthy()
+    expect(screen.getByText('pve6 · forwarder · no line received yet')).toBeTruthy()
+  })
+
+  it('counts the nodes whose forwarder needs a look', () => {
+    expect(forwarderTrouble(forwarded)).toBe(4)
+    expect(forwarderTrouble(nodes)).toBe(0)
+  })
+})
 
 describe('LogNodeLines', () => {
   it('picks the unit by size: seconds up to 120 s, minutes up to 120 min, then hours', () => {

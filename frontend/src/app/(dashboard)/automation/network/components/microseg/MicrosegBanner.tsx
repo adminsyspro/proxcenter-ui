@@ -14,11 +14,11 @@ import ClusterChip from './ClusterChip'
 import { shownClusterName } from './ClusterRunRow'
 import ClusterUnreadLines, { isUnreachable } from './ClusterUnreadLines'
 import IPFilterBannerLines, { useIPFilterBanner } from './IPFilterBanner'
-import LogNodeLines from './LogNodeLines'
+import LogNodeLines, { forwarderTrouble } from './LogNodeLines'
 import MicrosegConfirmDialog, { type ConfirmInfoLine } from './MicrosegConfirmDialog'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import PendingChangesBar from './PendingChangesBar'
-import { isTrafficRefusal, socleRefusalCluster, socleRefusalLines } from './preflightModel'
+import { isTrafficRefusal, logSettingsHref, socleRefusalCluster, socleRefusalLines } from './preflightModel'
 import { clusterFirewallOff, firewallOffByHand, formatWhen, stillPaused, stopFollowState } from './summaryModel'
 import type { ControlAction, MicrosegControls, StopFollowUp } from './useMicrosegControls'
 import { NOW_REFRESH_MS, useNow } from './useNow'
@@ -247,11 +247,16 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
     : (firewallOffByHand(status, !!policy.policy.stop_cluster_disabled) ? [t('microsegPilot.banner.firewallOffSingle')] : [])
 
   // A reader that met a full page of the log in 24 hours may have missed lines: the strip says so, the load per node on hover.
+  // Only a read through the API meets a page: the full pages of the last 24 hours outlive a switch to the forwarder.
+  // A cluster whose API read cannot keep up is told to switch, with a link to the setting.
   const logNodes = status?.engine.log_nodes ?? []
-  const logBehind = logNodes.some(n => n.full_pages_24h > 0)
+  const logBehind = logNodes.some(n => n.source !== 'forwarder' && n.full_pages_24h > 0)
+  // A cluster whose logs come by forwarder (a setting of its connection) says so, and how many forwarders need a look.
+  const logForwarded = logNodes.some(n => n.source === 'forwarder')
+  const logTrouble = forwarderTrouble(logNodes)
 
   const hasContent = stopOn || Object.keys(peerFailures).length > 0 || unreachableLines.length > 0 || firewallOffLines.length > 0 || followLines.length > 0 || !!status?.engine.held || !!shownNotice || actionError != null
-    || statusFailed || stale || pausedShown || logBehind || !!policy.pending_changes || ipFilter.off || ipFilter.unzoned > 0
+    || statusFailed || stale || pausedShown || logBehind || logForwarded || !!policy.pending_changes || ipFilter.off || ipFilter.unzoned > 0
 
   return (
     <>
@@ -313,7 +318,17 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
             <IPFilterBannerLines connectionId={connectionId} policy={policy} off={ipFilter.off} unzoned={ipFilter.unzoned} onOpenDrifts={onOpenDrifts} />
           )}
 
-          {(pausedShown || stale || logBehind) && (
+          {logBehind && (
+            <Box data-testid='log-forwarder-advice' sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Box component='i' className='ri-send-plane-line' sx={{ color: 'warning.main', fontSize: 18, flexShrink: 0 }} />
+              <Typography variant='body2' sx={{ flex: 1, minWidth: 0 }}>{t('microsegPilot.banner.logForwarderAdvice')}</Typography>
+              <Button size='small' variant='outlined' href={logSettingsHref(connectionId)} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+                {t('microsegPilot.preflight.openLogSettings')}
+              </Button>
+            </Box>
+          )}
+
+          {(pausedShown || stale || logBehind || logForwarded) && (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 4 }}>
               {pausedShown && (
                 <Chip
@@ -331,6 +346,18 @@ export default function MicrosegBanner({ connectionId, policy, controls, onOpenP
               {logBehind && (
                 <Tooltip title={<LogNodeLines nodes={logNodes} />} describeChild>
                   <Chip size='small' color='warning' variant='outlined' icon={<i className='ri-file-list-3-line' />} label={t('microsegPilot.banner.logBehind')} />
+                </Tooltip>
+              )}
+
+              {logForwarded && (
+                <Tooltip title={<LogNodeLines nodes={logNodes} />} describeChild>
+                  <Chip
+                    size='small'
+                    variant='outlined'
+                    color={logTrouble > 0 ? 'warning' : 'default'}
+                    icon={<i className='ri-send-plane-line' />}
+                    label={logTrouble > 0 ? t('microsegPilot.banner.logForwarderTrouble', { count: logTrouble }) : t('microsegPilot.banner.logForwarder')}
+                  />
                 </Tooltip>
               )}
             </Box>

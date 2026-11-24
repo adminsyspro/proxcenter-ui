@@ -189,9 +189,32 @@ function detailOf(check: PreflightCheck): Found | null {
     }
     case 'ip_filter':
       return ipFilterMessage(check, detail)
+    case 'log_collection':
+      return logCollectionMessage(check, detail)
     default:
       return null
   }
+}
+
+/** What is wrong with the forwarders of a cluster in forwarder mode, in the order the check says it. */
+export const LOG_COLLECTION_PARTS = ['silent', 'not_installed', 'drifted'] as const
+
+/**
+ * The log collection check. In API mode: the read keeps up, or the nodes it does not keep up on (a forwarder on the
+ * nodes removes the limit; it needs SSH access on the connection). In forwarder mode: every forwarder delivers, or
+ * each trouble with the nodes it is on ("silent: pve2, no forwarder: pve3").
+ */
+function logCollectionMessage(check: PreflightCheck, detail: Record<string, unknown>): Found {
+  const forwarder = detail.mode === 'forwarder'
+  if (check.status === 'pass') return { key: forwarder ? 'checks.log_collection.passForwarder' : 'checks.log_collection.passApi' }
+  if (!forwarder) {
+    return { key: detail.ssh_enabled === false ? 'checks.log_collection.behindNoSsh' : 'checks.log_collection.behind', values: { nodes: strings(detail.nodes).join(', ') } }
+  }
+  const parts = LOG_COLLECTION_PARTS.filter(part => strings(detail[part]).length > 0)
+    .map(part => ({ key: `checks.log_collection.part.${part}`, values: { nodes: strings(detail[part]).join(', ') } }))
+  if (parts.length === 0) return { key: 'checks.log_collection.passForwarder' }
+  const [first, ...more] = parts
+  return more.length > 0 ? { ...first, more, joiner: ', ' } : first
 }
 
 /**
@@ -239,7 +262,7 @@ export function parseRate(raw: string | undefined): { count: number; unit: RateU
   return m ? { count: Number(m[1]), unit: m[2] as RateUnit } : null
 }
 
-const KNOWN_IDS = new Set(['cluster_firewall', 'firewall_service', 'socle_rules', 'node_traffic', 'log_ratelimit', 'self_in_zone', 'egress_subnets', 'ip_filter'])
+const KNOWN_IDS = new Set(['cluster_firewall', 'firewall_service', 'socle_rules', 'node_traffic', 'log_ratelimit', 'self_in_zone', 'egress_subnets', 'ip_filter', 'log_collection'])
 
 export function preflightMessage(check: PreflightCheck): PreflightMessage {
   const found = detailOf(check)
@@ -294,6 +317,19 @@ export function isFirewallOffRunError(error: string | undefined | null): boolean
 /** Both fixes the orchestrator names are done by the deployment wizard (it enables the cluster firewall last). */
 export function opensWizard(check: PreflightCheck): boolean {
   return check.status !== 'pass' && !heldByStop(check) && check.fix === 'enable_cluster_firewall'
+}
+
+/**
+ * A log collection check that does not pass is acted on in the settings of the cluster connection (its Logs tab): the
+ * collection mode is chosen there, never switched from here.
+ */
+export function opensLogSettings(check: PreflightCheck): boolean {
+  return check.id === 'log_collection' && check.status !== 'pass'
+}
+
+/** The Logs tab of the connection dialog of a cluster, in Settings > Connections. */
+export function logSettingsHref(connectionId: string): string {
+  return `/settings?tab=connections&connection=${encodeURIComponent(connectionId)}&connectionTab=logs`
 }
 
 /** What the pre-flight button sets: 20 log lines a second per node, bursts of 50, measured on the lab while observing. */

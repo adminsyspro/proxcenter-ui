@@ -16,6 +16,7 @@ const ALIAS: Record<Exclude<SudoProfile, 'migrations'>, string> = {
   'node-ops': 'PXC_NODE_OPS',
   'site-recovery': 'PXC_SITE_RECOVERY',
   'pbs-ops': 'PXC_PBS_OPS',
+  'log-forwarder': 'PXC_LOG_FORWARDER',
 }
 
 // sudoers reads , : = and \ specially inside a command line. A regular

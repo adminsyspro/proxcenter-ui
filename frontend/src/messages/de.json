@@ -5297,6 +5297,10 @@
         "pbsOps": {
           "label": "Backup-Server",
           "features": "Updates des Backup-Servers: Paket-Upgrade, Neustart, Wartungsmodus der Datastores"
+        },
+        "logForwarder": {
+          "label": "Weiterleitung der Firewall-Protokolle",
+          "features": "Mikrosegmentierung im Weiterleitungsmodus: installiert und entfernt den Weiterleitungsdienst auf den Knoten (entspricht root)"
         }
       }
     },
@@ -5561,6 +5565,7 @@
     "connectionTabAuth": "Authentifizierung",
     "connectionTabSsh": "SSH",
     "connectionTabMigrations": "Migrationen",
+    "connectionTabLogs": "Protokolle",
     "warmZeroRateLimitLabel": "Nullungs-Ratenlimit für Thick:",
     "warmZeroRateLimitCaption": "Drosselt das Nullen von Thick-LVM-Zielen vor einer Warm-Kopie in diesen Cluster. Ein im Migrationsdialog eingegebener Wert hat für diesen Lauf Vorrang.",
     "integrityCheck": "Jede kopierte Festplatte vor der Übergabe der VM prüfen",
@@ -5731,6 +5736,129 @@
     "sshTrustNewHostKey": "Dem neuen Schlüssel vertrauen",
     "sshTrustHostKeyHelper": "Vergleichen Sie diesen Fingerabdruck vor dem Vertrauen mit dem, den der Host selbst meldet: ssh-keygen -lf auf seinen Dateien /etc/ssh/ssh_host_*_key.pub.",
     "sshTrustFailed": "Dem Schlüssel wurde nicht vertraut: {error}",
+    "logCollection": {
+      "mode": "Erfassung der VM-Firewall-Protokolle",
+      "modeApi": "API",
+      "modeForwarder": "Weiterleitung",
+      "modeAdvice": "Weiterleitung empfohlen bei hohem Protokollvolumen.",
+      "advanced": "Erweiterte Einstellungen",
+      "modeHelp": "Wie die Firewall-Protokolle der VMs und Container, die auf jedem Knoten geschrieben werden, zur Mikrosegmentierung gelangen: über die Proxmox-API gelesen oder von einem Weiterleitungsdienst gesendet, den ProxCenter per SSH auf jedem Knoten installiert. Ein Cluster nutzt das eine oder das andere, nie beides.",
+      "blockedSsh": "Aktivieren Sie den SSH-Zugriff für diese Verbindung, um die Weiterleitung zu wählen.",
+      "blockedPolicy": "Wenden Sie eine Mikrosegmentierungsrichtlinie auf diesen Cluster an, um die Weiterleitung zu wählen.",
+      "receiver": "Adresse des Empfängers",
+      "receiverHost": "Adresse",
+      "receiverPort": "Port",
+      "receiverHelp": "Wo die Knoten ProxCenter erreichen: seine Adresse (die virtuelle Adresse bei HA) und ein TCP-Port, der von den Knoten aus zu öffnen ist.",
+      "queue": "Lokale Warteschlange pro Knoten",
+      "queueUnit": "MB",
+      "queueHelp": "Speicherplatz, den die auf einem Knoten wartenden Zeilen bei einer Protokollrotation belegen dürfen, solange der Empfänger nicht erreichbar ist. Darüber hinaus werden die ältesten Zeilen verworfen und gezählt.",
+      "budget": "Aufnahmebudget pro Knoten",
+      "budgetUnit": "Zeilen/min",
+      "budgetHelp": "Oberhalb dieser Rate liest der Empfänger einen Knoten nicht mehr; der Knoten behält seine Zeilen bis zum nächsten Durchlauf. So wird begrenzt, was ein Gast, der Ports scannt, ProxCenter speichern lässt.",
+      "range": "{min} bis {max}",
+      "apply": "Anwenden",
+      "check": "Knoten prüfen",
+      "checked": "Knoten geprüft.",
+      "loadFailed": "Die Protokollerfassung dieses Clusters konnte nicht gelesen werden.",
+      "applied": "Einstellungen angewendet.",
+      "invalid": {
+        "receiver_host": "Eine IP-Adresse oder ein Hostname.",
+        "receiver_port": "Ein Port von 1 bis 65535.",
+        "queue_mb": "Von {min} bis {max} MB.",
+        "budget_lines_per_min": "Von {min} bis {max} Zeilen pro Minute."
+      },
+      "confirm": {
+        "installTitle": "Weiterleitungsdienst installieren?",
+        "installBody": "ProxCenter installiert per SSH auf jedem Knoten des Clusters einen Weiterleitungsdienst: ein Programm in /usr/local/lib/proxcenter, seine Konfiguration in /etc/proxcenter und den Dienst proxcenter-logfwd. Die Firewall-Protokolle werden dann nicht mehr über die Proxmox-API gelesen.",
+        "removeTitle": "Zum Lesen über die API zurückkehren?",
+        "removeBody": "ProxCenter entfernt den Weiterleitungsdienst von allen Knoten des Clusters und liest die Firewall-Protokolle wieder über die Proxmox-API, ab der Stelle, an der die Dienste aufgehört haben.",
+        "updateTitle": "Weiterleitungsdienste aktualisieren?",
+        "updateBody": "ProxCenter schreibt die neuen Einstellungen per SSH auf jeden Knoten des Clusters und startet die Dienste neu. Es geht keine Zeile verloren.",
+        "install": "Installieren",
+        "remove": "Entfernen",
+        "update": "Aktualisieren",
+        "cancel": "Abbrechen"
+      },
+      "preflightFailed": "Nichts wurde geändert: {count, plural, one {# Knoten ist} other {# Knoten sind}} nicht bereit.",
+      "problems": {
+        "ssh_unreachable": "SSH antwortet nicht",
+        "host_key_unconfirmed": "sein SSH-Hostschlüssel ist nicht bestätigt (Einstellungen, SSH-Befehle, SSH-Host-Schlüssel)",
+        "sudo_missing": "die sudo-Regeln des Profils für die Protokollweiterleitung fehlen ({detail})",
+        "systemd_unknown": "die systemd-Version konnte nicht gelesen werden",
+        "receiver_unreachable": "er erreicht Adresse und Port des Empfängers nicht",
+        "other": "nicht bereit ({code})"
+      },
+      "refusals": {
+        "SSH_DISABLED": "Der SSH-Zugriff ist für diese Verbindung nicht aktiviert.",
+        "NO_POLICY": "Auf diesen Cluster ist keine Mikrosegmentierungsrichtlinie angewendet.",
+        "BUSY": "Auf diesem Cluster läuft bereits eine Installation oder Entfernung.",
+        "NOT_LEADER": "Der antwortende Orchestrator ist nicht der Leader. Versuchen Sie es gleich noch einmal.",
+        "INVALID": "Diese Einstellungen wurden abgelehnt.",
+        "FEATURE_REQUIRED": "Die Mikrosegmentierung ist nicht in der Lizenz enthalten.",
+        "ORCHESTRATOR_UNAVAILABLE": "Der Orchestrator hat nicht geantwortet.",
+        "default": "Die Anfrage ist fehlgeschlagen."
+      },
+      "nodes": "Weiterleitungsdienst jedes Knotens",
+      "noNodes": "Kein Weiterleitungsdienst auf den Knoten: Die Firewall-Protokolle der VMs und Container werden über die Proxmox-API gelesen.",
+      "columns": {
+        "node": "Knoten",
+        "state": "Zustand",
+        "version": "Version",
+        "lastLine": "Letzte Zeile",
+        "rate": "Zeilen/min",
+        "queue": "Warteschlange",
+        "dropped": "Verworfen"
+      },
+      "nodeState": {
+        "installing": "Installation",
+        "installed": "Läuft",
+        "failed": "Fehlgeschlagen",
+        "removeFailed": "Entfernen fehlgeschlagen",
+        "removing": "Entfernung",
+        "missing": "Nicht installiert",
+        "silent": "Stumm",
+        "drifted": "Verändert",
+        "paused": "Zurückgehalten"
+      },
+      "variantAdm": "Gruppe adm",
+      "variantAdmHelp": "Auf diesem Knoten läuft ein systemd älter als 253: Der Dienst öffnet das Protokoll selbst, als Mitglied der Gruppe adm, statt einen einzelnen schreibgeschützten Deskriptor zu erhalten.",
+      "never": "nie",
+      "details": "Details",
+      "retry": "Wiederholen",
+      "removeNode": "Entfernen",
+      "install": "Installieren",
+      "detail": {
+        "error": "Letzter Fehler: {error}",
+        "silent": "Von diesem Knoten kam seit zwei Minuten nichts. Seine Zeilen warten auf dem Knoten; über die API wird währenddessen nichts gelesen.",
+        "paused": "Das Aufnahmebudget ist erreicht: Der Knoten behält seine Zeilen bis zum nächsten Durchlauf.",
+        "budgetHits": "Budget {count, plural, one {# Mal} other {# Mal}} in 24 Stunden erreicht.",
+        "missing": "Dieser Knoten hat keinen Weiterleitungsdienst: Sein Firewall-Protokoll wird nicht gelesen.",
+        "left": "Dieser Knoten gehört nicht mehr zum Proxmox-Cluster. Entfernen deinstalliert seinen Forwarder oder vergisst ihn, wenn der Knoten nicht antwortet."
+      },
+      "drift": {
+        "binary": "Das Programm auf dem Knoten ist nicht das von ProxCenter installierte.",
+        "stopped": "Der Dienst ist gestoppt.",
+        "disabled": "Der Dienst ist deaktiviert.",
+        "missing": "Das Programm ist vom Knoten verschwunden."
+      },
+      "run": {
+        "install": "Installation läuft",
+        "uninstall": "Entfernung läuft"
+      },
+      "steps": {
+        "queued": "wartet",
+        "check": "Knoten wird geprüft",
+        "binary": "Programm wird kopiert",
+        "key": "Schlüssel wird erstellt",
+        "config": "Konfiguration wird geschrieben",
+        "start": "Dienst wird gestartet",
+        "connect": "wartet auf die erste Verbindung",
+        "stop": "Dienst wird gestoppt",
+        "remove": "Dateien werden entfernt",
+        "verify": "Prüfung, dass nichts zurückbleibt",
+        "done": "fertig"
+      }
+    },
     "connectionUsage": {
       "checking": "Es wird geprüft, was diese Verbindung verwendet…",
       "intro": "Diese Verbindung wird noch verwendet. Entfernen Sie zuerst diese Verknüpfungen, jeweils auf ihrer eigenen Seite:",
@@ -5746,7 +5874,8 @@
         "vdcMoves": "Laufende vDC-Verschiebungen",
         "complianceProfiles": "Compliance-Profile",
         "slaWindows": "SLA-Wartungsfenster",
-        "restoreDrillSchedules": "Zeitpläne für Wiederherstellungstests"
+        "restoreDrillSchedules": "Zeitpläne für Wiederherstellungstests",
+        "logForwarders": "Weiterleitung der Firewall-Protokolle (Knoten)"
       },
       "apiTokensTitle": "Auf diese Verbindung beschränkte API-Tokens",
       "apiTokensHint": "Sie erreichen nach dem Löschen nichts mehr. Das Löschen wird dadurch nicht blockiert."
@@ -13256,7 +13385,16 @@
         "running": "Läuft"
       },
       "logNode": "{node} · {rate} Zeilen/Min. · {lag} Verzug",
+      "logNodeForwarder": "{node} · Weiterleitung · {rate} Zeilen/Min. · {lag} Verzug",
+      "logNodeIdle": "{node} · Weiterleitung · noch keine Zeile empfangen",
+      "logNodeSilent": "{node} · Weiterleitung stumm · letzte Zeile vor {lag}",
+      "logNodeSilentNever": "{node} · Weiterleitung stumm · keine Zeile empfangen",
+      "logNodeNotInstalled": "{node} · kein Weiterleitungsdienst",
+      "logNodeChanged": "{node} · Weiterleitungsdienst auf dem Knoten verändert",
+      "logForwarder": "Protokolle per Weiterleitung",
+      "logForwarderTrouble": "Protokollweiterleitung: {count, plural, one {# Knoten} other {# Knoten}} zu prüfen",
       "logBehind": "Protokoll im Rückstand",
+      "logForwarderAdvice": "Die Firewall-Protokolle entstehen schneller, als die Proxmox-API sie lesen kann: Stellen Sie diesen Cluster auf den Modus Weiterleitung um.",
       "unreachableSince": "Der Cluster {name} ist seit {time} nicht erreichbar: Seine Regeln werden nicht aktualisiert, die anderen Cluster behalten seine zuletzt bekannten Adressen.",
       "unreachableSinceSingle": "Dieser Cluster ist seit {time} nicht erreichbar: Seine Regeln werden nicht aktualisiert.",
       "firewallOff": "{name}: Die Cluster-Firewall ist ausgeschaltet, dort wird nichts gefiltert.",
@@ -14219,6 +14357,7 @@
         "firstSeen": "Zuerst gesehen",
         "lastSeen": "Zuletzt gesehen",
         "addresses": "Beispieladressen",
+        "node": "Protokolliert vom Knoten",
         "trafficTitle": "Verkehr der letzten 24 Stunden",
         "trafficTotal": "{count, plural, one {# Treffer} other {# Treffer}}",
         "trafficLoading": "Verlauf wird gelesen...",
@@ -14618,6 +14757,7 @@
       "checking": "Cluster wird geprüft...",
       "runAgain": "Erneut prüfen",
       "openWizard": "Bereitstellungsassistent öffnen",
+      "openLogSettings": "Protokolleinstellungen öffnen",
       "raiseLogRate": "Während der Beobachtung anheben",
       "busy": "Die Engine schließt gerade einen Durchlauf oder eine Anwendung auf diesem Cluster ab, versuchen Sie es gleich noch einmal.",
       "noClient": "Für diese Verbindung ist kein Proxmox-Client verfügbar.",
@@ -14645,6 +14785,18 @@
           "hostRulesUnreadable": "Die Firewall-Regeln des Knotens {node} konnten nicht gelesen werden: Der Verwaltungszugang kann nicht geprüft werden.",
           "missingForNodes": "Keine Regel hält Port {ports} von {ips} auf {nodes} offen: Das Aktivieren der Firewall könnte ProxCenter abschneiden.",
           "missingOn": "Keine Regel hält Port {ports} auf {nodes} offen: Das Aktivieren der Firewall könnte Ihren Zugang abschneiden."
+        },
+        "log_collection": {
+          "title": "Protokollerfassung",
+          "passApi": "Die Firewall-Protokolle werden über die Proxmox-API gelesen und das Lesen kommt nach.",
+          "passForwarder": "Der Weiterleitungsdienst jedes Knotens liefert seine Zeilen.",
+          "behind": "Das Lesen über die API kommt auf {nodes} nicht nach: Es können Zeilen fehlen. Ein Weiterleitungsdienst auf den Knoten hebt die Grenze auf.",
+          "behindNoSsh": "Das Lesen über die API kommt auf {nodes} nicht nach: Es können Zeilen fehlen. Ein Weiterleitungsdienst auf den Knoten hebt die Grenze auf; er benötigt SSH-Zugriff für die Verbindung.",
+          "part": {
+            "silent": "stumm: {nodes}",
+            "not_installed": "kein Weiterleitungsdienst: {nodes}",
+            "drifted": "Dienst verändert: {nodes}"
+          }
         },
         "log_ratelimit": {
           "title": "Protokoll-Ratenlimit",

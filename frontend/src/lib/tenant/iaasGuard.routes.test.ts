@@ -131,6 +131,10 @@ const DENIED_FILES = [
   "[id]/nodes/[node]/upgrade/reboot/route.ts",
   "[id]/replicable-vms/route.ts",
   "[id]/replication-storages/route.ts",
+  "[id]/log-collection/route.ts",
+  "[id]/log-collection/preflight/route.ts",
+  "[id]/log-collection/check/route.ts",
+  "[id]/log-collection/nodes/[node]/retry/route.ts",
   "[id]/test-ssh/route.ts",
   "[id]/version/route.ts",
 ]

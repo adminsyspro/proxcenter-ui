@@ -5308,6 +5308,10 @@
         "pbsOps": {
           "label": "Serveur de sauvegarde",
           "features": "mises à jour du serveur de sauvegarde : mise à niveau des paquets, redémarrage, mode maintenance des datastores"
+        },
+        "logForwarder": {
+          "label": "Transfert des journaux du pare-feu",
+          "features": "micro-segmentation en mode transfert : installe et retire l’outil de transfert des journaux sur les nœuds (équivalent à root)"
         }
       }
     },
@@ -5572,6 +5576,7 @@
     "connectionTabAuth": "Authentification",
     "connectionTabSsh": "SSH",
     "connectionTabMigrations": "Migrations",
+    "connectionTabLogs": "Journaux",
     "warmZeroRateLimitLabel": "Plafond de mise à zéro thick :",
     "warmZeroRateLimitCaption": "Cadence la mise à zéro des cibles LVM thick avant une copie warm vers ce cluster. Une valeur saisie dans le dialogue de migration l'emporte pour cette migration.",
     "integrityCheck": "Vérifier chaque disque copié avant de livrer la VM",
@@ -5742,6 +5747,129 @@
     "sshTrustNewHostKey": "Faire confiance à la nouvelle clé",
     "sshTrustHostKeyHelper": "Comparez cette empreinte avec celle que l'hôte annonce lui-même avant de lui faire confiance : ssh-keygen -lf sur ses fichiers /etc/ssh/ssh_host_*_key.pub.",
     "sshTrustFailed": "La clé n'a pas été acceptée : {error}",
+    "logCollection": {
+      "mode": "Journaux du pare-feu des VM",
+      "modeApi": "API",
+      "modeForwarder": "Transfert",
+      "modeAdvice": "Transfert recommandé pour un grand volume de journaux.",
+      "advanced": "Réglages avancés",
+      "modeHelp": "Comment les journaux du pare-feu des VM et conteneurs, écrits sur chaque nœud, arrivent à la micro-segmentation : lus par l’API Proxmox, ou envoyés par un outil de transfert que ProxCenter installe sur chaque nœud par SSH. Un cluster utilise l’un ou l’autre, jamais les deux.",
+      "blockedSsh": "Activez l’accès SSH sur cette connexion pour choisir le transfert.",
+      "blockedPolicy": "Appliquez une politique de micro-segmentation sur ce cluster pour choisir le transfert.",
+      "receiver": "Adresse du récepteur",
+      "receiverHost": "Adresse",
+      "receiverPort": "Port",
+      "receiverHelp": "Où les nœuds joignent ProxCenter : son adresse (l’adresse virtuelle en HA) et un port TCP, à ouvrir depuis les nœuds.",
+      "queue": "File locale par nœud",
+      "queueUnit": "Mo",
+      "queueHelp": "Espace disque que les lignes en attente sur un nœud peuvent occuper à une rotation du journal, tant que le récepteur est injoignable. Au-delà, les lignes les plus anciennes sont abandonnées et comptées.",
+      "budget": "Budget d’ingestion par nœud",
+      "budgetUnit": "lignes/min",
+      "budgetHelp": "Au-delà de ce débit le récepteur cesse de lire un nœud, qui garde ses lignes jusqu’à la passe suivante. Il borne ce qu’un invité qui balaie des ports fait stocker à ProxCenter.",
+      "range": "{min} à {max}",
+      "apply": "Appliquer",
+      "check": "Vérifier les nœuds",
+      "checked": "Nœuds vérifiés.",
+      "loadFailed": "La collecte des journaux de ce cluster n’a pas pu être lue.",
+      "applied": "Réglages appliqués.",
+      "invalid": {
+        "receiver_host": "Une adresse IP ou un nom d’hôte.",
+        "receiver_port": "Un port de 1 à 65535.",
+        "queue_mb": "De {min} à {max} Mo.",
+        "budget_lines_per_min": "De {min} à {max} lignes par minute."
+      },
+      "confirm": {
+        "installTitle": "Installer l’outil de transfert des journaux ?",
+        "installBody": "ProxCenter installe un outil de transfert sur chaque nœud du cluster par SSH : un programme dans /usr/local/lib/proxcenter, sa configuration dans /etc/proxcenter et le service proxcenter-logfwd. Les journaux du pare-feu ne sont alors plus lus par l’API Proxmox.",
+        "removeTitle": "Revenir à la lecture par l’API ?",
+        "removeBody": "ProxCenter retire l’outil de transfert de tous les nœuds du cluster et relit les journaux du pare-feu par l’API Proxmox, à partir de l’endroit où les outils se sont arrêtés.",
+        "updateTitle": "Mettre à jour les outils de transfert ?",
+        "updateBody": "ProxCenter écrit les nouveaux réglages sur chaque nœud du cluster par SSH et relance les outils de transfert. Aucune ligne n’est perdue.",
+        "install": "Installer",
+        "remove": "Retirer",
+        "update": "Mettre à jour",
+        "cancel": "Annuler"
+      },
+      "preflightFailed": "Rien n’a été modifié : {count, plural, one {# nœud n’est pas prêt} other {# nœuds ne sont pas prêts}}.",
+      "problems": {
+        "ssh_unreachable": "SSH ne répond pas",
+        "host_key_unconfirmed": "sa clé d’hôte SSH n’est pas confirmée (Paramètres, Commandes SSH, Clés d'hôte SSH)",
+        "sudo_missing": "les règles sudo du profil de transfert des journaux manquent ({detail})",
+        "systemd_unknown": "la version de systemd n’a pas pu être lue",
+        "receiver_unreachable": "il ne joint pas l’adresse et le port du récepteur",
+        "other": "pas prêt ({code})"
+      },
+      "refusals": {
+        "SSH_DISABLED": "L’accès SSH n’est pas activé sur cette connexion.",
+        "NO_POLICY": "Ce cluster n’a pas de politique de micro-segmentation appliquée.",
+        "BUSY": "Une installation ou un retrait est déjà en cours sur ce cluster.",
+        "NOT_LEADER": "L’orchestrateur qui a répondu n’est pas le leader. Réessayez dans un instant.",
+        "INVALID": "Ces réglages ont été refusés.",
+        "FEATURE_REQUIRED": "La micro-segmentation n’est pas dans la licence.",
+        "ORCHESTRATOR_UNAVAILABLE": "L’orchestrateur n’a pas répondu.",
+        "default": "La demande a échoué."
+      },
+      "nodes": "Outil de transfert de chaque nœud",
+      "noNodes": "Aucun outil de transfert sur les nœuds : les journaux du pare-feu des VM et conteneurs sont lus par l’API Proxmox.",
+      "columns": {
+        "node": "Nœud",
+        "state": "État",
+        "version": "Version",
+        "lastLine": "Dernière ligne",
+        "rate": "Lignes/min",
+        "queue": "File",
+        "dropped": "Abandonnées"
+      },
+      "nodeState": {
+        "installing": "Installation",
+        "installed": "En marche",
+        "failed": "En échec",
+        "removeFailed": "Retrait en échec",
+        "removing": "Retrait",
+        "missing": "Non installé",
+        "silent": "Muet",
+        "drifted": "Modifié",
+        "paused": "Retenu"
+      },
+      "variantAdm": "groupe adm",
+      "variantAdmHelp": "Ce nœud a un systemd antérieur à 253 : l’outil ouvre lui-même le journal, comme membre du groupe adm, au lieu de recevoir un seul descripteur en lecture seule.",
+      "never": "jamais",
+      "details": "Détails",
+      "retry": "Réessayer",
+      "removeNode": "Retirer",
+      "install": "Installer",
+      "detail": {
+        "error": "Dernière erreur : {error}",
+        "silent": "Rien n’est arrivé de ce nœud depuis deux minutes. Ses lignes attendent sur le nœud ; rien n’est lu par l’API pendant ce temps.",
+        "paused": "Le budget d’ingestion est atteint : le nœud garde ses lignes jusqu’à la passe suivante.",
+        "budgetHits": "Budget atteint {count, plural, one {# fois} other {# fois}} sur 24 heures.",
+        "missing": "Ce nœud n’a pas d’outil de transfert : son journal du pare-feu n’est pas lu.",
+        "left": "Ce nœud ne fait plus partie du cluster Proxmox. Retirer désinstalle son outil de transfert, ou l’oublie si le nœud ne répond plus."
+      },
+      "drift": {
+        "binary": "Le programme présent sur le nœud n’est pas celui que ProxCenter a installé.",
+        "stopped": "Le service est arrêté.",
+        "disabled": "Le service est désactivé.",
+        "missing": "Le programme a disparu du nœud."
+      },
+      "run": {
+        "install": "Installation en cours",
+        "uninstall": "Retrait en cours"
+      },
+      "steps": {
+        "queued": "en attente",
+        "check": "contrôle du nœud",
+        "binary": "copie du programme",
+        "key": "création de la clé",
+        "config": "écriture de la configuration",
+        "start": "démarrage du service",
+        "connect": "attente de la première connexion",
+        "stop": "arrêt du service",
+        "remove": "suppression des fichiers",
+        "verify": "contrôle qu’il ne reste rien",
+        "done": "terminé"
+      }
+    },
     "connectionUsage": {
       "checking": "Recherche de ce qui utilise cette connexion…",
       "intro": "Cette connexion est encore utilisée. Retirez d’abord ces liaisons, chacune depuis sa page :",
@@ -5757,7 +5885,8 @@
         "vdcMoves": "Déplacements de vDC en cours",
         "complianceProfiles": "Profils de conformité",
         "slaWindows": "Fenêtres de maintenance SLA",
-        "restoreDrillSchedules": "Planifications de tests de restauration"
+        "restoreDrillSchedules": "Planifications de tests de restauration",
+        "logForwarders": "Transfert des journaux du pare-feu (nœuds)"
       },
       "apiTokensTitle": "Jetons API limités à cette connexion",
       "apiTokensHint": "Ils n’atteindront plus rien une fois la connexion supprimée. Cela ne bloque pas la suppression."
@@ -13686,7 +13815,16 @@
         "running": "En cours"
       },
       "logNode": "{node} · {rate} lignes/min · retard {lag}",
+      "logNodeForwarder": "{node} · transfert · {rate} lignes/min · retard {lag}",
+      "logNodeIdle": "{node} · transfert · aucune ligne reçue pour l’instant",
+      "logNodeSilent": "{node} · transfert muet · dernière ligne il y a {lag}",
+      "logNodeSilentNever": "{node} · transfert muet · aucune ligne reçue",
+      "logNodeNotInstalled": "{node} · pas d’outil de transfert",
+      "logNodeChanged": "{node} · outil de transfert modifié sur le nœud",
+      "logForwarder": "Journaux par transfert",
+      "logForwarderTrouble": "Transfert des journaux : {count, plural, one {# nœud} other {# nœuds}} à regarder",
       "logBehind": "Journal en retard",
+      "logForwarderAdvice": "Les journaux du pare-feu arrivent plus vite que l’API Proxmox ne peut les lire : passez ce cluster en mode Transfert.",
       "unreachableSince": "Le cluster {name} est injoignable depuis {time} : ses règles ne sont pas mises à jour, les autres clusters gardent ses dernières adresses connues.",
       "unreachableSinceSingle": "Ce cluster est injoignable depuis {time} : ses règles ne sont pas mises à jour.",
       "firewallOff": "{name} : le pare-feu du cluster est désactivé, rien n'y est filtré.",
@@ -14649,6 +14787,7 @@
         "firstSeen": "Vu la première fois",
         "lastSeen": "Vu la dernière fois",
         "addresses": "Adresses d'exemple",
+        "node": "Journalisé par le nœud",
         "trafficTitle": "Trafic sur les dernières 24 heures",
         "trafficTotal": "{count, plural, one {# occurrence} other {# occurrences}}",
         "trafficLoading": "Lecture de l'historique...",
@@ -15048,6 +15187,7 @@
       "checking": "Vérification du cluster...",
       "runAgain": "Relancer",
       "openWizard": "Ouvrir l'assistant de déploiement",
+      "openLogSettings": "Ouvrir les réglages des journaux",
       "raiseLogRate": "Relever pendant l'observation",
       "busy": "Le moteur termine un passage ou une application sur ce cluster, réessayez dans un instant.",
       "noClient": "Aucun client Proxmox n'est disponible pour cette connexion.",
@@ -15075,6 +15215,18 @@
           "hostRulesUnreadable": "Les règles du pare-feu du nœud {node} n'ont pas pu être lues : impossible de vérifier que l'accès d'administration reste ouvert.",
           "missingForNodes": "Aucune règle ne garde le port {ports} ouvert depuis {ips} sur {nodes} : activer le pare-feu pourrait couper ProxCenter.",
           "missingOn": "Aucune règle ne garde le port {ports} ouvert sur {nodes} : activer le pare-feu pourrait couper votre accès."
+        },
+        "log_collection": {
+          "title": "Collecte des journaux",
+          "passApi": "Les journaux du pare-feu sont lus par l’API Proxmox et la lecture suit.",
+          "passForwarder": "L’outil de transfert de chaque nœud livre ses lignes.",
+          "behind": "La lecture par l’API ne suit pas sur {nodes} : des lignes peuvent manquer. Un outil de transfert sur les nœuds lève cette limite.",
+          "behindNoSsh": "La lecture par l’API ne suit pas sur {nodes} : des lignes peuvent manquer. Un outil de transfert sur les nœuds lève cette limite ; il demande l’accès SSH sur la connexion.",
+          "part": {
+            "silent": "muet : {nodes}",
+            "not_installed": "pas d’outil de transfert : {nodes}",
+            "drifted": "outil modifié : {nodes}"
+          }
         },
         "log_ratelimit": {
           "title": "Limite du débit de journal",

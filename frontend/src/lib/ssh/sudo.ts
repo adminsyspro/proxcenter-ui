@@ -31,14 +31,22 @@ export function resolveSudo(cmd: string, useSudo: boolean): string {
   return cmd.split(MARK).join(useSudo ? 'sudo -n ' : '')
 }
 
-export const SUDO_PROFILES = ['node-ops', 'site-recovery', 'migrations', 'pbs-ops'] as const
+export const SUDO_PROFILES = ['node-ops', 'site-recovery', 'migrations', 'pbs-ops', 'log-forwarder'] as const
 export type SudoProfile = (typeof SUDO_PROFILES)[number]
 
 /** The profile of a Proxmox Backup Server account, the only one it is checked against. */
 export const PBS_SUDO_PROFILE: SudoProfile = 'pbs-ops'
 
-/** The profiles that apply to the nodes of a Proxmox VE cluster. */
-export const PVE_SUDO_PROFILES: SudoProfile[] = SUDO_PROFILES.filter(p => p !== PBS_SUDO_PROFILE)
+/**
+ * The profile that installs and removes the firewall log forwarder on the
+ * nodes of a cluster (micro-segmentation, forwarder mode). Granted on
+ * purpose: Test SSH does not ask for it, the switch to the forwarder mode
+ * checks it on every node before it writes anything.
+ */
+export const LOG_FORWARDER_SUDO_PROFILE: SudoProfile = 'log-forwarder'
+
+/** The profiles the nodes of a Proxmox VE cluster are checked against by Test SSH. */
+export const PVE_SUDO_PROFILES: SudoProfile[] = SUDO_PROFILES.filter(p => p !== PBS_SUDO_PROFILE && p !== LOG_FORWARDER_SUDO_PROFILE)
 
 /** The profiles a connection of this type is checked against by Test SSH. */
 export function sudoProfilesFor(connectionType: string | undefined): SudoProfile[] {
@@ -51,6 +59,7 @@ export const SUDO_PROFILE_I18N: Record<SudoProfile, string> = {
   'site-recovery': 'siteRecovery',
   migrations: 'migrations',
   'pbs-ops': 'pbsOps',
+  'log-forwarder': 'logForwarder',
 }
 
 /**

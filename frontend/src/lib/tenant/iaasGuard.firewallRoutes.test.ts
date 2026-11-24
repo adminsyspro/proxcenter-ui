@@ -95,6 +95,7 @@ const DENIED_FILES = [
   "firewall/aliases/[connectionId]/[name]/route.ts",
   "firewall/cluster/[connectionId]/route.ts",
   "firewall/coverage/[connectionId]/route.ts",
+  "firewall/group-usage/[connectionId]/route.ts",
   "firewall/cluster/[connectionId]/rules/route.ts",
   "firewall/cluster/[connectionId]/rules/[pos]/route.ts",
   "firewall/groups/[connectionId]/[groupName]/route.ts",

@@ -37,6 +37,7 @@ export const KIND_CHIP: Record<string, { color: KindChipColor; icon: string }> =
   nic_firewall_off: { color: 'error', icon: 'ri-shield-flash-line' },
   ipset_out_of_sync: { color: 'info', icon: 'ri-database-2-line' },
   foreign_accept: { color: 'error', icon: 'ri-alert-line' },
+  foreign_group: { color: 'error', icon: 'ri-shield-check-line' },
   object_collision: { color: 'error', icon: 'ri-alert-line' },
   egress_rule_missing: { color: 'warning', icon: 'ri-logout-box-r-line' },
   egress_rule_misplaced: { color: 'warning', icon: 'ri-arrow-up-down-line' },

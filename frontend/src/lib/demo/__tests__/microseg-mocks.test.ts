@@ -365,6 +365,16 @@ describe('demo micro-segmentation, outbound', () => {
     expect(older[0].seq).toBe(all.events[10].seq)
   })
 
+  it('serves the members of the security groups: the zone groups, with the guests of their zone', async () => {
+    const usage = await demoGet('/api/v1/firewall/group-usage/demo-pve-cluster-001')
+    const coverage = await demoGet('/api/v1/firewall/coverage/demo-pve-cluster-001')
+
+    expect(usage).toMatchObject({ partial: false, unread: 0, computing: false, total: coverage.total })
+    expect(usage.groups['pcz-web'].map((m: any) => m.vmid).sort()).toEqual(
+      coverage.guests.filter((g: any) => g.tags.includes('zone-web')).map((g: any) => g.vmid).sort(),
+    )
+  })
+
   it('serves the guest coverage of the Dashboard: counts that add up, zone members filtered, the tags and VLANs the groupings read', async () => {
     const c = await demoGet('/api/v1/firewall/coverage/demo-pve-cluster-001')
     const vms = (await demoGet('/api/v1/vms?connId=demo-pve-cluster-001')).data.vms

@@ -5,7 +5,7 @@ import { Fragment, useState, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
-  Avatar, Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
+  Alert, Avatar, Box, Button, Chip, Dialog, DialogTitle, DialogContent, DialogActions,
   IconButton, Paper, Stack, Table, TableBody, TableCell,
   TableContainer, TableRow, TextField, Tooltip, Typography,
   useTheme, alpha
@@ -15,6 +15,7 @@ import * as firewallAPI from '@/lib/api/firewall'
 import { isRuleEnabled } from './shared/isRuleEnabled'
 import { ruleToFormData } from './shared/ruleToFormData'
 import { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
+import type { GroupUsage } from '@/hooks/useGroupUsage'
 import { useToast } from '@/contexts/ToastContext'
 import { PolicySection } from '../../types'
 import FirewallLoadAlert from '../FirewallLoadAlert'
@@ -24,7 +25,11 @@ import SecurityGroupMembersDialog from './shared/SecurityGroupMembersDialog'
 import FirewallLogDialog from '@/components/firewall/FirewallLogDialog'
 import { useLastRevisionSnapshot } from '@/lib/microseg/useLastRevision'
 import { useMicrosegPolicy } from '@/lib/microseg/useMicroseg'
-import { ZONE_GROUP_PREFIX, groupMembers } from './shared/groupMembership'
+import { useZoneGuests } from '../microseg/useZoneGuests'
+import { ZONE_GROUP_PREFIX, groupMembers, orphanGroups } from './shared/groupMembership'
+import DeleteSecurityGroupDialog from './shared/DeleteSecurityGroupDialog'
+import { detachGroup } from './shared/groupDetach'
+import GuestOnNodeLine from './shared/GuestOnNodeLine'
 import { objectColour, objectDotSx } from '../microseg/objectColour'
 import { RuleActionCell, RuleLogCommentCells, RuleRowActionsCell, RuleRowLeadingCells, RuleTrafficCells } from './shared/RuleTableCells'
 import { WriteTip, useMicrosegWrite } from '../microseg/microsegAccess'
@@ -51,6 +56,14 @@ interface SecurityGroupsPanelProps {
   /** Reads one guest's rules (the members dialog asks it before detaching a guest whose rules were not read). */
   loadGuestRules: (vm: VMFirewallInfo) => Promise<firewallAPI.FirewallRule[]>
   reloadVMFirewallRules: (vm: VMFirewallInfo) => Promise<void>
+  /** Which guests carry which group, as the server read their rules; null until read or when the read failed. */
+  groupUsage: GroupUsage | null
+  groupUsageLoading: boolean
+  reloadGroupUsage: (force?: boolean) => Promise<void>
+  /** Reads the rules of every guest again: asked before a group is deleted. */
+  checkGroupUsage: () => Promise<GroupUsage>
+  /** The PVE status of each node (online, offline), for the dot of a node named in a dialog. */
+  nodeStatus?: Record<string, string>
 }
 
 /**
@@ -80,7 +93,8 @@ function computeScopeRefs(
 
 export default function SecurityGroupsPanel({
   securityGroups, vmFirewallData, loadingVMRules, guestsNotScanned, clusterRules, hostRulesByNode,
-  firewallMode, selectedConnection, totalRules, aliases, ipsets, loadError, reload, loadGuestRules, reloadVMFirewallRules
+  selectedConnection, totalRules, aliases, ipsets, loadError, reload, loadGuestRules, reloadVMFirewallRules,
+  groupUsage, groupUsageLoading, reloadGroupUsage, checkGroupUsage, nodeStatus
 }: SecurityGroupsPanelProps) {
   const theme = useTheme()
   const t = useTranslations()
@@ -89,15 +103,23 @@ export default function SecurityGroupsPanel({
   const { canWrite } = useMicrosegWrite()
   const writable = canWrite && !!selectedConnection
 
-  // Membership without reading every guest's rules (UA44): the zone groups of the deployed micro-segmentation
-  // revision have their members from the zone tags; any other group only knows the guests whose rules were read.
+  // Membership: Proxmox keeps no member list, so the server reads the guests' rules once for every viewer
+  // (groupUsage). The zone groups of the deployed micro-segmentation revision also have their members from the zone
+  // tags, known before any rule is read.
   const { data: microsegPolicy, loading: policyLoading } = useMicrosegPolicy(selectedConnection || null)
   const { revision: deployed, loading: revisionLoading } = useLastRevisionSnapshot(selectedConnection || null, microsegPolicy?.last_revision?.id)
   const deployedSnapshot = deployed?.snapshot ?? null
   // The members of a zone group come from the deployed revision: until it is read, its count is not known yet (a
   // "0 VMs" shown meanwhile reads as an unused group).
-  const deploymentPending = !!policyLoading || (!!microsegPolicy?.last_revision && !!revisionLoading)
-  const membersPending = (group: string) => loadingVMRules || (deploymentPending && group.startsWith(ZONE_GROUP_PREFIX))
+  // The zone tags as the zone map reads them (one guest list read, read again after every run), only once a
+  // revision is deployed: the two screens then count the same members.
+  const zoneGuests = useZoneGuests(microsegPolicy?.last_revision && selectedConnection ? selectedConnection : null)
+  const zoneTags = useMemo(
+    () => (zoneGuests.status === 'ready' ? new Map(zoneGuests.guests.map(g => [`${g.type}/${g.vmid}`, g.tags])) : null),
+    [zoneGuests.status, zoneGuests.guests],
+  )
+  const deploymentPending = !!policyLoading || (!!microsegPolicy?.last_revision && zoneGuests.status === 'loading') || (!!microsegPolicy?.last_revision && !!revisionLoading)
+  const membersPending = (group: string) => loadingVMRules || groupUsageLoading || (deploymentPending && group.startsWith(ZONE_GROUP_PREFIX))
 
   // ── State ──
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
@@ -118,8 +140,10 @@ export default function SecurityGroupsPanel({
   const [deleteConfirm, setDeleteConfirm] = useState<{ groupName: string; pos: number } | null>(null)
   // The group whose deletion is asked (themed dialog, never a native confirm), and that deletion while it runs
   const [groupToDelete, setGroupToDelete] = useState<string | null>(null)
-  const [deletingGroup, setDeletingGroup] = useState(false)
-  const [deleteGroupError, setDeleteGroupError] = useState<string | null>(null)
+  // Removing the rules that still name a deleted group: asked, then running
+  const [orphansAsked, setOrphansAsked] = useState(false)
+  const [removingOrphans, setRemovingOrphans] = useState(false)
+  const [orphansError, setOrphansError] = useState<string | null>(null)
 
   // Members (which guests this group is attached to)
   const [membersOf, setMembersOf] = useState<string | null>(null)
@@ -133,10 +157,20 @@ export default function SecurityGroupsPanel({
     [vmFirewallData]
   )
 
+  const guestStatusByKey = useMemo(
+    () => Object.fromEntries(vmFirewallData.map(v => [`${v.type}/${v.vmid}`, v.status])),
+    [vmFirewallData]
+  )
+
   const membersLabel = (section: PolicySection) => {
     if (membersPending(section.id)) return '…'
-    // "0+ VMs" would read as odd: with none seen, the count is plain and the tooltip says why it may be more.
-    if (section.appliedToKnown === false && section.appliedTo.length > 0) return t('networkPage.rulesOnDemand.membersUnknownCount', { count: section.appliedTo.length })
+    // Not every guest could be read: "N+" with some seen, and with none the count is not given at all ("0 VMs"
+    // would read as an unused group, which invites deleting one that guests carry).
+    if (section.appliedToKnown === false) {
+      return section.appliedTo.length > 0
+        ? t('networkPage.rulesOnDemand.membersUnknownCount', { count: section.appliedTo.length })
+        : t('networkPage.groupUsage.notCounted')
+    }
     return t('networkPage.vmCount', { count: section.appliedTo.length })
   }
 
@@ -147,7 +181,7 @@ export default function SecurityGroupsPanel({
   const sections: PolicySection[] = useMemo(() => {
     return securityGroups.map(sg => {
       const rules = sg.rules || []
-      const membership = groupMembers(sg.group, vmFirewallData, deployedSnapshot)
+      const membership = groupMembers(sg.group, vmFirewallData, deployedSnapshot, groupUsage, zoneTags)
       return {
         id: sg.group,
         type: 'security-group' as const,
@@ -160,7 +194,7 @@ export default function SecurityGroupsPanel({
         activeRuleCount: rules.filter(isRuleEnabled).length,
       }
     })
-  }, [securityGroups, vmFirewallData, deployedSnapshot])
+  }, [securityGroups, vmFirewallData, deployedSnapshot, groupUsage, zoneTags])
 
   // ── Filter by search ──
   const filteredSections = useMemo(() => {
@@ -247,22 +281,49 @@ export default function SecurityGroupsPanel({
   }
 
   // ── Delete SG ──
-  const handleDeleteGroup = (name: string) => {
-    setDeleteGroupError(null)
-    setGroupToDelete(name)
+  const nodeNames = useMemo(() => Object.keys(nodeStatus ?? {}), [nodeStatus])
+  const handleDeleteGroup = (name: string) => setGroupToDelete(name)
+  const groupDeleted = (detached: Array<{ type: string; vmid: string }>) => {
+    showToast(t('networkPage.securityGroupDeleted'), 'success')
+    setGroupToDelete(null)
+    refreshGuests(detached)
+    reload()
+    void reloadGroupUsage()
   }
-  const confirmDeleteGroup = async () => {
-    if (!groupToDelete) return
-    setDeletingGroup(true)
+
+  /** The guests of the page whose rules ProxCenter just changed: read again, so their rows and the counts follow. */
+  const refreshGuests = (touched: Array<{ type: string; vmid: string | number }>) => {
+    const keys = new Set(touched.map(g => `${g.type}/${g.vmid}`))
+    vmFirewallData.filter(v => keys.has(`${v.type}/${v.vmid}`)).forEach(v => { void reloadVMFirewallRules(v) })
+  }
+
+  // ── Rules naming a group that no longer exists ──
+  const orphans = useMemo(() => orphanGroups(groupUsage, securityGroups.map(g => g.group)), [groupUsage, securityGroups])
+  const orphanGuests = useMemo(() => {
+    const byKey = new Map<string, { type: string; vmid: string; node: string; name: string }>()
+    for (const o of orphans) for (const m of groupUsage?.groups[o.group] ?? []) byKey.set(`${m.type}/${m.vmid}`, m)
+
+    return [...byKey.values()]
+  }, [orphans, groupUsage])
+  const removeOrphans = async () => {
+    setRemovingOrphans(true)
+    setOrphansError(null)
+    const touched: Array<{ type: string; vmid: string }> = []
     try {
-      await firewallAPI.deleteSecurityGroup(selectedConnection, groupToDelete)
-      showToast(t('networkPage.securityGroupDeleted'), 'success')
-      setGroupToDelete(null)
-      reload()
+      for (const o of orphans) {
+        for (const member of groupUsage?.groups[o.group] ?? []) {
+          await detachGroup(selectedConnection, member, o.group)
+          touched.push(member)
+        }
+      }
+      showToast(t('networkPage.groupUsage.orphansRemoved', { count: orphanGuests.length }), 'success')
+      setOrphansAsked(false)
     } catch (err: any) {
-      setDeleteGroupError(err?.message || t('networkPage.error'))
+      setOrphansError(err?.message || t('networkPage.error'))
     } finally {
-      setDeletingGroup(false)
+      setRemovingOrphans(false)
+      refreshGuests(touched)
+      void reloadGroupUsage()
     }
   }
 
@@ -501,58 +562,29 @@ export default function SecurityGroupsPanel({
     return section.rules.map((rule, idx) => renderRuleRow(section, rule, idx))
   }
 
-  // ── Standalone warning ──
-  if (firewallMode === 'standalone') {
-    return (
-      <Box sx={{ textAlign: 'center', py: 6 }}>
-        <Avatar sx={{ width: 80, height: 80, bgcolor: alpha('#f59e0b', 0.15), mx: 'auto', mb: 3 }}>
-          <i className="ri-shield-line" style={{ fontSize: 40, color: '#f59e0b' }} />
-        </Avatar>
-        <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>{t('network.securityGroupsNotAvailable')}</Typography>
-        <Typography variant="body1" sx={{ color: 'text.secondary', maxWidth: 500, mx: 'auto', mb: 3 }}>
-          {t('network.securityGroupsClusterFeature')}
-        </Typography>
-        <Box sx={{ p: 3, bgcolor: paletteAlpha(theme, 'divider', 0.05), borderRadius: 2, maxWidth: 600, mx: 'auto' }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 2 }}>{t('network.availableAlternatives')}</Typography>
-          {/* Centred as a group: the panel is textAlign center, so leaving the
-              rows flex-start gave centred labels above left-anchored rows. */}
-          <Stack spacing={1.5} alignItems="center">
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Avatar sx={{ width: 32, height: 32, bgcolor: alpha('#8b5cf6', 0.15) }}>
-                <i className="ri-price-tag-3-line" style={{ fontSize: 16, color: '#8b5cf6' }} />
-              </Avatar>
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>Aliases</Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>{t('network.aliasesDescription')}</Typography>
-              </Box>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Avatar sx={{ width: 32, height: 32, bgcolor: alpha('#f59e0b', 0.15) }}>
-                <i className="ri-database-2-line" style={{ fontSize: 16, color: '#f59e0b' }} />
-              </Avatar>
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>IP Sets</Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>{t('network.ipSetsDescription')}</Typography>
-              </Box>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Avatar sx={{ width: 32, height: 32, bgcolor: alpha('#22c55e', 0.15) }}>
-                <i className="ri-computer-line" style={{ fontSize: 16, color: '#22c55e' }} />
-              </Avatar>
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>{t('network.vmCtRules')}</Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>{t('network.vmCtRulesDescription')}</Typography>
-              </Box>
-            </Box>
-          </Stack>
-        </Box>
-      </Box>
-    )
-  }
-
   return (
     <Box sx={{ p: 3 }}>
       <FirewallLoadAlert error={loadError} onRetry={reload} />
+      {orphans.length > 0 && (
+        <Alert
+          severity='warning'
+          data-testid='sg-orphans'
+          sx={{ mb: 2, py: 0.25, '& .MuiAlert-message': { minWidth: 0, overflow: 'hidden', flex: '1 1 0' } }}
+          action={(
+            <WriteTip>
+              <Button color='inherit' size='small' disabled={!writable} onClick={() => { setOrphansError(null); setOrphansAsked(true) }} sx={{ whiteSpace: 'nowrap' }}>
+                {t('networkPage.groupUsage.orphansRemove')}
+              </Button>
+            </WriteTip>
+          )}
+        >
+          <Tooltip title={orphans.map(o => `${o.group}: ${(groupUsage?.groups[o.group] ?? []).map(m => `${m.name} (${m.vmid})`).join(', ')}`).join(' · ')}>
+            <Typography variant='body2' noWrap>
+              {t('networkPage.groupUsage.orphans', { count: orphanGuests.length, groups: orphans.map(o => o.group).join(', ') })}
+            </Typography>
+          </Tooltip>
+        </Alert>
+      )}
 
       {/* Toolbar */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
@@ -575,7 +607,7 @@ export default function SecurityGroupsPanel({
               {t('networkPage.newPolicy')}
             </Button>
           </WriteTip>
-          <Button size="small" variant="outlined" startIcon={<i className="ri-refresh-line" />} onClick={reload}>
+          <Button size="small" variant="outlined" startIcon={<i className="ri-refresh-line" />} onClick={() => { reload(); void reloadGroupUsage(true) }}>
             {t('networkPage.refresh')}
           </Button>
         </Box>
@@ -626,7 +658,7 @@ export default function SecurityGroupsPanel({
           groupName={membersOf}
           connectionId={selectedConnection}
           guests={vmFirewallData}
-          membership={groupMembers(membersOf, vmFirewallData, deployedSnapshot)}
+          membership={groupMembers(membersOf, vmFirewallData, deployedSnapshot, groupUsage, zoneTags)}
           loadGuestRules={loadGuestRules}
           guestsNotScanned={guestsNotScanned}
           onClose={() => setMembersOf(null)}
@@ -672,17 +704,39 @@ export default function SecurityGroupsPanel({
         </DialogActions>
       </Dialog>
 
-      {/* Delete Security Group Confirmation */}
+      {/* Delete Security Group: the guests carrying it are read first, and detached with it */}
+      {groupToDelete && (
+        <DeleteSecurityGroupDialog
+          key={groupToDelete}
+          groupName={groupToDelete}
+          connectionId={selectedConnection}
+          rules={securityGroups.find(g => g.group === groupToDelete)?.rules ?? []}
+          scope={computeScopeRefs(groupToDelete, clusterRules, hostRulesByNode)}
+          nodes={nodeNames}
+          check={checkGroupUsage}
+          guestStatus={guestStatusByKey}
+          nodeStatus={nodeStatus}
+          onClose={() => setGroupToDelete(null)}
+          onDeleted={groupDeleted}
+        />
+      )}
+
+      {/* Rules naming a deleted group: removed from the guests that still carry one */}
       <MicrosegConfirmDialog
-        open={!!groupToDelete}
-        title={t('networkPage.deleteSgConfirm', { name: groupToDelete ?? '' })}
-        body={t('networkPage.deleteSgWarning', { name: groupToDelete ?? '' })}
-        confirmLabel={t('common.delete')}
-        color='error'
-        busy={deletingGroup}
-        error={deleteGroupError}
-        onConfirm={() => { void confirmDeleteGroup() }}
-        onCancel={() => setGroupToDelete(null)}
+        open={orphansAsked}
+        title={t('networkPage.groupUsage.orphansConfirmTitle')}
+        body={t('networkPage.groupUsage.orphansConfirmBody')}
+        infoLines={orphans.flatMap(o => (groupUsage?.groups[o.group] ?? []).map(m => ({
+          icon: '',
+          text: `${m.type}/${m.vmid}/${o.group}`,
+          content: <GuestOnNodeLine guest={m} guestStatus={guestStatusByKey[`${m.type}/${m.vmid}`]} nodeStatus={nodeStatus?.[m.node]} extra={o.group} />,
+        }))).slice(0, 8)}
+        confirmLabel={t('networkPage.groupUsage.orphansRemove')}
+        color='warning'
+        busy={removingOrphans}
+        error={orphansError}
+        onConfirm={() => { void removeOrphans() }}
+        onCancel={() => setOrphansAsked(false)}
       />
 
       {/* Delete Rule Confirmation */}

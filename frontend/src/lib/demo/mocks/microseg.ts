@@ -536,12 +536,32 @@ function coverage(now: number) {
   }
 }
 
+/**
+ * GET /api/v1/firewall/group-usage/{connection}: the guests carrying each security group. In the demo the only groups
+ * attached to guests are the zone groups the engine manages, one per zone that observes or enforces.
+ */
+function groupUsage(now: number) {
+  const groups: Record<string, Array<{ type: string; vmid: string; node: string; name: string }>> = {}
+  const total = Object.keys(GUESTS).length
+
+  for (const [id, g] of Object.entries(GUESTS)) {
+    const zone = zoneOfGuest.get(Number(id))
+    if (!zone || zone.state === 'disabled') continue
+    (groups[`pcz-${zone.name}`] ??= []).push({ type: g.type, vmid: id, node: g.node, name: g.name })
+  }
+
+  return { total, measured: total, unread: 0, partial: false, computedAt: new Date(now - 4 * 60_000).toISOString(), computing: false, groups }
+}
+
 export const MICROSEG_MOCKS: DemoMockMap = {}
 
 const ROUTE = /^\/api\/v1\/firewall\/microseg\/[^/]+\/(policy|status|drifts|preflight|ipfilter|suggestions|runs|revisions|traffic|volume|events)(?:\/([^/]+))?$/
 
 /** The guest coverage the Dashboard reads (its chips, its "To do" list, the groupings by VLAN and node): same guests, same zones. */
 const COVERAGE_ROUTE = /^\/api\/v1\/firewall\/coverage\/[^/]+$/
+
+/** The members of each security group, for the Security Groups tab. */
+const GROUP_USAGE_ROUTE = /^\/api\/v1\/firewall\/group-usage\/[^/]+$/
 
 const WRITE_ROUTE = /^\/api\/v1\/firewall\/microseg\/[^/]+\//
 
@@ -553,6 +573,7 @@ export const resolveMicrosegMock: DemoMockResolver = (method, cleanPath, url) =>
   }
 
   if (COVERAGE_ROUTE.test(cleanPath)) return coverage(Date.now())
+  if (GROUP_USAGE_ROUTE.test(cleanPath)) return groupUsage(Date.now())
 
   const match = ROUTE.exec(cleanPath)
 

@@ -6287,13 +6287,6 @@
     "zeroTrustScore": "Score Zero Trust",
     "defaultPolicies": "Politiques par défaut",
     "vmsWithDisabledFirewall": "{count, plural, one {# VM avec le pare-feu désactivé} other {# VMs avec le pare-feu désactivé}}",
-    "securityGroupsNotAvailable": "Groupes de sécurité non disponibles",
-    "securityGroupsClusterFeature": "Les groupes de sécurité sont une fonctionnalité de cluster Proxmox. En mode standalone, les règles de pare-feu doivent être configurées directement au niveau de l'hôte ou de chaque VM/CT.",
-    "availableAlternatives": "Alternatives disponibles :",
-    "aliasesDescription": "Définissez des noms pour vos réseaux et IPs",
-    "ipSetsDescription": "Groupez plusieurs IPs/réseaux ensemble",
-    "vmCtRules": "Règles VM/CT",
-    "vmCtRulesDescription": "Configurez les règles directement sur chaque machine",
     "newGroup": "Nouveau groupe",
     "noDescription": "Aucune description",
     "groupsAndRules": "{groups} groupes • {rules} règles",
@@ -9703,7 +9696,7 @@
     "unprotectedCount": "Non protégées",
     "distributedFirewall": "Pare-feu distribué",
     "appliedTo": "Appliqué à",
-    "vmCount": "{count} VMs",
+    "vmCount": "{count, plural, one {# VM} other {# VMs}}",
     "noVmsReferencing": "Aucune VM ne référence ce groupe",
     "newPolicy": "Nouvelle Policy",
     "activeRulesCount": "{count} actives",
@@ -9879,10 +9872,29 @@
     "rulesOnDemand": {
       "chip": "Règles à l'ouverture",
       "readFailed": "Les règles de cet invité n'ont pas pu être lues",
-      "membersUnknown": "Proxmox ne tient aucune liste de membres : un invité en fait partie quand une de ses règles porte le groupe, et les règles sont lues invité par invité. Les membres d'un groupe de zone de micro-segmentation déployée sont connus par leurs tags ; pour ce groupe, seuls les invités déjà ouverts sont listés",
+      "membersUnknown": "Proxmox ne tient aucune liste de membres : un invité en fait partie quand une de ses règles porte le groupe. Les règles de certains invités n'ont pas pu être lues, cette liste peut donc être incomplète",
       "membersUnknownCount": "{count, number}+ VMs",
       "detachNoRule": "{guest} ne porte aucune règle de {group}",
       "alreadyMember": "{guests} portent déjà {group} : pas rattachés une seconde fois"
+    },
+    "groupUsage": {
+      "deleteBody": "Irréversible : le groupe et ses règles sont supprimés du cluster.",
+      "notCounted": "VM non comptées",
+      "checking": "Lecture des règles des invités pour trouver ceux qui portent ce groupe…",
+      "checkFailed": "Les invités n'ont pas pu être vérifiés, le groupe est donc conservé",
+      "noMember": "Aucun invité ne porte ce groupe",
+      "moreMembers": "et {count, number} de plus",
+      "unchecked": "{count, plural, one {# invité n'a pas pu être vérifié et peut} other {# invités n'ont pas pu être vérifiés et peuvent}} encore porter le groupe",
+      "nodesUnchecked": "Les règles de {nodes} n'ont pas pu être lues et utilisent peut-être encore le groupe",
+      "scopeCluster": "Une règle du cluster utilise encore ce groupe : supprimez d'abord cette règle",
+      "scopeNodes": "Des règles de {nodes} utilisent encore ce groupe : supprimez-les d'abord",
+      "detachAndDelete": "Détacher de {count, plural, one {# invité} other {# invités}} et supprimer",
+      "detachFailed": "{guest} n'a pas pu être détaché : le groupe n'a pas été supprimé",
+      "orphans": "{count, plural, one {# invité nomme} other {# invités nomment}} encore un groupe de sécurité qui n'existe plus : {groups}",
+      "orphansRemove": "Retirer ces références",
+      "orphansConfirmTitle": "Retirer les références aux groupes supprimés ?",
+      "orphansConfirmBody": "La règle qui nomme un groupe supprimé est retirée de chaque invité. Leurs autres règles sont conservées.",
+      "orphansRemoved": "Références retirées de {count, plural, one {# invité} other {# invités}}"
     },
     "vmPager": {
       "groupCount": "{count, plural, one {# VM} other {# VM}}",
@@ -14334,6 +14346,11 @@
           "hint": "Une règle ACCEPT ajoutée hors de la micro-segmentation ouvre cet invité : à examiner dans Proxmox.",
           "hintGroup": "Une règle ACCEPT ajoutée hors de la micro-segmentation ouvre ce groupe : à examiner dans Proxmox."
         },
+        "foreign_group": {
+          "title": "Groupe de sécurité non attaché par ProxCenter",
+          "detail": "Le groupe de sécurité {group} attaché en position {pos} n'a pas été attaché par ProxCenter et est conservé tel quel.",
+          "hint": "Ce que ce groupe accepte passe, même là où la zone bloque : vérifiez-le dans Groupes de sécurité, ou détachez-le de cet invité."
+        },
         "ipset_out_of_sync": {
           "title": "IP set désynchronisé",
           "detail": "{object} contient {actual} au lieu de {desired}."
@@ -14457,6 +14474,7 @@
         "unzoned_running": "Sans zone",
         "nic_firewall_off": "Pare-feu coupé",
         "foreign_accept": "Règle tierce",
+        "foreign_group": "Groupe étranger",
         "ipset_out_of_sync": "Désynchronisé",
         "member_without_ip": "Sans IP",
         "ambiguous_zone": "Plusieurs zones",
@@ -14486,6 +14504,7 @@
         "unzoned_running": "Invités en marche sans zone ({count, number})",
         "nic_firewall_off": "Pare-feu d'invité coupé ({count, number})",
         "foreign_accept": "Règles modifiées à la main ({count, number})",
+        "foreign_group": "Groupes de sécurité attachés à la main ({count, number})",
         "ipset_out_of_sync": "Ensembles d'IP désynchronisés ({count, number})",
         "member_without_ip": "Membres sans IP connue ({count, number})",
         "ambiguous_zone": "Invités dans plusieurs zones ({count, number})",

@@ -40,6 +40,7 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
 vi.mock("@/lib/connections/getConnection", () => ({ invalidateConnectionCache: vi.fn() }))
 vi.mock("@/lib/cache/inventoryCache", () => ({ invalidateInventoryCache: vi.fn() }))
 vi.mock("@/lib/firewall/guestCoverage", () => ({ evictGuestCoverage: vi.fn() }))
+vi.mock("@/lib/firewall/groupUsage", () => ({ evictGroupUsage: vi.fn() }))
 vi.mock("@/lib/tenant/iaasGuard", async (orig) => ({ ...(await orig<Record<string, unknown>>()), denyIaasTenant: async () => null }))
 vi.mock("@/lib/connections/connectionUsage", () => ({
   connectionUsage: (...args: unknown[]) => usageMock(...args),

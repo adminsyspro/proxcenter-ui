@@ -2,14 +2,18 @@ import { describe, expect, it } from 'vitest'
 
 import { parsePbsUpdateOptions, PBS_REBOOT_TIMEOUT_DEFAULT, PBS_REBOOT_TIMEOUT_MAX, PBS_REBOOT_TIMEOUT_MIN } from './updateOptions'
 import {
+  findingTone,
   findingValues,
   isKnownFinding,
   isRunActive,
   isSubscriptionRefusal,
   needsUpdate,
+  rebootState,
   runDurationSeconds,
+  runOutcome,
   runPercent,
   runSteps,
+  updatesTone,
   type PbsRun,
 } from './updateView'
 
@@ -143,5 +147,41 @@ describe('run state', () => {
     expect(runDurationSeconds(run({}, { started_at: '2026-11-23T19:09:47Z', completed_at: '2026-11-23T19:13:57Z' }))).toBe(250)
     expect(runDurationSeconds(run({}, { started_at: '2026-11-23T19:09:47Z' }))).toBeNull()
     expect(runDurationSeconds(run({}, { started_at: 'x', completed_at: 'y' }))).toBeNull()
+  })
+})
+
+describe('tones and outcome', () => {
+  const finding = (code: string, severity: 'error' | 'warning') => ({ code, severity, message: code })
+
+  it('reads a check row from its findings, an error first', () => {
+    const findings = [finding('pbs_disk_space_low', 'warning'), finding('pbs_tasks_running', 'error')]
+
+    expect(findingTone(findings, 'pbs_tasks_running')).toBe('error')
+    expect(findingTone(findings, 'pbs_disk_space', 'pbs_disk_space_low')).toBe('warning')
+    expect(findingTone(findings, 'pbs_service_inactive')).toBe('ok')
+  })
+
+  it('reads the pending updates row', () => {
+    const updates = (available: boolean) => ({ updates_available: available }) as any
+
+    expect(updatesTone({ findings: [finding('pbs_apt_update_failed', 'error')], updates: updates(false) })).toBe('error')
+    expect(updatesTone({ findings: [finding('pbs_dpkg_interrupted', 'warning')], updates: updates(false) })).toBe('warning')
+    expect(updatesTone({ findings: [], updates: updates(true) })).toBe('info')
+    expect(updatesTone({ findings: [], updates: updates(false) })).toBe('ok')
+  })
+
+  it('names how a run ended', () => {
+    const ended = (status: string, node = 'completed') => ({ id: 'r', status, node_statuses: [{ node_name: 'pbs', status: node }] }) as any
+
+    expect(runOutcome(ended('failed'))).toEqual({ outcome: 'failed', tone: 'error' })
+    expect(runOutcome(ended('cancelled'))).toEqual({ outcome: 'cancelled', tone: 'warning' })
+    expect(runOutcome(ended('completed', 'skipped'))).toEqual({ outcome: 'upToDate', tone: 'info' })
+    expect(runOutcome(ended('completed'))).toEqual({ outcome: 'completed', tone: 'ok' })
+  })
+
+  it('says what happened to the reboot', () => {
+    expect(rebootState({ did_reboot: true, reboot_required: true })).toBe('done')
+    expect(rebootState({ did_reboot: false, reboot_required: true })).toBe('pending')
+    expect(rebootState({})).toBe('notNeeded')
   })
 })

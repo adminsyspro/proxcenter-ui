@@ -26,18 +26,24 @@ import ConfirmCloseDialog from '@/components/ConfirmCloseDialog'
 import NumericTextField from '@/components/ui/NumericTextField'
 import { PBS_REBOOT_TIMEOUT_DEFAULT, PBS_REBOOT_TIMEOUT_MAX, PBS_REBOOT_TIMEOUT_MIN } from '@/lib/pbs/updateOptions'
 import {
+  findingTone,
   findingValues,
   isKnownFinding,
   isRunActive,
   isSubscriptionRefusal,
   needsUpdate,
+  rebootState,
   runDurationSeconds,
+  runOutcome,
   runPercent,
   runSteps,
+  updatesTone,
   type PbsFinding,
   type PbsPreflight,
   type PbsRun,
+  type PbsRunNode,
   type PbsStepState,
+  type PbsTone,
 } from '@/lib/pbs/updateView'
 import { packageProgressLabel } from '@/lib/rolling/updateProgress'
 import { formatBytes } from '@/utils/format'
@@ -52,12 +58,16 @@ interface Props {
 }
 
 type View = 'loading' | 'checks' | 'run'
-type Tone = 'ok' | 'warning' | 'error' | 'info'
+type Tone = PbsTone
 
 const POLL_MS = 3000
 const LOG_TAIL = 200
 
 type Pane = 'log' | 'packages' | 'apt'
+
+const OUTCOME_KEY = { failed: 'statusFailed', cancelled: 'statusCancelled', upToDate: 'statusUpToDate', completed: 'statusCompleted' } as const
+const PANE_KEY = { log: 'paneLog', packages: 'panePackages', apt: 'paneApt' } as const
+const REBOOT_KEY = { done: 'rebootDone', pending: 'rebootPending', notNeeded: 'rebootNotNeeded' } as const
 
 const PANE_SX = { minHeight: 72, flex: '0 1 200px', overflow: 'auto', bgcolor: 'background.default', border: 1, borderColor: 'divider', borderRadius: 1 } as const
 
@@ -77,7 +87,7 @@ const STEP_ICON: Record<PbsStepState, { icon: string, color: string }> = {
 }
 
 /** One line: an icon, what it is, its value on the right. */
-function Row({ icon, color, label, spin = false, children }: { icon: string, color: string, label: string, spin?: boolean, children?: ReactNode }) {
+function Row({ icon, color, label, spin = false, children }: Readonly<{ icon: string, color: string, label: string, spin?: boolean, children?: ReactNode }>) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minHeight: 36, px: 2 }}>
       <Box component='i' className={icon} sx={{ fontSize: 18, color, flexShrink: 0, ...(spin && { animation: 'spin 1s linear infinite' }) }} />
@@ -87,11 +97,11 @@ function Row({ icon, color, label, spin = false, children }: { icon: string, col
   )
 }
 
-function Value({ children }: { children: ReactNode }) {
+function Value({ children }: Readonly<{ children: ReactNode }>) {
   return <Typography variant='body2' color='text.secondary' noWrap>{children}</Typography>
 }
 
-function Panel({ children }: { children: ReactNode }) {
+function Panel({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', '& > * + *': { borderTop: 1, borderColor: 'divider' } }}>
       {children}
@@ -105,7 +115,7 @@ function Panel({ children }: { children: ReactNode }) {
  * lives in the orchestrator, so closing the dialog does not stop it and
  * opening it again shows where it is.
  */
-export default function PbsUpdateDialog({ open, pbsId, pbsName, onClose, onFinished }: Props) {
+export default function PbsUpdateDialog({ open, pbsId, pbsName, onClose, onFinished }: Readonly<Props>) {
   const t = useTranslations('inventory.pbsUpdate')
   const tu = useTranslations()
   const locale = useLocale()
@@ -281,6 +291,36 @@ export default function PbsUpdateDialog({ open, pbsId, pbsName, onClose, onFinis
   const node = run?.node_statuses?.[0]
   const pkg = node?.status === 'updating' ? packageProgressLabel(node.package_progress as any) : null
 
+  const optionsPanel = () => (
+    <>
+      <Panel>
+        <Row icon='ri-restart-line' color='text.secondary' label={t('optAutoReboot')}>
+          <Switch size='small' checked={autoReboot} onChange={e => setAutoReboot(e.target.checked)} slotProps={{ input: { 'aria-label': t('optAutoReboot') } }} />
+        </Row>
+        <Row icon='ri-timer-line' color='text.secondary' label={t('optRebootTimeout')}>
+          <NumericTextField
+            size='small'
+            value={rebootMinutes}
+            onChange={v => setRebootMinutes(v)}
+            fallback={PBS_REBOOT_TIMEOUT_DEFAULT / 60}
+            min={PBS_REBOOT_TIMEOUT_MIN / 60}
+            max={PBS_REBOOT_TIMEOUT_MAX / 60}
+            disabled={!autoReboot}
+            sx={{ width: 84 }}
+            slotProps={{ htmlInput: { 'aria-label': t('optRebootTimeout') } }}
+          />
+          <Value>{t('minutes')}</Value>
+        </Row>
+        <Row icon='ri-lock-line' color='text.secondary' label={t('optReadOnly')}>
+          <Switch size='small' checked={readOnly} onChange={e => setReadOnly(e.target.checked)} slotProps={{ input: { 'aria-label': t('optReadOnly') } }} />
+        </Row>
+      </Panel>
+      <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>
+        {readOnly ? t('readOnlyHint') : t('readOnlyOffHint')}
+      </Typography>
+    </>
+  )
+
   const checksView = () => {
     if (checking && !preflight) {
       return (
@@ -294,24 +334,17 @@ export default function PbsUpdateDialog({ open, pbsId, pbsName, onClose, onFinis
 
     const errors = preflight.findings.filter(f => f.severity === 'error')
     const warnings = preflight.findings.filter(f => f.severity === 'warning' && f.code !== 'pbs_no_updates')
-    const has = (code: string) => preflight.findings.find(f => f.code === code)
-    const tone = (...codes: string[]): Tone => {
-      const found = codes.map(has).filter(Boolean) as PbsFinding[]
-
-      if (found.some(f => f.severity === 'error')) return 'error'
-
-      return found.length > 0 ? 'warning' : 'ok'
-    }
+    const tone = (...codes: string[]) => findingTone(preflight.findings, ...codes)
+    const aptFailed = preflight.findings.some(f => f.code === 'pbs_apt_update_failed')
     const maintained = preflight.datastores.filter(d => d.maintenance_mode).length
     const upcoming = preflight.upcoming_backup_jobs ?? []
     const jobs = preflight.backup_jobs ?? []
-    const updatesTone: Tone = has('pbs_apt_update_failed') ? 'error' : has('pbs_dpkg_interrupted') ? 'warning' : preflight.updates.updates_available ? 'info' : 'ok'
     const icon = (x: Tone) => TONE_ICON[x]
 
     return (
       <Stack spacing={2}>
-        {errors.map((f, i) => <Alert key={`e${i}`} severity='error'>{findingText(f)}</Alert>)}
-        {warnings.map((f, i) => <Alert key={`w${i}`} severity='warning'>{findingText(f)}</Alert>)}
+        {errors.map(f => <Alert key={`${f.code}:${f.message}`} severity='error'>{findingText(f)}</Alert>)}
+        {warnings.map(f => <Alert key={`${f.code}:${f.message}`} severity='warning'>{findingText(f)}</Alert>)}
         {upcoming.length > 0 && (
           <Alert severity='warning'>
             {t('upcomingJobs', {
@@ -329,9 +362,9 @@ export default function PbsUpdateDialog({ open, pbsId, pbsName, onClose, onFinis
           <Row {...icon('ok')} label={t('rowKernel')}>
             <Value>{preflight.kernel || '-'}</Value>
           </Row>
-          <Row {...icon(updatesTone)} label={t('rowUpdates')}>
+          <Row {...icon(updatesTone(preflight))} label={t('rowUpdates')}>
             {preflight.updates.kernel_update && <Chip size='small' variant='outlined' label={t('kernelUpdate')} />}
-            <Value>{has('pbs_apt_update_failed') ? '-' : t('packageCount', { count: preflight.updates.package_count })}</Value>
+            <Value>{aptFailed ? '-' : t('packageCount', { count: preflight.updates.package_count })}</Value>
           </Row>
           <Row {...icon(tone('pbs_tasks_running'))} label={t('rowTasks')}>
             <Value>{preflight.running_tasks.length === 0 ? t('noTask') : t('taskCount', { count: preflight.running_tasks.length })}</Value>
@@ -354,54 +387,99 @@ export default function PbsUpdateDialog({ open, pbsId, pbsName, onClose, onFinis
           </Row>
         </Panel>
 
-        <Panel>
-          <Row icon='ri-restart-line' color='text.secondary' label={t('optAutoReboot')}>
-            <Switch size='small' checked={autoReboot} onChange={e => setAutoReboot(e.target.checked)} slotProps={{ input: { 'aria-label': t('optAutoReboot') } }} />
-          </Row>
-          <Row icon='ri-timer-line' color='text.secondary' label={t('optRebootTimeout')}>
-            <NumericTextField
-              size='small'
-              value={rebootMinutes}
-              onChange={v => setRebootMinutes(v)}
-              fallback={PBS_REBOOT_TIMEOUT_DEFAULT / 60}
-              min={PBS_REBOOT_TIMEOUT_MIN / 60}
-              max={PBS_REBOOT_TIMEOUT_MAX / 60}
-              disabled={!autoReboot}
-              sx={{ width: 84 }}
-              slotProps={{ htmlInput: { 'aria-label': t('optRebootTimeout') } }}
-            />
-            <Value>{t('minutes')}</Value>
-          </Row>
-          <Row icon='ri-lock-line' color='text.secondary' label={t('optReadOnly')}>
-            <Switch size='small' checked={readOnly} onChange={e => setReadOnly(e.target.checked)} slotProps={{ input: { 'aria-label': t('optReadOnly') } }} />
-          </Row>
-        </Panel>
-        <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>
-          {readOnly ? t('readOnlyHint') : t('readOnlyOffHint')}
-        </Typography>
+        {optionsPanel()}
       </Stack>
     )
   }
 
+  const reportPanel = (run: PbsRun, node: PbsRunNode) => {
+    const { outcome, tone } = runOutcome(run)
+    const duration = runDurationSeconds(run)
+    const upgraded = node.upgraded_packages ?? []
+    const maintained = node.maintenance_datastores?.length ?? 0
+
+    return (
+      <Panel>
+        <Row icon='ri-flag-line' color='text.secondary' label={t('reportStatus')}>
+          <Box component='i' className={TONE_ICON[tone].icon} sx={{ fontSize: 18, color: TONE_ICON[tone].color }} />
+          <Value>{t(OUTCOME_KEY[outcome])}</Value>
+        </Row>
+        {node.status !== 'skipped' && (
+          <>
+        <Row icon='ri-server-line' color='text.secondary' label={t('reportVersion')}>
+          <Value>{node.version_before || '-'} → {node.version_after || '-'}</Value>
+        </Row>
+        <Row icon='ri-cpu-line' color='text.secondary' label={t('reportKernel')}>
+          <Value>{node.kernel_before || '-'} → {node.kernel_after || '-'}</Value>
+        </Row>
+        <Row icon='ri-restart-line' color='text.secondary' label={t('reportReboot')}>
+          <Value>{t(REBOOT_KEY[rebootState(node)])}</Value>
+        </Row>
+        <Row icon='ri-archive-line' color='text.secondary' label={t('reportPackages')}>
+          <Value>{t('packageCount', { count: upgraded.length })}</Value>
+        </Row>
+        {maintained > 0 && (
+          <Row icon='ri-lock-line' color='text.secondary' label={t('reportReadOnly')}>
+            <Value>{t('datastoreCount', { count: maintained })}</Value>
+          </Row>
+        )}
+        {run.completed_at && (
+          <Row icon='ri-calendar-check-line' color='text.secondary' label={t('reportFinished')}>
+            <Value>{new Date(run.completed_at).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' })}</Value>
+          </Row>
+        )}
+        {duration !== null && (
+          <Row icon='ri-timer-line' color='text.secondary' label={t('reportDuration')}>
+            <Value>{t('duration', { minutes: Math.floor(duration / 60), seconds: duration % 60 })}</Value>
+          </Row>
+        )}
+          </>
+        )}
+      </Panel>
+    )
+  }
+
+  const detailPane = (panes: Pane[], shown: Pane, upgraded: NonNullable<PbsRunNode['upgraded_packages']>, output: string, logs: NonNullable<PbsRun['logs']>) => (
+    <>
+      {panes.length > 1 && (
+        <ToggleButtonGroup size='small' exclusive value={shown} onChange={(_, v: Pane | null) => { if (v) setPane(v) }} aria-label={t('paneLabel')} sx={{ alignSelf: 'flex-start', flexShrink: 0 }}>
+          {panes.map(p => (
+            <ToggleButton key={p} value={p} sx={{ py: 0.25, px: 1.5, textTransform: 'none' }}>{t(PANE_KEY[p])}</ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      )}
+      {shown === 'packages' ? (
+        <Box sx={PANE_SX}>
+          {upgraded.map(p => (
+            <Box key={p.name} sx={{ display: 'flex', gap: 2, px: 2, py: 0.5, '& + &': { borderTop: 1, borderColor: 'divider' } }}>
+              <Typography variant='body2' sx={{ flex: 1, minWidth: 0 }} noWrap>{p.name}</Typography>
+              <Typography variant='body2' color='text.secondary' noWrap>{p.current_version} → {p.new_version}</Typography>
+            </Box>
+          ))}
+        </Box>
+      ) : (
+        <Box
+          ref={logRef}
+          component='pre'
+          data-testid={shown === 'apt' ? 'pbs-update-output' : 'pbs-update-log'}
+          sx={{ ...PANE_SX, m: 0, p: 1.5, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+        >
+          {shown === 'apt' ? output : logs.map(l => `${new Date(l.timestamp).toLocaleTimeString(locale)}  ${l.message}`).join('\n')}
+        </Box>
+      )}
+    </>
+  )
+
   const runView = () => {
     if (!run) return null
     const steps = runSteps(run)
-    const duration = runDurationSeconds(run)
     const ended = !isRunActive(run)
     const upgraded = node?.upgraded_packages ?? []
     const logs = (run.logs ?? []).slice(-LOG_TAIL)
-    const outcome: { tone: Tone, text: string } = run.status === 'failed'
-      ? { tone: 'error', text: t('statusFailed') }
-      : run.status === 'cancelled'
-        ? { tone: 'warning', text: t('statusCancelled') }
-        : node?.status === 'skipped'
-          ? { tone: 'info', text: t('statusUpToDate') }
-          : { tone: 'ok', text: t('statusCompleted') }
     const output = node?.update_output ?? ''
     const panes: Pane[] = [...(logs.length > 0 ? ['log' as const] : []), ...(ended && upgraded.length > 0 ? ['packages' as const] : []), ...(output ? ['apt' as const] : [])]
     const preferred = pane ?? (node?.status === 'failed' && output ? 'apt' : 'log')
     const shown = panes.includes(preferred) ? preferred : panes[0]
-    const PANE_LABEL: Record<Pane, string> = { log: t('paneLog'), packages: t('panePackages'), apt: t('paneApt') }
 
     return (
       <Stack spacing={2} sx={{ minHeight: 0 }}>
@@ -437,76 +515,9 @@ export default function PbsUpdateDialog({ open, pbsId, pbsName, onClose, onFinis
           </Panel>
         )}
 
-        {ended && node && (
-          <Panel>
-            <Row icon='ri-flag-line' color='text.secondary' label={t('reportStatus')}>
-              <Box component='i' className={TONE_ICON[outcome.tone].icon} sx={{ fontSize: 18, color: TONE_ICON[outcome.tone].color }} />
-              <Value>{outcome.text}</Value>
-            </Row>
-            {node.status !== 'skipped' && (
-              <>
-            <Row icon='ri-server-line' color='text.secondary' label={t('reportVersion')}>
-              <Value>{node.version_before || '-'} → {node.version_after || '-'}</Value>
-            </Row>
-            <Row icon='ri-cpu-line' color='text.secondary' label={t('reportKernel')}>
-              <Value>{node.kernel_before || '-'} → {node.kernel_after || '-'}</Value>
-            </Row>
-            <Row icon='ri-restart-line' color='text.secondary' label={t('reportReboot')}>
-              <Value>{node.did_reboot ? t('rebootDone') : node.reboot_required ? t('rebootPending') : t('rebootNotNeeded')}</Value>
-            </Row>
-            <Row icon='ri-archive-line' color='text.secondary' label={t('reportPackages')}>
-              <Value>{t('packageCount', { count: upgraded.length })}</Value>
-            </Row>
-            {(node.maintenance_datastores?.length ?? 0) > 0 && (
-              <Row icon='ri-lock-line' color='text.secondary' label={t('reportReadOnly')}>
-                <Value>{t('datastoreCount', { count: node.maintenance_datastores!.length })}</Value>
-              </Row>
-            )}
-            {run.completed_at && (
-              <Row icon='ri-calendar-check-line' color='text.secondary' label={t('reportFinished')}>
-                <Value>{new Date(run.completed_at).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' })}</Value>
-              </Row>
-            )}
-            {duration !== null && (
-              <Row icon='ri-timer-line' color='text.secondary' label={t('reportDuration')}>
-                <Value>{t('duration', { minutes: Math.floor(duration / 60), seconds: duration % 60 })}</Value>
-              </Row>
-            )}
-              </>
-            )}
-          </Panel>
-        )}
+        {ended && node && reportPanel(run, node)}
 
-        {panes.length > 0 && (
-          <>
-            {panes.length > 1 && (
-              <ToggleButtonGroup size='small' exclusive value={shown} onChange={(_, v: Pane | null) => { if (v) setPane(v) }} aria-label={t('paneLabel')} sx={{ alignSelf: 'flex-start', flexShrink: 0 }}>
-                {panes.map(p => (
-                  <ToggleButton key={p} value={p} sx={{ py: 0.25, px: 1.5, textTransform: 'none' }}>{PANE_LABEL[p]}</ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-            )}
-            {shown === 'packages' ? (
-              <Box sx={PANE_SX}>
-                {upgraded.map(p => (
-                  <Box key={p.name} sx={{ display: 'flex', gap: 2, px: 2, py: 0.5, '& + &': { borderTop: 1, borderColor: 'divider' } }}>
-                    <Typography variant='body2' sx={{ flex: 1, minWidth: 0 }} noWrap>{p.name}</Typography>
-                    <Typography variant='body2' color='text.secondary' noWrap>{p.current_version} → {p.new_version}</Typography>
-                  </Box>
-                ))}
-              </Box>
-            ) : (
-              <Box
-                ref={logRef}
-                component='pre'
-                data-testid={shown === 'apt' ? 'pbs-update-output' : 'pbs-update-log'}
-                sx={{ ...PANE_SX, m: 0, p: 1.5, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-              >
-                {shown === 'apt' ? output : logs.map(l => `${new Date(l.timestamp).toLocaleTimeString(locale)}  ${l.message}`).join('\n')}
-              </Box>
-            )}
-          </>
-        )}
+        {panes.length > 0 && detailPane(panes, shown, upgraded, output, logs)}
       </Stack>
     )
   }

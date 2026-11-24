@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { copyToClipboard } from '@/lib/clipboard'
+import PbsUpdateDialog from '@/components/pbs/PbsUpdateDialog'
+import { Features, useLicense } from '@/contexts/LicenseContext'
 import {
   Alert,
   Box,
@@ -70,7 +72,13 @@ export default function PbsUpdatesTab({ pbsId }: PbsUpdatesTabProps) {
   const [changelogError, setChangelogError] = useState<string | null>(null)
   const [changelogForbidden, setChangelogForbidden] = useState<{ requiredPriv?: string } | null>(null)
 
-  // Upgrade dialog (PBS has no REST endpoint for apt dist-upgrade — must run via Shell/SSH)
+  // Upgrade: PBS has no REST endpoint for apt dist-upgrade. With the rolling
+  // updates feature and SSH saved on the connection, ProxCenter runs it
+  // (PbsUpdateDialog); otherwise the dialog below gives the command to run.
+  const { hasFeature, loading: licenseLoading } = useLicense()
+  const updateLicensed = !licenseLoading && hasFeature(Features.ROLLING_UPDATES)
+  const [sshEnabled, setSshEnabled] = useState<boolean>(false)
+  const [assistedOpen, setAssistedOpen] = useState<boolean>(false)
   const [upgradeOpen, setUpgradeOpen] = useState<boolean>(false)
   const [pbsBaseUrl, setPbsBaseUrl] = useState<string>('')
 
@@ -97,6 +105,18 @@ export default function PbsUpdatesTab({ pbsId }: PbsUpdatesTabProps) {
   useEffect(() => {
     void fetchUpdates()
   }, [fetchUpdates])
+
+  useEffect(() => {
+    if (!updateLicensed) return
+    let cancelled = false
+
+    fetch(`/api/v1/pbs/${pbsId}/update`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(b => { if (!cancelled) setSshEnabled(!!b?.data?.sshEnabled && !!b?.data?.orchestrator) })
+      .catch(() => {})
+
+    return () => { cancelled = true }
+  }, [pbsId, updateLicensed])
 
   const sortedPackages = useMemo(() => {
     const arr = [...packages]
@@ -228,13 +248,19 @@ export default function PbsUpdatesTab({ pbsId }: PbsUpdatesTabProps) {
             color="warning"
             size="small"
             onClick={() => {
+              if (updateLicensed && sshEnabled) {
+                setAssistedOpen(true)
+
+                return
+              }
               setUpgradeOpen(true)
               fetch(`/api/v1/pbs/${pbsId}/info`, { cache: 'no-store' })
                 .then(r => r.ok ? r.json() : null)
                 .then(b => setPbsBaseUrl(b?.data?.baseUrl || ''))
                 .catch(() => {})
             }}
-            disabled={packages.length === 0}
+            // With the assisted update the dialog also shows the server state and the last report.
+            disabled={packages.length === 0 && !(updateLicensed && sshEnabled)}
             startIcon={<i className="ri-install-line" style={{ fontSize: 16 }} />}
           >
             {t('inventory.pbsUpdatesUpgrade')}
@@ -510,9 +536,14 @@ export default function PbsUpdatesTab({ pbsId }: PbsUpdatesTabProps) {
               </IconButton>
             </Tooltip>
           </Box>
-          <Typography variant="caption" sx={{ opacity: 0.7 }}>
+          <Typography variant="caption" sx={{ display: 'block', opacity: 0.7 }}>
             {t('inventory.pbsUpdatesUpgradeHint')}
           </Typography>
+          {updateLicensed && !sshEnabled && (
+            <Typography variant="caption" sx={{ display: 'block', opacity: 0.7, mt: 0.5 }}>
+              {t('inventory.pbsUpdatesUpgradeSshHint')}
+            </Typography>
+          )}
         </DialogContent>
         <DialogActions>
           {pbsBaseUrl && (
@@ -532,6 +563,13 @@ export default function PbsUpdatesTab({ pbsId }: PbsUpdatesTabProps) {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <PbsUpdateDialog
+        open={assistedOpen}
+        pbsId={pbsId}
+        onClose={() => setAssistedOpen(false)}
+        onFinished={() => { void fetchUpdates() }}
+      />
 
       {/* Snackbar */}
       <Snackbar

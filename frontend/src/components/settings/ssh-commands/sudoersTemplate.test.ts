@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { FRONTEND_SUDO_RULES, type SudoRule } from '@/lib/ssh/sudo'
+import { FRONTEND_SUDO_RULES, sudoProfilesFor, type SudoRule } from '@/lib/ssh/sudo'
 
 import { buildInstallCommand, buildProfileSudoersTemplate, profileRules, SETUP_BASH } from './sudoersTemplate'
 
@@ -69,5 +69,29 @@ describe('SETUP_BASH', () => {
   it('creates the account with a home directory and no longer touches the openvswitch group', () => {
     expect(SETUP_BASH).toContain('adduser --system --home /home/proxcenter')
     expect(SETUP_BASH).not.toContain('openvswitch')
+  })
+})
+
+describe('backup server profile', () => {
+  const pbsRules: SudoRule[] = [
+    { id: 'pbs-apt-update', profile: 'pbs-ops', path: '/usr/bin/apt-get', args: '^update -qq$', usedBy: 'Backup server > Updates', example: 'update -qq' },
+    { id: 'pbs-manager-read', profile: 'pbs-ops', path: '/usr/sbin/proxmox-backup-manager', args: '^(versions|task list|datastore list) --output-format json$', usedBy: 'Backup server > Updates', example: 'task list --output-format json' },
+    { id: 'apt-update', profile: 'node-ops', path: '/usr/bin/apt-get', args: '^update -qq$', usedBy: 'Rolling updates', example: 'update -qq' },
+  ]
+
+  it('gets its own alias, holding only its rules', () => {
+    const template = buildProfileSudoersTemplate(pbsRules, ['pbs-ops'])
+
+    expect(template).toContain('Cmnd_Alias PXC_PBS_OPS = ')
+    expect(template).toContain('/usr/sbin/proxmox-backup-manager ^(versions|task list|datastore list) --output-format json$')
+    expect(template).toContain('proxcenter ALL=(root) NOPASSWD: PXC_PBS_OPS')
+    expect(template).not.toContain('PXC_NODE_OPS')
+  })
+
+  it('is what a backup server is checked against, and a cluster never is', () => {
+    expect(sudoProfilesFor('pbs')).toEqual(['pbs-ops'])
+    expect(sudoProfilesFor('pve')).toEqual(['node-ops', 'site-recovery', 'migrations'])
+    expect(sudoProfilesFor(undefined)).not.toContain('pbs-ops')
+    expect(profileRules(pbsRules, 'pbs-ops').map(r => r.id)).toEqual(['pbs-apt-update', 'pbs-manager-read'])
   })
 })

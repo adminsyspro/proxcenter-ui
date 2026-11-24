@@ -2491,7 +2491,95 @@
     "guestPoolVdc": "由其 vDC 管理",
     "rootOnlyOption": "Proxmox 仅允许 root@pam 修改此设置，API 令牌不可以",
     "lxcCores": "核心",
-    "lxcCpuCount": "{count} 个核心"
+    "lxcCpuCount": "{count} 个核心",
+    "pbsUpdate": {
+      "title": "更新备份服务器",
+      "titleNamed": "更新 {name}",
+      "checking": "正在检查服务器…",
+      "rowVersion": "Proxmox Backup Server 版本",
+      "rowKernel": "运行中的内核",
+      "rowUpdates": "待安装的更新",
+      "rowTasks": "运行中的任务",
+      "rowDatastores": "数据存储",
+      "rowDisk": "根文件系统可用空间",
+      "rowServices": "备份服务",
+      "rowBackupJobs": "写入此处的 Proxmox VE 备份作业",
+      "kernelUpdate": "内核",
+      "packageCount": "{count, plural, =0 {无软件包} other {# 个软件包}}",
+      "noTask": "无",
+      "taskCount": "{count, plural, other {# 个任务}}",
+      "datastoreCount": "{count, plural, =0 {无} other {# 个数据存储}}",
+      "datastoreCountMaintenance": "{count, plural, other {# 个数据存储}}，其中 {maintained} 个已处于维护状态",
+      "diskFree": "{free}，共 {total}",
+      "servicesRunning": "运行中",
+      "noBackupJob": "无",
+      "backupJobCount": "{count, plural, other {# 个作业}}",
+      "upcomingJobs": "{count, plural, one {{cluster} 的一个备份作业计划于 {time} 运行} other {一小时内有 # 个备份作业，最早的在 {cluster} 上于 {time} 运行}}：更新期间启动的备份会失败。",
+      "optAutoReboot": "更新需要时重启服务器",
+      "optRebootTimeout": "等待服务器恢复的时间",
+      "minutes": "分钟",
+      "optReadOnly": "更新期间将数据存储设为只读",
+      "readOnlyHint": "数据存储只读期间，备份、清理和垃圾回收会被拒绝，恢复仍然可用。已处于维护状态的数据存储保持不变。",
+      "readOnlyOffHint": "更新期间不会阻止备份启动；如果服务或服务器重启，该备份会失败。",
+      "recheck": "重新检查",
+      "start": "开始",
+      "lastReport": "上次报告",
+      "backToChecks": "返回检查",
+      "cancelRun": "取消更新",
+      "cancelTitle": "取消更新？",
+      "cancelMessage": "更新会停在当前位置。如果在软件包升级过程中被中断，可能留下未完成配置的软件包，下次更新会先完成它们的配置。已设为只读的数据存储会被恢复。",
+      "runInProgress": "正在更新",
+      "reportStatus": "更新状态",
+      "statusCompleted": "成功",
+      "statusUpToDate": "已是最新,未安装任何内容",
+      "statusFailed": "失败",
+      "statusCancelled": "已取消",
+      "resultFailed": "更新失败：{error}",
+      "rebootStillRequired": "使用新内核需要重启，但尚未重启：自动重启已关闭。",
+      "steps": {
+        "maintenance": "数据存储只读",
+        "upgrade": "软件包升级",
+        "reboot": "重启",
+        "verify": "检查服务和数据存储",
+        "release": "数据存储恢复读写"
+      },
+      "stepStates": {
+        "pending": "等待",
+        "active": "进行中",
+        "done": "完成",
+        "failed": "失败",
+        "skipped": "已跳过"
+      },
+      "reportVersion": "Proxmox Backup Server 版本",
+      "reportKernel": "内核",
+      "reportReboot": "重启",
+      "reportPackages": "已升级的软件包",
+      "paneLabel": "执行详情",
+      "paneLog": "日志",
+      "panePackages": "软件包",
+      "paneApt": "apt 输出",
+      "reportReadOnly": "设为只读的数据存储",
+      "reportFinished": "完成时间",
+      "reportDuration": "耗时",
+      "rebootDone": "已完成",
+      "rebootPending": "需要，未执行",
+      "rebootNotNeeded": "不需要",
+      "duration": "{minutes} 分 {seconds} 秒",
+      "findings": {
+        "pbs_apt_update_failed": "无法刷新软件包列表：{error}",
+        "pbs_apt_update_subscription": "软件包仓库拒绝了服务器（{error}）。enterprise 仓库需要有效订阅：请添加订阅密钥，或在“仓库”选项卡中禁用该仓库并启用 no-subscription 仓库。",
+        "pbs_tasks_running": "{count, plural, other {服务器上有 # 个任务正在运行，将被中断}}：{tasks}。请等待其结束，或将其停止。",
+        "pbs_disk_space": "根文件系统可用 {free}，共 {total}；升级至少需要 {needed}。",
+        "pbs_disk_space_low": "根文件系统空间不足：可用 {free}，共 {total}。",
+        "pbs_service_inactive": "更新前未运行：{services}。",
+        "pbs_no_updates": "服务器已是最新，无需安装。",
+        "pbs_state_unreadable": "无法读取服务器信息（{what}）：{error}",
+        "pbs_reboot_pending": "服务器已有待执行的重启。",
+        "pbs_dpkg_interrupted": "上一次升级被中断：{count, plural, other {有 # 个软件包已解包但未配置}}。本次更新会先完成它们的配置。",
+        "pbs_datastore_offline": "数据存储 {datastore} 因维护而离线，保持不变。"
+      }
+    },
+    "pbsUpdatesUpgradeSshHint": "在此连接上启用 SSH（设置 > 连接），即可从 ProxCenter 安装更新。"
   },
   "inventoryPage": {
     "newTag": "新标签...",
@@ -5216,6 +5304,10 @@
         "migrations": {
           "label": "迁移",
           "features": "从 VMware、Hyper-V、Nutanix 和 XCP-ng 迁移（等同于 root）"
+        },
+        "pbsOps": {
+          "label": "备份服务器",
+          "features": "备份服务器更新：软件包升级、重启、数据存储维护模式"
         }
       }
     },
@@ -5682,7 +5774,8 @@
       "noOvs": "无 OVS",
       "samplingRate": "采样率（每 N 个数据包取 1 个）",
       "samplingLoad": "节点负载"
-    }
+    },
+    "sshInfoPbs": "通过 SSH 访问，ProxCenter 可以安装此备份服务器的更新并在需要时重启它，而 Proxmox Backup Server 的 API 无法做到。"
   },
   "green": {
     "score": {

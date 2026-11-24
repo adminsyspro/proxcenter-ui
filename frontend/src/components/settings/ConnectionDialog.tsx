@@ -50,7 +50,7 @@ import { isPartialIPv4Cidr, isValidCidr } from '@/lib/net/cidr'
 import type { SshHostKeyRefusal } from './hostKeyRefusal'
 import NodeSshEndpointsEditor from '@/components/ssh/NodeSshEndpointsEditor'
 import { formatSshEndpoint } from '@/lib/ssh/node-endpoint-core'
-import type { SudoCheck } from '@/lib/ssh/sudo'
+import { sudoProfilesFor, type SudoCheck } from '@/lib/ssh/sudo'
 import SudoCheckLines, { NotDeployedLine, profilesAbsentEverywhere, uniformSudoCheck } from './SudoCheckLines'
 import { useLicense, Features } from '@/contexts/LicenseContext'
 import { isZeroRateLimitValid, ZERO_RATE_LIMIT_MAX_MBPS } from '@/lib/migration/warm/zero-rate'
@@ -271,10 +271,12 @@ export default function ConnectionDialog({
 
   // Nodes that all answered the sudoers check alike are summed up in one line,
   // and a profile no node holds is a choice rather than a fault.
-  const sudoUniform = useMemo(() => uniformSudoCheck(sshTestResult?.nodes ?? []), [sshTestResult])
+  // A backup server is checked against its own profile, a cluster against the others.
+  const sudoScope = useMemo(() => sudoProfilesFor(type), [type])
+  const sudoUniform = useMemo(() => uniformSudoCheck(sshTestResult?.nodes ?? [], sudoScope), [sshTestResult, sudoScope])
   const sudoAbsentEverywhere = useMemo(
-    () => profilesAbsentEverywhere((sshTestResult?.nodes ?? []).flatMap(n => (n.sudoCheck ? [n.sudoCheck] : []))),
-    [sshTestResult],
+    () => profilesAbsentEverywhere((sshTestResult?.nodes ?? []).flatMap(n => (n.sudoCheck ? [n.sudoCheck] : [])), sudoScope),
+    [sshTestResult, sudoScope],
   )
 
   // Trust: confirm the host key one node presented, then re-run the test.
@@ -673,7 +675,8 @@ export default function ConnectionDialog({
   const isXcpngXo = isXcpng && form.subType === 'xo'
 
   // Tabs shown for this connection type; the SSH condition is the one the SSH
-  // section always had (PVE and standalone ESXi only).
+  // section always had (PVE and standalone ESXi), plus a backup server, whose
+  // updates are installed over SSH.
  // Migration settings of a target cluster: Enterprise, PVE, and only once a
   // source hypervisor exists to migrate from.
   // A VMware source gets the tab too, for its per-host limit of bulk
@@ -682,7 +685,7 @@ export default function ConnectionDialog({
   // An XCP-ng pool reached through Xen Orchestra only migrates offline: it has
   // no warm hold, so nothing to set here.
   const showMigrationsTab = migrationAvailable && ((type === 'pve' && migrationSourcesConfigured) || isVmware || (isXcpng && !isXcpngXo))
-  const showSshTab = !isPbs && !isXcpng && !isHyperv && !isNutanix && !(isVmware && form.subType === 'vcenter')
+  const showSshTab = !isXcpng && !isHyperv && !isNutanix && !(isVmware && form.subType === 'vcenter')
   const visibleTabs: { id: ConnectionTabId; label: string; icon: string }[] = [
     { id: 'general', label: t('settings.connectionTabGeneral'), icon: 'ri-settings-3-line' },
     { id: 'auth', label: t('settings.connectionTabAuth'), icon: 'ri-key-2-line' },
@@ -1263,7 +1266,7 @@ export default function ConnectionDialog({
           <>
 
         {/* Section: SSH access (PVE + VMware/ESXi) */}
-        <SectionTitle icon="ri-terminal-line" title={t('settings.sshAccess')} optional={t('common.optional')} info={t('settings.sshInfo')} />
+        <SectionTitle icon="ri-terminal-line" title={t('settings.sshAccess')} optional={t('common.optional')} info={t(isPbs ? 'settings.sshInfoPbs' : 'settings.sshInfo')} />
 
         <FormControlLabel
           control={
@@ -1462,7 +1465,7 @@ export default function ConnectionDialog({
                         </Typography>
                       )}
                       {sudoUniform ? (
-                        <SudoCheckLines check={sudoUniform} user={form.sshUser || 'root'} absentEverywhere={sudoAbsentEverywhere} summaryCount={sshTestResult.nodes?.filter(n => n.status === 'ok').length} />
+                        <SudoCheckLines check={sudoUniform} user={form.sshUser || 'root'} absentEverywhere={sudoAbsentEverywhere} scope={sudoScope} summaryCount={sshTestResult.nodes?.filter(n => n.status === 'ok').length} />
                       ) : (
                         <NotDeployedLine profiles={sudoAbsentEverywhere} />
                       )}
@@ -1521,7 +1524,7 @@ export default function ConnectionDialog({
                                 </Tooltip>
                               )}
                             </Box>
-                            {node.sudoCheck && !sudoUniform && <SudoCheckLines check={node.sudoCheck} user={form.sshUser || 'root'} absentEverywhere={sudoAbsentEverywhere} showNotDeployed={false} />}
+                            {node.sudoCheck && !sudoUniform && <SudoCheckLines check={node.sudoCheck} user={form.sshUser || 'root'} absentEverywhere={sudoAbsentEverywhere} scope={sudoScope} showNotDeployed={false} />}
                             {hostKey && (
                               <Typography variant="caption" sx={{ display: 'block', ml: 3 }}>
                                 {t('settings.sshHostKeyFingerprint', { keyType: hostKey.key_type, fingerprint: hostKey.fingerprint })}

@@ -2487,7 +2487,95 @@
     "guestPoolVdc": "Managed by its vDC",
     "rootOnlyOption": "Proxmox lets only root@pam change this setting, not an API token",
     "lxcCores": "Cores",
-    "lxcCpuCount": "{count, plural, one {# core} other {# cores}}"
+    "lxcCpuCount": "{count, plural, one {# core} other {# cores}}",
+    "pbsUpdate": {
+      "title": "Update the backup server",
+      "titleNamed": "Update {name}",
+      "checking": "Checking the server…",
+      "rowVersion": "Proxmox Backup Server version",
+      "rowKernel": "Running kernel",
+      "rowUpdates": "Pending updates",
+      "rowTasks": "Running tasks",
+      "rowDatastores": "Datastores",
+      "rowDisk": "Free space on the root filesystem",
+      "rowServices": "Backup services",
+      "rowBackupJobs": "Proxmox VE backup jobs writing here",
+      "kernelUpdate": "kernel",
+      "packageCount": "{count, plural, =0 {no package} one {# package} other {# packages}}",
+      "noTask": "none",
+      "taskCount": "{count, plural, one {# task} other {# tasks}}",
+      "datastoreCount": "{count, plural, =0 {none} one {# datastore} other {# datastores}}",
+      "datastoreCountMaintenance": "{count, plural, one {# datastore} other {# datastores}}, {maintained} already in maintenance",
+      "diskFree": "{free} of {total}",
+      "servicesRunning": "running",
+      "noBackupJob": "none",
+      "backupJobCount": "{count, plural, one {# job} other {# jobs}}",
+      "upcomingJobs": "{count, plural, one {A backup job of {cluster} is due at {time}} other {# backup jobs are due within the hour, the first at {time} on {cluster}}}: a backup that starts during the update fails.",
+      "optAutoReboot": "Reboot the server if the update requires it",
+      "optRebootTimeout": "Time allowed for the server to come back",
+      "minutes": "min",
+      "optReadOnly": "Put the datastores in read-only during the update",
+      "readOnlyHint": "Backups, prunes and garbage collections are refused while the datastores are read-only; restores keep working. Datastores already in maintenance are left as they are.",
+      "readOnlyOffHint": "Nothing prevents a backup from starting during the update; it fails if the services restart or the server reboots under it.",
+      "recheck": "Check again",
+      "start": "Start",
+      "lastReport": "Last report",
+      "backToChecks": "Back to the checks",
+      "cancelRun": "Cancel the update",
+      "cancelTitle": "Cancel the update?",
+      "cancelMessage": "The update stops where it is. Interrupted during the package upgrade, it can leave packages half configured; the next update configures them first. The datastores put in read-only are released.",
+      "runInProgress": "Update in progress",
+      "reportStatus": "Update status",
+      "statusCompleted": "successful",
+      "statusUpToDate": "already up to date, nothing installed",
+      "statusFailed": "failed",
+      "statusCancelled": "cancelled",
+      "resultFailed": "The update failed: {error}",
+      "rebootStillRequired": "A reboot is required to run the new kernel and was not done: automatic reboot was off.",
+      "steps": {
+        "maintenance": "Datastores in read-only",
+        "upgrade": "Package upgrade",
+        "reboot": "Reboot",
+        "verify": "Services and datastores check",
+        "release": "Datastores back to read-write"
+      },
+      "stepStates": {
+        "pending": "pending",
+        "active": "in progress",
+        "done": "done",
+        "failed": "failed",
+        "skipped": "skipped"
+      },
+      "reportVersion": "Proxmox Backup Server version",
+      "reportKernel": "Kernel",
+      "reportReboot": "Reboot",
+      "reportPackages": "Packages upgraded",
+      "paneLabel": "Run details",
+      "paneLog": "Log",
+      "panePackages": "Packages",
+      "paneApt": "apt output",
+      "reportReadOnly": "Datastores put in read-only",
+      "reportFinished": "Finished on",
+      "reportDuration": "Duration",
+      "rebootDone": "done",
+      "rebootPending": "required, not done",
+      "rebootNotNeeded": "not needed",
+      "duration": "{minutes} min {seconds} s",
+      "findings": {
+        "pbs_apt_update_failed": "The package lists could not be refreshed: {error}",
+        "pbs_apt_update_subscription": "A package repository refused the server ({error}). The enterprise repository needs a valid subscription: add the subscription key, or disable that repository and enable the no-subscription one in the Repositories tab.",
+        "pbs_tasks_running": "{count, plural, one {A task is running on the server and would be interrupted} other {# tasks are running on the server and would be interrupted}}: {tasks}. Wait for the end, or stop them.",
+        "pbs_disk_space": "The root filesystem has {free} free of {total}; at least {needed} are needed to upgrade.",
+        "pbs_disk_space_low": "The root filesystem is low on space: {free} free of {total}.",
+        "pbs_service_inactive": "Not running before the update: {services}.",
+        "pbs_no_updates": "The server is up to date, there is nothing to install.",
+        "pbs_state_unreadable": "Could not read the {what} of the server: {error}",
+        "pbs_reboot_pending": "A reboot is already pending on the server.",
+        "pbs_dpkg_interrupted": "A previous upgrade was interrupted: {count, plural, one {# package is} other {# packages are}} unpacked but not configured. The update configures them first.",
+        "pbs_datastore_offline": "Datastore {datastore} is offline for maintenance and is left as it is."
+      }
+    },
+    "pbsUpdatesUpgradeSshHint": "Enable SSH on this connection (Settings > Connections) to install the updates from ProxCenter."
   },
   "inventoryPage": {
     "newTag": "New tag...",
@@ -5216,6 +5304,10 @@
         "migrations": {
           "label": "Migrations",
           "features": "migrations from VMware, Hyper-V, Nutanix and XCP-ng (equivalent to root)"
+        },
+        "pbsOps": {
+          "label": "Backup server",
+          "features": "backup server updates: package upgrade, reboot, datastore maintenance mode"
         }
       }
     },
@@ -5682,7 +5774,8 @@
       "noOvs": "No OVS",
       "samplingRate": "Sampling rate (1 packet in N)",
       "samplingLoad": "Load on the nodes"
-    }
+    },
+    "sshInfoPbs": "SSH access lets ProxCenter install the updates of this backup server and reboot it when needed, which the Proxmox Backup Server API cannot do."
   },
   "green": {
     "score": {

@@ -2476,7 +2476,95 @@
     "guestPoolVdc": "Von seinem vDC verwaltet",
     "rootOnlyOption": "Proxmox lässt nur root@pam diese Einstellung ändern, kein API-Token",
     "lxcCores": "Kerne",
-    "lxcCpuCount": "{count, plural, one {# Kern} other {# Kerne}}"
+    "lxcCpuCount": "{count, plural, one {# Kern} other {# Kerne}}",
+    "pbsUpdate": {
+      "title": "Backup-Server aktualisieren",
+      "titleNamed": "{name} aktualisieren",
+      "checking": "Server wird geprüft…",
+      "rowVersion": "Version von Proxmox Backup Server",
+      "rowKernel": "Laufender Kernel",
+      "rowUpdates": "Ausstehende Updates",
+      "rowTasks": "Laufende Aufgaben",
+      "rowDatastores": "Datastores",
+      "rowDisk": "Freier Speicher auf dem Root-Dateisystem",
+      "rowServices": "Backup-Dienste",
+      "rowBackupJobs": "Proxmox-VE-Backup-Jobs, die hierher schreiben",
+      "kernelUpdate": "Kernel",
+      "packageCount": "{count, plural, =0 {kein Paket} one {# Paket} other {# Pakete}}",
+      "noTask": "keine",
+      "taskCount": "{count, plural, one {# Aufgabe} other {# Aufgaben}}",
+      "datastoreCount": "{count, plural, =0 {keiner} one {# Datastore} other {# Datastores}}",
+      "datastoreCountMaintenance": "{count, plural, one {# Datastore} other {# Datastores}}, {maintained} bereits in Wartung",
+      "diskFree": "{free} von {total}",
+      "servicesRunning": "laufen",
+      "noBackupJob": "keine",
+      "backupJobCount": "{count, plural, one {# Job} other {# Jobs}}",
+      "upcomingJobs": "{count, plural, one {Ein Backup-Job von {cluster} ist für {time} geplant} other {# Backup-Jobs sind innerhalb der nächsten Stunde geplant, der erste um {time} auf {cluster}}}: Ein Backup, das während des Updates startet, schlägt fehl.",
+      "optAutoReboot": "Server neu starten, wenn das Update es erfordert",
+      "optRebootTimeout": "Zeit, die der Server zum Zurückkommen hat",
+      "minutes": "min",
+      "optReadOnly": "Datastores während des Updates schreibgeschützt setzen",
+      "readOnlyHint": "Backups, Prunes und Garbage Collections werden abgelehnt, solange die Datastores schreibgeschützt sind; Wiederherstellungen bleiben möglich. Datastores, die bereits in Wartung sind, bleiben unverändert.",
+      "readOnlyOffHint": "Nichts verhindert, dass während des Updates ein Backup startet; es schlägt fehl, wenn die Dienste oder der Server neu starten.",
+      "recheck": "Erneut prüfen",
+      "start": "Starten",
+      "lastReport": "Letzter Bericht",
+      "backToChecks": "Zurück zu den Prüfungen",
+      "cancelRun": "Update abbrechen",
+      "cancelTitle": "Update abbrechen?",
+      "cancelMessage": "Das Update hält an der aktuellen Stelle an. Während des Paket-Upgrades unterbrochen, kann es halb konfigurierte Pakete hinterlassen; das nächste Update konfiguriert sie zuerst. Die schreibgeschützt gesetzten Datastores werden freigegeben.",
+      "runInProgress": "Update läuft",
+      "reportStatus": "Status des Updates",
+      "statusCompleted": "erfolgreich",
+      "statusUpToDate": "bereits aktuell, nichts installiert",
+      "statusFailed": "fehlgeschlagen",
+      "statusCancelled": "abgebrochen",
+      "resultFailed": "Das Update ist fehlgeschlagen: {error}",
+      "rebootStillRequired": "Für den neuen Kernel ist ein Neustart erforderlich, der nicht erfolgt ist: Der automatische Neustart war deaktiviert.",
+      "steps": {
+        "maintenance": "Datastores schreibgeschützt",
+        "upgrade": "Paket-Upgrade",
+        "reboot": "Neustart",
+        "verify": "Prüfung der Dienste und Datastores",
+        "release": "Datastores wieder beschreibbar"
+      },
+      "stepStates": {
+        "pending": "ausstehend",
+        "active": "läuft",
+        "done": "erledigt",
+        "failed": "fehlgeschlagen",
+        "skipped": "übersprungen"
+      },
+      "reportVersion": "Version von Proxmox Backup Server",
+      "reportKernel": "Kernel",
+      "reportReboot": "Neustart",
+      "reportPackages": "Aktualisierte Pakete",
+      "paneLabel": "Details der Ausführung",
+      "paneLog": "Protokoll",
+      "panePackages": "Pakete",
+      "paneApt": "apt-Ausgabe",
+      "reportReadOnly": "Schreibgeschützt gesetzte Datastores",
+      "reportFinished": "Beendet am",
+      "reportDuration": "Dauer",
+      "rebootDone": "erfolgt",
+      "rebootPending": "erforderlich, nicht erfolgt",
+      "rebootNotNeeded": "nicht nötig",
+      "duration": "{minutes} min {seconds} s",
+      "findings": {
+        "pbs_apt_update_failed": "Die Paketlisten konnten nicht aktualisiert werden: {error}",
+        "pbs_apt_update_subscription": "Ein Paket-Repository hat den Server abgelehnt ({error}). Das Enterprise-Repository erfordert eine gültige Subskription: Fügen Sie den Subskriptionsschlüssel hinzu, oder deaktivieren Sie dieses Repository und aktivieren Sie das No-Subscription-Repository im Reiter Repositories.",
+        "pbs_tasks_running": "{count, plural, one {Eine Aufgabe läuft auf dem Server und würde unterbrochen} other {# Aufgaben laufen auf dem Server und würden unterbrochen}}: {tasks}. Warten Sie das Ende ab, oder stoppen Sie sie.",
+        "pbs_disk_space": "Das Root-Dateisystem hat {free} von {total} frei; für das Upgrade werden mindestens {needed} benötigt.",
+        "pbs_disk_space_low": "Das Root-Dateisystem hat wenig Platz: {free} von {total} frei.",
+        "pbs_service_inactive": "Vor dem Update nicht aktiv: {services}.",
+        "pbs_no_updates": "Der Server ist aktuell, es gibt nichts zu installieren.",
+        "pbs_state_unreadable": "Lesen nicht möglich ({what}) auf dem Server: {error}",
+        "pbs_reboot_pending": "Auf dem Server steht bereits ein Neustart aus.",
+        "pbs_dpkg_interrupted": "Ein früheres Upgrade wurde unterbrochen: {count, plural, one {# Paket ist entpackt, aber nicht konfiguriert} other {# Pakete sind entpackt, aber nicht konfiguriert}}. Das Update konfiguriert sie zuerst.",
+        "pbs_datastore_offline": "Der Datastore {datastore} ist für Wartung offline und bleibt unverändert."
+      }
+    },
+    "pbsUpdatesUpgradeSshHint": "Aktivieren Sie SSH für diese Verbindung (Einstellungen > Verbindungen), um die Updates aus ProxCenter zu installieren."
   },
   "inventoryPage": {
     "newTag": "Neuer Tag...",
@@ -5205,6 +5293,10 @@
         "migrations": {
           "label": "Migrationen",
           "features": "Migrationen von VMware, Hyper-V, Nutanix und XCP-ng (root-gleichwertig)"
+        },
+        "pbsOps": {
+          "label": "Backup-Server",
+          "features": "Updates des Backup-Servers: Paket-Upgrade, Neustart, Wartungsmodus der Datastores"
         }
       }
     },
@@ -5671,7 +5763,8 @@
       "noOvs": "Kein OVS",
       "samplingRate": "Stichprobenrate (1 Paket von N)",
       "samplingLoad": "Last auf den Nodes"
-    }
+    },
+    "sshInfoPbs": "Über SSH kann ProxCenter die Updates dieses Backup-Servers installieren und ihn bei Bedarf neu starten, was die API von Proxmox Backup Server nicht erlaubt."
   },
   "green": {
     "score": {

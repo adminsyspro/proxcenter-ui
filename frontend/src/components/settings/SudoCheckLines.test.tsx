@@ -102,3 +102,30 @@ describe('several nodes', () => {
     expect(screen.queryByText(/^Not deployed: /)).toBeNull()
   })
 })
+
+describe('backup server', () => {
+  const pbsCheck = { status: 'ok' as const, version: 'Sudo version 1.9.16p2', profiles: { 'pbs-ops': { checked: 7, missing: [] } } }
+
+  it('is shown its own profile only, not the cluster ones it does not hold', () => {
+    renderWithProviders(<SudoCheckLines check={pbsCheck} user='proxcenter' scope={['pbs-ops']} />)
+
+    expect(screen.getByText(/Backup server ✓/)).toBeInTheDocument()
+    expect(screen.queryByText(/Node operations/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Site Recovery/)).not.toBeInTheDocument()
+  })
+
+  it('names the features lost when the profile is missing', () => {
+    const missing = { status: 'ok' as const, version: null, profiles: { 'pbs-ops': { checked: 7, missing: Array.from({ length: 7 }, (_, i) => ({ id: `r${i}`, usedBy: 'Backup server > Updates' })) } } }
+
+    renderWithProviders(<SudoCheckLines check={missing} user='proxcenter' scope={['pbs-ops']} />)
+
+    expect(screen.getByText(/Backup server ✗/)).toBeInTheDocument()
+    expect(screen.getByText(/backup server updates: package upgrade, reboot, datastore maintenance mode/)).toBeInTheDocument()
+  })
+
+  it('is left out of a cluster check, where its rules mean nothing', () => {
+    expect(profilesAbsentEverywhere([pbsCheck])).not.toContain('pbs-ops')
+    expect(profilesAbsentEverywhere([pbsCheck], ['pbs-ops'])).toEqual([])
+    expect(uniformSudoCheck([{ status: 'ok', sudoCheck: pbsCheck }, { status: 'ok', sudoCheck: pbsCheck }], ['pbs-ops'])).toBe(pbsCheck)
+  })
+})

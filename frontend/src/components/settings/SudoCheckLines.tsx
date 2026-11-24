@@ -3,26 +3,26 @@
 import { Typography } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
-import { profileState, SUDO_MIN_VERSION, SUDO_PROFILES, SUDO_PROFILE_I18N, type SudoCheck, type SudoProfile } from '@/lib/ssh/sudo'
+import { profileState, PVE_SUDO_PROFILES, SUDO_MIN_VERSION, SUDO_PROFILE_I18N, type SudoCheck, type SudoProfile } from '@/lib/ssh/sudo'
 
 // Two stacked MUI captions sit side by side unless each one is a block.
 const CAPTION_SX = { display: 'block', ml: 3 }
 const SUMMARY_SX = { display: 'block', mb: 0.5 }
 
 /** Profiles held by no node at all: a choice of the administrator, not a fault. */
-export function profilesAbsentEverywhere(checks: SudoCheck[]): SudoProfile[] {
+export function profilesAbsentEverywhere(checks: SudoCheck[], scope: SudoProfile[] = PVE_SUDO_PROFILES): SudoProfile[] {
   const ok = checks.filter(c => c.status === 'ok' || c.status === 'too-old')
 
   if (ok.length === 0) return []
 
-  return SUDO_PROFILES.filter(p => ok.every(c => profileState(c.profiles[p]) === 'none'))
+  return scope.filter(p => ok.every(c => profileState(c.profiles[p]) === 'none'))
 }
 
-function signature(check: SudoCheck): string {
+function signature(check: SudoCheck, scope: SudoProfile[]): string {
   return JSON.stringify([
     check.status,
     check.status === 'too-old' ? check.version : '',
-    SUDO_PROFILES.map(p => [profileState(check.profiles[p]), check.profiles[p]?.missing.map(m => m.id) ?? []]),
+    scope.map(p => [profileState(check.profiles[p]), check.profiles[p]?.missing.map(m => m.id) ?? []]),
     check.tooOpen?.map(r => r.id) ?? [],
   ])
 }
@@ -31,13 +31,13 @@ function signature(check: SudoCheck): string {
  * The check shared by every node, when the nodes tested (at least two) all
  * answered alike; the dialog then says it once instead of once per node.
  */
-export function uniformSudoCheck(nodes: { status: string, sudoCheck?: SudoCheck }[]): SudoCheck | null {
+export function uniformSudoCheck(nodes: { status: string, sudoCheck?: SudoCheck }[], scope: SudoProfile[] = PVE_SUDO_PROFILES): SudoCheck | null {
   const reachable = nodes.filter(n => n.status === 'ok')
 
   if (reachable.length < 2 || reachable.some(n => !n.sudoCheck)) return null
-  const first = signature(reachable[0].sudoCheck!)
+  const first = signature(reachable[0].sudoCheck!, scope)
 
-  return reachable.every(n => signature(n.sudoCheck!) === first) ? reachable[0].sudoCheck! : null
+  return reachable.every(n => signature(n.sudoCheck!, scope) === first) ? reachable[0].sudoCheck! : null
 }
 
 interface Props {
@@ -49,6 +49,8 @@ interface Props {
   summaryCount?: number
   /** False under each node when NotDeployedLine already says it once. */
   showNotDeployed?: boolean
+  /** The profiles the connection is checked against; a cluster's by default. */
+  scope?: SudoProfile[]
 }
 
 /** The profiles no node holds, said once above the nodes. */
@@ -71,7 +73,7 @@ export function NotDeployedLine({ profiles }: { profiles: SudoProfile[] }) {
  * a sudo too old for the restricted template, then the profiles held, the
  * features unavailable and the rules the file lacks.
  */
-export default function SudoCheckLines({ check, user, absentEverywhere = [], summaryCount, showNotDeployed = true }: Props) {
+export default function SudoCheckLines({ check, user, absentEverywhere = [], summaryCount, showNotDeployed = true, scope = PVE_SUDO_PROFILES }: Props) {
   const t = useTranslations()
   const sx = summaryCount ? SUMMARY_SX : CAPTION_SX
 
@@ -97,11 +99,11 @@ export default function SudoCheckLines({ check, user, absentEverywhere = [], sum
     }
   }
 
-  const absent = SUDO_PROFILES.filter(p => profileState(check.profiles[p]) === 'none')
+  const absent = scope.filter(p => profileState(check.profiles[p]) === 'none')
   const absentHere = absent.filter(p => !absentEverywhere.includes(p))
   const notDeployed = absent.filter(p => absentEverywhere.includes(p))
-  const partial = SUDO_PROFILES.filter(p => profileState(check.profiles[p]) === 'partial')
-  const profiles = SUDO_PROFILES.map(mark).join(' · ')
+  const partial = scope.filter(p => profileState(check.profiles[p]) === 'partial')
+  const profiles = scope.map(mark).join(' · ')
 
   return (
     <>

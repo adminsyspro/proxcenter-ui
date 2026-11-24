@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { cleanup, fireEvent } from '@testing-library/react'
+import { cleanup, fireEvent, within } from '@testing-library/react'
 import { ResponsiveContainer } from 'recharts'
 import { renderWithProviders, screen } from '@/__tests__/setup/renderWithProviders'
 import { server, http, HttpResponse } from '@/__tests__/setup/msw-server'
@@ -161,12 +161,14 @@ describe('ZfsArcWidget interactions', () => {
 
   it('switches to the share of RAM view', async () => {
     respondWith({ 'node:pve-01': [{ ts: 1, t: '10:00', arc: 3221225472, arcPct: 18.7 }] })
-    render()
+    const { container } = render()
 
     fireEvent.click(await screen.findByText('% RAM'))
 
     // The percentage axis is bounded, so its ticks carry the percent sign.
-    expect(await screen.findByText('100%')).toBeInTheDocument()
+    // Recharts measures tick labels in a hidden span appended to the body, so
+    // the query stays inside the widget to find the tick itself.
+    expect(await within(container).findByText('100%')).toBeInTheDocument()
   })
 
   it('clears the connection filter from the empty state', async () => {

@@ -31,14 +31,26 @@ export function resolveSudo(cmd: string, useSudo: boolean): string {
   return cmd.split(MARK).join(useSudo ? 'sudo -n ' : '')
 }
 
-export const SUDO_PROFILES = ['node-ops', 'site-recovery', 'migrations'] as const
+export const SUDO_PROFILES = ['node-ops', 'site-recovery', 'migrations', 'pbs-ops'] as const
 export type SudoProfile = (typeof SUDO_PROFILES)[number]
+
+/** The profile of a Proxmox Backup Server account, the only one it is checked against. */
+export const PBS_SUDO_PROFILE: SudoProfile = 'pbs-ops'
+
+/** The profiles that apply to the nodes of a Proxmox VE cluster. */
+export const PVE_SUDO_PROFILES: SudoProfile[] = SUDO_PROFILES.filter(p => p !== PBS_SUDO_PROFILE)
+
+/** The profiles a connection of this type is checked against by Test SSH. */
+export function sudoProfilesFor(connectionType: string | undefined): SudoProfile[] {
+  return connectionType === 'pbs' ? [PBS_SUDO_PROFILE] : PVE_SUDO_PROFILES
+}
 
 /** i18n key of each profile under settings.sshCommands.profiles. */
 export const SUDO_PROFILE_I18N: Record<SudoProfile, string> = {
   'node-ops': 'nodeOps',
   'site-recovery': 'siteRecovery',
   migrations: 'migrations',
+  'pbs-ops': 'pbsOps',
 }
 
 /**

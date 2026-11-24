@@ -597,4 +597,62 @@ describe('POST /api/v1/connections/[id]/test-ssh - sudoers check', () => {
 
     expect(json.sudoSkipped).toBeUndefined()
   })
+
+  // ui#1428: a backup server is one host, reached at the address of its URL,
+  // and is asked about its own sudoers profile only.
+  const PBS_RULES = [
+    ...RULES,
+    { id: 'pbs-manager-read', profile: 'pbs-ops', path: '/usr/sbin/proxmox-backup-manager', args: '^task list --output-format json$', usedBy: 'Backup server > Updates', example: 'task list --output-format json' },
+  ]
+
+  function pbsConnection(sshUser: string) {
+    return { ...connection(sshUser, true), name: 'PBS', type: 'pbs', baseUrl: 'https://10.42.0.201:8007' }
+  }
+
+  it('tests a backup server directly on its own address, without the orchestrator or the cluster API', async () => {
+    findUniqueMock.mockResolvedValueOnce(pbsConnection('proxcenter'))
+    loadSudoRulesMock.mockResolvedValueOnce({ rules: PBS_RULES, orchestratorAvailable: true })
+    executeSSHDirectMock
+      .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true, output: 'PXC_SUDO_VERSION:Sudo version 1.9.16p2\nPXC_RULE:pbs-manager-read:yes\nPXC_RULE:pxc-migrations:no\n' } as any)
+
+    const json = await readJson<any>(await callRoute(await importHandler(), { params: { id: 'conn-1' }, body: {} }))
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(pveFetchMock).not.toHaveBeenCalled()
+    expect(executeSSHDirectMock.mock.calls[0][0]).toMatchObject({ host: '10.42.0.201', port: 22, user: 'proxcenter', command: 'hostname' })
+    expect(json.success).toBe(true)
+    expect(json.nodes[0]).toMatchObject({ node: 'PBS', host: '10.42.0.201', status: 'ok' })
+
+    const check = executeSSHDirectMock.mock.calls[1][0].command
+
+    expect(check).toContain("pxc_r 'pbs-manager-read' '/usr/sbin/proxmox-backup-manager' 'task' 'list' '--output-format' 'json'")
+    // The cluster rules are not asked about on a backup server.
+    expect(check).not.toContain('ui-guest-unlock')
+    expect(check).not.toContain('sr-zfs')
+    expect(json.nodes[0].sudoCheck.profiles['pbs-ops']).toEqual({ checked: 1, missing: [] })
+    expect(json.nodes[0].sudoCheck.profiles['node-ops']).toBeUndefined()
+  })
+
+  it('does not check sudo for root on a backup server', async () => {
+    findUniqueMock.mockResolvedValueOnce(pbsConnection('root'))
+    executeSSHDirectMock.mockResolvedValueOnce({ success: true })
+
+    const json = await readJson<any>(await callRoute(await importHandler(), { params: { id: 'conn-1' }, body: {} }))
+
+    expect(executeSSHDirectMock).toHaveBeenCalledTimes(1)
+    expect(json.sudoSkipped).toBe('root')
+  })
+
+  it('never asks a cluster node about the backup server rules', async () => {
+    findUniqueMock.mockResolvedValueOnce(connection('proxcenter', true))
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, nodes: [{ node: 'pve1', ip: '10.0.0.1', status: 'ok' }] }) })
+    loadSudoRulesMock.mockResolvedValueOnce({ rules: PBS_RULES, orchestratorAvailable: true })
+    executeSSHDirectMock.mockResolvedValueOnce({ success: true, output: 'PXC_SUDO_VERSION:Sudo version 1.9.16p2\nPXC_RULE:ui-guest-unlock:yes\nPXC_RULE:sr-zfs:yes\n' } as any)
+
+    const json = await readJson<any>(await callRoute(await importHandler(), { params: { id: 'conn-1' }, body: {} }))
+
+    expect(executeSSHDirectMock.mock.calls[0][0].command).not.toContain('pbs-manager-read')
+    expect(json.nodes[0].sudoCheck.profiles['pbs-ops']).toBeUndefined()
+  })
 })

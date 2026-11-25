@@ -584,7 +584,10 @@ return `${mins}m`
               {/* Proxmox fills a node's disk/maxdisk from df('/'), so this is the
                   host root filesystem and NOT the datastores listed in the tree.
                   Labelled explicitly: calling it "Storage" is what made a customer
-                  read a root-filesystem alert as a datastore filling up. */}
+                  read a root-filesystem alert as a datastore filling up.
+                  No drive temperature here: a filesystem has none, and the hottest
+                  drive is often not the one holding '/'. Each drive's own reading
+                  is in its SMART detail, under the node's Disks tab. */}
               {diskCap > 0 ? (
                 <UsageBar
                   themeColor={primaryColor}
@@ -593,7 +596,6 @@ return `${mins}m`
                   used={diskUsed}
                   capacity={diskCap}
                   mode="bytes"
-                  extra={<SensorTemp sensors={sensors} role="disk" />}
                 />
               ) : null}
 

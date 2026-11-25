@@ -1,6 +1,8 @@
-FROM alpine:3.20
+FROM alpine:3.24.4
 
-RUN apk add --no-cache keepalived wget gettext curl
+# apk upgrade: the packages fixed in Alpine since the base image was built.
+RUN apk upgrade --no-cache && \
+    apk add --no-cache keepalived wget gettext curl
 
 COPY entrypoint-keepalived.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

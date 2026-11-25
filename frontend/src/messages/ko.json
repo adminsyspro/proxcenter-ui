@@ -627,6 +627,25 @@
       "resume": "재개",
       "done": "보안 강화가 적용되었습니다.",
       "progressWithLabel": "보안 강화: {total}단계 중 {step}단계: {label}"
+    },
+    "imageUpdate": {
+      "banner": "이 클러스터에 더 새로운 etcd 및 HAProxy 이미지를 사용할 수 있습니다(etcd {etcd}, HAProxy {haproxy}).",
+      "apply": "이미지 업데이트",
+      "dialogTitle": "etcd 및 HAProxy 이미지 업데이트",
+      "orderLabel": "순서",
+      "order": "etcd 먼저, 그다음 HAProxy, 노드를 하나씩",
+      "outageLabel": "중단",
+      "outage": "노드당 몇 초, 스위치오버 없음",
+      "uiLabel": "이 인터페이스",
+      "ui": "VIP를 보유한 노드의 차례에 몇 초 동안 접속 불가",
+      "dataLabel": "데이터",
+      "data": "손실 없음",
+      "confirm": "업데이트 시작",
+      "progress": "이미지 업데이트: {total}단계 중 {step}단계",
+      "progressWithLabel": "이미지 업데이트: {total}단계 중 {step}단계: {label}",
+      "failed": "이미지 업데이트 실패: {error}",
+      "retry": "다시 시작",
+      "done": "etcd 및 HAProxy 이미지가 업데이트되었습니다."
     }
   },
   "user": {

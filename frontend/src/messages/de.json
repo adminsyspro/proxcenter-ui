@@ -630,6 +630,25 @@
       "resume": "Fortsetzen",
       "done": "Sicherheitshärtung angewendet.",
       "progressWithLabel": "Sicherheitshärtung: Schritt {step} von {total}: {label}"
+    },
+    "imageUpdate": {
+      "banner": "Für diesen Cluster sind neuere etcd- und HAProxy-Images verfügbar (etcd {etcd}, HAProxy {haproxy}).",
+      "apply": "Images aktualisieren",
+      "dialogTitle": "etcd- und HAProxy-Images aktualisieren",
+      "orderLabel": "Reihenfolge",
+      "order": "Zuerst etcd, dann HAProxy, ein Knoten nach dem anderen",
+      "outageLabel": "Unterbrechung",
+      "outage": "Einige Sekunden pro Knoten, kein Switchover",
+      "uiLabel": "Diese Oberfläche",
+      "ui": "Einige Sekunden nicht erreichbar, wenn der Knoten mit der VIP an der Reihe ist",
+      "dataLabel": "Daten",
+      "data": "Kein Verlust",
+      "confirm": "Aktualisierung starten",
+      "progress": "Image-Aktualisierung: Schritt {step} von {total}",
+      "progressWithLabel": "Image-Aktualisierung: Schritt {step} von {total}: {label}",
+      "failed": "Image-Aktualisierung fehlgeschlagen: {error}",
+      "retry": "Erneut starten",
+      "done": "etcd- und HAProxy-Images aktualisiert."
     }
   },
   "user": {

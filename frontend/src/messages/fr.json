@@ -627,6 +627,25 @@
       "resume": "Reprendre",
       "done": "Durcissement de la sécurité appliqué.",
       "progressWithLabel": "Durcissement de la sécurité : étape {step} sur {total} : {label}"
+    },
+    "imageUpdate": {
+      "banner": "Des images etcd et HAProxy plus récentes sont disponibles pour ce cluster (etcd {etcd}, HAProxy {haproxy}).",
+      "apply": "Mettre à jour les images",
+      "dialogTitle": "Mettre à jour les images etcd et HAProxy",
+      "orderLabel": "Ordre",
+      "order": "etcd d'abord, puis HAProxy, un nœud à la fois",
+      "outageLabel": "Coupure",
+      "outage": "Quelques secondes par nœud, sans bascule",
+      "uiLabel": "Cette interface",
+      "ui": "Injoignable quelques secondes au tour du nœud qui porte la VIP",
+      "dataLabel": "Données",
+      "data": "Aucune perte",
+      "confirm": "Lancer la mise à jour",
+      "progress": "Mise à jour des images : étape {step} sur {total}",
+      "progressWithLabel": "Mise à jour des images : étape {step} sur {total} : {label}",
+      "failed": "Échec de la mise à jour des images : {error}",
+      "retry": "Relancer",
+      "done": "Images etcd et HAProxy mises à jour."
     }
   },
   "user": {

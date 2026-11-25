@@ -15,7 +15,7 @@
 services:
   # ── Layer 0: distributed consensus ──────────────────────────────
   etcd:
-    image: ${REGISTRY:-ghcr.io/adminsyspro}/etcd:v3.5.17
+    image: ${REGISTRY:-ghcr.io/adminsyspro}/etcd:v3.5.36
     network_mode: host
     restart: unless-stopped
     volumes:
@@ -112,7 +112,7 @@ services:
 
   # ── Layer 2: local PG proxy ─────────────────────────────────────
   haproxy:
-    image: ${REGISTRY:-ghcr.io/adminsyspro}/haproxy:2.9-alpine
+    image: ${REGISTRY:-ghcr.io/adminsyspro}/haproxy:3.4.8-alpine
     network_mode: host
     restart: unless-stopped
     # Root reads the 0640 root:70 TLS keys. Master-worker mode (-W) keeps a

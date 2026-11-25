@@ -12,6 +12,8 @@ export interface HaConfig {
   nodes: HaNodeConfig[]
   securityLevel?: number
   securityUpgrade?: HaSecurityUpgrade | null
+  /** State of the etcd and HAProxy image update (same record shape). */
+  imageUpdate?: HaSecurityUpgrade | null
 }
 
 export interface HaSecurityUpgrade {
@@ -53,6 +55,31 @@ export interface HaNodeConfig {
 
 export function useHaConfig(enabled = true) {
   return useSWRFetch<HaConfig>(enabled ? '/api/v1/ha/config' : null, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    shouldRetryOnError: false,
+  })
+}
+
+export interface HaNodeImages {
+  node: string
+  etcd?: string
+  haproxy?: string
+  outdated: boolean
+  error?: string
+}
+
+/** Tags of the etcd and HAProxy images this version deploys, and the ones each node still names. */
+export interface HaImageStatus {
+  etcd: string
+  haproxy: string
+  nodes: HaNodeImages[]
+  outdated: boolean
+  checkedAt: string
+}
+
+export function useHaImages(enabled = true) {
+  return useSWRFetch<HaImageStatus>(enabled ? '/api/v1/ha/images' : null, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     shouldRetryOnError: false,

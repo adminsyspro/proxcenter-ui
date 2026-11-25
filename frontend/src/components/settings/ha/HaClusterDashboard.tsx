@@ -21,6 +21,7 @@ import { useHaCluster, type PatroniMember } from './useHaCluster'
 import { useHaConfig } from './useHaConfig'
 
 import HaNodeCard from './HaNodeCard'
+import HaImageUpdate from './HaImageUpdate'
 import HaSecurityUpgrade from './HaSecurityUpgrade'
 import HaServiceGrid from './HaServiceGrid'
 
@@ -112,11 +113,12 @@ export default function HaClusterDashboard() {
   }
 
   if (error || !cluster) {
-    // The security upgrade stays visible: /ha/cluster fails for a while
-    // during its switchover and recreates.
+    // The security upgrade and the image update stay visible: /ha/cluster
+    // fails for a while during their recreates.
     return (
       <Box sx={{ p: 2 }}>
         <HaSecurityUpgrade config={haConfig} onChange={refreshConfig} />
+        <HaImageUpdate config={haConfig} onChange={refreshConfig} />
         <Alert severity="error">
           {t('dashboard.loadFailed')} {error?.message || t('dashboard.orchestratorUnavailable')}
         </Alert>
@@ -151,6 +153,7 @@ export default function HaClusterDashboard() {
   return (
     <Box sx={{ p: 2 }}>
       <HaSecurityUpgrade config={haConfig} onChange={refreshConfig} />
+      <HaImageUpdate config={haConfig} onChange={refreshConfig} />
       {versionMismatch && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           {t('dashboard.versionMismatch', { versions: [...versions].join(', ') })}

@@ -627,6 +627,25 @@
       "resume": "Resume",
       "done": "Security hardening applied.",
       "progressWithLabel": "Security hardening: step {step} of {total}: {label}"
+    },
+    "imageUpdate": {
+      "banner": "Newer etcd and HAProxy images are available for this cluster (etcd {etcd}, HAProxy {haproxy}).",
+      "apply": "Update the images",
+      "dialogTitle": "Update the etcd and HAProxy images",
+      "orderLabel": "Order",
+      "order": "etcd first, then HAProxy, one node at a time",
+      "outageLabel": "Outage",
+      "outage": "A few seconds per node, no switchover",
+      "uiLabel": "This interface",
+      "ui": "Unreachable for a few seconds when the node holding the VIP takes its turn",
+      "dataLabel": "Data",
+      "data": "Nothing is lost",
+      "confirm": "Start the update",
+      "progress": "Image update: step {step} of {total}",
+      "progressWithLabel": "Image update: step {step} of {total}: {label}",
+      "failed": "Image update failed: {error}",
+      "retry": "Start again",
+      "done": "etcd and HAProxy images updated."
     }
   },
   "user": {

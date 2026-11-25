@@ -627,6 +627,25 @@
       "resume": "Reanudar",
       "done": "Refuerzo de seguridad aplicado.",
       "progressWithLabel": "Refuerzo de seguridad: paso {step} de {total}: {label}"
+    },
+    "imageUpdate": {
+      "banner": "Hay imágenes de etcd y HAProxy más recientes disponibles para este clúster (etcd {etcd}, HAProxy {haproxy}).",
+      "apply": "Actualizar las imágenes",
+      "dialogTitle": "Actualizar las imágenes de etcd y HAProxy",
+      "orderLabel": "Orden",
+      "order": "Primero etcd, luego HAProxy, un nodo cada vez",
+      "outageLabel": "Interrupción",
+      "outage": "Unos segundos por nodo, sin conmutación",
+      "uiLabel": "Esta interfaz",
+      "ui": "Inaccesible unos segundos cuando le toca al nodo que tiene la VIP",
+      "dataLabel": "Datos",
+      "data": "Sin pérdida",
+      "confirm": "Iniciar la actualización",
+      "progress": "Actualización de imágenes: paso {step} de {total}",
+      "progressWithLabel": "Actualización de imágenes: paso {step} de {total}: {label}",
+      "failed": "Error en la actualización de imágenes: {error}",
+      "retry": "Volver a iniciar",
+      "done": "Imágenes de etcd y HAProxy actualizadas."
     }
   },
   "user": {

@@ -427,7 +427,7 @@ jobs:
   # ========================================
   # Build HA Infrastructure Images
   # ========================================
-  # Patroni (postgres:16-alpine + patroni[etcd3]) and Keepalived images for
+  # Patroni (PostgreSQL 16 on Alpine + patroni[etcd3]) and Keepalived images for
   # the 3-node HA control plane, built from config/ha/. Prebuilt and pulled
   # from GHCR so the HA conversion never runs `docker build` on customer
   # nodes: nodes need ghcr.io egress only. Both packages stay PRIVATE
@@ -512,9 +512,11 @@ jobs:
   # etcd and haproxy are re-hosted under ghcr.io/adminsyspro so converted
   # nodes only ever need ghcr.io egress (no quay.io / docker.io at
   # conversion time). Idempotent: a tag that already exists on GHCR is
-  # skipped, which also freezes the mirrored haproxy:2.9-alpine at the
-  # digest first copied (re-mirroring is a deliberate manual act: delete
-  # the GHCR tag, then re-run the workflow).
+  # skipped, which also freezes each mirrored tag at the digest first copied
+  # (re-mirroring is a deliberate manual act: delete the GHCR tag, then
+  # re-run the workflow). A fix therefore ships as a NEW, exact upstream tag
+  # (never a floating one), here and in docker-compose.ha.yml; the tags
+  # mirrored before stay on GHCR for the clusters that still name them.
   mirror-ha-images:
     if: ${{ github.event_name != 'pull_request' && !inputs.staging }}
     runs-on: ubuntu-latest
@@ -544,8 +546,8 @@ jobs:
             docker tag "$src" "$dst"
             docker push "$dst"
           }
-          mirror "quay.io/coreos/etcd:v3.5.17" "ghcr.io/${OWNER}/etcd:v3.5.17"
-          mirror "haproxy:2.9-alpine" "ghcr.io/${OWNER}/haproxy:2.9-alpine"
+          mirror "quay.io/coreos/etcd:v3.5.36" "ghcr.io/${OWNER}/etcd:v3.5.36"
+          mirror "haproxy:3.4.8-alpine" "ghcr.io/${OWNER}/haproxy:3.4.8-alpine"
 
   # ========================================
   # Run Backend Tests

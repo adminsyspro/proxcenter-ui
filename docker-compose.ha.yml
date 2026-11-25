@@ -263,6 +263,14 @@ services:
       # directly on the node (no ports: mapping needed).
       PROXCENTER_SFLOW_ENABLED: "true"
       PROXCENTER_SFLOW_LISTEN_ADDRESS: 0.0.0.0:6343
+      # Firewall log forwarders (micro-segmentation, forwarder mode): HAProxy
+      # holds 6344 on every node and relays to the receiver of the leader,
+      # on 6345, with the PROXY protocol, accepted from the HAProxy of the
+      # three nodes only. The Proxmox nodes are given the virtual address.
+      # Open 6344/tcp from the Proxmox nodes to the virtual address.
+      PROXCENTER_LOGFWD_LISTEN_ADDRESS: ${NODE_IP}:6345
+      PROXCENTER_LOGFWD_PROXY_FROM: ${PROXCENTER_HOST_IPS:-}
+      PROXCENTER_LOGFWD_ADVERTISE_ADDRESS: ${VIP}
       # Outbound HTTP proxy (CVE feeds, portal), from .env. Empty keeps
       # direct connections. Proxmox and the HA probes of the cluster nodes
       # never go through it.

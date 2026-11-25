@@ -5308,6 +5308,10 @@
         "pbsOps": {
           "label": "백업 서버",
           "features": "백업 서버 업데이트: 패키지 업그레이드, 재부팅, 데이터스토어 유지보수 모드"
+        },
+        "logForwarder": {
+          "label": "방화벽 로그 전달",
+          "features": "전달 모드의 마이크로 세분화: 노드에 로그 전달 에이전트를 설치하고 제거합니다(root와 동등)"
         }
       }
     },
@@ -5572,6 +5576,7 @@
     "connectionTabAuth": "인증",
     "connectionTabSsh": "SSH",
     "connectionTabMigrations": "마이그레이션",
+    "connectionTabLogs": "로그",
     "warmZeroRateLimitLabel": "Thick 제로화 속도 제한:",
     "warmZeroRateLimitCaption": "이 클러스터로의 웜 복사 전에 thick LVM 대상의 제로화 속도를 조절합니다. 마이그레이션 대화 상자에 입력한 값이 해당 실행에 우선합니다.",
     "integrityCheck": "VM 인계 전에 복사된 각 디스크 검증",
@@ -5742,6 +5747,129 @@
     "sshTrustNewHostKey": "새 키 신뢰",
     "sshTrustHostKeyHelper": "신뢰하기 전에 이 지문을 호스트가 직접 보고하는 지문과 비교하세요: /etc/ssh/ssh_host_*_key.pub 파일에 ssh-keygen -lf 를 실행합니다.",
     "sshTrustFailed": "키를 신뢰하지 못했습니다: {error}",
+    "logCollection": {
+      "mode": "VM 방화벽 로그 수집",
+      "modeApi": "API",
+      "modeForwarder": "전달",
+      "modeAdvice": "로그량이 많으면 전달 모드를 권장합니다.",
+      "advanced": "고급 설정",
+      "modeHelp": "각 노드에 기록되는 VM 및 컨테이너의 방화벽 로그가 마이크로 세분화에 도달하는 방식입니다. Proxmox API로 읽거나, ProxCenter가 SSH로 각 노드에 설치하는 전달 에이전트가 보냅니다. 클러스터는 둘 중 하나만 사용합니다.",
+      "blockedSsh": "전달을 선택하려면 이 연결에서 SSH 접근을 활성화하세요.",
+      "blockedPolicy": "전달을 선택하려면 이 클러스터에 마이크로 세분화 정책을 적용하세요.",
+      "receiver": "수신기 주소",
+      "receiverHost": "주소",
+      "receiverPort": "포트",
+      "receiverHelp": "노드가 ProxCenter에 도달하는 위치입니다. 주소(HA에서는 가상 주소)와 노드에서 열어야 하는 TCP 포트입니다.",
+      "queue": "노드별 로컬 대기열",
+      "queueUnit": "MB",
+      "queueHelp": "수신기에 연결할 수 없는 동안 로그 순환 시 노드에서 대기 중인 줄이 차지할 수 있는 디스크 공간입니다. 이를 넘으면 가장 오래된 줄이 버려지고 집계됩니다.",
+      "budget": "노드별 수집 예산",
+      "budgetUnit": "줄/분",
+      "budgetHelp": "이 속도를 넘으면 수신기가 노드 읽기를 멈추고, 노드는 다음 패스까지 줄을 보관합니다. 포트를 스캔하는 게스트가 ProxCenter에 저장하게 하는 양을 제한합니다.",
+      "range": "{min}~{max}",
+      "apply": "적용",
+      "check": "노드 확인",
+      "checked": "노드를 확인했습니다.",
+      "loadFailed": "이 클러스터의 로그 수집을 읽을 수 없습니다.",
+      "applied": "설정을 적용했습니다.",
+      "invalid": {
+        "receiver_host": "IP 주소 또는 호스트 이름.",
+        "receiver_port": "1~65535 범위의 포트.",
+        "queue_mb": "{min}~{max} MB.",
+        "budget_lines_per_min": "분당 {min}~{max}줄."
+      },
+      "confirm": {
+        "installTitle": "로그 전달 에이전트를 설치할까요?",
+        "installBody": "ProxCenter가 SSH로 클러스터의 각 노드에 전달 에이전트를 설치합니다. /usr/local/lib/proxcenter의 프로그램, /etc/proxcenter의 구성, proxcenter-logfwd 서비스입니다. 이후 방화벽 로그는 Proxmox API로 읽지 않습니다.",
+        "removeTitle": "API 읽기로 돌아갈까요?",
+        "removeBody": "ProxCenter가 클러스터의 모든 노드에서 전달 에이전트를 제거하고, 에이전트가 멈춘 지점부터 Proxmox API로 방화벽 로그를 다시 읽습니다.",
+        "updateTitle": "전달 에이전트를 업데이트할까요?",
+        "updateBody": "ProxCenter가 SSH로 클러스터의 각 노드에 새 설정을 기록하고 에이전트를 다시 시작합니다. 줄은 손실되지 않습니다.",
+        "install": "설치",
+        "remove": "제거",
+        "update": "업데이트",
+        "cancel": "취소"
+      },
+      "preflightFailed": "변경된 것이 없습니다. 준비되지 않은 노드: {count, plural, other {#개}}.",
+      "problems": {
+        "ssh_unreachable": "SSH가 응답하지 않음",
+        "host_key_unconfirmed": "SSH 호스트 키가 확인되지 않음(설정, SSH 명령, SSH 호스트 키)",
+        "sudo_missing": "로그 전달 프로필의 sudo 규칙이 없음({detail})",
+        "systemd_unknown": "systemd 버전을 읽을 수 없음",
+        "receiver_unreachable": "수신기 주소와 포트에 도달할 수 없음",
+        "other": "준비되지 않음({code})"
+      },
+      "refusals": {
+        "SSH_DISABLED": "이 연결에서 SSH 접근이 활성화되어 있지 않습니다.",
+        "NO_POLICY": "이 클러스터에 적용된 마이크로 세분화 정책이 없습니다.",
+        "BUSY": "이 클러스터에서 설치 또는 제거가 이미 실행 중입니다.",
+        "NOT_LEADER": "응답한 오케스트레이터가 리더가 아닙니다. 잠시 후 다시 시도하세요.",
+        "INVALID": "이 설정이 거부되었습니다.",
+        "FEATURE_REQUIRED": "마이크로 세분화가 라이선스에 포함되어 있지 않습니다.",
+        "ORCHESTRATOR_UNAVAILABLE": "오케스트레이터가 응답하지 않았습니다.",
+        "default": "요청이 실패했습니다."
+      },
+      "nodes": "각 노드의 전달 에이전트",
+      "noNodes": "노드에 전달 에이전트가 없습니다. VM 및 컨테이너의 방화벽 로그는 Proxmox API로 읽습니다.",
+      "columns": {
+        "node": "노드",
+        "state": "상태",
+        "version": "버전",
+        "lastLine": "마지막 줄",
+        "rate": "줄/분",
+        "queue": "대기열",
+        "dropped": "버려짐"
+      },
+      "nodeState": {
+        "installing": "설치 중",
+        "installed": "실행 중",
+        "failed": "실패",
+        "removeFailed": "제거 실패",
+        "removing": "제거 중",
+        "missing": "설치되지 않음",
+        "silent": "무응답",
+        "drifted": "변경됨",
+        "paused": "보류됨"
+      },
+      "variantAdm": "adm 그룹",
+      "variantAdmHelp": "이 노드는 253 이전 버전의 systemd를 실행합니다. 에이전트는 읽기 전용 디스크립터 하나를 받는 대신 adm 그룹의 구성원으로서 로그를 직접 엽니다.",
+      "never": "없음",
+      "details": "세부 정보",
+      "retry": "다시 시도",
+      "removeNode": "제거",
+      "install": "설치",
+      "detail": {
+        "error": "마지막 오류: {error}",
+        "silent": "2분 동안 이 노드에서 아무것도 오지 않았습니다. 줄은 노드에서 대기하며, 그동안 API로는 아무것도 읽지 않습니다.",
+        "paused": "수집 예산에 도달했습니다. 노드는 다음 패스까지 줄을 보관합니다.",
+        "budgetHits": "24시간 동안 예산 도달 {count, plural, other {#회}}.",
+        "missing": "이 노드에는 전달 에이전트가 없습니다. 방화벽 로그를 읽지 않습니다.",
+        "left": "이 노드는 더 이상 Proxmox 클러스터에 속하지 않습니다. 제거하면 전달 도구를 삭제하며, 노드가 응답하지 않으면 목록에서 지웁니다."
+      },
+      "drift": {
+        "binary": "노드의 프로그램이 ProxCenter가 설치한 것이 아닙니다.",
+        "stopped": "서비스가 중지되었습니다.",
+        "disabled": "서비스가 비활성화되었습니다.",
+        "missing": "프로그램이 노드에서 사라졌습니다."
+      },
+      "run": {
+        "install": "설치 실행 중",
+        "uninstall": "제거 실행 중"
+      },
+      "steps": {
+        "queued": "대기 중",
+        "check": "노드 확인 중",
+        "binary": "프로그램 복사 중",
+        "key": "키 생성 중",
+        "config": "구성 기록 중",
+        "start": "서비스 시작 중",
+        "connect": "첫 연결 대기 중",
+        "stop": "서비스 중지 중",
+        "remove": "파일 삭제 중",
+        "verify": "남은 것이 없는지 확인 중",
+        "done": "완료"
+      }
+    },
     "connectionUsage": {
       "checking": "이 연결을 사용하는 항목을 확인하는 중…",
       "intro": "이 연결은 아직 사용 중입니다. 각 페이지에서 다음 연결 항목을 먼저 제거하세요:",
@@ -5757,7 +5885,8 @@
         "vdcMoves": "진행 중인 vDC 이동",
         "complianceProfiles": "규정 준수 프로필",
         "slaWindows": "SLA 유지 관리 기간",
-        "restoreDrillSchedules": "복원 테스트 일정"
+        "restoreDrillSchedules": "복원 테스트 일정",
+        "logForwarders": "방화벽 로그 전달(노드)"
       },
       "apiTokensTitle": "이 연결로 제한된 API 토큰",
       "apiTokensHint": "연결이 삭제되면 더 이상 아무것도 사용할 수 없습니다. 삭제를 막지는 않습니다."
@@ -13697,7 +13826,16 @@
         "running": "실행 중"
       },
       "logNode": "{node} · 분당 {rate}줄 · {lag} 지연",
+      "logNodeForwarder": "{node} · 전달 · 분당 {rate}줄 · {lag} 지연",
+      "logNodeIdle": "{node} · 전달 · 아직 수신된 줄 없음",
+      "logNodeSilent": "{node} · 전달 무응답 · 마지막 줄 {lag} 전",
+      "logNodeSilentNever": "{node} · 전달 무응답 · 수신된 줄 없음",
+      "logNodeNotInstalled": "{node} · 전달 에이전트 없음",
+      "logNodeChanged": "{node} · 노드의 전달 에이전트가 변경됨",
+      "logForwarder": "전달로 수집하는 로그",
+      "logForwarderTrouble": "로그 전달: 확인할 노드 {count, plural, other {#개}}",
       "logBehind": "로그 지연",
+      "logForwarderAdvice": "방화벽 로그가 Proxmox API가 읽는 속도보다 빠르게 쌓입니다. 이 클러스터를 전달 모드로 전환하세요.",
       "unreachableSince": "클러스터 {name}에 {time}부터 연결할 수 없습니다: 해당 규칙이 업데이트되지 않으며, 다른 클러스터는 마지막으로 알려진 주소를 유지합니다.",
       "unreachableSinceSingle": "이 클러스터에 {time}부터 연결할 수 없습니다: 해당 규칙이 업데이트되지 않습니다.",
       "firewallOff": "{name}: 클러스터 방화벽이 꺼져 있어 아무것도 필터링되지 않습니다.",
@@ -14667,6 +14805,7 @@
         "firstSeen": "처음 확인",
         "lastSeen": "마지막 확인",
         "addresses": "예시 주소",
+        "node": "기록한 노드",
         "trafficTitle": "최근 24시간 트래픽",
         "trafficTotal": "히트 {count}개",
         "trafficLoading": "기록을 읽는 중...",
@@ -15066,6 +15205,7 @@
       "checking": "클러스터를 점검하는 중...",
       "runAgain": "다시 실행",
       "openWizard": "배포 마법사 열기",
+      "openLogSettings": "로그 설정 열기",
       "raiseLogRate": "관찰 중 올리기",
       "busy": "엔진이 이 클러스터에서 실행 또는 적용을 마무리하고 있습니다. 잠시 후 다시 시도하세요.",
       "noClient": "이 연결에 사용할 수 있는 Proxmox 클라이언트가 없습니다.",
@@ -15093,6 +15233,18 @@
           "hostRulesUnreadable": "노드 {node}의 방화벽 규칙을 읽을 수 없습니다. 관리 접근을 확인할 수 없습니다.",
           "missingForNodes": "{nodes}에서 {ips}의 포트 {ports}을(를) 열어 두는 규칙이 없습니다. 방화벽을 켜면 ProxCenter가 차단될 수 있습니다.",
           "missingOn": "{nodes}에서 포트 {ports}을(를) 열어 두는 규칙이 없습니다. 방화벽을 켜면 접근이 차단될 수 있습니다."
+        },
+        "log_collection": {
+          "title": "로그 수집",
+          "passApi": "방화벽 로그를 Proxmox API로 읽고 있으며 읽기가 따라가고 있습니다.",
+          "passForwarder": "각 노드의 전달 에이전트가 줄을 전달하고 있습니다.",
+          "behind": "{nodes}에서 API 읽기가 따라가지 못합니다. 줄이 누락될 수 있습니다. 노드의 전달 에이전트가 이 제한을 없앱니다.",
+          "behindNoSsh": "{nodes}에서 API 읽기가 따라가지 못합니다. 줄이 누락될 수 있습니다. 노드의 전달 에이전트가 이 제한을 없애며, 연결에 SSH 접근이 필요합니다.",
+          "part": {
+            "silent": "무응답: {nodes}",
+            "not_installed": "전달 에이전트 없음: {nodes}",
+            "drifted": "에이전트 변경됨: {nodes}"
+          }
         },
         "log_ratelimit": {
           "title": "로그 속도 제한",

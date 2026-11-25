@@ -157,6 +157,10 @@ services:
     restart: unless-stopped
     ports:
       - "6343:6343/udp"  # sFlow collector (receives from OVS agents)
+      # Firewall log forwarders of the Proxmox nodes (micro-segmentation,
+      # forwarder mode). Nothing listens behind it until a cluster is put in
+      # that mode; then only its nodes, each known by its key, are answered.
+      - "6344:6344"
     environment:
       - APP_SECRET=${APP_SECRET}
       - LICENSE_KEY=${LICENSE_KEY:-}
@@ -170,6 +174,11 @@ services:
       # sFlow collector
       - PROXCENTER_SFLOW_ENABLED=true
       - PROXCENTER_SFLOW_LISTEN_ADDRESS=0.0.0.0:6343
+      # Firewall log forwarders: the receiver drops, before any handshake, a
+      # source that is not a node of a cluster in forwarder mode. When the
+      # nodes reach this host through a NAT, list here the addresses or
+      # networks they are seen from (comma separated).
+      - PROXCENTER_LOGFWD_EXTRA_SOURCES=${PROXCENTER_LOGFWD_EXTRA_SOURCES:-}
       # PDF report renderer (WeasyPrint sidecar — see weasyprint service below).
       - PROXCENTER_REPORTING_URL=http://weasyprint:5000
       # CVE scanner sources. Empty keeps the public Debian hosts; an

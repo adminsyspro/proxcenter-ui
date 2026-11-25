@@ -10,7 +10,7 @@ import { screen, fireEvent, renderWithProviders, waitFor } from '@/__tests__/set
 import { MicrosegApiError } from '@/lib/microseg/api'
 import type { PreflightCheck } from '@/lib/microseg/types'
 
-import { calls, mock, renderTab, reply, resetMocks } from './microsegTestKit'
+import { calls, fetchMock, mock, renderTab, reply, resetMocks } from './microsegTestKit'
 import PreflightPanel from './PreflightPanel'
 import { RECOMMENDED_OBSERVE_LOG_RATE } from './preflightModel'
 
@@ -338,5 +338,60 @@ describe('the IP filter check', () => {
     fireEvent.click(within(details).getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'IP filter: addresses per member' })).toBeNull())
     expect(screen.getByRole('dialog', { name: 'Pre-flight checks' })).toBeTruthy()
+  })
+})
+
+describe('the log collection check', () => {
+  const row = (name: string) => screen.findByRole('listitem', { name })
+
+  it('passes without a word to act on when the API read keeps up', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, { checks: [{ id: 'log_collection', status: 'pass', detail: { mode: 'api' } }] })
+    open()
+    const line = await row('Log collection: passed')
+
+    expect(within(line).getByText('The firewall logs are read through the Proxmox API and the read keeps up.')).toBeTruthy()
+    expect(within(line).queryByRole('link')).toBeNull()
+  })
+
+  it('names the nodes the API read cannot follow and opens the Logs tab of the cluster connection, without switching by itself', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'log_collection', status: 'warn', fix: 'switch_to_forwarder', detail: { mode: 'api', nodes: ['pve1', 'pve3'], ssh_enabled: true } }],
+    })
+    open()
+    const line = await row('Log collection: warning')
+
+    expect(within(line).getByText('The API read does not keep up on pve1, pve3: lines may be missed. A forwarder on the nodes removes the limit.')).toBeTruthy()
+    const link = within(line).getByRole('link', { name: 'Open the log settings' })
+
+    expect(link.getAttribute('href')).toBe('/settings?tab=connections&connection=c1&connectionTab=logs')
+    // Reading the checks is all the panel did.
+    expect(fetchMock.mock.calls.filter(([, init]) => (init?.method ?? 'GET') !== 'GET')).toEqual([])
+  })
+
+  it('says SSH access is needed when the connection has none', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'log_collection', status: 'warn', fix: 'switch_to_forwarder', detail: { mode: 'api', nodes: ['pve2'], ssh_enabled: false } }],
+    })
+    open()
+
+    expect(within(await row('Log collection: warning')).getByText(/it needs SSH access on the connection/)).toBeTruthy()
+  })
+
+  it('fails in forwarder mode on a silent node, a node without a forwarder and a changed one, each named on the line', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, {
+      checks: [{ id: 'log_collection', status: 'fail', detail: { mode: 'forwarder', silent: ['pve2'], not_installed: ['pve3', 'pve5'], drifted: ['pve4'] } }],
+    })
+    open()
+    const line = await row('Log collection: failed')
+
+    expect(within(line).getByText('silent: pve2, no forwarder: pve3, pve5, forwarder changed: pve4')).toBeTruthy()
+    expect(within(line).getByRole('link', { name: 'Open the log settings' })).toBeTruthy()
+  })
+
+  it('passes in forwarder mode when every node delivers', async () => {
+    mock.routes['GET /preflight'] = () => reply(200, { checks: [{ id: 'log_collection', status: 'pass', detail: { mode: 'forwarder' } }] })
+    open()
+
+    expect(within(await row('Log collection: passed')).getByText('The forwarder of every node delivers its lines.')).toBeTruthy()
   })
 })

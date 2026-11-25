@@ -18,12 +18,14 @@ const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
 
 // Leader-only endpoints: DRS (/drs/*), metrics (/metrics/*), availability
 // (/availability/*, which reads the latest metrics sample), the GPU readings
-// (/gpu/*, whose latest round lives in the leader's collector) and micro-
+// (/gpu/*, whose latest round lives in the leader's collector), micro-
 // segmentation (/microseg/*, whose engine and run state live on the leader)
-// read or act on state that only the leader holds. Everything else stays on
-// the local orchestrator (ORCHESTRATOR_URL).
+// and the firewall log forwarding that feeds it (/logfwd/*, whose receiver
+// and installation runs live on the leader) read or act on state that only
+// the leader holds. Everything else stays on the local orchestrator
+// (ORCHESTRATOR_URL).
 function orchestratorBaseUrlForPath(path: string): string {
-  return /^\/(metrics|drs|availability|gpu|microseg)(\/|$|\?)/.test(path) ? ORCHESTRATOR_LEADER_URL : ORCHESTRATOR_URL
+  return /^\/(metrics|drs|availability|gpu|microseg|logfwd)(\/|$|\?)/.test(path) ? ORCHESTRATOR_LEADER_URL : ORCHESTRATOR_URL
 }
 
 export interface OrchestratorRequestOptions {

@@ -454,6 +454,15 @@ describe('leader routing (ui#803 defect 2)', () => {
     expect(await fetchPathWithLeaderUrl('/firewall/microseg/c1/vms', leader)).toBe('http://localhost:8080/api/v1/firewall/microseg/c1/vms')
   })
 
+  // The receiver of the firewall log forwarders and the runs that install
+  // them live on the leader, like the micro-segmentation engine they feed.
+  it('routes /logfwd to the leader URL when set, and only /logfwd', async () => {
+    const leader = 'http://127.0.0.1:8081'
+    expect(await fetchPathWithLeaderUrl('/logfwd/c1', leader)).toBe(`${leader}/api/v1/logfwd/c1`)
+    expect(await fetchPathWithLeaderUrl('/logfwd/c1/nodes/pve1/retry', leader)).toBe(`${leader}/api/v1/logfwd/c1/nodes/pve1/retry`)
+    expect(await fetchPathWithLeaderUrl('/logfwdx/c1', leader)).toBe('http://localhost:8080/api/v1/logfwdx/c1')
+  })
+
   it('routes /metrics and /drs to the leader URL when set', async () => {
     const leader = 'http://127.0.0.1:8081'
     expect(await fetchPathWithLeaderUrl('/metrics', leader)).toBe(`${leader}/api/v1/metrics`)

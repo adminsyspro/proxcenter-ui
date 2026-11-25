@@ -467,6 +467,8 @@ function ConnectionsTab() {
   const [addConnOpen, setAddConnOpen] = useState(false)
   const [addConnType, setAddConnType] = useState('pve')
   const [editingConn, setEditingConn] = useState(null)
+  // The tab the connection dialog opens on, when a link asks for one.
+  const [editingTab, setEditingTab] = useState(undefined)
   const [detectingCephId, setDetectingCephId] = useState(null)
 
   // Diagnostic modal state
@@ -495,14 +497,32 @@ function ConnectionsTab() {
   const openAddDialog = (type) => {
     setAddConnType(type)
     setEditingConn(null)
+    setEditingTab(undefined)
     setAddConnOpen(true)
   }
 
-  const openEditDialog = (connection) => {
+  const openEditDialog = (connection, tab) => {
     setAddConnType(connection.type)
     setEditingConn(connection)
+    setEditingTab(tab)
     setAddConnOpen(true)
   }
+
+  // A link from elsewhere (the micro-segmentation checks) opens the dialog of
+  // one cluster on one of its tabs: ?tab=connections&connection=<id>&connectionTab=logs.
+  // Once: closing the dialog must not open it again.
+  const linkedConnection = searchParams.get('connection')
+  const linkedTab = searchParams.get('connectionTab')
+  const linkOpened = useRef(null)
+
+  useEffect(() => {
+    if (!linkedConnection || linkOpened.current === linkedConnection) return
+    const connection = pveConnections.find(c => c.id === linkedConnection)
+
+    if (!connection) return
+    linkOpened.current = linkedConnection
+    openEditDialog(connection, linkedTab || undefined)
+  }, [linkedConnection, linkedTab, pveConnections])
 
   const handleSaveConnection = async (formData) => {
     const isExtHypervisor = addConnType === 'vmware' || addConnType === 'xcpng' || addConnType === 'nutanix' || addConnType === 'hyperv'
@@ -1809,6 +1829,7 @@ function ConnectionsTab() {
         type={addConnType}
         initialData={editingConn}
         mode={editingConn ? 'edit' : 'create'}
+        initialTab={editingTab}
         // The Migrations tab only matters once a source hypervisor is set up.
         migrationSourcesConfigured={migrationSourcesConfigured}
       />

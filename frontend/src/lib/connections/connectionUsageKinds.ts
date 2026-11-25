@@ -17,6 +17,7 @@ export const BLOCKING_KINDS = [
   'complianceProfiles',
   'slaWindows',
   'restoreDrillSchedules',
+  'logForwarders',
 ] as const
 
 export type UsageKind = (typeof BLOCKING_KINDS)[number]

@@ -107,6 +107,26 @@ describe('connectionUsage', () => {
     expect(orchestratorFetchMock).toHaveBeenCalledWith('/microseg/dr/clusters', expect.anything())
   })
 
+  // The forwarders are removed over the SSH access of the connection: once it
+  // is deleted nothing can reach the nodes to clean them.
+  it('blocks while a firewall log forwarder is left on a node, by node name', async () => {
+    db.$queryRaw.mockImplementation(async (strings: TemplateStringsArray) =>
+      strings.join('?').includes('logfwd_nodes') ? [{ node: 'pve1' }, { node: 'pve3' }] : [])
+
+    const { blocking } = await connectionUsage('dr', PVE, { callerTenantId: 'default' })
+
+    expect(blocking.logForwarders).toEqual(['pve1', 'pve3'])
+    expect(blocking.drsRules).toBeUndefined()
+  })
+
+  it('does not look for log forwarders on a connection that is not a cluster', async () => {
+    db.$queryRaw.mockImplementation(async () => [{ node: 'pve1' }])
+
+    const { blocking } = await connectionUsage('pbs1', { type: 'pbs', tenantId: 'default' }, { callerTenantId: 'default' })
+
+    expect(blocking.logForwarders).toBeUndefined()
+  })
+
   it('does not block on a policy left inactive on its single cluster: it cannot leave it', async () => {
     orchestratorFetchMock.mockResolvedValue({ clusters: [{ policy_id: 'pol', connection_id: 'dr', active: false }] })
 

@@ -5308,6 +5308,10 @@
         "pbsOps": {
           "label": "Backup server",
           "features": "backup server updates: package upgrade, reboot, datastore maintenance mode"
+        },
+        "logForwarder": {
+          "label": "Firewall log forwarder",
+          "features": "micro-segmentation in forwarder mode: installs and removes the log forwarder on the nodes (equivalent to root)"
         }
       }
     },
@@ -5572,6 +5576,7 @@
     "connectionTabAuth": "Authentication",
     "connectionTabSsh": "SSH",
     "connectionTabMigrations": "Migrations",
+    "connectionTabLogs": "Logs",
     "warmZeroRateLimitLabel": "Thick zeroing rate limit:",
     "warmZeroRateLimitCaption": "Paces the zeroing of thick LVM targets before a warm copy into this cluster. A value typed in the migration dialog wins for that run.",
     "integrityCheck": "Verify every copied disk before handing the VM over",
@@ -5742,6 +5747,129 @@
     "sshTrustNewHostKey": "Trust the new key",
     "sshTrustHostKeyHelper": "Compare this fingerprint with the one the host itself reports before trusting it: ssh-keygen -lf on its /etc/ssh/ssh_host_*_key.pub files.",
     "sshTrustFailed": "The key was not trusted: {error}",
+    "logCollection": {
+      "mode": "VM firewall log collection",
+      "modeApi": "API",
+      "modeForwarder": "Forwarder",
+      "modeAdvice": "Forwarder recommended for a high log volume.",
+      "advanced": "Advanced settings",
+      "modeHelp": "How the firewall logs of the VMs and containers, written on each node, reach the micro-segmentation: read through the Proxmox API, or sent by a forwarder ProxCenter installs on each node over SSH. A cluster uses one or the other, never both.",
+      "blockedSsh": "Enable SSH access on this connection to choose the forwarder.",
+      "blockedPolicy": "Apply a micro-segmentation policy on this cluster to choose the forwarder.",
+      "receiver": "Receiver address",
+      "receiverHost": "Address",
+      "receiverPort": "Port",
+      "receiverHelp": "Where the nodes reach ProxCenter: its address (the virtual address in HA) and a TCP port, to open from the nodes.",
+      "queue": "Local queue per node",
+      "queueUnit": "MB",
+      "queueHelp": "Disk space the lines waiting on a node may take across a log rotation while the receiver cannot be reached. Past it the oldest lines are dropped and counted.",
+      "budget": "Ingestion budget per node",
+      "budgetUnit": "lines/min",
+      "budgetHelp": "Past this rate the receiver stops reading a node, which keeps its lines until the next pass. It bounds what a guest scanning ports makes ProxCenter store.",
+      "range": "{min} to {max}",
+      "apply": "Apply",
+      "check": "Check the nodes",
+      "checked": "Nodes checked.",
+      "loadFailed": "The log collection of this cluster could not be read.",
+      "applied": "Settings applied.",
+      "invalid": {
+        "receiver_host": "An IP address or a host name.",
+        "receiver_port": "A port from 1 to 65535.",
+        "queue_mb": "From {min} to {max} MB.",
+        "budget_lines_per_min": "From {min} to {max} lines per minute."
+      },
+      "confirm": {
+        "installTitle": "Install the log forwarder?",
+        "installBody": "ProxCenter installs a forwarder on each node of the cluster over SSH: a program in /usr/local/lib/proxcenter, its configuration in /etc/proxcenter and the proxcenter-logfwd service. The firewall logs are then no longer read through the Proxmox API.",
+        "removeTitle": "Go back to the API read?",
+        "removeBody": "ProxCenter removes the forwarder from every node of the cluster and reads the firewall logs through the Proxmox API again, from where the forwarders stopped.",
+        "updateTitle": "Update the forwarders?",
+        "updateBody": "ProxCenter writes the new settings on every node of the cluster over SSH and restarts the forwarders. No line is lost.",
+        "install": "Install",
+        "remove": "Remove",
+        "update": "Update",
+        "cancel": "Cancel"
+      },
+      "preflightFailed": "Nothing was changed: {count, plural, one {# node is} other {# nodes are}} not ready.",
+      "problems": {
+        "ssh_unreachable": "SSH does not answer",
+        "host_key_unconfirmed": "its SSH host key is not confirmed (Settings, SSH Commands, SSH host keys)",
+        "sudo_missing": "the sudo rules of the log forwarder profile are missing ({detail})",
+        "systemd_unknown": "the systemd version could not be read",
+        "receiver_unreachable": "it does not reach the receiver address and port",
+        "other": "not ready ({code})"
+      },
+      "refusals": {
+        "SSH_DISABLED": "SSH access is not enabled on this connection.",
+        "NO_POLICY": "This cluster has no applied micro-segmentation policy.",
+        "BUSY": "An installation or a removal is already running on this cluster.",
+        "NOT_LEADER": "The orchestrator that answered is not the leader. Try again in a moment.",
+        "INVALID": "These settings were refused.",
+        "FEATURE_REQUIRED": "The micro-segmentation is not in the licence.",
+        "ORCHESTRATOR_UNAVAILABLE": "The orchestrator did not answer.",
+        "default": "The request failed."
+      },
+      "nodes": "Forwarder of each node",
+      "noNodes": "No forwarder on the nodes: the firewall logs of the VMs and containers are read through the Proxmox API.",
+      "columns": {
+        "node": "Node",
+        "state": "State",
+        "version": "Version",
+        "lastLine": "Last line",
+        "rate": "Lines/min",
+        "queue": "Queue",
+        "dropped": "Dropped"
+      },
+      "nodeState": {
+        "installing": "Installing",
+        "installed": "Running",
+        "failed": "Failed",
+        "removeFailed": "Removal failed",
+        "removing": "Removing",
+        "missing": "Not installed",
+        "silent": "Silent",
+        "drifted": "Changed",
+        "paused": "Held back"
+      },
+      "variantAdm": "adm group",
+      "variantAdmHelp": "This node runs a systemd older than 253: the forwarder opens the log itself, as a member of the adm group, instead of receiving one read-only descriptor.",
+      "never": "never",
+      "details": "Details",
+      "retry": "Retry",
+      "removeNode": "Remove",
+      "install": "Install",
+      "detail": {
+        "error": "Last error: {error}",
+        "silent": "Nothing came from this node for two minutes. Its lines wait on it; nothing is read through the API meanwhile.",
+        "paused": "The ingestion budget is reached: the node keeps its lines until the next pass.",
+        "budgetHits": "Budget reached {count, plural, one {# time} other {# times}} over 24 hours.",
+        "missing": "This node has no forwarder: its firewall log is not read.",
+        "left": "This node is no longer a node of the Proxmox cluster. Remove takes its forwarder away, or forgets it when the node does not answer."
+      },
+      "drift": {
+        "binary": "The program on the node is not the one ProxCenter installed.",
+        "stopped": "The service is stopped.",
+        "disabled": "The service is disabled.",
+        "missing": "The program is gone from the node."
+      },
+      "run": {
+        "install": "Installation running",
+        "uninstall": "Removal running"
+      },
+      "steps": {
+        "queued": "waiting",
+        "check": "checking the node",
+        "binary": "copying the program",
+        "key": "creating the key",
+        "config": "writing the configuration",
+        "start": "starting the service",
+        "connect": "waiting for the first connection",
+        "stop": "stopping the service",
+        "remove": "removing the files",
+        "verify": "checking nothing is left",
+        "done": "done"
+      }
+    },
     "connectionUsage": {
       "checking": "Checking what uses this connection…",
       "intro": "This connection is still in use. Remove these links first, each from its own page:",
@@ -5757,7 +5885,8 @@
         "vdcMoves": "vDC moves in progress",
         "complianceProfiles": "Compliance profiles",
         "slaWindows": "SLA maintenance windows",
-        "restoreDrillSchedules": "Restore test schedules"
+        "restoreDrillSchedules": "Restore test schedules",
+        "logForwarders": "Firewall log forwarders (nodes)"
       },
       "apiTokensTitle": "API tokens limited to this connection",
       "apiTokensHint": "They will no longer reach anything once it is deleted. This does not block the deletion."
@@ -13697,7 +13826,16 @@
         "running": "Running"
       },
       "logNode": "{node} · {rate} lines/min · {lag} behind",
+      "logNodeForwarder": "{node} · forwarder · {rate} lines/min · {lag} behind",
+      "logNodeIdle": "{node} · forwarder · no line received yet",
+      "logNodeSilent": "{node} · forwarder silent · last line {lag} ago",
+      "logNodeSilentNever": "{node} · forwarder silent · no line received",
+      "logNodeNotInstalled": "{node} · no forwarder",
+      "logNodeChanged": "{node} · forwarder changed on the node",
+      "logForwarder": "Logs by forwarder",
+      "logForwarderTrouble": "Log forwarder: {count, plural, one {# node} other {# nodes}} to look at",
       "logBehind": "Log behind",
+      "logForwarderAdvice": "Firewall logs arrive faster than the Proxmox API can read them: switch this cluster to forwarder mode.",
       "unreachableSince": "Cluster {name} has been unreachable since {time}: its rules are not updated, the other clusters keep its last known addresses.",
       "unreachableSinceSingle": "This cluster has been unreachable since {time}: its rules are not updated.",
       "firewallOff": "{name}: the cluster firewall is off, nothing is filtered there.",
@@ -14667,6 +14805,7 @@
         "firstSeen": "First seen",
         "lastSeen": "Last seen",
         "addresses": "Sample addresses",
+        "node": "Logged by node",
         "trafficTitle": "Traffic over the last 24 hours",
         "trafficTotal": "{count, plural, one {# hit} other {# hits}}",
         "trafficLoading": "Reading the history...",
@@ -15066,6 +15205,7 @@
       "checking": "Checking the cluster...",
       "runAgain": "Run again",
       "openWizard": "Open the deployment wizard",
+      "openLogSettings": "Open the log settings",
       "raiseLogRate": "Raise while observing",
       "busy": "The engine is finishing a pass or an apply on this cluster, retry in a moment.",
       "noClient": "No Proxmox client is available for this connection.",
@@ -15093,6 +15233,18 @@
           "hostRulesUnreadable": "The firewall rules of node {node} could not be read: the management access cannot be checked.",
           "missingForNodes": "No rule keeps port {ports} open from {ips} on {nodes}: turning the firewall on could cut ProxCenter off.",
           "missingOn": "No rule keeps port {ports} open on {nodes}: turning the firewall on could cut your access."
+        },
+        "log_collection": {
+          "title": "Log collection",
+          "passApi": "The firewall logs are read through the Proxmox API and the read keeps up.",
+          "passForwarder": "The forwarder of every node delivers its lines.",
+          "behind": "The API read does not keep up on {nodes}: lines may be missed. A forwarder on the nodes removes the limit.",
+          "behindNoSsh": "The API read does not keep up on {nodes}: lines may be missed. A forwarder on the nodes removes the limit; it needs SSH access on the connection.",
+          "part": {
+            "silent": "silent: {nodes}",
+            "not_installed": "no forwarder: {nodes}",
+            "drifted": "forwarder changed: {nodes}"
+          }
         },
         "log_ratelimit": {
           "title": "Log rate limit",

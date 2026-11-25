@@ -10,6 +10,7 @@ import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { orchestratorOrPve } from '@/lib/firewall/withPveFallback'
 import { firewallParamRefusal } from '@/lib/firewall/pathParams'
+import { forgetGroupUsage } from '@/lib/firewall/groupUsage'
 import * as pveDirect from '@/lib/firewall/pveDirect'
 import { guardSessionGuest } from '@/lib/vdc/guestGuard'
 import { withAudit } from '@/lib/audit/withAudit'
@@ -46,6 +47,8 @@ async function putHandler(req: NextRequest, ctx: RouteContext) {
       () => orchestrator.put(orchestratorPath`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules/${pos}`, body),
       async () => pveDirect.updateVMRule(await getConnectionById(connectionId), node, vmType, vmid, pos, body),
     )
+    // The security group usage read this guest's rules as they were: it reads them again, alone.
+    forgetGroupUsage(connectionId, { type: vmType, vmid })
 
     return NextResponse.json(result)
   } catch (e: any) {
@@ -78,6 +81,8 @@ async function deleteHandler(req: NextRequest, ctx: RouteContext) {
       () => orchestrator.delete(orchestratorPath`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules/${pos}`),
       async () => pveDirect.deleteVMRule(await getConnectionById(connectionId), node, vmType, vmid, pos),
     )
+    // The security group usage read this guest's rules as they were: it reads them again, alone.
+    forgetGroupUsage(connectionId, { type: vmType, vmid })
 
     return NextResponse.json(result)
   } catch (e: any) {

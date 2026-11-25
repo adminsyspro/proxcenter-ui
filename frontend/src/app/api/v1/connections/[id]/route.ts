@@ -16,6 +16,7 @@ import { invalidateConnectionCache } from "@/lib/connections/getConnection"
 import { invalidateInventoryCache } from "@/lib/cache/inventoryCache"
 import { invalidateGuestIpIndex } from "@/lib/cache/guestIpCache"
 import { evictGuestCoverage } from "@/lib/firewall/guestCoverage"
+import { evictGroupUsage } from "@/lib/firewall/groupUsage"
 import { updateConnectionSchema } from "@/lib/schemas"
 import { orchestratorFetch } from "@/lib/orchestrator/client"
 import { connectionUsage, isBlocked } from "@/lib/connections/connectionUsage"
@@ -444,6 +445,7 @@ async function handleDelete(_req: Request, ctx: { params: Promise<{ id: string }
     invalidateInventoryCache()
     invalidateGuestIpIndex(id)
     evictGuestCoverage(id)
+    evictGroupUsage(id)
 
     // Audit
     const { audit } = await import("@/lib/audit")

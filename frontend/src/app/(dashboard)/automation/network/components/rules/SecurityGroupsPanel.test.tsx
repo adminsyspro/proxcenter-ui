@@ -31,6 +31,7 @@ import {
 } from '@/__tests__/setup/renderWithProviders'
 import type * as firewallAPIType from '@/lib/api/firewall'
 import type { VMFirewallInfo } from '@/hooks/useVMFirewallRules'
+import type { GroupUsage } from '@/hooks/useGroupUsage'
 
 vi.mock('@/lib/api/firewall', () => ({
   addSecurityGroupRule: vi.fn(),
@@ -43,6 +44,8 @@ vi.mock('@/lib/api/firewall', () => ({
   addVMRule: vi.fn(),
   deleteVMRule: vi.fn(),
   getVMRules: vi.fn(),
+  // Read by the delete dialog when it opens: the nodes' own rules.
+  getNodeRules: vi.fn(),
 }))
 
 // The deployed micro-segmentation revision the membership of the zone groups comes from (UA44): none by default.
@@ -62,6 +65,16 @@ vi.mock('@/lib/microseg/useLastRevision', () => ({
   }),
 }))
 
+// The zone tags as the zone map reads them: none by default, so the tags of the guest rows apply.
+const zoneGuests = vi.hoisted(() => ({ guests: [] as Array<{ type: string; vmid: number; tags: string[] }>, status: 'ready' as 'loading' | 'ready' | 'error', asked: [] as Array<string | null> }))
+vi.mock('../microseg/useZoneGuests', () => ({
+  useZoneGuests: (connectionId: string | null) => {
+    zoneGuests.asked.push(connectionId)
+
+    return { guests: zoneGuests.guests, status: connectionId ? zoneGuests.status : 'loading', reload: vi.fn(), unlisted: false }
+  },
+}))
+
 vi.mock('@/contexts/ToastContext', () => ({
   useToast: () => ({ showToast: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }),
 }))
@@ -69,6 +82,7 @@ vi.mock('@/contexts/ToastContext', () => ({
 import * as firewallAPI from '@/lib/api/firewall'
 
 import SecurityGroupsPanel from './SecurityGroupsPanel'
+import DeleteSecurityGroupDialog from './shared/DeleteSecurityGroupDialog'
 
 const api = firewallAPI as unknown as Record<string, ReturnType<typeof vi.fn>>
 
@@ -95,10 +109,18 @@ const WEB_VM: VMFirewallInfo = {
   rules: [{ pos: 0, type: 'group', action: 'sg-web', enable: 1 }], rulesLoaded: true, stateUnknown: false, tags: [],
 }
 
+const NO_NODES: string[] = []
+
 /** A group rule pointing at `group`, as PVE stores membership. */
 const groupRule = (group: string, pos = 0): firewallAPIType.FirewallRule => ({
   pos, type: 'group', action: group, enable: 1,
 })
+
+/** What the server read of the guests' rules: every guest by default, none of them carrying a group. */
+const usage = (groups: GroupUsage['groups'] = {}, unread = 0): GroupUsage => ({
+  total: 10, measured: 10 - unread, unread, partial: unread > 0, computedAt: '2026-11-24T10:00:00.000Z', groups,
+})
+const member = (vmid: number, name = `vm-${vmid}`, node = 'pve1') => ({ type: 'qemu' as const, vmid: String(vmid), node, name })
 
 function props(overrides: Partial<React.ComponentProps<typeof SecurityGroupsPanel>> = {}) {
   return {
@@ -108,7 +130,6 @@ function props(overrides: Partial<React.ComponentProps<typeof SecurityGroupsPane
     guestsNotScanned: 0,
     clusterRules: [] as firewallAPIType.FirewallRule[],
     hostRulesByNode: {} as Record<string, firewallAPIType.FirewallRule[]>,
-    firewallMode: 'cluster' as firewallAPIType.FirewallMode,
     selectedConnection: CONN,
     totalRules: 2,
     aliases: [{ name: 'net-mgmt', cidr: '10.99.99.0/24' }] as firewallAPIType.Alias[],
@@ -116,6 +137,10 @@ function props(overrides: Partial<React.ComponentProps<typeof SecurityGroupsPane
     reload: vi.fn(),
     loadGuestRules: vi.fn().mockResolvedValue([]),
     reloadVMFirewallRules: vi.fn().mockResolvedValue(undefined),
+    groupUsage: usage() as GroupUsage | null,
+    groupUsageLoading: false,
+    reloadGroupUsage: vi.fn().mockResolvedValue(undefined),
+    checkGroupUsage: vi.fn().mockResolvedValue(usage()),
     ...overrides,
   }
 }
@@ -164,9 +189,8 @@ describe('SecurityGroupsPanel', () => {
     expect(screen.getByText('2 rules')).toBeInTheDocument()
     expect(screen.getByText('0 rules')).toBeInTheDocument()
 
-    // sg-web is referenced by web-01, whose rules were read; outside the deployed zones the list is
-    // only what was read, which the count says with a "+" (UA44), except at 0 where "0+" would read oddly.
-    expect(screen.getByText('1+ VMs')).toBeInTheDocument()
+    // sg-web is referenced by web-01; the rules of every guest were read, so both counts are plain.
+    expect(screen.getByText(/^1 VMs?$/)).toBeInTheDocument()
     expect(screen.getByText('0 VMs')).toBeInTheDocument()
 
     expect(screen.queryByText('https in')).not.toBeInTheDocument()
@@ -179,7 +203,7 @@ describe('SecurityGroupsPanel', () => {
     // nothing; the column was dropped and this table now has the same eleven
     // columns as the other three.
     expect(screen.queryByText('Applied To')).not.toBeInTheDocument()
-    expect(screen.getByText('1+ VMs')).toBeInTheDocument()
+    expect(screen.getByText(/^1 VMs?$/)).toBeInTheDocument()
   })
 
   it('reveals a group\'s rules, with their log level, when expanded', () => {
@@ -316,13 +340,16 @@ describe('SecurityGroupsPanel', () => {
 
     const ask = await screen.findByRole('dialog')
     expect(within(ask).getByText('Delete Security Group "sg-web"?')).toBeInTheDocument()
-    expect(within(ask).getByText(/Security group sg-web and its rules will be permanently deleted/)).toBeInTheDocument()
+    expect(within(ask).getByText('This cannot be undone: the group and its rules are deleted from the cluster.')).toBeInTheDocument()
     fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(api.deleteSecurityGroup).not.toHaveBeenCalled()
 
     fireEvent.click(within(section).getByRole('button', { name: 'Delete' }))
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    const again = await screen.findByRole('dialog')
+    // The guests are read first; no guest carries the group here.
+    expect(await within(again).findByText('No guest carries this group')).toBeInTheDocument()
+    fireEvent.click(within(again).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => expect(api.deleteSecurityGroup).toHaveBeenCalledWith(CONN, 'sg-web'))
     expect(confirmSpy).not.toHaveBeenCalled()
@@ -398,7 +425,7 @@ describe('SecurityGroupsPanel', () => {
 
     const p = renderPanel()
 
-    fireEvent.click(screen.getByText('1+ VMs'))
+    fireEvent.click(screen.getByText(/^1 VMs?$/))
 
     await waitFor(() => expect(screen.getByText('Members of sg-web')).toBeInTheDocument())
 
@@ -429,7 +456,7 @@ describe('SecurityGroupsPanel', () => {
 
     // A "0 VMs" shown mid-scan reads as "unused" on a group that may well be
     // in use, so the count waits.
-    expect(screen.queryByText('1+ VMs')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^1\+? VMs?$/)).not.toBeInTheDocument()
     expect(screen.getAllByText('…')).toHaveLength(GROUPS.length)
     expect(screen.getAllByRole('button', { name: 'Loading...' })).toHaveLength(GROUPS.length)
   })
@@ -442,14 +469,12 @@ describe('SecurityGroupsPanel', () => {
     })).toBeInTheDocument()
   })
 
-  it('explains that security groups need a cluster when the node is standalone', () => {
-    renderPanel({ firewallMode: 'standalone' })
+  it('lists the groups of a single node like those of a cluster', () => {
+    renderPanel({ nodeStatus: { 'pve-solo': 'online' } })
 
-    expect(screen.getByText('Security Groups not available')).toBeInTheDocument()
-
-    // The rules table is replaced entirely, not merely disabled.
-    expect(screen.queryByText('sg-web')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'New Policy' })).not.toBeInTheDocument()
+    // A single node has the same Datacenter firewall as a cluster, groups included: nothing depends on the node count.
+    expect(screen.getByText('sg-web')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New Policy' })).toBeInTheDocument()
   })
 
   it('offers to create the first group when the connection has none', () => {
@@ -525,7 +550,7 @@ describe('SecurityGroupsPanel membership without every guest rules (UA44)', () =
     expect(within(sectionRow('pcz-web')).getByText(/^1 VMs?$/)).toBeInTheDocument()
   })
 
-  it('leaves a disabled zone group, or one with no deployed revision, unknown', () => {
+  it('does not take the tag of a disabled zone for a membership: only the rules read tell', () => {
     microseg.snapshot = { tag_prefix: 'zone-', flows: [], zones: [{ id: 'z1', name: 'web', state: 'disabled' }] }
     renderPanel({ securityGroups: ZONE_GROUPS, vmFirewallData: [tagged(1, ['zone-web'])] })
 
@@ -533,7 +558,7 @@ describe('SecurityGroupsPanel membership without every guest rules (UA44)', () =
   })
 
   it('says why the count is unknown in the chip tooltip', () => {
-    renderPanel()
+    renderPanel({ groupUsage: usage({}, 3) })
 
     expect(within(sectionRow('sg-web')).getByRole('button', { name: /^Proxmox keeps no member list/ })).toBeInTheDocument()
   })
@@ -544,7 +569,7 @@ describe('SecurityGroupsPanel membership without every guest rules (UA44)', () =
     const loadGuestRules = vi.fn().mockResolvedValue([groupRule('pcz-web', 3)])
     renderPanel({ securityGroups: ZONE_GROUPS, vmFirewallData: [tagged(7, ['zone-web']), tagged(8, [])], loadGuestRules })
 
-    fireEvent.click(within(sectionRow('pcz-web')).getByText('1 VMs'))
+    fireEvent.click(within(sectionRow('pcz-web')).getByText('1 VM'))
     await waitFor(() => expect(screen.getByText('Members of pcz-web')).toBeInTheDocument())
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Detach' }))
 
@@ -564,6 +589,303 @@ describe('SecurityGroupsPanel membership without every guest rules (UA44)', () =
       expect(getComputedStyle(screen.getByTestId('sg-dot-pcz-web')).backgroundColor).toBe('rgb(139, 92, 246)')
       expect(getComputedStyle(screen.getByTestId('sg-header-sg-db')).borderLeftColor).not.toBe('rgb(139, 92, 246)')
       expect(within(zoneHeader).getByText('pcz-web')).toBeInTheDocument()
+    })
+  })
+})
+
+describe('SecurityGroupsPanel zone groups count what the zone map counts', () => {
+  afterEach(() => {
+    cleanup()
+    microseg.snapshot = null
+    zoneGuests.guests = []
+    zoneGuests.status = 'ready'
+    zoneGuests.asked = []
+  })
+
+  const ZONES: firewallAPIType.SecurityGroup[] = [{ group: 'pcz-web', rules: [] }, { group: 'pcz-db', rules: [] }]
+  const stale = (vmid: number, tags: string[]): VMFirewallInfo => ({ ...WEB_VM, vmid, name: `vm-${vmid}`, rules: [], rulesLoaded: false, tags })
+  const deployed = () => { microseg.snapshot = { tag_prefix: 'zone-', flows: [], zones: [{ id: 'z1', name: 'web', state: 'observe' }, { id: 'z2', name: 'db', state: 'enforce' }] } }
+
+  it('follows a guest moved to another zone although the inventory and the shared rules read still have it in the old one', () => {
+    deployed()
+    // Guest 921 was moved from web to db: the inventory tags and the rules read are from before the run.
+    zoneGuests.guests = [{ type: 'qemu', vmid: 921, tags: ['zone-db'] }, { type: 'qemu', vmid: 922, tags: ['zone-web'] }]
+    renderPanel({
+      securityGroups: ZONES,
+      vmFirewallData: [stale(921, ['zone-web']), stale(922, ['zone-web'])],
+      groupUsage: usage({ 'pcz-web': [member(921), member(922)] }),
+    })
+
+    expect(within(sectionRow('pcz-web')).getByText('1 VM')).toBeInTheDocument()
+    expect(within(sectionRow('pcz-db')).getByText('1 VM')).toBeInTheDocument()
+    expect(zoneGuests.asked).toContain(CONN)
+  })
+
+  it('holds the zone counts back while the zone guests are read, and falls back to the inventory tags when they cannot be', () => {
+    deployed()
+    zoneGuests.status = 'loading'
+    renderPanel({ securityGroups: ZONES, vmFirewallData: [stale(921, ['zone-web'])] })
+    expect(within(sectionRow('pcz-web')).getByText('…')).toBeInTheDocument()
+
+    cleanup()
+    zoneGuests.status = 'error'
+    renderPanel({ securityGroups: ZONES, vmFirewallData: [stale(921, ['zone-web'])] })
+    expect(within(sectionRow('pcz-web')).getByText('1 VM')).toBeInTheDocument()
+  })
+
+  it('does not read the zone guests without a deployed revision', () => {
+    renderPanel()
+
+    expect(zoneGuests.asked.every(id => id === null)).toBe(true)
+  })
+})
+
+describe('SecurityGroupsPanel membership from the rules the server read', () => {
+  afterEach(cleanup)
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    api.deleteSecurityGroupRule.mockResolvedValue(undefined)
+    api.deleteSecurityGroup.mockResolvedValue(undefined)
+    api.deleteVMRule.mockResolvedValue(undefined)
+  })
+
+  /** A guest of the page whose rules were never read in the browser. */
+  const unread = (vmid: number): VMFirewallInfo => ({ ...WEB_VM, vmid, name: `vm-${vmid}`, rules: [], rulesLoaded: false })
+
+  it('counts the guests carrying a group although no row was opened', () => {
+    renderPanel({ vmFirewallData: [unread(201), unread(202), unread(203)], groupUsage: usage({ 'sg-db': [member(201), member(203)] }) })
+
+    expect(within(sectionRow('sg-db')).getByText('2 VMs')).toBeInTheDocument()
+    expect(within(sectionRow('sg-db')).getByRole('button', { name: /vm-201 \(201\), vm-203 \(203\)/ })).toBeInTheDocument()
+    expect(within(sectionRow('sg-web')).getByText('0 VMs')).toBeInTheDocument()
+    expect(api.getVMRules).not.toHaveBeenCalled()
+  })
+
+  it('trusts the rules read in the page over the shared read: a guest just detached leaves the count', () => {
+    const detached: VMFirewallInfo = { ...unread(201), rulesLoaded: true }
+    renderPanel({ vmFirewallData: [detached, unread(202)], groupUsage: usage({ 'sg-db': [member(201), member(202)] }) })
+
+    expect(within(sectionRow('sg-db')).getByText(/^1 VMs?$/)).toBeInTheDocument()
+  })
+
+  it('never reads "0 VMs" for a group whose guests could not all be read', () => {
+    renderPanel({ vmFirewallData: [unread(201)], groupUsage: usage({ 'sg-db': [member(201)] }, 4) })
+
+    expect(within(sectionRow('sg-db')).getByText('1+ VMs')).toBeInTheDocument()
+    expect(within(sectionRow('sg-web')).getByText('VMs not counted')).toBeInTheDocument()
+    expect(screen.queryByText('0 VMs')).not.toBeInTheDocument()
+  })
+
+  it('gives no count when the rules could not be read at all, and holds it back while they are read', () => {
+    renderPanel({ vmFirewallData: [unread(201)], groupUsage: null })
+    expect(screen.getAllByText('VMs not counted')).toHaveLength(GROUPS.length)
+
+    cleanup()
+    renderPanel({ vmFirewallData: [unread(201)], groupUsage: null, groupUsageLoading: true })
+    expect(screen.getAllByText('…')).toHaveLength(GROUPS.length)
+  })
+
+  it('asks the server for rules read again when Refresh is pressed', () => {
+    const p = renderPanel()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+
+    expect(p.reload).toHaveBeenCalled()
+    expect(p.reloadGroupUsage).toHaveBeenCalledWith(true)
+  })
+
+  describe('deleting a group', () => {
+    const openDelete = (group: string) => fireEvent.click(within(sectionRow(group)).getByRole('button', { name: 'Delete' }))
+
+    it('reads every guest, lists those carrying the group, detaches them, deletes its rules then the group', async () => {
+      const calls: string[] = []
+      api.getVMRules.mockImplementation(async (_c: string, _n: string, _t: string, vmid: number) => (
+        vmid === 201 ? [groupRule('sg-web', 0), { pos: 1, type: 'in', action: 'ACCEPT' }, groupRule('sg-web', 2)] : [groupRule('sg-web', 4)]
+      ))
+      api.deleteVMRule.mockImplementation(async (_c: string, _n: string, _t: string, vmid: number, pos: number) => { calls.push(`guest ${vmid} rule ${pos}`) })
+      api.deleteSecurityGroupRule.mockImplementation(async (_c: string, group: string, pos: number) => { calls.push(`${group} rule ${pos}`) })
+      api.deleteSecurityGroup.mockImplementation(async (_c: string, group: string) => { calls.push(`group ${group}`) })
+      let answer: (u: GroupUsage) => void = () => undefined
+      const checkGroupUsage = vi.fn().mockReturnValue(new Promise<GroupUsage>(resolve => { answer = resolve }))
+      const p = renderPanel({ vmFirewallData: [unread(201), unread(202)], checkGroupUsage })
+
+      openDelete('sg-web')
+      const ask = await screen.findByRole('dialog')
+      expect(within(ask).getByText(/Reading the rules of the guests/)).toBeInTheDocument()
+      expect(within(ask).getByRole('button', { name: 'Delete' })).toBeDisabled()
+      expect(within(ask).getByRole('button', { name: 'Cancel' })).toBeEnabled()
+      answer(usage({ 'sg-web': [member(201, 'app-01'), member(202, 'app-02', 'pve2')] }))
+
+      // Each guest on one line with its glyphs: type icon and state dot, name, VMID, then the Proxmox logo and the node.
+      const first = await within(ask).findByTestId('guest-line-qemu-201')
+      expect(first).toHaveTextContent('app-01#201pve1')
+      expect(first.querySelector('img[src*="proxmox-logo"]')).not.toBeNull()
+      expect(within(ask).getByTestId('guest-line-qemu-202')).toHaveTextContent('app-02#202pve2')
+      fireEvent.click(within(ask).getByRole('button', { name: 'Detach from 2 guests and delete' }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      // Last position first on a guest carrying the group twice, the guests before the group's own rules, the group last.
+      expect(calls).toEqual(['guest 201 rule 2', 'guest 201 rule 0', 'guest 202 rule 4', 'sg-web rule 1', 'sg-web rule 0', 'group sg-web'])
+      expect(checkGroupUsage).toHaveBeenCalledTimes(1)
+      expect(p.reload).toHaveBeenCalled()
+      expect(p.reloadGroupUsage).toHaveBeenCalled()
+      expect(p.reloadVMFirewallRules).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps the group when a guest could not be detached, and says which', async () => {
+      api.getVMRules.mockRejectedValue(new Error('pve said no'))
+      renderPanel({ checkGroupUsage: vi.fn().mockResolvedValue(usage({ 'sg-web': [member(201, 'app-01')] })) })
+
+      openDelete('sg-web')
+      fireEvent.click(await screen.findByRole('button', { name: 'Detach from 1 guest and delete' }))
+
+      expect(await screen.findByText('app-01 (201) · pve1 could not be detached: the group was not deleted')).toBeInTheDocument()
+      expect(api.deleteSecurityGroupRule).not.toHaveBeenCalled()
+      expect(api.deleteSecurityGroup).not.toHaveBeenCalled()
+    })
+
+    it('counts the guests beyond the first five on one line, and warns about those it could not check', async () => {
+      const many = Array.from({ length: 8 }, (_, i) => member(300 + i))
+      renderPanel({ checkGroupUsage: vi.fn().mockResolvedValue(usage({ 'sg-db': many }, 2)) })
+
+      openDelete('sg-db')
+      const ask = await screen.findByRole('dialog')
+
+      expect(await within(ask).findByText('and 3 more')).toBeInTheDocument()
+      expect(within(ask).getByTestId('guest-line-qemu-304')).toBeInTheDocument()
+      expect(within(ask).queryByTestId('guest-line-qemu-305')).not.toBeInTheDocument()
+      expect(within(ask).getByText('2 guests could not be checked and may still carry the group')).toBeInTheDocument()
+      expect(within(ask).getByRole('button', { name: 'Detach from 8 guests and delete' })).toBeEnabled()
+    })
+
+    it('keeps a group a cluster rule or a node rule still uses', async () => {
+      renderPanel({ clusterRules: [groupRule('sg-web')], hostRulesByNode: { pve2: [groupRule('sg-web')] } })
+
+      openDelete('sg-web')
+      const ask = await screen.findByRole('dialog')
+
+      expect(within(ask).getByText('A cluster rule still uses this group: remove that rule first')).toBeInTheDocument()
+      expect(within(ask).getByText('Rules of pve2 still use this group: remove them first')).toBeInTheDocument()
+      await within(ask).findByText('No guest carries this group')
+      expect(within(ask).getByRole('button', { name: 'Delete' })).toBeDisabled()
+    })
+
+    it('reads the rules of the nodes itself: a group a node names is kept even when the page never loaded them', async () => {
+      vi.mocked(api.getNodeRules).mockImplementation(async (_conn, node) => (node === 'pve2' ? [groupRule('sg-db')] : []))
+      renderPanel({ nodeStatus: { pve1: 'online', pve2: 'online' } })
+
+      openDelete('sg-db')
+      const ask = await screen.findByRole('dialog')
+
+      expect(await within(ask).findByText('Rules of pve2 still use this group: remove them first')).toBeInTheDocument()
+      expect(api.getNodeRules).toHaveBeenCalledWith(CONN, 'pve1')
+      expect(within(ask).getByRole('button', { name: 'Delete' })).toBeDisabled()
+    })
+
+    it('says which nodes could not be read, without holding the deletion', async () => {
+      vi.mocked(api.getNodeRules).mockImplementation(async (_conn, node) => {
+        if (node === 'pve3') throw new Error('offline')
+
+        return []
+      })
+      renderPanel({ nodeStatus: { pve1: 'online', pve3: 'offline' } })
+
+      openDelete('sg-db')
+      const ask = await screen.findByRole('dialog')
+
+      expect(await within(ask).findByText('The rules of pve3 could not be read and may still use the group')).toBeInTheDocument()
+      expect(within(ask).getByRole('button', { name: 'Delete' })).toBeEnabled()
+    })
+
+    it('keeps the group when the guests could not be checked, and checks again on Retry', async () => {
+      const checkGroupUsage = vi.fn().mockRejectedValueOnce(new Error('HTTP 500')).mockResolvedValue(usage())
+      renderPanel({ checkGroupUsage })
+
+      openDelete('sg-db')
+      const ask = await screen.findByRole('dialog')
+
+      expect(await within(ask).findByText('The guests could not be checked, so the group is kept')).toBeInTheDocument()
+      expect(within(ask).getByText('HTTP 500')).toBeInTheDocument()
+      expect(within(ask).getByRole('button', { name: 'Delete' })).toBeDisabled()
+      fireEvent.click(within(ask).getByRole('button', { name: 'Retry' }))
+
+      expect(await within(ask).findByText('No guest carries this group')).toBeInTheDocument()
+      fireEvent.click(within(ask).getByRole('button', { name: 'Delete' }))
+      await waitFor(() => expect(api.deleteSecurityGroup).toHaveBeenCalledWith(CONN, 'sg-db'))
+    })
+
+    it('shows only the answer of the check asked last', async () => {
+      let failFirst: (e: Error) => void = () => undefined
+      const first = vi.fn(() => new Promise<GroupUsage>((_resolve, reject) => { failFirst = reject }))
+      const second = vi.fn().mockResolvedValue(usage())
+      const dialog = (check: () => Promise<GroupUsage>) => (
+        <DeleteSecurityGroupDialog groupName='sg-db' connectionId={CONN} rules={[]} scope={{ cluster: false, nodes: [] }} nodes={NO_NODES} check={check} onClose={vi.fn()} onDeleted={vi.fn()} />
+      )
+      const { rerender } = renderWithProviders(dialog(first))
+
+      await waitFor(() => expect(first).toHaveBeenCalled())
+      // Another check is asked while the first still runs (what the double effect of development does).
+      rerender(dialog(second))
+      expect(await screen.findByText('No guest carries this group')).toBeInTheDocument()
+      failFirst(new Error('aborted'))
+      await Promise.resolve()
+
+      expect(screen.queryByText('The guests could not be checked, so the group is kept')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
+    })
+
+    it('shows what Proxmox answered when the deletion itself fails', async () => {
+      api.deleteSecurityGroup.mockRejectedValue(new Error('group is locked'))
+      renderPanel()
+
+      openDelete('sg-db')
+      const ask = await screen.findByRole('dialog')
+      await within(ask).findByText('No guest carries this group')
+      fireEvent.click(within(ask).getByRole('button', { name: 'Delete' }))
+
+      expect(await within(ask).findByText('group is locked')).toBeInTheDocument()
+    })
+  })
+
+  describe('rules naming a group that no longer exists', () => {
+    const orphaned = () => usage({ 'la-test-01': [member(103, 'VMTest3')], gone: [member(103, 'VMTest3'), member(104, 'other')], 'sg-web': [member(100, 'web-01')] })
+
+    it('says how many guests still name a deleted group, and which groups', () => {
+      renderPanel({ groupUsage: orphaned() })
+
+      expect(within(screen.getByTestId('sg-orphans')).getByText('2 guests still name a security group that no longer exists: gone, la-test-01')).toBeInTheDocument()
+    })
+
+    it('shows nothing when every group named exists', () => {
+      renderPanel({ groupUsage: usage({ 'sg-web': [member(100, 'web-01')] }) })
+
+      expect(screen.queryByTestId('sg-orphans')).not.toBeInTheDocument()
+    })
+
+    it('removes those rules from each guest once confirmed, then reads the usage again', async () => {
+      api.getVMRules.mockImplementation(async (_c: string, _n: string, _t: string, vmid: number) => (vmid === 103 ? [groupRule('la-test-01', 0), groupRule('gone', 1)] : [groupRule('gone', 5)]))
+      const p = renderPanel({ groupUsage: orphaned() })
+
+      fireEvent.click(within(screen.getByTestId('sg-orphans')).getByRole('button', { name: 'Remove these references' }))
+      const ask = await screen.findByRole('dialog')
+      expect(within(ask).getAllByTestId('guest-line-qemu-103').map(l => l.textContent)).toEqual(['VMTest3#103pve1gone', 'VMTest3#103pve1la-test-01'])
+      expect(within(ask).getAllByTestId('guest-line-qemu-103')[0].querySelector('img[src*="proxmox-logo"]')).not.toBeNull()
+      fireEvent.click(within(ask).getByRole('button', { name: 'Remove these references' }))
+
+      await waitFor(() => expect(p.reloadGroupUsage).toHaveBeenCalled())
+      expect(api.deleteVMRule.mock.calls.map(c => `${c[3]}:${c[4]}`)).toEqual(['103:1', '104:5', '103:0'])
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    })
+
+    it('keeps the dialog open with the error when a removal fails', async () => {
+      api.getVMRules.mockRejectedValue(new Error('node unreachable'))
+      renderPanel({ groupUsage: orphaned() })
+
+      fireEvent.click(within(screen.getByTestId('sg-orphans')).getByRole('button', { name: 'Remove these references' }))
+      fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove these references' }))
+
+      expect(await screen.findByText('node unreachable')).toBeInTheDocument()
     })
   })
 })

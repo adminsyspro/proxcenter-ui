@@ -11,7 +11,7 @@ const LOCAL_DEST = '+pcz-_local'
 
 /** The kinds the engine reports (drift.go), in the order the sub-tab documents them. */
 export const DRIFT_KINDS = [
-  'unzoned_running', 'nic_firewall_off', 'foreign_accept', 'ipset_out_of_sync', 'member_without_ip', 'ambiguous_zone', 'object_collision',
+  'unzoned_running', 'nic_firewall_off', 'foreign_accept', 'foreign_group', 'ipset_out_of_sync', 'member_without_ip', 'ambiguous_zone', 'object_collision',
   'egress_rule_missing', 'egress_rule_misplaced', 'egress_rule_verdict', 'known_rule_missing', 'known_rule_extra', 'local_set_desync', 'egress_no_subnet',
   'ipfilter_off', 'ipfilter_list_changed', 'ipfilter_no_address', 'ipfilter_address_held', 'ipfilter_manual', 'unzoned_same_network',
 ] as const
@@ -53,6 +53,8 @@ const FIX_OF: Record<(typeof DRIFT_KINDS)[number], DriftFix | null> = {
   ambiguous_zone: 'assign',
   nic_firewall_off: 'plan',
   foreign_accept: null,
+  // A group attached outside micro-segmentation: reviewed or detached in Security Groups, never by the engine.
+  foreign_group: null,
   ipset_out_of_sync: 'plan',
   member_without_ip: null,
   object_collision: null,
@@ -107,6 +109,7 @@ function valuesOf(d: MicrosegDrift, t: Translate): Record<string, string | numbe
     rule: ruleOf(detail),
     pos: typeof detail.pos === 'number' ? detail.pos : '-',
     object: text(d.object),
+    group: text(detail.group),
     desired: list(detail.desired),
     actual: list(detail.actual),
     zone: text(detail.zone),

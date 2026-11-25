@@ -17,6 +17,7 @@ import { pveFetch } from '@/lib/proxmox/client'
 import { audit } from '@/lib/audit'
 import { withAudit } from '@/lib/audit/withAudit'
 import { forgetGuestCoverage } from '@/lib/firewall/guestCoverage'
+import { forgetGroupUsage } from '@/lib/firewall/groupUsage'
 import { noteGuestNicFirewall } from '@/lib/inventory/guestDiskTotals'
 import { PUBLISH_CONFIRM_ABOVE, isFail, parsePublishBody, scopeKey, type PublishResult } from '@/lib/firewall/publishOps'
 import { executePublish, publishStatus, publishSummary, type PublishIO } from '@/lib/firewall/publish'
@@ -54,6 +55,7 @@ function pveIO(conn: Awaited<ReturnType<typeof getConnectionById>>, connectionId
     guestWritten: (scope, what) => {
       if (what === 'nic') noteGuestNicFirewall(connectionId, scope.vmType, scope.vmid, true)
       forgetGuestCoverage(connectionId, { type: scope.vmType, vmid: scope.vmid })
+      forgetGroupUsage(connectionId, { type: scope.vmType, vmid: scope.vmid })
     },
   }
 }

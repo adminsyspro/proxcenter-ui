@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, within } from '@testing-library/react'
 
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
+import type { MicrosegLogNode } from '@/lib/microseg/types'
 
 import {
   calls, flow, mock, policy, renderTab, reply, resetMocks, revisionWithSnapshot, status, zone, REVISION_HEAD,
@@ -400,6 +401,30 @@ describe('banner: the log reader load', () => {
     expect(tip.textContent).toContain('pve2 · 5 lines/min · 0 sec behind')
   })
 
+  it('recommends the forwarder, with a link to the Logs tab of the connection, when the API read met a full page', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ engine: { paused_until: null, held: false, last_runs: {}, last_log: null, log_nodes: [node({ full_pages_24h: 2, source: 'api' })] } }))
+    renderTab()
+    const line = await screen.findByTestId('log-forwarder-advice')
+    expect(line.textContent).toContain('Firewall logs arrive faster than the Proxmox API can read them: switch this cluster to forwarder mode.')
+    expect(within(line).getByRole('link', { name: 'Open the log settings' }).getAttribute('href')).toBe('/settings?tab=connections&connection=c1&connectionTab=logs')
+  })
+
+  it('says nothing of it while the API read keeps up', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ engine: { paused_until: null, held: false, last_runs: {}, last_log: null, log_nodes: [node()] } }))
+    renderTab()
+    await bannerReady()
+    expect(screen.queryByTestId('log-forwarder-advice')).toBeNull()
+  })
+
+  // The full pages of the last 24 hours outlive a switch to the forwarder: they were the API's.
+  it('neither recommends it nor says the log is behind once the cluster is in forwarder mode', async () => {
+    mock.routes['GET /status'] = () => reply(200, status({ engine: { paused_until: null, held: false, last_runs: {}, last_log: null, log_nodes: [node({ full_pages_24h: 3, source: 'forwarder', state: 'installed', last_line_at: new Date().toISOString() })] } }))
+    renderTab()
+    await screen.findByText('Logs by forwarder')
+    expect(screen.queryByTestId('log-forwarder-advice')).toBeNull()
+    expect(screen.queryByText('Log behind')).toBeNull()
+  })
+
   it('says a long lag in minutes, then hours', async () => {
     mock.routes['GET /status'] = () => reply(200, status({ engine: { paused_until: null, held: false, last_runs: {}, last_log: null, log_nodes: [node({ full_pages_24h: 1, lag_seconds: 120 }), node({ node: 'pve2', lag_seconds: 600 }), node({ node: 'pve3', lag_seconds: 36000 })] } }))
     renderTab()
@@ -408,5 +433,48 @@ describe('banner: the log reader load', () => {
     expect(tip).toContain('pve1 · 82 lines/min · 120 sec behind')
     expect(tip).toContain('pve2 · 82 lines/min · 10 min behind')
     expect(tip).toContain('pve3 · 82 lines/min · 10 hr behind')
+  })
+})
+
+describe('banner: a cluster whose logs come by forwarder', () => {
+  const last = new Date(Date.now() - 12_000).toISOString()
+  const fwd = (over: Partial<MicrosegLogNode> = {}): MicrosegLogNode => ({
+    node: 'pve1', lines_last: 400, lines_per_min_15m: 82, lag_seconds: 12, full_pages_24h: 0, source: 'forwarder', state: 'installed', last_line_at: last, ...over,
+  })
+  const engine = (nodes: MicrosegLogNode[]) => status({ engine: { paused_until: null, held: false, last_runs: {}, last_log: null, log_nodes: nodes } })
+
+  it('says the source with a plain chip, and the reader of each node on hover', async () => {
+    mock.routes['GET /status'] = () => reply(200, engine([fwd(), fwd({ node: 'pve2', lines_per_min_15m: 5 })]))
+    renderTab()
+    const chip = await screen.findByText('Logs by forwarder')
+
+    expect(chip.closest('.MuiChip-colorWarning')).toBeNull()
+    expect(screen.queryByText('Log behind')).toBeNull()
+    fireEvent.mouseOver(chip)
+    const tip = (await screen.findByRole('tooltip')).textContent
+
+    expect(tip).toContain('pve1 · forwarder · 82 lines/min · 12 sec behind')
+    expect(tip).toContain('pve2 · forwarder · 5 lines/min · 12 sec behind')
+  })
+
+  it('warns, with the count, when a forwarder is silent or missing', async () => {
+    mock.routes['GET /status'] = () => reply(200, engine([fwd(), fwd({ node: 'pve2', silent: true, lag_seconds: 600 }), fwd({ node: 'pve3', state: 'failed', last_line_at: undefined })]))
+    renderTab()
+    const chip = await screen.findByText('Log forwarder: 2 nodes to look at')
+
+    expect(chip.closest('.MuiChip-colorWarning')).toBeTruthy()
+    fireEvent.mouseOver(chip)
+    const tip = (await screen.findByRole('tooltip')).textContent
+
+    expect(tip).toContain('pve2 · forwarder silent · last line 10 min ago')
+    expect(tip).toContain('pve3 · no forwarder')
+  })
+
+  it('draws no forwarder chip for a cluster read through the API', async () => {
+    mock.routes['GET /status'] = () => reply(200, engine([{ node: 'pve1', lines_last: 400, lines_per_min_15m: 82, lag_seconds: 12, full_pages_24h: 0, source: 'api' }]))
+    renderTab()
+    await bannerReady()
+
+    expect(screen.queryByText('Logs by forwarder')).toBeNull()
   })
 })

@@ -5308,6 +5308,10 @@
         "pbsOps": {
           "label": "Servidor de copias",
           "features": "actualizaciones del servidor de copias: actualización de paquetes, reinicio, modo de mantenimiento de los datastores"
+        },
+        "logForwarder": {
+          "label": "Reenvío de registros del cortafuegos",
+          "features": "microsegmentación en modo reenvío: instala y retira el agente de reenvío de registros en los nodos (equivalente a root)"
         }
       }
     },
@@ -5572,6 +5576,7 @@
     "connectionTabAuth": "Autenticación",
     "connectionTabSsh": "SSH",
     "connectionTabMigrations": "Migraciones",
+    "connectionTabLogs": "Registros",
     "warmZeroRateLimitLabel": "Límite de puesta a cero thick:",
     "warmZeroRateLimitCaption": "Regula la puesta a cero de los destinos LVM thick antes de una copia warm hacia este clúster. Un valor introducido en el diálogo de migración prevalece para esa migración.",
     "integrityCheck": "Verificar cada disco copiado antes de entregar la VM",
@@ -5742,6 +5747,129 @@
     "sshTrustNewHostKey": "Confiar en la nueva clave",
     "sshTrustHostKeyHelper": "Compare esta huella con la que indica el propio host antes de confiar en ella: ssh-keygen -lf sobre sus archivos /etc/ssh/ssh_host_*_key.pub.",
     "sshTrustFailed": "No se confió en la clave: {error}",
+    "logCollection": {
+      "mode": "Registros del cortafuegos de las VM",
+      "modeApi": "API",
+      "modeForwarder": "Reenvío",
+      "modeAdvice": "Reenvío recomendado para un gran volumen de registros.",
+      "advanced": "Ajustes avanzados",
+      "modeHelp": "Cómo llegan a la microsegmentación los registros del cortafuegos de las VM y contenedores, escritos en cada nodo: leídos por la API de Proxmox, o enviados por un agente de reenvío que ProxCenter instala en cada nodo por SSH. Un clúster usa uno u otro, nunca los dos.",
+      "blockedSsh": "Active el acceso SSH en esta conexión para elegir el reenvío.",
+      "blockedPolicy": "Aplique una política de microsegmentación en este clúster para elegir el reenvío.",
+      "receiver": "Dirección del receptor",
+      "receiverHost": "Dirección",
+      "receiverPort": "Puerto",
+      "receiverHelp": "Dónde alcanzan los nodos a ProxCenter: su dirección (la dirección virtual en HA) y un puerto TCP, que debe abrirse desde los nodos.",
+      "queue": "Cola local por nodo",
+      "queueUnit": "MB",
+      "queueHelp": "Espacio en disco que pueden ocupar las líneas en espera en un nodo en una rotación del registro, mientras el receptor no esté accesible. Más allá, las líneas más antiguas se descartan y se cuentan.",
+      "budget": "Presupuesto de ingesta por nodo",
+      "budgetUnit": "líneas/min",
+      "budgetHelp": "Por encima de este ritmo el receptor deja de leer un nodo, que conserva sus líneas hasta la pasada siguiente. Limita lo que un invitado que escanea puertos hace almacenar a ProxCenter.",
+      "range": "{min} a {max}",
+      "apply": "Aplicar",
+      "check": "Comprobar los nodos",
+      "checked": "Nodos comprobados.",
+      "loadFailed": "No se pudo leer la recogida de registros de este clúster.",
+      "applied": "Ajustes aplicados.",
+      "invalid": {
+        "receiver_host": "Una dirección IP o un nombre de host.",
+        "receiver_port": "Un puerto de 1 a 65535.",
+        "queue_mb": "De {min} a {max} MB.",
+        "budget_lines_per_min": "De {min} a {max} líneas por minuto."
+      },
+      "confirm": {
+        "installTitle": "¿Instalar el agente de reenvío de registros?",
+        "installBody": "ProxCenter instala por SSH un agente de reenvío en cada nodo del clúster: un programa en /usr/local/lib/proxcenter, su configuración en /etc/proxcenter y el servicio proxcenter-logfwd. Los registros del cortafuegos dejan entonces de leerse por la API de Proxmox.",
+        "removeTitle": "¿Volver a la lectura por la API?",
+        "removeBody": "ProxCenter retira el agente de reenvío de todos los nodos del clúster y vuelve a leer los registros del cortafuegos por la API de Proxmox, desde donde se detuvieron los agentes.",
+        "updateTitle": "¿Actualizar los agentes de reenvío?",
+        "updateBody": "ProxCenter escribe por SSH los nuevos ajustes en cada nodo del clúster y reinicia los agentes. No se pierde ninguna línea.",
+        "install": "Instalar",
+        "remove": "Retirar",
+        "update": "Actualizar",
+        "cancel": "Cancelar"
+      },
+      "preflightFailed": "No se ha cambiado nada: {count, plural, one {# nodo no está listo} other {# nodos no están listos}}.",
+      "problems": {
+        "ssh_unreachable": "SSH no responde",
+        "host_key_unconfirmed": "su clave de host SSH no está confirmada (Ajustes, Comandos SSH, Claves de host SSH)",
+        "sudo_missing": "faltan las reglas sudo del perfil de reenvío de registros ({detail})",
+        "systemd_unknown": "no se pudo leer la versión de systemd",
+        "receiver_unreachable": "no alcanza la dirección y el puerto del receptor",
+        "other": "no está listo ({code})"
+      },
+      "refusals": {
+        "SSH_DISABLED": "El acceso SSH no está activado en esta conexión.",
+        "NO_POLICY": "Este clúster no tiene una política de microsegmentación aplicada.",
+        "BUSY": "Ya hay una instalación o una retirada en curso en este clúster.",
+        "NOT_LEADER": "El orquestador que respondió no es el líder. Inténtelo de nuevo en un momento.",
+        "INVALID": "Estos ajustes fueron rechazados.",
+        "FEATURE_REQUIRED": "La microsegmentación no está en la licencia.",
+        "ORCHESTRATOR_UNAVAILABLE": "El orquestador no respondió.",
+        "default": "La solicitud falló."
+      },
+      "nodes": "Agente de reenvío de cada nodo",
+      "noNodes": "Ningún agente de reenvío en los nodos: los registros del cortafuegos de las VM y contenedores se leen por la API de Proxmox.",
+      "columns": {
+        "node": "Nodo",
+        "state": "Estado",
+        "version": "Versión",
+        "lastLine": "Última línea",
+        "rate": "Líneas/min",
+        "queue": "Cola",
+        "dropped": "Descartadas"
+      },
+      "nodeState": {
+        "installing": "Instalando",
+        "installed": "En marcha",
+        "failed": "Fallido",
+        "removeFailed": "Retirada fallida",
+        "removing": "Retirando",
+        "missing": "No instalado",
+        "silent": "Sin señal",
+        "drifted": "Modificado",
+        "paused": "Retenido"
+      },
+      "variantAdm": "grupo adm",
+      "variantAdmHelp": "Este nodo tiene un systemd anterior a 253: el agente abre él mismo el registro, como miembro del grupo adm, en lugar de recibir un único descriptor de solo lectura.",
+      "never": "nunca",
+      "details": "Detalles",
+      "retry": "Reintentar",
+      "removeNode": "Retirar",
+      "install": "Instalar",
+      "detail": {
+        "error": "Último error: {error}",
+        "silent": "No ha llegado nada de este nodo desde hace dos minutos. Sus líneas esperan en el nodo; mientras tanto no se lee nada por la API.",
+        "paused": "Se ha alcanzado el presupuesto de ingesta: el nodo conserva sus líneas hasta la pasada siguiente.",
+        "budgetHits": "Presupuesto alcanzado {count, plural, one {# vez} other {# veces}} en 24 horas.",
+        "missing": "Este nodo no tiene agente de reenvío: su registro del cortafuegos no se lee.",
+        "left": "Este nodo ya no forma parte del clúster de Proxmox. Retirar desinstala su reenviador, o lo olvida si el nodo no responde."
+      },
+      "drift": {
+        "binary": "El programa presente en el nodo no es el que instaló ProxCenter.",
+        "stopped": "El servicio está detenido.",
+        "disabled": "El servicio está desactivado.",
+        "missing": "El programa ha desaparecido del nodo."
+      },
+      "run": {
+        "install": "Instalación en curso",
+        "uninstall": "Retirada en curso"
+      },
+      "steps": {
+        "queued": "en espera",
+        "check": "comprobando el nodo",
+        "binary": "copiando el programa",
+        "key": "creando la clave",
+        "config": "escribiendo la configuración",
+        "start": "iniciando el servicio",
+        "connect": "esperando la primera conexión",
+        "stop": "deteniendo el servicio",
+        "remove": "eliminando los archivos",
+        "verify": "comprobando que no queda nada",
+        "done": "terminado"
+      }
+    },
     "connectionUsage": {
       "checking": "Comprobando qué usa esta conexión…",
       "intro": "Esta conexión todavía está en uso. Quite primero estos vínculos, cada uno desde su propia página:",
@@ -5757,7 +5885,8 @@
         "vdcMoves": "Movimientos de vDC en curso",
         "complianceProfiles": "Perfiles de cumplimiento",
         "slaWindows": "Ventanas de mantenimiento SLA",
-        "restoreDrillSchedules": "Planificaciones de pruebas de restauración"
+        "restoreDrillSchedules": "Planificaciones de pruebas de restauración",
+        "logForwarders": "Reenvío de los registros del cortafuegos (nodos)"
       },
       "apiTokensTitle": "Tokens de API limitados a esta conexión",
       "apiTokensHint": "Ya no alcanzarán nada una vez eliminada. Esto no bloquea la eliminación."
@@ -13697,7 +13826,16 @@
         "running": "En curso"
       },
       "logNode": "{node} · {rate} líneas/min · retraso {lag}",
+      "logNodeForwarder": "{node} · reenvío · {rate} líneas/min · {lag} de retraso",
+      "logNodeIdle": "{node} · reenvío · ninguna línea recibida todavía",
+      "logNodeSilent": "{node} · reenvío sin señal · última línea hace {lag}",
+      "logNodeSilentNever": "{node} · reenvío sin señal · ninguna línea recibida",
+      "logNodeNotInstalled": "{node} · sin agente de reenvío",
+      "logNodeChanged": "{node} · agente de reenvío modificado en el nodo",
+      "logForwarder": "Registros por reenvío",
+      "logForwarderTrouble": "Reenvío de registros: {count, plural, one {# nodo} other {# nodos}} por revisar",
       "logBehind": "Registro atrasado",
+      "logForwarderAdvice": "Los registros del cortafuegos llegan más rápido de lo que la API de Proxmox puede leerlos: cambie este clúster al modo Reenvío.",
       "unreachableSince": "El clúster {name} está inaccesible desde {time}: sus reglas no se actualizan, los demás clústeres conservan sus últimas direcciones conocidas.",
       "unreachableSinceSingle": "Este clúster está inaccesible desde {time}: sus reglas no se actualizan.",
       "firewallOff": "{name}: el cortafuegos del clúster está desactivado, allí no se filtra nada.",
@@ -14667,6 +14805,7 @@
         "firstSeen": "Visto por primera vez",
         "lastSeen": "Visto por última vez",
         "addresses": "Direcciones de ejemplo",
+        "node": "Registrado por el nodo",
         "trafficTitle": "Tráfico de las últimas 24 horas",
         "trafficTotal": "{count, plural, one {# impacto} other {# impactos}}",
         "trafficLoading": "Leyendo el historial...",
@@ -15066,6 +15205,7 @@
       "checking": "Comprobando el clúster...",
       "runAgain": "Repetir",
       "openWizard": "Abrir el asistente de despliegue",
+      "openLogSettings": "Abrir los ajustes de registros",
       "raiseLogRate": "Elevar durante la observación",
       "busy": "El motor está terminando una pasada o una aplicación en este clúster, inténtelo de nuevo en un momento.",
       "noClient": "No hay ningún cliente de Proxmox disponible para esta conexión.",
@@ -15093,6 +15233,18 @@
           "hostRulesUnreadable": "No se pudieron leer las reglas del cortafuegos del nodo {node}: no se puede comprobar el acceso de administración.",
           "missingForNodes": "Ninguna regla mantiene abierto el puerto {ports} desde {ips} en {nodes}: activar el cortafuegos podría dejar fuera a ProxCenter.",
           "missingOn": "Ninguna regla mantiene abierto el puerto {ports} en {nodes}: activar el cortafuegos podría cortar su acceso."
+        },
+        "log_collection": {
+          "title": "Recogida de registros",
+          "passApi": "Los registros del cortafuegos se leen por la API de Proxmox y la lectura va al día.",
+          "passForwarder": "El agente de reenvío de cada nodo entrega sus líneas.",
+          "behind": "La lectura por la API no va al día en {nodes}: pueden faltar líneas. Un agente de reenvío en los nodos elimina el límite.",
+          "behindNoSsh": "La lectura por la API no va al día en {nodes}: pueden faltar líneas. Un agente de reenvío en los nodos elimina el límite; requiere acceso SSH en la conexión.",
+          "part": {
+            "silent": "sin señal: {nodes}",
+            "not_installed": "sin agente de reenvío: {nodes}",
+            "drifted": "agente modificado: {nodes}"
+          }
         },
         "log_ratelimit": {
           "title": "Límite de tasa del registro",

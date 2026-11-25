@@ -181,6 +181,25 @@ async function microsegPolicy(connectionId: string): Promise<string[]> {
   return links.map(l => names.get(l.connection_id) || l.connection_id)
 }
 
+/**
+ * The nodes that still hold a firewall log forwarder of the cluster
+ * (micro-segmentation, forwarder mode), installed or left by a removal that
+ * failed. They are removed over the SSH access of the connection, so they
+ * must go first: put the collection back in API mode, or retry the node.
+ * Read from the orchestrator's table in the shared database, as drsRules
+ * does. No table (Community edition, older orchestrator): nothing to list.
+ */
+async function logForwarders(connectionId: string): Promise<string[]> {
+  try {
+    const rows = await prisma.$queryRaw<{ node: string | null }[]>`
+      SELECT node FROM logfwd_nodes WHERE connection_id = ${connectionId} ORDER BY node`
+
+    return rows.map(r => r.node).filter((n): n is string => typeof n === 'string' && n !== '')
+  } catch {
+    return []
+  }
+}
+
 const none = async (): Promise<string[]> => []
 
 export async function connectionUsage(
@@ -189,7 +208,7 @@ export async function connectionUsage(
   { callerTenantId }: { callerTenantId: string }
 ): Promise<ConnectionUsage> {
   const isPve = conn.type === 'pve'
-  const [owner, vdcs, pbsVdcs, sr, microseg, rules, migrations, vdcMoves, profiles, windows, drills, apiTokens] = await Promise.all([
+  const [owner, vdcs, pbsVdcs, sr, microseg, rules, migrations, vdcMoves, profiles, windows, drills, forwarders, apiTokens] = await Promise.all([
     tenantOwner(conn, callerTenantId),
     isPve ? vdcsOn(connectionId) : none(),
     conn.type === 'pbs' ? vdcsBackingUpTo(connectionId) : none(),
@@ -201,6 +220,7 @@ export async function connectionUsage(
     complianceProfiles(connectionId),
     slaWindows(connectionId),
     restoreDrillSchedules(connectionId),
+    isPve ? logForwarders(connectionId) : none(),
     apiTokensLimitedTo(connectionId),
   ])
 
@@ -217,6 +237,7 @@ export async function connectionUsage(
     complianceProfiles: profiles,
     slaWindows: windows,
     restoreDrillSchedules: drills,
+    logForwarders: forwarders,
   }
   const blocking: ConnectionUsage['blocking'] = {}
   for (const kind of BLOCKING_KINDS) if (found[kind].length > 0) blocking[kind] = found[kind]

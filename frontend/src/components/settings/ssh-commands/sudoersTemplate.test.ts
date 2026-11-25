@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { FRONTEND_SUDO_RULES, sudoProfilesFor, type SudoRule } from '@/lib/ssh/sudo'
+import { FRONTEND_SUDO_RULES, SUDO_PROFILES, SUDO_PROFILE_I18N, sudoProfilesFor, type SudoRule } from '@/lib/ssh/sudo'
 
 import { buildInstallCommand, buildProfileSudoersTemplate, profileRules, SETUP_BASH } from './sudoersTemplate'
 
@@ -93,5 +93,31 @@ describe('backup server profile', () => {
     expect(sudoProfilesFor('pve')).toEqual(['node-ops', 'site-recovery', 'migrations'])
     expect(sudoProfilesFor(undefined)).not.toContain('pbs-ops')
     expect(profileRules(pbsRules, 'pbs-ops').map(r => r.id)).toEqual(['pbs-apt-update', 'pbs-manager-read'])
+  })
+})
+
+// The firewall log forwarder (micro-segmentation, forwarder mode) is
+// installed by a dedicated profile an administrator grants on purpose.
+describe('the log forwarder profile', () => {
+  const forwarderRules: SudoRule[] = [
+    { id: 'logfwd-install', profile: 'log-forwarder', path: '/usr/bin/install', args: '^-D -m (0755|0644|0600) -o root -g root /dev/stdin (/usr/local/lib/proxcenter/pxc-logfwd|/etc/proxcenter/logfwd\\.conf)$', usedBy: 'Connection > Logs', example: '-D -m 0600 -o root -g root /dev/stdin /etc/proxcenter/logfwd.conf' },
+    { id: 'logfwd-systemctl', profile: 'log-forwarder', path: '/usr/bin/systemctl', args: '^(daemon-reload|(enable|restart|disable --now) proxcenter-logfwd\\.service)$', usedBy: 'Connection > Logs', example: 'restart proxcenter-logfwd.service' },
+    { id: 'apt-update', profile: 'node-ops', path: '/usr/bin/apt-get', args: '^update -qq$', usedBy: 'Rolling updates', example: 'update -qq' },
+  ]
+
+  it('gets its own alias, holding only its rules', () => {
+    const template = buildProfileSudoersTemplate(forwarderRules, ['log-forwarder'])
+
+    expect(template).toContain('Cmnd_Alias PXC_LOG_FORWARDER = ')
+    expect(template).toContain('/usr/bin/systemctl ^(daemon-reload|(enable|restart|disable --now) proxcenter-logfwd\\.service)$')
+    expect(template).toContain('proxcenter ALL=(root) NOPASSWD: PXC_LOG_FORWARDER')
+    expect(template).not.toContain('PXC_NODE_OPS')
+  })
+
+  it('is never part of what Test SSH checks: a cluster that reads its logs through the API does not need it', () => {
+    expect(sudoProfilesFor('pve')).toEqual(['node-ops', 'site-recovery', 'migrations'])
+    expect(sudoProfilesFor('pbs')).toEqual(['pbs-ops'])
+    expect(SUDO_PROFILES).toContain('log-forwarder')
+    expect(SUDO_PROFILE_I18N['log-forwarder']).toBe('logForwarder')
   })
 })

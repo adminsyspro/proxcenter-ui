@@ -5308,6 +5308,10 @@
         "pbsOps": {
           "label": "备份服务器",
           "features": "备份服务器更新：软件包升级、重启、数据存储维护模式"
+        },
+        "logForwarder": {
+          "label": "防火墙日志转发",
+          "features": "转发模式下的微分段：在节点上安装和移除日志转发器（等同于 root）"
         }
       }
     },
@@ -5572,6 +5576,7 @@
     "connectionTabAuth": "认证",
     "connectionTabSsh": "SSH",
     "connectionTabMigrations": "迁移",
+    "connectionTabLogs": "日志",
     "warmZeroRateLimitLabel": "Thick 清零速率上限：",
     "warmZeroRateLimitCaption": "控制热迁移复制到此集群之前 thick LVM 目标的清零速率。迁移对话框中输入的值对该次迁移优先。",
     "integrityCheck": "在交付虚拟机前校验每个已复制的磁盘",
@@ -5742,6 +5747,129 @@
     "sshTrustNewHostKey": "信任新密钥",
     "sshTrustHostKeyHelper": "信任之前，请将此指纹与主机自身报告的指纹进行比对：在其 /etc/ssh/ssh_host_*_key.pub 文件上运行 ssh-keygen -lf。",
     "sshTrustFailed": "未能信任该密钥：{error}",
+    "logCollection": {
+      "mode": "虚拟机防火墙日志采集",
+      "modeApi": "API",
+      "modeForwarder": "转发",
+      "modeAdvice": "日志量大时建议使用转发。",
+      "advanced": "高级设置",
+      "modeHelp": "各节点上记录的虚拟机和容器防火墙日志到达微分段的方式：通过 Proxmox API 读取，或由 ProxCenter 通过 SSH 安装在每个节点上的转发器发送。一个集群只使用其中一种，不会同时使用两种。",
+      "blockedSsh": "请在此连接上启用 SSH 访问以选择转发。",
+      "blockedPolicy": "请在此集群上应用微分段策略以选择转发。",
+      "receiver": "接收器地址",
+      "receiverHost": "地址",
+      "receiverPort": "端口",
+      "receiverHelp": "节点访问 ProxCenter 的位置：其地址（高可用时为虚拟地址）和一个 TCP 端口，需从节点侧放行。",
+      "queue": "每个节点的本地队列",
+      "queueUnit": "MB",
+      "queueHelp": "接收器无法访问时，日志轮转期间节点上等待的日志行可占用的磁盘空间。超出后，最旧的日志行将被丢弃并计数。",
+      "budget": "每个节点的摄取预算",
+      "budgetUnit": "行/分钟",
+      "budgetHelp": "超过此速率后，接收器停止读取该节点，节点将日志行保留到下一轮。它限制了扫描端口的客户机让 ProxCenter 存储的数据量。",
+      "range": "{min} 至 {max}",
+      "apply": "应用",
+      "check": "检查节点",
+      "checked": "节点已检查。",
+      "loadFailed": "无法读取此集群的日志采集。",
+      "applied": "设置已应用。",
+      "invalid": {
+        "receiver_host": "IP 地址或主机名。",
+        "receiver_port": "1 至 65535 之间的端口。",
+        "queue_mb": "{min} 至 {max} MB。",
+        "budget_lines_per_min": "每分钟 {min} 至 {max} 行。"
+      },
+      "confirm": {
+        "installTitle": "安装日志转发器？",
+        "installBody": "ProxCenter 通过 SSH 在集群的每个节点上安装转发器：/usr/local/lib/proxcenter 中的程序、/etc/proxcenter 中的配置以及 proxcenter-logfwd 服务。此后不再通过 Proxmox API 读取防火墙日志。",
+        "removeTitle": "恢复为通过 API 读取？",
+        "removeBody": "ProxCenter 从集群的所有节点移除转发器，并从转发器停止的位置起重新通过 Proxmox API 读取防火墙日志。",
+        "updateTitle": "更新转发器？",
+        "updateBody": "ProxCenter 通过 SSH 将新设置写入集群的每个节点并重启转发器。不会丢失任何日志行。",
+        "install": "安装",
+        "remove": "移除",
+        "update": "更新",
+        "cancel": "取消"
+      },
+      "preflightFailed": "未做任何更改：{count, plural, other {# 个节点}}尚未就绪。",
+      "problems": {
+        "ssh_unreachable": "SSH 无响应",
+        "host_key_unconfirmed": "其 SSH 主机密钥未确认（设置，SSH 命令，SSH 主机密钥）",
+        "sudo_missing": "缺少日志转发配置文件的 sudo 规则（{detail}）",
+        "systemd_unknown": "无法读取 systemd 版本",
+        "receiver_unreachable": "无法访问接收器的地址和端口",
+        "other": "未就绪（{code}）"
+      },
+      "refusals": {
+        "SSH_DISABLED": "此连接未启用 SSH 访问。",
+        "NO_POLICY": "此集群没有已应用的微分段策略。",
+        "BUSY": "此集群上已有安装或移除正在进行。",
+        "NOT_LEADER": "应答的编排器不是主节点。请稍后重试。",
+        "INVALID": "这些设置被拒绝。",
+        "FEATURE_REQUIRED": "许可证不包含微分段。",
+        "ORCHESTRATOR_UNAVAILABLE": "编排器未响应。",
+        "default": "请求失败。"
+      },
+      "nodes": "每个节点的转发器",
+      "noNodes": "节点上没有转发器：虚拟机和容器的防火墙日志通过 Proxmox API 读取。",
+      "columns": {
+        "node": "节点",
+        "state": "状态",
+        "version": "版本",
+        "lastLine": "最后一行",
+        "rate": "行/分钟",
+        "queue": "队列",
+        "dropped": "已丢弃"
+      },
+      "nodeState": {
+        "installing": "安装中",
+        "installed": "运行中",
+        "failed": "失败",
+        "removeFailed": "移除失败",
+        "removing": "移除中",
+        "missing": "未安装",
+        "silent": "无数据",
+        "drifted": "已变更",
+        "paused": "已暂缓"
+      },
+      "variantAdm": "adm 组",
+      "variantAdmHelp": "此节点运行的 systemd 早于 253：转发器以 adm 组成员身份自行打开日志，而不是接收单个只读描述符。",
+      "never": "从未",
+      "details": "详情",
+      "retry": "重试",
+      "removeNode": "移除",
+      "install": "安装",
+      "detail": {
+        "error": "最近的错误：{error}",
+        "silent": "该节点已两分钟没有数据到达。其日志行在节点上等待；在此期间不会通过 API 读取任何内容。",
+        "paused": "已达到摄取预算：节点将日志行保留到下一轮。",
+        "budgetHits": "24 小时内达到预算 {count, plural, other {# 次}}。",
+        "missing": "此节点没有转发器：不会读取其防火墙日志。",
+        "left": "此节点已不在 Proxmox 集群中。移除会卸载其转发工具；如果节点无响应，则将其从列表中删除。"
+      },
+      "drift": {
+        "binary": "节点上的程序不是 ProxCenter 安装的程序。",
+        "stopped": "服务已停止。",
+        "disabled": "服务已禁用。",
+        "missing": "程序已从节点上消失。"
+      },
+      "run": {
+        "install": "正在安装",
+        "uninstall": "正在移除"
+      },
+      "steps": {
+        "queued": "等待中",
+        "check": "正在检查节点",
+        "binary": "正在复制程序",
+        "key": "正在创建密钥",
+        "config": "正在写入配置",
+        "start": "正在启动服务",
+        "connect": "正在等待首次连接",
+        "stop": "正在停止服务",
+        "remove": "正在删除文件",
+        "verify": "正在确认没有残留",
+        "done": "完成"
+      }
+    },
     "connectionUsage": {
       "checking": "正在检查使用此连接的项目…",
       "intro": "此连接仍在使用中。请先在各自的页面中移除以下关联：",
@@ -5757,7 +5885,8 @@
         "vdcMoves": "进行中的 vDC 移动",
         "complianceProfiles": "合规配置文件",
         "slaWindows": "SLA 维护窗口",
-        "restoreDrillSchedules": "恢复测试计划"
+        "restoreDrillSchedules": "恢复测试计划",
+        "logForwarders": "防火墙日志转发（节点）"
       },
       "apiTokensTitle": "仅限于此连接的 API 令牌",
       "apiTokensHint": "删除后它们将无法访问任何内容。这不会阻止删除。"
@@ -13697,7 +13826,16 @@
         "running": "运行中"
       },
       "logNode": "{node} · {rate} 行/分钟 · 延迟 {lag}",
+      "logNodeForwarder": "{node} · 转发 · {rate} 行/分钟 · 滞后 {lag}",
+      "logNodeIdle": "{node} · 转发 · 尚未收到日志行",
+      "logNodeSilent": "{node} · 转发无数据 · 最后一行在 {lag} 前",
+      "logNodeSilentNever": "{node} · 转发无数据 · 未收到日志行",
+      "logNodeNotInstalled": "{node} · 没有转发器",
+      "logNodeChanged": "{node} · 节点上的转发器已变更",
+      "logForwarder": "通过转发采集日志",
+      "logForwarderTrouble": "日志转发：{count, plural, other {# 个节点}}需要查看",
       "logBehind": "日志滞后",
+      "logForwarderAdvice": "防火墙日志的产生速度超过 Proxmox API 的读取速度：请将此集群切换到转发模式。",
       "unreachableSince": "集群 {name} 自 {time} 起无法访问：其规则不会更新，其他集群保留其最后已知的地址。",
       "unreachableSinceSingle": "此集群自 {time} 起无法访问：其规则不会更新。",
       "firewallOff": "{name}：集群防火墙已关闭，那里不会过滤任何流量。",
@@ -14667,6 +14805,7 @@
         "firstSeen": "首次出现",
         "lastSeen": "最后出现",
         "addresses": "示例地址",
+        "node": "记录该流量的节点",
         "trafficTitle": "最近 24 小时的流量",
         "trafficTotal": "{count} 次命中",
         "trafficLoading": "正在读取历史记录...",
@@ -15066,6 +15205,7 @@
       "checking": "正在检查集群...",
       "runAgain": "重新检查",
       "openWizard": "打开部署向导",
+      "openLogSettings": "打开日志设置",
       "raiseLogRate": "观察期间提高",
       "busy": "引擎正在完成此集群上的一次巡检或应用，请稍后重试。",
       "noClient": "此连接没有可用的 Proxmox 客户端。",
@@ -15093,6 +15233,18 @@
           "hostRulesUnreadable": "无法读取节点 {node} 的防火墙规则：无法检查管理访问。",
           "missingForNodes": "{nodes} 上没有规则从 {ips} 保持端口 {ports} 开放：启用防火墙可能会切断 ProxCenter。",
           "missingOn": "{nodes} 上没有规则保持端口 {ports} 开放：启用防火墙可能会切断您的访问。"
+        },
+        "log_collection": {
+          "title": "日志采集",
+          "passApi": "防火墙日志通过 Proxmox API 读取，读取速度跟得上。",
+          "passForwarder": "每个节点的转发器都在交付日志行。",
+          "behind": "API 读取在 {nodes} 上跟不上：可能会漏掉日志行。在节点上安装转发器可消除此限制。",
+          "behindNoSsh": "API 读取在 {nodes} 上跟不上：可能会漏掉日志行。在节点上安装转发器可消除此限制；这需要在连接上启用 SSH 访问。",
+          "part": {
+            "silent": "无数据：{nodes}",
+            "not_installed": "没有转发器：{nodes}",
+            "drifted": "转发器已变更：{nodes}"
+          }
         },
         "log_ratelimit": {
           "title": "日志速率限制",

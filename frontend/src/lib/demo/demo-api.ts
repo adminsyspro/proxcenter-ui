@@ -2294,6 +2294,17 @@ export const EXTRA_MOCKS: MockDataMap = {
     return generateOrchestratorAlerts().filter(a => a.status === 'active')
   },
 
+  // --- Firewall log collection of a cluster (the Logs tab of its connection):
+  // both demo clusters read their logs through the Proxmox API, the default.
+  'GET:/api/v1/connections/demo-pve-cluster-001/log-collection': {
+    mode: 'api', receiver_host: '', receiver_port: 6344, queue_mb: 256, budget_lines_per_min: 30000, receiver_default: '10.10.10.5',
+    ssh_enabled: true, has_policy: true, limits: { min_queue_mb: 16, max_queue_mb: 4096, min_budget: 1000, max_budget: 300000 }, nodes: [], run: null, busy: false,
+  },
+  'GET:/api/v1/connections/demo-pve-dr-001/log-collection': {
+    mode: 'api', receiver_host: '', receiver_port: 6344, queue_mb: 256, budget_lines_per_min: 30000, receiver_default: '10.10.10.5',
+    ssh_enabled: true, has_policy: false, limits: { min_queue_mb: 16, max_queue_mb: 4096, min_budget: 1000, max_budget: 300000 }, nodes: [], run: null, busy: false,
+  },
+
   // --- Cluster options and pools, both clusters ---
   'GET:/api/v1/connections/demo-pve-cluster-001/cluster/options': {
     data: {

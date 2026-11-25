@@ -213,6 +213,7 @@ export default function ObservedFlowDialog({ connectionId, clusterIds, suggestio
           <Line label={t('dialog.firstSeen')}>{when(s.first_seen)}</Line>
           <Line label={t('dialog.lastSeen')}>{when(s.last_seen)}</Line>
           <Line label={t('dialog.addresses')}>{`${s.src_ip || (outbound && srcZone) || t('unknownEndpoint')} → ${s.dst_ip || t('unknownEndpoint')}`}</Line>
+          {s.node && <Line label={t('dialog.node')}>{s.node}</Line>}
           <Typography variant='caption' color='text.secondary'>{t('detail.sampleNote')}</Typography>
         </Section>
 

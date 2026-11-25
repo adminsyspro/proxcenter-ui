@@ -130,6 +130,156 @@ jobs:
           sarif_file: 'trivy-orchestrator.sarif'
           category: 'trivy-orchestrator'
 
+  # The report renderer sidecar renders tenant-controlled HTML (custom CSS,
+  # uploaded logos). Its tests run inside the built image with no network,
+  # so they exercise the exact WeasyPrint and libraries that ship, then
+  # Trivy scans the Debian packages (the Python tree is pinned in
+  # weasyprint/requirements.txt, which trivy-fs covers).
+  trivy-weasyprint:
+    name: Trivy — WeasyPrint Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build WeasyPrint image (local)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./weasyprint
+          file: ./weasyprint/Dockerfile
+          push: false
+          load: true
+          tags: proxcenter-weasyprint:scan
+          cache-from: type=gha,scope=weasyprint
+          cache-to: type=gha,mode=max,scope=weasyprint
+
+      - name: Test the resource policy inside the image
+        run: |
+          docker run --rm --network none \
+            -v "$GITHUB_WORKSPACE/weasyprint/tests:/app/tests:ro" \
+            proxcenter-weasyprint:scan python -m unittest discover -s /app/tests
+
+      - name: Run Trivy on WeasyPrint image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: 'proxcenter-weasyprint:scan'
+          format: 'sarif'
+          output: 'trivy-weasyprint.sarif'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          limit-severities-for-sarif: true
+          vuln-type: 'os'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        if: success() || (failure() && hashFiles('trivy-weasyprint.sarif') != '')
+        with:
+          sarif_file: 'trivy-weasyprint.sarif'
+          category: 'trivy-weasyprint'
+
+  # The HA images built from config/ha. Patroni is pip-installed without a
+  # lockfile and the postgres base ships Go binaries (gosu), so libraries are
+  # scanned along with the Alpine packages.
+  trivy-ha:
+    name: Trivy — HA ${{ matrix.image }} Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: patroni
+            dockerfile: Dockerfile.patroni
+          - image: keepalived
+            dockerfile: Dockerfile.keepalived
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build ${{ matrix.image }} image (local)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./config/ha
+          file: ./config/ha/${{ matrix.dockerfile }}
+          push: false
+          load: true
+          tags: proxcenter-${{ matrix.image }}:scan
+          # Same scope as docker-publish.yml, which builds the same image.
+          cache-from: type=gha,scope=proxcenter-${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=proxcenter-${{ matrix.image }}
+
+      - name: Run Trivy on ${{ matrix.image }} image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: proxcenter-${{ matrix.image }}:scan
+          format: 'sarif'
+          output: trivy-${{ matrix.image }}.sarif
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          limit-severities-for-sarif: true
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        if: success() || (failure() && hashFiles(format('trivy-{0}.sarif', matrix.image)) != '')
+        with:
+          sarif_file: trivy-${{ matrix.image }}.sarif
+          category: trivy-${{ matrix.image }}
+
+  # etcd and haproxy are mirrored to GHCR by docker-publish.yml and pulled
+  # from there by every HA node: scan the mirrored copy, which is what runs.
+  # Skipped on pull requests, which cannot change these images.
+  trivy-mirrored:
+    if: github.event_name != 'pull_request'
+    name: Trivy — Mirrored ${{ matrix.name }} Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: etcd
+            ref: etcd:v3.5.17
+          - name: haproxy
+            ref: haproxy:2.9-alpine
+    steps:
+      - name: Run Trivy on the mirrored ${{ matrix.name }} image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/${{ matrix.ref }}
+          format: 'sarif'
+          output: trivy-${{ matrix.name }}.sarif
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          limit-severities-for-sarif: true
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        if: success() || (failure() && hashFiles(format('trivy-{0}.sarif', matrix.name)) != '')
+        with:
+          sarif_file: trivy-${{ matrix.name }}.sarif
+          category: trivy-mirrored-${{ matrix.name }}
+
   # ========================================
   # Trivy: Scan filesystem (deps + secrets)
   # ========================================

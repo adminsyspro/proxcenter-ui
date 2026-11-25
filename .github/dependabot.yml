@@ -31,6 +31,33 @@ updates:
     labels:
       - "dependencies"
 
+  # Report renderer sidecar: the pinned Python tree (pip-compile of
+  # requirements.in, with hashes) and its digest-pinned base image.
+  - package-ecosystem: "pip"
+    directory: "/weasyprint"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: "docker"
+    directory: "/weasyprint"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+
+  # Base images of the HA images (Dockerfile.patroni, Dockerfile.keepalived).
+  - package-ecosystem: "docker"
+    directory: "/config/ha"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

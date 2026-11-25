@@ -627,6 +627,25 @@
       "resume": "继续",
       "done": "安全加固已应用。",
       "progressWithLabel": "安全加固:第 {step} 步,共 {total} 步:{label}"
+    },
+    "imageUpdate": {
+      "banner": "此集群有更新的 etcd 和 HAProxy 镜像可用（etcd {etcd}，HAProxy {haproxy}）。",
+      "apply": "更新镜像",
+      "dialogTitle": "更新 etcd 和 HAProxy 镜像",
+      "orderLabel": "顺序",
+      "order": "先 etcd，后 HAProxy，逐个节点",
+      "outageLabel": "中断",
+      "outage": "每个节点几秒，不发生主备切换",
+      "uiLabel": "本界面",
+      "ui": "轮到持有 VIP 的节点时，几秒无法访问",
+      "dataLabel": "数据",
+      "data": "无丢失",
+      "confirm": "开始更新",
+      "progress": "镜像更新：第 {step} 步，共 {total} 步",
+      "progressWithLabel": "镜像更新：第 {step} 步，共 {total} 步：{label}",
+      "failed": "镜像更新失败：{error}",
+      "retry": "重新开始",
+      "done": "etcd 和 HAProxy 镜像已更新。"
     }
   },
   "user": {

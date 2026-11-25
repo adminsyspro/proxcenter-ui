@@ -57,6 +57,11 @@ updates:
       day: "monday"
     labels:
       - "dependencies"
+    # PostgreSQL stays on its major: a major upgrade is a migration of the
+    # data directory of every cluster, never a base image bump.
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

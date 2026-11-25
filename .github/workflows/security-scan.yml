@@ -256,9 +256,9 @@ jobs:
       matrix:
         include:
           - name: etcd
-            ref: etcd:v3.5.17
+            ref: etcd:v3.5.36
           - name: haproxy
-            ref: haproxy:2.9-alpine
+            ref: haproxy:3.4.8-alpine
     steps:
       - name: Run Trivy on the mirrored ${{ matrix.name }} image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

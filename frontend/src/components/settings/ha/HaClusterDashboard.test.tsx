@@ -11,6 +11,7 @@ vi.mock('./useHaConfig', () => ({
   useHaConfig: () => ({ data: { deploymentState: 'deployed', securityLevel: 0, nodes: [] }, mutate: vi.fn() }),
 }))
 vi.mock('./HaSecurityUpgrade', () => ({ default: () => <div data-testid='ha-security-upgrade' /> }))
+vi.mock('./HaImageUpdate', () => ({ default: () => <div data-testid='ha-image-update' /> }))
 
 afterEach(() => cleanup())
 

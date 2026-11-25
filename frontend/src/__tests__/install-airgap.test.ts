@@ -108,8 +108,8 @@ describe('bundle', () => {
     expect(argv.some(a => a.startsWith('curl'))).toBe(false)
 
     const ha = [
-      'ghcr.io/adminsyspro/etcd:v3.5.17',
-      'ghcr.io/adminsyspro/haproxy:2.9-alpine',
+      'ghcr.io/adminsyspro/etcd:v3.5.36',
+      'ghcr.io/adminsyspro/haproxy:3.4.8-alpine',
       'ghcr.io/adminsyspro/proxcenter-keepalived:1.4.10',
       'ghcr.io/adminsyspro/proxcenter-patroni:1.4.10',
     ]
@@ -706,7 +706,7 @@ describe('upgrade', () => {
 describe('load (HA nodes 2 and 3)', () => {
   it('verifies the checksums and loads every manifest image, installing nothing', () => {
     const images = [
-      'ghcr.io/adminsyspro/etcd:v3.5.17',
+      'ghcr.io/adminsyspro/etcd:v3.5.36',
       'ghcr.io/adminsyspro/proxcenter-frontend:1.4.10',
       'ghcr.io/adminsyspro/proxcenter-patroni:1.4.10',
       'postgres:16-alpine',

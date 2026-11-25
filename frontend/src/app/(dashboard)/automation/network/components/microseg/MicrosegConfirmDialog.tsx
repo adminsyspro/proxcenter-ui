@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
@@ -7,7 +8,8 @@ import { DialogErrorLine, ONE_LINE_SX, OneLine } from './dialogParts'
 import TruncatedText from './TruncatedText'
 
 /** A line of explanation under the body: an icon and one line of text. */
-export type ConfirmInfoLine = { icon: string; text: string }
+/** `content` draws the line itself (a guest with its glyphs, say): it then stands for the icon and the text, and `text` only keys the line. */
+export type ConfirmInfoLine = { icon: string; text: string; content?: ReactNode }
 
 type Props = {
   open: boolean
@@ -19,6 +21,8 @@ type Props = {
   confirmLabel: string
   color?: 'primary' | 'warning' | 'error'
   busy?: boolean
+  /** The action cannot be confirmed (yet): the confirm button alone is disabled, Cancel stays. */
+  confirmDisabled?: boolean
   /** A failed confirmation, shown on one line under the body; the dialog stays open. */
   error?: string | null
   /** A second line under the error, such as the wording the server gave. */
@@ -32,7 +36,7 @@ type Props = {
 }
 
 /** Themed confirmation of an action of the Micro-segmentation tab (never a native confirm). */
-export default function MicrosegConfirmDialog({ open, title, body, infoLines = [], confirmLabel, color = 'primary', busy = false, error = null, errorDetail = null, errorLines = [], extraAction, onConfirm, onCancel }: Props) {
+export default function MicrosegConfirmDialog({ open, title, body, infoLines = [], confirmLabel, color = 'primary', busy = false, confirmDisabled = false, error = null, errorDetail = null, errorLines = [], extraAction, onConfirm, onCancel }: Props) {
   const t = useTranslations()
 
   return (
@@ -44,12 +48,12 @@ export default function MicrosegConfirmDialog({ open, title, body, infoLines = [
         <TruncatedText text={body} />
         {infoLines.length > 0 && (
           <Stack spacing={1} sx={{ mt: 2 }}>
-            {infoLines.map(line => (
+            {infoLines.map(line => (line.content ? <Box key={line.text} sx={{ minWidth: 0 }}>{line.content}</Box> : (
               <Box key={line.text} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
                 <Box component='i' className={line.icon} aria-hidden sx={{ fontSize: 18, flexShrink: 0, color: 'text.secondary' }} />
                 <OneLine text={line.text} />
               </Box>
-            ))}
+            )))}
           </Stack>
         )}
         {error && (
@@ -65,7 +69,7 @@ export default function MicrosegConfirmDialog({ open, title, body, infoLines = [
         <Button onClick={onCancel} disabled={busy} autoFocus>
           {t('common.cancel')}
         </Button>
-        <Button onClick={onConfirm} disabled={busy} variant='contained' color={color}>
+        <Button onClick={onConfirm} disabled={busy || confirmDisabled} variant='contained' color={color}>
           {confirmLabel}
         </Button>
       </DialogActions>

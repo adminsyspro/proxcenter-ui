@@ -370,7 +370,7 @@ export type MicrosegRun = {
 }
 
 export type DriftKind =
-  | 'unzoned_running' | 'nic_firewall_off' | 'foreign_accept' | 'ipset_out_of_sync'
+  | 'unzoned_running' | 'nic_firewall_off' | 'foreign_accept' | 'foreign_group' | 'ipset_out_of_sync'
   | 'member_without_ip' | 'ambiguous_zone' | 'object_collision' | 'peer_unreadable' | 'stop_lift_held' | 'cluster_firewall_off' | 'firewall_service_stopped'
   | 'ipfilter_off' | 'ipfilter_list_changed' | 'ipfilter_no_address' | 'ipfilter_address_held' | 'ipfilter_manual' | 'unzoned_same_network' | (string & {})
 

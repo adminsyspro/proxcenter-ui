@@ -195,8 +195,8 @@ export function resetGuestCoverage(): void {
   generations().clear()
 }
 
-const guestKey = (g: { type: string; vmid: string }) => `${g.type}/${g.vmid}`
-const placedKey = (g: { type: string; vmid: string; node: string }) => `${guestKey(g)}@${g.node}`
+export const guestKey = (g: { type: string; vmid: string }) => `${g.type}/${g.vmid}`
+export const placedKey = (g: { type: string; vmid: string; node: string }) => `${guestKey(g)}@${g.node}`
 
 function byKey(a: { type: string; vmid: string }, b: { type: string; vmid: string }): number {
   const ka = guestKey(a)

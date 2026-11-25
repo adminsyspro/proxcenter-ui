@@ -6416,13 +6416,6 @@
     "zeroTrustScore": "Zero Trust Score",
     "defaultPolicies": "Default Policies",
     "vmsWithDisabledFirewall": "{count, plural, one {# VM with the firewall disabled} other {# VMs with the firewall disabled}}",
-    "securityGroupsNotAvailable": "Security Groups not available",
-    "securityGroupsClusterFeature": "Security Groups are a Proxmox cluster feature. In standalone mode, firewall rules must be configured directly at the host or VM/CT level.",
-    "availableAlternatives": "Available alternatives:",
-    "aliasesDescription": "Define names for your networks and IPs",
-    "ipSetsDescription": "Group multiple IPs/networks together",
-    "vmCtRules": "VM/CT Rules",
-    "vmCtRulesDescription": "Configure rules directly on each machine",
     "newGroup": "New group",
     "noDescription": "No description",
     "groupsAndRules": "{groups} groups • {rules} rules",
@@ -9832,7 +9825,7 @@
     "unprotectedCount": "Unprotected",
     "distributedFirewall": "Distributed Firewall",
     "appliedTo": "Applied To",
-    "vmCount": "{count} VMs",
+    "vmCount": "{count, plural, one {# VM} other {# VMs}}",
     "noVmsReferencing": "No VMs reference this group",
     "newPolicy": "New Policy",
     "activeRulesCount": "{count} active",
@@ -10008,10 +10001,29 @@
     "rulesOnDemand": {
       "chip": "Rules read when opened",
       "readFailed": "The rules of this guest could not be read",
-      "membersUnknown": "Proxmox keeps no member list: a guest belongs when one of its rules carries the group, and rules are read guest by guest. The members of a deployed micro-segmentation zone group are known from its tags; for this group only the guests opened so far are listed",
+      "membersUnknown": "Proxmox keeps no member list: a guest belongs when one of its rules carries the group. The rules of some guests could not be read, so this list may be incomplete",
       "membersUnknownCount": "{count, number}+ VMs",
       "detachNoRule": "{guest} carries no rule of {group}",
       "alreadyMember": "{guests} already carry {group}: not attached again"
+    },
+    "groupUsage": {
+      "deleteBody": "This cannot be undone: the group and its rules are deleted from the cluster.",
+      "notCounted": "VMs not counted",
+      "checking": "Reading the rules of the guests to find those that carry this group…",
+      "checkFailed": "The guests could not be checked, so the group is kept",
+      "noMember": "No guest carries this group",
+      "moreMembers": "and {count, number} more",
+      "unchecked": "{count, plural, one {# guest} other {# guests}} could not be checked and may still carry the group",
+      "nodesUnchecked": "The rules of {nodes} could not be read and may still use the group",
+      "scopeCluster": "A cluster rule still uses this group: remove that rule first",
+      "scopeNodes": "Rules of {nodes} still use this group: remove them first",
+      "detachAndDelete": "Detach from {count, plural, one {# guest} other {# guests}} and delete",
+      "detachFailed": "{guest} could not be detached: the group was not deleted",
+      "orphans": "{count, plural, one {# guest still names} other {# guests still name}} a security group that no longer exists: {groups}",
+      "orphansRemove": "Remove these references",
+      "orphansConfirmTitle": "Remove the references to deleted groups?",
+      "orphansConfirmBody": "The rule naming a deleted group is removed from each guest. Their other rules are kept.",
+      "orphansRemoved": "References removed from {count, plural, one {# guest} other {# guests}}"
     },
     "vmPager": {
       "groupCount": "{count, plural, one {# VM} other {# VMs}}",
@@ -14471,6 +14483,11 @@
           "hint": "An ACCEPT rule added outside micro-segmentation opens this guest: review it in Proxmox.",
           "hintGroup": "An ACCEPT rule added outside micro-segmentation opens this group: review it in Proxmox."
         },
+        "foreign_group": {
+          "title": "Security group not attached by ProxCenter",
+          "detail": "The security group {group} attached at position {pos} was not attached by ProxCenter and is kept as it is.",
+          "hint": "Whatever this group accepts passes, even where the zone blocks: review it in Security Groups, or detach it from this guest."
+        },
         "ipset_out_of_sync": {
           "title": "IP set out of sync",
           "detail": "{object} holds {actual} instead of {desired}."
@@ -14594,6 +14611,7 @@
         "unzoned_running": "No zone",
         "nic_firewall_off": "Firewall off",
         "foreign_accept": "Foreign rule",
+        "foreign_group": "Foreign group",
         "ipset_out_of_sync": "Out of sync",
         "member_without_ip": "No IP",
         "ambiguous_zone": "Several zones",
@@ -14623,6 +14641,7 @@
         "unzoned_running": "Running guests in no zone ({count, number})",
         "nic_firewall_off": "Guest firewall off ({count, number})",
         "foreign_accept": "Rules changed by hand ({count, number})",
+        "foreign_group": "Security groups attached by hand ({count, number})",
         "ipset_out_of_sync": "IP sets out of sync ({count, number})",
         "member_without_ip": "Members without a known IP ({count, number})",
         "ambiguous_zone": "Guests in several zones ({count, number})",

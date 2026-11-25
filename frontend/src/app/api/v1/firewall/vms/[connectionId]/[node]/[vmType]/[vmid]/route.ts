@@ -14,6 +14,7 @@ import * as pveDirect from '@/lib/firewall/pveDirect'
 import { guardSessionGuest } from '@/lib/vdc/guestGuard'
 import { withAudit } from '@/lib/audit/withAudit'
 import { forgetGuestCoverage } from '@/lib/firewall/guestCoverage'
+import { forgetGroupUsage } from '@/lib/firewall/groupUsage'
 
 type RouteContext = {
   params: Promise<{ connectionId: string; node: string; vmType: string; vmid: string }>
@@ -83,6 +84,8 @@ async function postHandler(req: NextRequest, ctx: RouteContext) {
       () => orchestrator.post(orchestratorPath`/firewall/vms/${connectionId}/${node}/${vmType}/${vmid}/rules`, body),
       async () => pveDirect.addVMRule(await getConnectionById(connectionId), node, vmType, vmid, body),
     )
+    // The security group usage read this guest's rules as they were: it reads them again, alone.
+    forgetGroupUsage(connectionId, { type: vmType, vmid })
 
     return NextResponse.json(result, { status: 201 })
   } catch (e: any) {

@@ -68,6 +68,8 @@ vi.mock("@/lib/connections/connectionUsage", () => ({
 }))
 const { evictGuestCoverageMock } = vi.hoisted(() => ({ evictGuestCoverageMock: vi.fn() }))
 vi.mock("@/lib/firewall/guestCoverage", () => ({ evictGuestCoverage: evictGuestCoverageMock }))
+const { evictGroupUsageMock } = vi.hoisted(() => ({ evictGroupUsageMock: vi.fn() }))
+vi.mock("@/lib/firewall/groupUsage", () => ({ evictGroupUsage: evictGroupUsageMock }))
 
 import { DELETE as deleteRoute } from "./route"
 
@@ -104,5 +106,6 @@ describe("DELETE /api/v1/connections/[id] (cleanup)", () => {
 
     expect(res.status).toBe(200)
     expect(evictGuestCoverageMock).toHaveBeenCalledWith("pve-1")
+    expect(evictGroupUsageMock).toHaveBeenCalledWith("pve-1")
   })
 })

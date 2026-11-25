@@ -54,6 +54,7 @@ const SAMPLES: MicrosegDrift[] = [
   { kind: 'ipfilter_address_held', guest, detail: { zone: 'web', nic: 'net0', addr: '10.0.0.7', reason: 'later' } },
   { kind: 'ipfilter_manual', guest, detail: { zone: 'web', nics: ['net0'] } },
   { kind: 'unzoned_same_network', guest, detail: { name: 'stray-1', networks: ['vmbr0/20'], zones: ['web', 'db'] } },
+  { kind: 'foreign_group', guest, detail: { pos: 1, group: 'allow-any' } },
 ]
 
 describe('driftLabel', () => {
@@ -116,11 +117,20 @@ describe('driftLabel', () => {
     expect(driftLabel(SAMPLES[2], t).detail).not.toContain('group')
   })
 
+  it('names the security group attached to a zone member outside micro-segmentation, its position, and what to do', () => {
+    const label = driftLabel({ kind: 'foreign_group', guest, detail: { pos: 1, group: 'allow-any' } }, translator('en'))
+
+    expect(label.title).toBe('Security group not attached by ProxCenter')
+    expect(label.detail).toBe('The security group allow-any attached at position 1 was not attached by ProxCenter and is kept as it is.')
+    expect(label.hint).toContain('even where the zone blocks')
+    expect(label.fixable).toBe(false)
+  })
+
   it('fixes unzoned and ambiguous guests by assigning them, the NIC and ipset drifts by the plan, the rest by nothing', () => {
     const t = translator('en')
     const fixes = Object.fromEntries(SAMPLES.map(s => [s.kind, driftLabel(s, t).fix]))
     expect(fixes).toEqual({
-      unzoned_running: 'assign', ambiguous_zone: 'assign', nic_firewall_off: 'plan', foreign_accept: null,
+      unzoned_running: 'assign', ambiguous_zone: 'assign', nic_firewall_off: 'plan', foreign_accept: null, foreign_group: null,
       ipset_out_of_sync: 'plan', member_without_ip: null, object_collision: null,
       // The last sample of a kind wins: the collided ones have no fix (Proxmox holds it), the misplaced known rule is realigned.
       egress_rule_missing: null, egress_rule_misplaced: 'plan', egress_rule_verdict: null, known_rule_missing: 'plan',

@@ -6416,13 +6416,6 @@
     "zeroTrustScore": "零信任评分",
     "defaultPolicies": "默认策略",
     "vmsWithDisabledFirewall": "{count} 个 VM 未启用防火墙",
-    "securityGroupsNotAvailable": "安全组不可用",
-    "securityGroupsClusterFeature": "安全组是 Proxmox 集群功能。在独立模式下，防火墙规则必须直接在主机或 VM/CT 级别配置。",
-    "availableAlternatives": "可用替代方案：",
-    "aliasesDescription": "为您的网络和 IP 定义名称",
-    "ipSetsDescription": "将多个 IP/网络分组",
-    "vmCtRules": "VM/CT 规则",
-    "vmCtRulesDescription": "直接在每台机器上配置规则",
     "newGroup": "新建组",
     "noDescription": "无描述",
     "groupsAndRules": "{groups} 个组 • {rules} 条规则",
@@ -10008,10 +10001,29 @@
     "rulesOnDemand": {
       "chip": "打开时加载规则",
       "readFailed": "无法读取此客户机的规则",
-      "membersUnknown": "Proxmox 不维护成员列表：客户机的某条规则包含该组时即为成员，规则逐个客户机读取。已部署的微分段区域组的成员可通过其标签得知；此组仅列出已打开的客户机",
+      "membersUnknown": "Proxmox 不维护成员列表：客户机的某条规则包含该组时即为成员。部分客户机的规则无法读取，因此此列表可能不完整",
       "membersUnknownCount": "{count, number}+ 个 VM",
       "detachNoRule": "{guest} 没有 {group} 的规则",
       "alreadyMember": "{guests} 已带有 {group}：未重复附加"
+    },
+    "groupUsage": {
+      "deleteBody": "不可撤销：该组及其规则将从集群中删除。",
+      "notCounted": "VM 未统计",
+      "checking": "正在读取客户机的规则，以找出包含此组的客户机…",
+      "checkFailed": "无法检查客户机，因此保留该组",
+      "noMember": "没有客户机包含此组",
+      "moreMembers": "另有 {count, number} 个",
+      "unchecked": "有 {count, number} 个客户机无法检查，可能仍包含该组",
+      "nodesUnchecked": "无法读取 {nodes} 的规则，它们可能仍在使用该组",
+      "scopeCluster": "集群规则仍在使用此组：请先删除该规则",
+      "scopeNodes": "{nodes} 的规则仍在使用此组：请先删除这些规则",
+      "detachAndDelete": "从 {count, number} 个客户机分离并删除",
+      "detachFailed": "无法分离 {guest}：该组未被删除",
+      "orphans": "有 {count, number} 个客户机仍引用已不存在的安全组：{groups}",
+      "orphansRemove": "移除这些引用",
+      "orphansConfirmTitle": "移除对已删除组的引用？",
+      "orphansConfirmBody": "引用已删除组的规则将从每个客户机移除，其他规则保留。",
+      "orphansRemoved": "已从 {count, number} 个客户机移除引用"
     },
     "vmPager": {
       "groupCount": "{count, plural, other {# 个 VM}}",
@@ -14471,6 +14483,11 @@
           "hint": "在微分段之外添加的 ACCEPT 规则放行了此客户机：请在 Proxmox 中检查。",
           "hintGroup": "在微分段之外添加的 ACCEPT 规则放行了此组：请在 Proxmox 中检查。"
         },
+        "foreign_group": {
+          "title": "非 ProxCenter 附加的安全组",
+          "detail": "位置 {pos} 处附加的安全组 {group} 不是由 ProxCenter 附加的，将保持原样。",
+          "hint": "该组接受的流量即使在区域阻止的地方也会通过：请在安全组中检查，或将其从此客户机分离。"
+        },
         "ipset_out_of_sync": {
           "title": "IP 集未同步",
           "detail": "{object} 包含 {actual}，应为 {desired}。"
@@ -14594,6 +14611,7 @@
         "unzoned_running": "无区域",
         "nic_firewall_off": "防火墙已关闭",
         "foreign_accept": "外部规则",
+        "foreign_group": "外部组",
         "ipset_out_of_sync": "未同步",
         "member_without_ip": "无 IP",
         "ambiguous_zone": "多个区域",
@@ -14623,6 +14641,7 @@
         "unzoned_running": "不在区域内的运行中客户机（{count, number}）",
         "nic_firewall_off": "客户机防火墙已关闭（{count, number}）",
         "foreign_accept": "手动更改的规则（{count, number}）",
+        "foreign_group": "手动附加的安全组 ({count, number})",
         "ipset_out_of_sync": "未同步的 IP 集（{count, number}）",
         "member_without_ip": "没有已知 IP 的成员（{count, number}）",
         "ambiguous_zone": "位于多个区域的客户机（{count, number}）",

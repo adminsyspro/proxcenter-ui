@@ -17,6 +17,7 @@ import { usePVEConnections } from '@/hooks/useConnections'
 import { useSWRFetch } from '@/hooks/useSWRFetch'
 import { useFirewallData, Connection } from '@/hooks/useFirewallData'
 import { useVMFirewallRules } from '@/hooks/useVMFirewallRules'
+import { useGroupUsage } from '@/hooks/useGroupUsage'
 import { useHostFirewallRules } from '@/hooks/useHostFirewallRules'
 
 import DashboardTab, { type GuestFilter } from './components/DashboardTab'
@@ -117,10 +118,16 @@ export default function NetworkAutomationPage() {
   const {
     vmFirewallData, loadingVMRules, vmRulesError, guestsNotScanned, loadVMFirewallData, loadGuestRules, reloadVMFirewallRules, setVMFirewallData,
   } = useVMFirewallRules(isEnterprise ? selectedConnection || null : null)
+  const enterpriseConnection = isEnterprise ? selectedConnection || null : null
+
+  // Which guests carry which security group: read by the server (bounded there), only once this tab is shown.
+  const {
+    usage: groupUsage, loading: groupUsageLoading, reload: reloadGroupUsage, check: checkGroupUsage,
+  } = useGroupUsage(enterpriseConnection, activeTab === TAB.groups)
 
   const {
     hostRulesByNode, hostRulesError, setHostRulesByNode,
-  } = useHostFirewallRules(isEnterprise ? selectedConnection || null : null, nodesList)
+  } = useHostFirewallRules(enterpriseConnection, nodesList)
 
   // The firewall tabs write with node.manage on the connection, like the micro-segmentation: a read-only user sees
   // every write control of Firewalling, Aliases, IP Sets and Security Groups disabled, with the reason (WriteTip).
@@ -306,7 +313,6 @@ export default function NetworkAutomationPage() {
               guestsNotScanned={guestsNotScanned}
               clusterRules={clusterRules}
               hostRulesByNode={hostRulesByNode}
-              firewallMode={firewallMode}
               selectedConnection={selectedConnection}
               totalRules={totalRules}
               aliases={aliases}
@@ -315,6 +321,11 @@ export default function NetworkAutomationPage() {
               reload={loadFirewallData}
               loadGuestRules={loadGuestRules}
               reloadVMFirewallRules={reloadVMFirewallRules}
+              groupUsage={groupUsage}
+              groupUsageLoading={groupUsageLoading}
+              reloadGroupUsage={reloadGroupUsage}
+              checkGroupUsage={checkGroupUsage}
+              nodeStatus={nodeStatus}
             />
           )}
 

@@ -15,6 +15,7 @@ const h = vi.hoisted(() => ({
   pveFetch: vi.fn<(...a: any[]) => Promise<any>>(),
   audit: vi.fn<(...a: any[]) => Promise<string>>(),
   forget: vi.fn(),
+  forgetUsage: vi.fn(),
   nic: vi.fn(),
 }))
 
@@ -33,6 +34,7 @@ vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => h.audit(...a) }))
 // The route writes its own row; the wrapper (tested on its own) would skip it, it is left out here.
 vi.mock('@/lib/audit/withAudit', () => ({ withAudit: (_spec: unknown, handler: unknown) => handler }))
 vi.mock('@/lib/firewall/guestCoverage', () => ({ forgetGuestCoverage: (...a: any[]) => h.forget(...a) }))
+vi.mock('@/lib/firewall/groupUsage', () => ({ forgetGroupUsage: (...a: any[]) => h.forgetUsage(...a) }))
 vi.mock('@/lib/inventory/guestDiskTotals', () => ({ noteGuestNicFirewall: (...a: any[]) => h.nic(...a) }))
 
 import { POST } from './route'
@@ -175,5 +177,7 @@ describe('POST /api/v1/firewall/publish/[connectionId]', () => {
     expect(res.status).toBe(200)
     expect(h.nic).toHaveBeenCalledWith('conn-1', 'qemu', 101, true)
     expect(h.forget).toHaveBeenCalledWith('conn-1', { type: 'qemu', vmid: 101 })
+    // The security group usage read this guest's rules as they were: it is read again too.
+    expect(h.forgetUsage).toHaveBeenCalledWith('conn-1', { type: 'qemu', vmid: 101 })
   })
 })

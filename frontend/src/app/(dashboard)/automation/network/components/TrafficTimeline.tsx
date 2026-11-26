@@ -35,6 +35,8 @@ type Props = {
   compact?: boolean
   /** Grows with the card it is in: the chart takes the free height, never under its usual height. */
   fill?: boolean
+  /** A compact chart given room (a zone's details on the Policy sub-tab): taller than in a map panel, at a set height. */
+  tall?: boolean
   /** Opens on the Volume (once sFlow measures it): a panel opened from the map, whose tooltips told the bytes. */
   volumeFirst?: boolean
   /** False for a chart of the orchestrator's memory only (a guest): no range chips. */
@@ -62,6 +64,8 @@ export const COMPACT_TIMELINE_HEIGHT = 120
 export const COMPACT_TIMELINE_MAX_HEIGHT = 280
 /** The height of a compact chart per pixel of width. */
 const COMPACT_RATIO = 0.25
+/** The height of a tall compact chart. */
+export const COMPACT_TALL_HEIGHT = 320
 const LEFT = 36
 /** A byte scale ("57 GiB") needs a wider gutter than a count. */
 const LEFT_BYTES = 52
@@ -260,16 +264,15 @@ function LegendChips({ timeline, below = null }: { timeline: PostureTimeline; be
  * second tab, "Volume (sFlow)", shows the sFlow bytes of the same groups over the same range, only when sFlow has data
  * for the connection.
  */
-export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null, compact = false, fill = false, showRange = true, direction, onDirection, emptyText, hideVerdict = false, emptyAction, mirror = null, volumeFirst = false }: Props) {
+export default function TrafficTimeline({ phase, timeline, verdict, onVerdict, volume = null, volumeSent = true, range, onRange, rangeLock = null, compact = false, fill = false, tall = false, showRange = true, direction, onDirection, emptyText, hideVerdict = false, emptyAction, mirror = null, volumeFirst = false }: Props) {
   const t = useTranslations('networkPage.dashboard')
   const [ref, size] = useBoxSize<HTMLDivElement>()
   const [chosen, setChosen] = useState<Unit>(volumeFirst ? 'bytes' : 'events')
   // The Volume tab only exists while sFlow has data for the connection.
   const unit: Unit = volume ? chosen : 'events'
   const measured = size?.width ?? null
-  const base = compact
-    ? Math.min(COMPACT_TIMELINE_MAX_HEIGHT, Math.max(COMPACT_TIMELINE_HEIGHT, Math.round((size?.width ?? 0) * COMPACT_RATIO)))
-    : TIMELINE_HEIGHT
+  let base = TIMELINE_HEIGHT
+  if (compact) base = tall ? COMPACT_TALL_HEIGHT : Math.min(COMPACT_TIMELINE_MAX_HEIGHT, Math.max(COMPACT_TIMELINE_HEIGHT, Math.round((size?.width ?? 0) * COMPACT_RATIO)))
   const height = fill ? Math.max(base, size?.height ?? 0) : base
 
   let body: React.ReactNode

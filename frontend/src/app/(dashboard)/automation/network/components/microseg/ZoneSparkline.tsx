@@ -75,13 +75,14 @@ export function ZoneSparkCell({ state, series, outSeries = null, outState = 'obs
   const { colour, split, total, label } = useUncoveredWords(state, series, outSeries, outState)
   if (state === 'disabled') return <Typography data-zone-sparkline variant='caption' color='text.disabled' noWrap sx={{ display: 'block', minWidth: 0 }}>{t('disabled')}</Typography>
   const aria = total === null ? t('loading') : t('aria', { count: total })
+  // The words have a track of their own, the same width on every row: every line is as long as the others.
   return (
-    <Tooltip title={total === null ? '' : aria} disableInteractive>
-      <Box data-zone-sparkline sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-        <Box sx={{ flex: '1 1 0', minWidth: 48 }}>
+    <Tooltip title={total === null ? '' : <>{label}<br />{aria}</>} disableInteractive>
+      <Box data-zone-sparkline sx={{ display: 'grid', gridTemplateColumns: 'minmax(48px, 1fr) minmax(0, 40%)', alignItems: 'center', columnGap: 1, minWidth: 0 }}>
+        <Box sx={{ minWidth: 0 }}>
           <SparkLine series={series} colour={colour} second={split ? outSeries : null} secondColour={OUTBOUND_COLOUR} height={20} ariaLabel={aria} />
         </Box>
-        <Typography variant='caption' fontWeight={600} noWrap data-testid='zone-sparkline-total' sx={{ flex: '0 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</Typography>
+        <Typography variant='caption' fontWeight={600} noWrap data-testid='zone-sparkline-total' sx={{ display: 'block', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</Typography>
       </Box>
     </Tooltip>
   )

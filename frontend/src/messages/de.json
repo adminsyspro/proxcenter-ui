@@ -14484,6 +14484,7 @@
         "members": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
         "external": "Unbekannt / Extern",
         "externalHint": "Quellen, die zu keinem Gast passen: eine IP-Adresse oder ein Netz (CIDR)",
+        "externalTop": "{count, plural, one {Die gesehene Adresse} other {Die aktivsten Adressen, {shown} von #}}",
         "outside": "Außerhalb",
         "outsideHint": "Ziele außerhalb der Zonen (ein CIDR). Flüsse dorthin werden angewendet, sobald die Quellzone ihren Ausgang blockiert.",
         "notApplied": "Ausgang nicht kontrolliert",
@@ -14818,7 +14819,9 @@
         "liveResume": "Fortsetzen",
         "hideNoise": "Multicast und Broadcast ausblenden",
         "hideNoiseTip": "Blendet aus, was das Netzwerk an alle Gäste sendet (Multicast, Broadcast). Die {count} neuesten Zeilen werden einmal gelesen und im Browser gefiltert.",
-        "noiseShown": "{count, plural, =0 {Keine Zeile übrig} one {# Zeile übrig} other {# Zeilen übrig}} von den {scanned} neuesten"
+        "noiseShown": "{count, plural, =0 {Keine Zeile übrig} one {# Zeile übrig} other {# Zeilen übrig}} von den {scanned} neuesten",
+        "lineTitle": "Firewall-Protokollzeile · {name}",
+        "lineOpenHint": "Doppelklick für die Details"
       }
     },
     "preflight": {

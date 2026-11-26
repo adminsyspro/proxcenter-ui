@@ -70,13 +70,15 @@ describe('map notes', () => {
   it('says the map is partial when the suggestions page is full', async () => {
     const full = Array.from({ length: 200 }, (_, i) => wouldBlock(`s${i}`))
     setup({ suggestions: full })
-    expect(await screen.findByText('Partial: only the first 200 pending flows are drawn.')).toBeTruthy()
+    // In a tooltip at the top right of the map, no banner above it.
+    expect(await screen.findByRole('note', { name: 'Partial: only the first 200 pending flows are drawn.' })).toBeTruthy()
+    expect(screen.queryByText(/Partial:/)).toBeNull()
   })
 
   it('does not say it with fewer than 200 suggestions', async () => {
     setup({ suggestions: Array.from({ length: 199 }, (_, i) => wouldBlock(`s${i}`)) })
     await pathOf('unprotected:zone:zw>zone:zd')
-    expect(screen.queryByText(/Partial:/)).toBeNull()
+    expect(screen.queryByRole('note', { name: /Partial:/ })).toBeNull()
   })
 
   it('refits the canvas when the panel opens and when it closes', async () => {

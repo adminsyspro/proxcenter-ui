@@ -212,7 +212,7 @@ async function handler(
 
     // A Proxmox VE 9.3 source refuses an older target inside the task: said
     // here, before PVE locks the guest and opens the tunnel.
-    const tunnel = await checkMigrationTunnel('qemu', { conn: sourceConn, node }, { conn: targetConn, node: safeTargetNode })
+    const tunnel = await checkMigrationTunnel('qemu', { conn: sourceConn, node: safeNode }, { conn: targetConn, node: safeTargetNode })
     if (tunnel) {
       return NextResponse.json(
         { error: tunnelTooOldMessage(tunnel), code: 'TARGET_TUNNEL_TOO_OLD', context: tunnel },

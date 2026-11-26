@@ -115,6 +115,8 @@ async function postHandler(
       } catch {
         return NextResponse.json({ error: "Invalid target node name" }, { status: 400 })
       }
+      // Also the token perimeter for this nested body field, which the API
+      // token guard does not read: keep it before any use of the connection.
       const targetDenied = await checkPermission(PERMISSIONS.VM_MIGRATE, "connection", body.target.connectionId)
       if (targetDenied) return targetDenied
       if (!canMigrateConnections(infra, id, body.target.connectionId)) {

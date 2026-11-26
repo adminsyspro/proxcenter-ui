@@ -50,6 +50,12 @@ class InlineOnlyURLFetcher(URLFetcher):
         return super().fetch(url, headers)
 
 
+def _error(message: str, status: int) -> Response:
+    res = jsonify(error=message)
+    res.status_code = status
+    return res
+
+
 @app.get("/health")
 def health() -> Response:
     return jsonify(status="ok")
@@ -59,7 +65,7 @@ def health() -> Response:
 def render() -> Response:
     html = request.get_data(as_text=True)
     if not html:
-        return jsonify(error="empty html body"), 400
+        return _error("empty html body", 400)
 
     try:
         # Callers embed CSS, images and fonts inline; InlineOnlyURLFetcher
@@ -71,7 +77,7 @@ def render() -> Response:
         # fixed message, so no exception text (file paths, library internals,
         # fragments of the submitted HTML) leaves the sidecar.
         log.exception("PDF rendering failed")
-        return jsonify(error="PDF rendering failed, see the reporting sidecar log"), 500
+        return _error("PDF rendering failed, see the reporting sidecar log", 500)
 
     return Response(pdf_bytes, mimetype="application/pdf")
 

@@ -17,6 +17,7 @@
     "lib/connections/check/transport.ts": 1,
     "lib/diagnostics/connectionDiagnostics.ts": 1,
     "lib/migration/adopt-file-volume.ts": 3,
+    "lib/migration/cold-source-reach.ts": 1,
     "lib/migration/cross-cluster-watcher.ts": 3,
     "lib/migration/mac-conflicts.ts": 1,
     "lib/migration/nfc-export.ts": 3,

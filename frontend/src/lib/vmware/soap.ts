@@ -888,16 +888,25 @@ export async function soapNfcLeaseComplete(session: SoapSession, leaseMor: strin
   await soapRequest(session.baseUrl, body, session.cookie, session.insecureTLS).catch(() => {})
 }
 
-/** Abort an NFC lease (on error/cancellation) */
-export async function soapNfcLeaseAbort(session: SoapSession, leaseMor: string, reason = "Migration aborted"): Promise<void> {
+/**
+ * Abort an NFC lease (on error, cancellation, or after a pre-flight test).
+ * `fault` is a LocalizedMethodFault: a MethodFault (SystemError carries a
+ * reason) plus the message vCenter shows on the export task. A bare
+ * `<faultMessage>` there is not part of the schema: vCenter refused the whole
+ * call (InvalidRequestFault) and every lease stayed open until it timed out.
+ * Without a reason the lease is aborted with no fault ("canceled by a user").
+ */
+export async function soapNfcLeaseAbort(session: SoapSession, leaseMor: string, reason?: string): Promise<void> {
+  const fault = reason
+    ? `<urn:fault><urn:fault xsi:type="urn:SystemError" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><urn:reason>${xmlEscape(reason.slice(0, 500))}</urn:reason></urn:fault>` +
+      `<urn:localizedMessage>${xmlEscape(reason.slice(0, 500))}</urn:localizedMessage></urn:fault>`
+    : ""
   const body = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:vim25">
   <soapenv:Body>
     <urn:HttpNfcLeaseAbort>
-      <urn:_this type="HttpNfcLease">${leaseMor}</urn:_this>
-      <urn:fault>
-        <faultMessage>${reason}</faultMessage>
-      </urn:fault>
+      <urn:_this type="HttpNfcLease">${xmlEscape(leaseMor)}</urn:_this>
+      ${fault}
     </urn:HttpNfcLeaseAbort>
   </soapenv:Body>
 </soapenv:Envelope>`

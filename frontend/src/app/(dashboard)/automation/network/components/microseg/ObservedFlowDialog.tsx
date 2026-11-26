@@ -126,7 +126,8 @@ function RecentSection({ connectionId, suggestion: s, ends, srcZone, dstZone, gu
   const format = useFormatter()
   const when = (iso: string) => formatWhen(format, iso)
   const outbound = s.direction === 'out'
-  const events = useMicrosegEvents(connectionId, { zone: ends.guestZone, verdict: s.kind, q: String(s.dport) }, true)
+  // The cluster that logged the flow: on a shared policy the tab's connection holds the events of its own guests only.
+  const events = useMicrosegEvents(s.connection_id || connectionId, { zone: ends.guestZone, verdict: s.kind, q: String(s.dport) }, true)
   const recent = events.events.filter(e => eventOfFlow(e, s, srcZone, dstZone)).slice(0, RECENT_SHOWN)
   // How far back the engine's memory went for this read (newest first): the oldest event it returned.
   const oldest = events.events.at(-1)?.ts ?? null

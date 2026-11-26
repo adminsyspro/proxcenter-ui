@@ -45,7 +45,7 @@ import { targetFocus, targetRing, targetSankey, targetSuggestions, type TargetGu
 import { useMapTarget } from './useMapTarget'
 import { useGuestVolume, useZoneVolume } from './useZoneVolume'
 import { rangeOfPeriod } from './useEdgeVolumeHistory'
-import { MapRangeContext } from './SelectionTraffic'
+import { MapRangeContext, TrafficClustersContext } from './SelectionTraffic'
 import { edgeVolumes } from './edgeVolume'
 import {
   EXTERNAL_ID, OUTSIDE_ID, SEEN_PERIODS, STALE_AFTER_MS, UNZONED_ID, edgeServices, filterEdgeAge, filterEdgeServices, filterEdges, focusSets, isPveGroup, lastSeenOf, pveNodeName,
@@ -542,6 +542,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
       <MapNamesContext.Provider value={names}>
       <EdgeVolumeContext.Provider value={volumeSource}>
       <MapRangeContext.Provider value={rangeOfPeriod(seenPeriod)}>
+      <TrafficClustersContext.Provider value={readIds}>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch', flexWrap: { xs: 'wrap', lg: 'nowrap' }, flex: 1, minHeight: 560 }}>
           <Box
             role='region'
@@ -707,6 +708,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
             />
           )}
         </Box>
+      </TrafficClustersContext.Provider>
       </MapRangeContext.Provider>
       </EdgeVolumeContext.Provider>
       </MapNamesContext.Provider>

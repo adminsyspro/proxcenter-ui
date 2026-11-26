@@ -28,6 +28,7 @@ import { useZoneEdits, type ExceptionCreated } from './useZoneEdits'
 import { useGroupGuests, withUnreachable } from './useGroupGuests'
 import { GroupGuestsUnread } from './GroupGuestsUnread'
 import { targetPeers } from './targetModel'
+import { TrafficClustersContext } from './SelectionTraffic'
 
 type Editing<T> = { item: T | null } | null
 
@@ -100,6 +101,8 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
   }
 
   return (
+    // The zone details read the traffic of every cluster of the policy, as the cards' uncovered counts do.
+    <TrafficClustersContext.Provider value={trafficIds}>
     <Box>
       {onOpenPreflight && (
         <SlotActions order={1}>
@@ -177,5 +180,6 @@ export default function PolicyPanel({ connectionId, policy, reloadPolicy, goToSu
         onCancel={() => setDeleting(null)}
       />
     </Box>
+    </TrafficClustersContext.Provider>
   )
 }

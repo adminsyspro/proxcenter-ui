@@ -5,16 +5,16 @@ import { Box, Tooltip, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { GuestType, MicrosegEvent, MicrosegZone } from '@/lib/microseg/types'
-import { addVolume, volumeText, type VolumeFigure } from '@/lib/microseg/volume'
+import { addVolume, mergeVolume, volumeText, type VolumeFigure } from '@/lib/microseg/volume'
 
 import type { BlockPhase } from '../dashboardModel'
 import { zoneSeries } from '../dashboardPosture'
-import { alignTimelines, topSources, volumeTimeline, type PostureTimeline, type SourceTotal, type TimelineRange, type TimelineVerdict } from '../postureTimeline'
+import { alignTimelines, stepMsOf, topSources, volumeTimeline, type PostureTimeline, type SourceTotal, type TimelineRange, type TimelineVerdict } from '../postureTimeline'
 import TrafficTimeline, { type TimelineDirection } from '../TrafficTimeline'
 import { useSliceName } from '../TrafficByZone'
 import { useTimelineRange } from '../useTimelineRange'
+import { usePolicyVolume } from '../usePolicyReads'
 import { useTrafficTimeline } from '../useTrafficTimeline'
-import { useVolumeHistory } from '../useVolumeHistory'
 import { objectDotSx } from './objectColour'
 import { bareIp } from './zoneGraph'
 import TruncatedText from './TruncatedText'
@@ -25,6 +25,15 @@ import TruncatedText from './TruncatedText'
  * panel, it stays the panel's (the range remembered by the browser is the Dashboard's). Null out of a map.
  */
 export const MapRangeContext = createContext<TimelineRange | null>(null)
+
+/**
+ * The clusters whose traffic a panel reads, the tab's connection first: on a shared policy each cluster logs the
+ * traffic of its own guests only, so a zone or a pair of zones is read on every one of them and summed. Given by the
+ * map and the Policy sub-tab; null (the connection alone) elsewhere.
+ */
+export const TrafficClustersContext = createContext<readonly string[] | null>(null)
+
+const NO_IDS: readonly string[] = []
 
 /** Sources (or destinations) listed in the panel; the header counts them all. */
 const TOP_SOURCES = 5
@@ -37,7 +46,8 @@ const TOP_SOURCES = 5
 export type TrafficSelection =
   | { kind: 'zone'; zone: MicrosegZone }
   | { kind: 'pair'; emitter: string; receiver: string }
-  | { kind: 'guest'; type: GuestType; vmid: number; ips: readonly string[] }
+  /** `connectionId`: the guest's own cluster, the one that logs its traffic (the tab's connection when absent). */
+  | { kind: 'guest'; type: GuestType; vmid: number; ips: readonly string[]; connectionId?: string }
 
 
 /**
@@ -80,21 +90,33 @@ export function useSelectionTraffic(connectionId: string, zones: MicrosegZone[],
   const emitter = selection.kind === 'pair' ? selection.emitter : null
   const receiver = selection.kind === 'pair' ? selection.receiver : null
   const pair = useMemo(() => (emitter === null || receiver === null ? null : { emitter, receiver }), [emitter, receiver])
-  const connection = enabled ? connectionId : null
+  // A zone or a pair: every cluster of the policy the panel is given. A guest: its own cluster (its VMID may exist on another).
+  const group = useContext(TrafficClustersContext)
+  const guestCluster = selection.kind === 'guest' ? selection.connectionId || connectionId : null
+  const groupKey = (group && group.length > 0 ? group : [connectionId]).join('|')
+  const readIds = useMemo(() => {
+    if (!enabled) return NO_IDS
+    return guestCluster === null ? groupKey.split('|') : [guestCluster]
+  }, [enabled, guestCluster, groupKey])
+  const connection = readIds[0] ?? null
+  const clusters = readIds.length > 1 ? readIds : undefined
   // Both directions are read: the same history answer, or the ring the panel holds (inbound of a zone asks `zone=`).
-  const inbound = useTrafficTimeline({ connection, zones, slices, groupBy: 'zone', verdict, range, zone, pair, keep: keepIn })
-  const outbound = useTrafficTimeline({ connection, zones, slices, groupBy: 'dstzone', verdict, range, zone, pair, keep: keepOut })
+  const inbound = useTrafficTimeline({ connection, zones, slices, groupBy: 'zone', verdict, range, zone, pair, keep: keepIn, clusters })
+  const outbound = useTrafficTimeline({ connection, zones, slices, groupBy: 'dstzone', verdict, range, zone, pair, keep: keepOut, clusters })
   // What sFlow measured for the selection over the range (a zone or a pair: the volume is kept per pair of zones, not
-  // per guest), read only when sFlow measures the connection; null otherwise, the chart then shows the hits only.
-  const volumeRead = useVolumeHistory(enabled && selection.kind !== 'guest' ? connectionId : null, range)
+  // per guest), each cluster read and summed, only those sFlow measures; null otherwise, the chart then shows the hits only.
+  const volumes = usePolicyVolume(guestCluster === null ? readIds : NO_IDS, range)
+  const merged = useMemo(() => {
+    const step = stepMsOf(volumes.range) / 1000
+    return mergeVolume(readIds.flatMap(id => { const a = volumes.byCluster[id]; return a && a.step === step ? [a] : [] }))
+  }, [volumes, readIds])
   const volume = useMemo(() => {
-    const answer = volumeRead.volume
-    if (!answer?.covered) return null
+    if (!merged?.covered) return null
     const out = direction === 'out'
-    return volumeTimeline({ volume: answer, range: volumeRead.range, zones, slices, by: out ? 'dst' : 'src', pair, zone: zone ? zone.name : null })
-  }, [volumeRead.volume, volumeRead.range, direction, zones, slices, pair, zone])
+    return volumeTimeline({ volume: merged, range: volumes.range, zones, slices, by: out ? 'dst' : 'src', pair, zone: zone ? zone.name : null })
+  }, [merged, volumes.range, direction, zones, slices, pair, zone])
   const volumeTotals = useMemo(() => {
-    const answer = volumeRead.volume
+    const answer = merged
     if (!answer?.covered || !volume) return null
     const keep = (b: { src_zone: string; dst_zone: string }) => {
       const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
@@ -105,7 +127,7 @@ export function useSelectionTraffic(connectionId: string, zones: MicrosegZone[],
     const sum: VolumeFigure = { bytes: 0, packets: 0 }
     for (const b of answer.buckets) if (keep(b)) addVolume(sum, b)
     return sum
-  }, [volumeRead.volume, volume, pair, zone, direction])
+  }, [merged, volume, pair, zone, direction])
   const inSummary = useMemo(() => summaryOf(inbound.build), [inbound.build])
   const outSummary = useMemo(() => summaryOf(outbound.build), [outbound.build])
   const aligned = useMemo(() => alignTimelines(inbound.timeline, outbound.timeline), [inbound.timeline, outbound.timeline])
@@ -129,8 +151,12 @@ export function useSelectionTraffic(connectionId: string, zones: MicrosegZone[],
   if (both) timeline = aligned.above
   else if (direction === 'out') timeline = outbound.timeline
   const answer = direction === 'out' ? outbound.answer : inbound.answer
+  // A cluster of a shared policy that has not answered yet: the sum would be partial, nothing is drawn until it does.
+  let pending = inbound.pending || outbound.pending
+  if (direction === 'in') pending = inbound.pending
+  else if (direction === 'out') pending = outbound.pending
   let phase: BlockPhase = 'loading'
-  if (answer.data) phase = 'ready'
+  if (answer.data && !pending) phase = 'ready'
   else if (answer.error) phase = 'unavailable'
   // Empty one way, traffic the other: the panel says so (none in Both).
   let otherTotal = 0

@@ -126,7 +126,7 @@ export default function TargetPanel({ target, zonesById, suggestions, flows, pee
   const { busy, failure, clearFailure, resolve: resolveIds } = useResolveSuggestions(connectionId, version, reloadPolicy, reloadSuggestions)
   const zones = useMemo(() => [...zonesById.values()], [zonesById])
   const trafficSection = usePanelSection('guest.traffic')
-  const traffic = useSelectionTraffic(connectionId, zones, { kind: 'guest', type: target.type, vmid: target.vmid, ips: target.ips }, trafficSection[0])
+  const traffic = useSelectionTraffic(connectionId, zones, { kind: 'guest', type: target.type, vmid: target.vmid, ips: target.ips, connectionId: target.connectionId }, trafficSection[0])
   const ips = target.ips.length ? t('node.guestIps', { ips: target.ips.join(', ') }) : t('node.guestNoIp')
 
   async function resolve(id: string, action: SuggestionAction, prefixLen?: number) {

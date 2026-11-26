@@ -13,6 +13,7 @@ import type { MicrosegDrift, MicrosegRevision, MicrosegRun } from '@/lib/microse
 // The kit first: it mocks the map's stylesheet before MicrosegTab is loaded.
 import { GUESTS_ROUTE, calls, mock, policy, renderTab, reply, resetMocks, status, zone, REVISION_HEAD } from './microsegTestKit'
 import { suggestion, vm } from './policyTestKit'
+import { node } from './zoneMapTestKit'
 import { mergeClusterEvents } from '../MicrosegEventsView'
 import { driftKey } from './driftLabels'
 import DriftsPanel from './DriftsPanel'
@@ -157,6 +158,64 @@ describe('uncovered traffic of a shared policy', () => {
     renderTab(<MicrosegTab connectionId='c1' connections={CONNECTIONS} />)
     const t = await screen.findByRole('table', { name: 'Flows' })
     expect(await within(within(t).getByRole('rowgroup', { name: 'db' })).findByRole('button', { name: 'Uncovered 24 h: 4 hits' })).toBeTruthy()
+  })
+})
+
+describe('the zone details of a shared policy', () => {
+  // A bucket of the last minutes: inside every range the details offer.
+  const recent = () => new Date(Math.floor(Date.now() / 300_000) * 300_000 - 600_000).toISOString()
+  const bucket = (zoneName: string, src: string, hits: number) => ({ at: recent(), zone: zoneName, src_zone: src, verdict: 'blocked', direction: 'in', hits })
+  const lastHour = () => {
+    const end = Math.floor(Date.now() / 300_000) * 300_000
+    return { from: new Date(end - 3_600_000).toISOString(), to: new Date(end).toISOString() }
+  }
+  const traffic = (buckets: ReturnType<typeof bucket>[]) => reply(200, { step: 300, ...lastHour(), buckets })
+
+  it('draws what every cluster logged into the zone, not the tab cluster alone', async () => {
+    window.localStorage.setItem('microseg.subTab', 'policy')
+    window.localStorage.setItem('microseg.policy.openCards.c1', JSON.stringify(['zd']))
+    mock.routes['GET /clusters'] = () => reply(200, { clusters: [link('c1'), link('c2')], max: 8 })
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('zd', { name: 'db' }), zone('zw', { name: 'web' })], last_revision: REVISION_HEAD, clusters: [link('c1'), link('c2')] }))
+    mock.routes['GET /api/v1/vms?connId=c2'] = () => reply(200, { data: { vms: [] } })
+    mock.routes[`GET ${C2}/status`] = () => reply(200, status())
+    // The tab's cluster logged nothing into db: its members are on c2 (the case of a zone of one cluster only).
+    mock.routes['GET /traffic*'] = () => traffic([])
+    mock.routes[`GET ${C2}/traffic*`] = () => traffic([bucket('db', 'web', 30)])
+    mock.routes['GET /suggestions*'] = () => reply(200, { suggestions: [], limit: 26, offset: 0 })
+    renderTab(<MicrosegTab connectionId='c1' connections={CONNECTIONS} />)
+    const details = await screen.findByRole('region', { name: 'Details of db' })
+    expect(await within(details).findByText(/in 30 hits/)).toBeTruthy()
+    expect(within(details).queryByText('No observed event in this range')).toBeNull()
+    const reads = fetchedUrls().filter(u => /\/traffic\?/.test(u) && /step=300/.test(u))
+    expect(reads.some(u => u.includes('/microseg/c1/traffic?'))).toBe(true)
+    expect(reads.some(u => u.startsWith(`${C2}/traffic?`))).toBe(true)
+  })
+})
+
+describe('the logs of a zone of a shared policy', () => {
+  let seq = 500
+  const event = (guest: string, src_ip: string) => ({
+    seq: seq--, ts: new Date(Date.now() - 60_000).toISOString(), node: 'pve1', vmid: 101, type: 'qemu', guest, zone: 'db', src_zone: 'web',
+    src_ip, dst_ip: '10.0.0.2', proto: 'tcp', dport: 5432, verdict: 'blocked', direction: 'in',
+  })
+
+  it('lists the events every cluster logged into the zone in the expanded dialog', async () => {
+    window.localStorage.setItem('microseg.subTab', 'overview')
+    mock.routes['GET /clusters'] = () => reply(200, { clusters: [link('c1'), link('c2')], max: 8 })
+    mock.routes['GET /policy'] = () => reply(200, policy({ zones: [zone('zd', { name: 'db' }), zone('zw', { name: 'web' })], last_revision: REVISION_HEAD, clusters: [link('c1'), link('c2')] }))
+    mock.routes['GET /api/v1/vms?connId=c2'] = () => reply(200, { data: { vms: [] } })
+    mock.routes[`GET ${C2}/status`] = () => reply(200, status())
+    mock.routes['GET /suggestions?status=pending&limit=200'] = () => reply(200, { suggestions: [], limit: 200, offset: 0 })
+    mock.routes['GET /events?limit=200'] = () => reply(200, { events: [event('db-prod', '10.1.1.1')], truncated: false, oldest: null })
+    mock.routes[`GET ${C2}/events?limit=200`] = () => reply(200, { events: [event('db-dr', '10.2.2.2')], truncated: false, oldest: null })
+    renderTab(<MicrosegTab connectionId='c1' connections={CONNECTIONS} />)
+    fireEvent.click(await node('zone:zd'))
+    const panel = await screen.findByRole('complementary', { name: 'Zone db' })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Expand' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Zone details · db' })
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Logs' }))
+    expect(await within(dialog).findByText('10.2.2.2')).toBeTruthy()
+    expect(within(dialog).getByText('10.1.1.1')).toBeTruthy()
   })
 })
 

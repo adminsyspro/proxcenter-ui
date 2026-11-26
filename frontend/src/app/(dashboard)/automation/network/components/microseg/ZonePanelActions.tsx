@@ -275,6 +275,8 @@ export function useFlowEditor(edits: ZoneEdits): FlowEditor {
   const [editing, setEditing] = useState<FlowEditing>(null)
   const [deleting, setDeleting] = useState<MicrosegFlow | null>(null)
   const removal = useDialogAction()
+  // The clusters of the policy the user sees: a CIDR naming one of their zone members offers that zone.
+  const { guestIds: clusterIds } = useExceptionScope(edits.policy, edits.connectionId, edits.clusterName)
 
   const save = async (values: FlowSaveValues) => {
     await edits.saveFlow(editing?.flow ?? null, values)
@@ -286,7 +288,7 @@ export function useFlowEditor(edits: ZoneEdits): FlowEditor {
 
   const dialogs = (
     <>
-      {editing && <FlowDialog flow={editing.flow} zones={edits.zones} initial={editing.initial} onSave={save} onClose={() => setEditing(null)} />}
+      {editing && <FlowDialog flow={editing.flow} zones={edits.zones} initial={editing.initial} clusterIds={clusterIds} onSave={save} onClose={() => setEditing(null)} />}
       <MicrosegConfirmDialog
         open={deleting !== null}
         title={tp('delete.flowTitle')}

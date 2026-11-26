@@ -14192,6 +14192,9 @@
         "dportHint": "80, 443 ou 8000:8100. Vide : tous les ports",
         "comment": "Commentaire",
         "useMasked": "Utiliser {masked}",
+        "cidrBlocked": "Un des deux côtés doit être une zone : le flux s'applique aux invités de cette zone",
+        "zoneHint": "{addr} est {guest}, membre de la zone {zone}",
+        "useZone": "Utiliser la zone {zone}",
         "create": "Créer",
         "save": "Enregistrer"
       },

@@ -14191,6 +14191,9 @@
         "dportHint": "80, 443 u 8000:8100. Vacío: todos los puertos",
         "comment": "Comentario",
         "useMasked": "Usar {masked}",
+        "cidrBlocked": "Un lado debe ser una zona: el flujo se aplica a los invitados de esa zona",
+        "zoneHint": "{addr} es {guest}, miembro de la zona {zone}",
+        "useZone": "Usar la zona {zone}",
         "create": "Crear",
         "save": "Guardar"
       },

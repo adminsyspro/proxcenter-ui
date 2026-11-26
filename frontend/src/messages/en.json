@@ -14191,6 +14191,9 @@
         "dportHint": "80, 443 or 8000:8100. Empty: all ports",
         "comment": "Comment",
         "useMasked": "Use {masked}",
+        "cidrBlocked": "One side must be a zone: the flow is enforced on the guests of that zone",
+        "zoneHint": "{addr} is {guest}, a member of zone {zone}",
+        "useZone": "Use zone {zone}",
         "create": "Create",
         "save": "Save"
       },

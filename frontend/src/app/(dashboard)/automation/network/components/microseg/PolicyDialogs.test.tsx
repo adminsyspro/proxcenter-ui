@@ -8,6 +8,7 @@ import { within } from '@testing-library/react'
 import { screen, fireEvent, waitFor } from '@/__tests__/setup/renderWithProviders'
 import type { MicrosegFlow } from '@/lib/microseg/types'
 
+import { filterAnswer, filterGuest } from './ipFilterTestKit'
 import { calls, exception, flow, mock, reply } from './microsegTestKit'
 import { body, db, setup, installFreshMocks, web } from './policyTestKit'
 
@@ -146,13 +147,41 @@ describe('flow dialog', () => {
     fireEvent.change(within(dialog).getByLabelText(field), { target: { value } })
   }
 
-  it('refuses a flow with two CIDR sides', async () => {
+  const cidrButton = (dialog: HTMLElement, group: string) =>
+    within(within(dialog).getByRole('group', { name: group })).getByRole('button', { name: 'CIDR' }) as HTMLButtonElement
+
+  it('keeps the other side on a zone once one side is a CIDR, and says why', async () => {
     const dialog = await open()
     useCidr(dialog, 'Source type', '10.0.0.0/8', 'Source CIDR')
-    useCidr(dialog, 'Destination type', '192.168.0.0/16', 'Destination CIDR')
-    expect(await within(dialog).findByText('A flow cannot have a CIDR on both sides.')).toBeTruthy()
-    expect((within(dialog).getByRole('button', { name: 'Create' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(calls('POST /flows')).toHaveLength(0)
+    expect(cidrButton(dialog, 'Destination type').disabled).toBe(true)
+    fireEvent.mouseOver(cidrButton(dialog, 'Destination type').parentElement!)
+    expect(await screen.findByText(/One side must be a zone/)).toBeTruthy()
+    expect(cidrButton(dialog, 'Source type').disabled).toBe(false)
+
+    fireEvent.click(within(within(dialog).getByRole('group', { name: 'Source type' })).getByRole('button', { name: 'Zone' }))
+    expect(cidrButton(dialog, 'Destination type').disabled).toBe(false)
+  })
+
+  it('offers the zone of the member whose address a single-host CIDR names', async () => {
+    mock.routes['GET /ipfilter'] = () => reply(200, filterAnswer([filterGuest({ name: 'db-1', zone: 'db', nics: { net0: ['0.0.0.0', '10.22.22.3'] } })]))
+    const dialog = await open()
+    await pickZone(dialog, 'Source zone', 'web')
+    useCidr(dialog, 'Destination type', '10.22.22.3/32', 'Destination CIDR')
+    expect(await within(dialog).findByText('10.22.22.3 is db-1, a member of zone db')).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Use zone db' }))
+    expect(within(dialog).queryByLabelText('Destination CIDR')).toBeNull()
+    expect(within(dialog).getByRole('combobox', { name: 'Destination zone' }).textContent).toBe('db')
+    expect((within(dialog).getByRole('button', { name: 'Create' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('offers no zone for a network, an unknown address or before the first full run', async () => {
+    mock.routes['GET /ipfilter'] = () => reply(200, filterAnswer([filterGuest({ name: 'db-1', zone: 'db', nics: { net0: ['10.22.22.3'] } })], { computed: false }))
+    const dialog = await open()
+    await pickZone(dialog, 'Source zone', 'web')
+    useCidr(dialog, 'Destination type', '10.22.22.3/32', 'Destination CIDR')
+    await waitFor(() => expect(calls('GET /ipfilter').length).toBeGreaterThan(0))
+    expect(within(dialog).queryByRole('button', { name: /Use zone/ })).toBeNull()
   })
 
   it('refuses a CIDR with host bits set and proposes the masked form', async () => {

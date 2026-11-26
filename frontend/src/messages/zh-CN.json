@@ -14191,6 +14191,9 @@
         "dportHint": "80、443 或 8000:8100。留空表示所有端口",
         "comment": "备注",
         "useMasked": "使用 {masked}",
+        "cidrBlocked": "一侧必须是区域：流量规则作用于该区域的客户机",
+        "zoneHint": "{addr} 是 {guest}，区域 {zone} 的成员",
+        "useZone": "使用区域 {zone}",
         "create": "创建",
         "save": "保存"
       },

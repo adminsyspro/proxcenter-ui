@@ -41,6 +41,9 @@ vi.mock("@/lib/migration/warm/nfc-reachability", async (io) => {
   const actual = await io<typeof import("@/lib/migration/warm/nfc-reachability")>()
   return { ...actual, runWarmCopyReachability: vi.fn() }
 })
+// Cold vCenter source: the test lease and the probe live in cold-source-reach.
+const coldReach = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/migration/cold-source-reach", () => ({ checkColdSourceReach: (...a: any[]) => coldReach(...a) }))
 vi.mock("@/lib/db/prisma", () => ({
   prisma: { connection: { findUnique: vi.fn(async () => ({ type: "vmware" })) } },
 }))
@@ -228,6 +231,41 @@ describe("POST /api/v1/migrations/preflight — warm-check action", () => {
     }
   })
 
+  it("probes the host's default adapter when none is named, and only reports a probe that ran", async () => {
+    readIfaces.mockResolvedValueOnce(ifaces("vcenter"))
+    const verdict = { address: "10.42.0.21", ports: { 902: false }, ok: false, vcenter: { host: "vcenter.corp.local", resolved: true, open: true } }
+    mockReach.mockResolvedValueOnce(verdict)
+    const res = await callRoute(POST, { body: copyBody })
+    expect(mockReach).toHaveBeenCalledExactlyOnceWith("c1", "pve1", "10.42.0.21", false, "vcenter.corp.local")
+    expect((await readJson<{ copy: unknown }>(res))?.copy).toEqual({ ...verdict, device: "vmk0" })
+
+    // the probe could not run (SSH), the adapters could not be read, no addressed default: no verdict
+    readIfaces.mockResolvedValueOnce(ifaces("esxi"))
+    mockReach.mockResolvedValueOnce({ address: "10.42.0.21", ports: {}, ok: false, error: "ssh down" })
+    readIfaces.mockRejectedValueOnce(new Error("vCenter unreachable"))
+    readIfaces.mockResolvedValueOnce({ ...ifaces("esxi"), defaultDevice: undefined })
+    for (let i = 0; i < 3; i++) {
+      const r = await callRoute(POST, { body: copyBody })
+      expect(r.status).toBe(200)
+      expect("copy" in ((await r.json()) as object)).toBe(false)
+    }
+  })
+
+  it("skips the default probe for a caller who may not view the source, and for a non VMware source", async () => {
+    const { checkPermission } = await import("@/lib/rbac")
+    vi.mocked(checkPermission).mockImplementation(async (perm: string) => (perm === "connection.view" ? Response.json({ error: "denied" }, { status: 403 }) as any : null))
+    try {
+      const res = await callRoute(POST, { body: copyBody })
+      expect(res.status).toBe(200)
+      expect(readIfaces).not.toHaveBeenCalled()
+    } finally {
+      vi.mocked(checkPermission).mockImplementation(async () => null)
+    }
+    mockSource.mockResolvedValue({ type: "hyperv" })
+    await callRoute(POST, { body: copyBody })
+    expect(readIfaces).not.toHaveBeenCalled()
+  })
+
   it("reads the source adapters through the tenant-scoped client", async () => {
     readIfaces.mockResolvedValueOnce(ifaces("esxi"))
     mockReach.mockResolvedValueOnce({ address: "10.42.53.21", ports: { 902: true, 443: true }, ok: true })
@@ -330,5 +368,38 @@ describe("POST /api/v1/migrations/preflight: install-virt-v2v-backport action (#
     expect(vi.mocked(installVirtV2vBackport)).toHaveBeenCalledWith("c1", "pve3")
     expect(await res.json()).toEqual({ success: true, output: "virt-v2v 2.6.0-1+deb13u1~proxcenter1 installed (Windows Server 2025 support)" })
     expect(mockV2v).not.toHaveBeenCalled()
+  })
+})
+
+describe("POST /api/v1/migrations/preflight — cold-source-check action", () => {
+  const coldBody = { action: "cold-source-check", sourceConnectionId: "src", sourceVmId: "vm-20446", targetConnectionId: "c1", targetNode: "pve3" }
+
+  it("tests the download address of the source VM from the node, through the tenant-scoped client", async () => {
+    const verdict = { status: "blocked", node: "pve3", endpoints: [{ host: "10.42.0.22", port: 443, resolved: true, open: false }], message: "m" }
+    coldReach.mockResolvedValueOnce(verdict)
+    const res = await callRoute(POST, { body: coldBody })
+    expect(res.status).toBe(200)
+    expect(await readJson(res)).toEqual(verdict)
+    expect(coldReach).toHaveBeenCalledWith({ prisma: { session: true }, sourceConnectionId: "src", sourceVmId: "vm-20446", targetConnectionId: "c1", node: "pve3" })
+    expect(mockV2v).not.toHaveBeenCalled()
+  })
+
+  it("refuses a request without a valid source VM", async () => {
+    for (const bad of [{ ...coldBody, sourceVmId: undefined }, { ...coldBody, sourceVmId: "vm 1;" }, { ...coldBody, sourceConnectionId: undefined }]) {
+      expect((await callRoute(POST, { body: bad })).status).toBe(400)
+    }
+    expect(coldReach).not.toHaveBeenCalled()
+  })
+
+  it("needs the right to view the source connection it opens a lease on", async () => {
+    const { checkPermission } = await import("@/lib/rbac")
+    vi.mocked(checkPermission).mockImplementation(async (perm: string) => (perm === "connection.view" ? Response.json({ error: "denied" }, { status: 403 }) as any : null))
+    try {
+      expect((await callRoute(POST, { body: coldBody })).status).toBe(403)
+      expect(checkPermission).toHaveBeenCalledWith("connection.view", "connection", "src")
+      expect(coldReach).not.toHaveBeenCalled()
+    } finally {
+      vi.mocked(checkPermission).mockImplementation(async () => null)
+    }
   })
 })

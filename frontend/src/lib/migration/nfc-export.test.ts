@@ -30,7 +30,7 @@ import {
   soapNfcLeaseAbort,
 } from "@/lib/vmware/soap"
 import type { EsxiVmConfig, SoapSession } from "@/lib/vmware/soap"
-import { runVcenterNfcExport, type NfcJobIo } from "./nfc-export"
+import { runVcenterNfcExport, nfcNoConnectionMessage, type NfcJobIo } from "./nfc-export"
 
 const GiB = 1073741824
 const OUT = "/tmp/v2v-job1"
@@ -57,10 +57,13 @@ let probeMode: "ok" | "fail"
 let nodeDownAfterExit: boolean
 /** Probe polls that time out before the node answers again. */
 let probeTimeouts: number
+/** Answer of the node's probe of the NFC download address: open, closed, or an SSH failure. */
+let reachMode: "open" | "closed" | "sshDown"
 let running: number
 let peakRunning: number
 let removed: string[]
 let launchOrder: string[]
+let curlStats: string
 
 function ok(output = "") {
   return { success: true as const, output }
@@ -89,6 +92,11 @@ function byCtrl(path: string): FakeDownload | undefined {
 }
 
 async function sshRouter(_connId: string, _host: string, command: string) {
+  if (command.includes("exec 3<>/dev/tcp/")) {
+    if (reachMode === "sshDown") return TIMEOUT
+    const ids = [...command.matchAll(/"ep-(\d+)=open"/g)].map(m => m[1])
+    return ok(ids.map(i => `ep-${i}=${reachMode === "open" ? "open" : "closed"}`).join("\n"))
+  }
   if (command.startsWith("nohup bash -c ")) {
     // The inner command is one single-quoted argument to bash; unwrap it before reading the curl config path.
     const inner = unq(command.slice("nohup bash -c ".length, command.lastIndexOf(" > /dev/null 2>&1 & echo $!")))
@@ -140,7 +148,7 @@ async function sshRouter(_connId: string, _host: string, command: string) {
   }
   if (command.startsWith("head -c 4 ")) return ok("KDMV")
   if (command.startsWith("tail -c 1000 ")) return ok("")
-  if (command.startsWith("cat ") && command.includes(".ctrl.stats")) return ok("http_code=200\nsize_download=1")
+  if (command.startsWith("cat ") && command.includes(".ctrl.stats")) return ok(curlStats)
   if (command.startsWith("pkill ") || command.startsWith("kill ")) {
     // curl runs under a `bash -c` wrapper whose pid is what nohup echoed: a
     // kill of the wrapper alone leaves curl streaming (and the lease alive).
@@ -225,10 +233,12 @@ beforeEach(() => {
   probeMode = "ok"
   nodeDownAfterExit = false
   probeTimeouts = 0
+  reachMode = "open"
   running = 0
   peakRunning = 0
   removed = []
   launchOrder = []
+  curlStats = "http_code=200\nsize_download=1"
   let leases = 0
   vi.mocked(executeSSH).mockImplementation(sshRouter as any)
   vi.mocked(soapExportVm).mockImplementation(async () => `lease-${++leases}`)
@@ -420,5 +430,50 @@ describe("runVcenterNfcExport", () => {
     }, io))
     expect(soapExportSnapshot).toHaveBeenCalledWith(SESSION, "snapshot-9")
     expect(soapExportVm).not.toHaveBeenCalled()
+  })
+
+  it("probes the download address from the node before any download, and stops at once when it does not answer", async () => {
+    const { io, logs } = makeIo()
+    const config = setupDisks([100 * GiB])
+    vi.mocked(soapWaitForNfcLease).mockResolvedValue([{ key: "d0", url: "https://vc-proxy.example.com:8443/nfc/x/disk-0.vmdk", fileSize: 0, disk: true, targetId: "disk-0.vmdk" }])
+    reachMode = "closed"
+    await expect(runToEnd(runVcenterNfcExport({
+      jobId: "job1", targetConnectionId: "conn-target", sourceVmId: "vm-1", nodeIp: "10.0.0.1", nodeName: "pve3",
+      session: SESSION, outputDir: OUT, sourceVmwareConfig: config, snapshotMor: null, band: { offset: 0, scale: 50 }, concurrency: 1,
+    }, io))).rejects.toThrow(/The Proxmox node pve3 cannot reach vc-proxy\.example\.com:8443, where the source disks are downloaded from/)
+    expect(launchOrder).toEqual([])
+    expect(logs.some(l => l.msg.includes("Opening fresh NFC lease"))).toBe(false)
+  })
+
+  it("says the address answered, and downloads anyway when the probe itself could not run", async () => {
+    const first = makeIo()
+    await runToEnd(exportWith(first.io, setupDisks([10 * GiB]), 1))
+    expect(first.logs.some(l => l.level === "success" && l.msg === "NFC download address reachable from target: vc.example:443")).toBe(true)
+    reachMode = "sshDown"
+    downloads = new Map()
+    const second = makeIo()
+    await runToEnd(exportWith(second.io, setupDisks([10 * GiB]), 1))
+    expect(second.logs.some(l => l.level === "warn" && l.msg.startsWith("Could not probe the NFC download address from the node"))).toBe(true)
+    expect(launchOrder).toHaveLength(2)
+  })
+
+  it("explains a download that never connected by the node's route, not by the certificate or the session", async () => {
+    const { io } = makeIo()
+    const config = setupDisks([100 * GiB])
+    plans.set(`${OUT}/disk-0.vmdk`, [{ size: 0, position: 0, exit: 28 }])
+    curlStats = "http_code=000\nnum_connects=0\ntime_total=133.98"
+    const err = (await runToEnd(exportWith(io, config, 1)).then(() => new Error("no failure"), e => e)) as Error
+    expect(err.message).toMatch(/^The Proxmox node target could not connect to vc\.example:443 \(curl exit 28, no connection made\)/)
+    expect(err.message).not.toContain("Common causes")
+  })
+})
+
+describe("nfcNoConnectionMessage", () => {
+  it("only explains exits 7 and 28 that made no connection", () => {
+    expect(nfcNoConnectionMessage("pve3", "https://h:8443/nfc/x", 7, "num_connects=0", "curl: (7) Failed")).toContain("pve3 could not connect to h:8443 (curl exit 7")
+    expect(nfcNoConnectionMessage("pve3", "http://h/nfc/x", 28, "a=1\nnum_connects=0", "")).toContain("h:80")
+    expect(nfcNoConnectionMessage("pve3", "not a url", 28, "num_connects=0", "")).toContain("could not connect to not a url")
+    expect(nfcNoConnectionMessage("pve3", "https://h/nfc/x", 28, "num_connects=1", "")).toBeNull()
+    expect(nfcNoConnectionMessage("pve3", "https://h/nfc/x", 22, "num_connects=0", "")).toBeNull()
   })
 })

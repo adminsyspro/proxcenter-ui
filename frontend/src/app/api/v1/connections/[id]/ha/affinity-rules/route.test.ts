@@ -68,4 +68,19 @@ describe('POST /api/v1/connections/[id]/ha/affinity-rules', () => {
     expect(res.status).toBe(200)
     expect((await readJson<any>(res)).message).toBe('HA affinity rule created')
   })
+
+  // Proxmox VE 9.3: a node-affinity rule can keep its resources off its nodes.
+  it('sends the direction of a node-affinity rule only when it is given', async () => {
+    const sent = () => new URLSearchParams(pveFetchMock.mock.calls.at(-1)[2].body)
+
+    await call({ type: 'node-affinity', rule: 'keep-off', nodes: 'pve3-dr', resources: 'vm:9931', strict: true, affinity: 'negative' })
+    expect(sent().get('affinity')).toBe('negative')
+    expect(sent().get('strict')).toBe('1')
+
+    await call({ type: 'node-affinity', rule: 'pin', nodes: 'pve1' })
+    expect(sent().has('affinity')).toBe(false)
+
+    await call({ type: 'node-affinity', rule: 'junk', nodes: 'pve1', affinity: 'sideways' })
+    expect(sent().has('affinity')).toBe(false)
+  })
 })

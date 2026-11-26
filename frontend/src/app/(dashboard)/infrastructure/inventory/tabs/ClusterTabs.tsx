@@ -2070,7 +2070,7 @@ export default function ClusterTabs(props: any) {
                                   {/* Header */}
                                   <Box sx={{ 
                                     display: 'grid', 
-                                    gridTemplateColumns: '60px 60px 50px 1fr 1fr 80px', alignItems: 'center', columnGap: 2,
+                                    gridTemplateColumns: '60px 60px 50px 60px 1fr 1fr 80px', alignItems: 'center', columnGap: 2,
                                     gap: 1,
                                     px: 1.5,
                                     py: 1,
@@ -2082,6 +2082,7 @@ export default function ClusterTabs(props: any) {
                                     <Typography variant="caption" sx={{ textAlign: 'center' }}>{t('common.enabled')}</Typography>
                                     <Typography variant="caption" sx={{ textAlign: 'center' }}>{t('cluster.state')}</Typography>
                                     <Typography variant="caption" sx={{ textAlign: 'center' }}>{t('cluster.strict')}</Typography>
+                                    <Typography variant="caption" sx={{ textAlign: 'center' }}>{t('cluster.affinity')}</Typography>
                                     <Typography variant="caption">{t('cluster.haResourcesCol')}</Typography>
                                     <Typography variant="caption">{t('inventory.nodesLabel')}</Typography>
                                     <Typography variant="caption" sx={{ textAlign: 'center' }}>{t('common.actions')}</Typography>
@@ -2092,7 +2093,7 @@ export default function ClusterTabs(props: any) {
                                       key={rule.rule}
                                       sx={{ 
                                         display: 'grid', 
-                                        gridTemplateColumns: '60px 60px 50px 1fr 1fr 80px', alignItems: 'center', columnGap: 2,
+                                        gridTemplateColumns: '60px 60px 50px 60px 1fr 1fr 80px', alignItems: 'center', columnGap: 2,
                                         gap: 1,
                                         px: 1.5,
                                         py: 0.75,
@@ -2115,6 +2116,15 @@ export default function ClusterTabs(props: any) {
                                       <MuiTooltip title={rule.strict ? 'Strict' : 'Not strict'}>
                                         <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                                           <i className={rule.strict ? 'ri-lock-line' : 'ri-lock-unlock-line'} style={{ fontSize: 16, color: rule.strict ? '#f59e0b' : '#9ca3af' }} />
+                                        </Box>
+                                      </MuiTooltip>
+                                      {/* Proxmox VE 9.3: a negative rule keeps the resources OFF its nodes. */}
+                                      <MuiTooltip title={rule.affinity === 'negative' ? t('inventoryPage.keepOffSelectedNodes') : t('inventoryPage.runOnSelectedNodes')}>
+                                        <Box
+                                          aria-label={rule.affinity === 'negative' ? t('inventoryPage.keepOffSelectedNodes') : t('inventoryPage.runOnSelectedNodes')}
+                                          sx={{ display: 'flex', justifyContent: 'center' }}
+                                        >
+                                          <i className={rule.affinity === 'negative' ? 'ri-forbid-line' : 'ri-map-pin-line'} style={{ fontSize: 16, color: rule.affinity === 'negative' ? '#f59e0b' : '#3b82f6' }} />
                                         </Box>
                                       </MuiTooltip>
                                       <HaResourceChips resources={rule.resources} allVms={allVms || []} connId={clusterConnId} />

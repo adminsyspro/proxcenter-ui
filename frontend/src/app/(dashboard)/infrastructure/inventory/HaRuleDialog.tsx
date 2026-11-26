@@ -42,10 +42,23 @@ type HaRuleDialogProps = {
   availableNodes: any[] // node objects with { node, status, ... }
   availableResources: any[] // HA resources
   allVms?: any[] // all VMs for name resolution
+  /** Proxmox VE 9.3+: a node-affinity rule can keep its resources OFF the nodes. */
+  nodeAffinityDirection?: boolean
   onSaved: () => void
 }
 
-function HaRuleDialog({ open, onClose, rule, ruleType, connId, availableNodes, availableResources, allVms, onSaved }: HaRuleDialogProps) {
+/** `node1:2,node2` → { node1: '2' }: the priorities a rule gives its nodes. */
+function nodePriorities(nodes: unknown): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const entry of String(nodes || '').split(',')) {
+    const [node, priority] = entry.split(':').map(p => p.trim())
+    if (node && priority) out[node] = priority
+  }
+
+  return out
+}
+
+function HaRuleDialog({ open, onClose, rule, ruleType, connId, availableNodes, availableResources, allVms, nodeAffinityDirection = false, onSaved }: HaRuleDialogProps) {
   const t = useTranslations()
   const theme = useTheme()
   const [name, setName] = useState('')
@@ -97,6 +110,17 @@ function HaRuleDialog({ open, onClose, rule, ruleType, connId, availableNodes, a
     }
   }, [open, rule])
 
+  // An older PVE has no direction for node-affinity rules: the selector only
+  // shows where PVE has it, or on a rule that already carries one.
+  const showNodeDirection = ruleType === 'node-affinity' && (nodeAffinityDirection || !!rule?.affinity)
+  const keepOff = ruleType === 'node-affinity' && affinity === 'negative'
+
+  const ruleInfo = () => {
+    if (ruleType === 'resource-affinity') return t('cluster.resourceAffinityInfo')
+
+    return keepOff ? t('cluster.nodeAffinityNegativeInfo') : t('cluster.nodeAffinityInfo')
+  }
+
   const handleSave = async () => {
     if (!name.trim() && !rule) {
       setError(t('inventoryPage.ruleNameRequired'))
@@ -120,7 +144,10 @@ return
     setError(null)
 
     try {
-      const nodesString = selectedNodes.join(',')
+      // Kept nodes keep the priority the rule gave them; a negative rule has
+      // none (PVE refuses priorities there).
+      const priorities = keepOff ? {} : nodePriorities(rule?.nodes)
+      const nodesString = selectedNodes.map(n => (priorities[n] ? `${n}:${priorities[n]}` : n)).join(',')
       const resourcesString = selectedResources.join(',')
       
       const url = rule
@@ -143,6 +170,7 @@ return
       if (ruleType === 'node-affinity') {
         body.nodes = nodesString
         body.strict = strict
+        if (showNodeDirection) body.affinity = affinity
       } else {
         body.affinity = affinity
       }
@@ -204,10 +232,7 @@ return
         )}
 
         <Alert severity="info" icon={<i className={ruleType === 'node-affinity' ? 'ri-route-line' : 'ri-links-line'} style={{ fontSize: 18 }} />} sx={{ mb: 2, '& .MuiAlert-message': { fontSize: 12 } }}>
-          {ruleType === 'node-affinity'
-            ? t('cluster.nodeAffinityInfo')
-            : t('cluster.resourceAffinityInfo')
-          }
+          {ruleInfo()}
         </Alert>
 
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mt: 1, mb: 2 }}>
@@ -236,6 +261,7 @@ return
         <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
           {ruleType === 'node-affinity' && (
             <FormControlLabel
+              sx={{ flexShrink: 0 }}
               control={
                 <Switch 
                   checked={strict} 
@@ -246,12 +272,27 @@ return
               label={
                 <Box>
                   <Typography variant="body2">Strict</Typography>
-                  <Typography variant="caption" sx={{ opacity: 0.6 }}>
-                    {t('inventoryPage.restrictToSelectedNodes')}
+                  <Typography variant="caption" sx={{ opacity: 0.6, whiteSpace: 'nowrap' }}>
+                    {keepOff ? t('inventoryPage.neverOnSelectedNodes') : t('inventoryPage.restrictToSelectedNodes')}
                   </Typography>
                 </Box>
               }
             />
+          )}
+
+          {showNodeDirection && (
+            <FormControl size="small" fullWidth>
+              <InputLabel>{t('cluster.affinity')}</InputLabel>
+              <Select
+                value={affinity}
+                onChange={(e) => setAffinity(e.target.value as 'positive' | 'negative')}
+                label={t('cluster.affinity')}
+                disabled={saving}
+              >
+                <MenuItem value="positive">{t('inventoryPage.runOnSelectedNodes')}</MenuItem>
+                <MenuItem value="negative">{t('inventoryPage.keepOffSelectedNodes')}</MenuItem>
+              </Select>
+            </FormControl>
           )}
           
           {ruleType === 'resource-affinity' && (

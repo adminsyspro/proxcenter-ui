@@ -308,11 +308,16 @@ describe('ProtectionTab job details', () => {
 
     expect(screen.getByText('100 · synced-vm').parentElement).toHaveTextContent('2.0 KB')
     expect(screen.getByText('100 · synced-vm').parentElement).toHaveTextContent('2m')
+    // An error row folds its reason into the red status icon's tooltip: the
+    // row stays one line of plain text, and the old run figures stay hidden.
     const errorRow = screen.getByText('102 · error-vm').parentElement!
-    expect(errorRow).toHaveTextContent('snapshot failed')
+    expect(errorRow).not.toHaveTextContent('snapshot failed')
     expect(errorRow).not.toHaveTextContent('4.0 KB')
+    await userEvent.hover(screen.getByTestId('vm-status-icon-102'))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Error: snapshot failed')
+    await userEvent.unhover(screen.getByTestId('vm-status-icon-102'))
     await userEvent.hover(screen.getByRole('img', { name: 'Error' }))
-    expect(await screen.findByRole('tooltip')).toHaveTextContent('Error — snapshot failed')
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Error: snapshot failed')
     expect(screen.getByText('VM 104')).toBeInTheDocument()
   })
 

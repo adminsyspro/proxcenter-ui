@@ -1053,8 +1053,14 @@ export default function ProtectionTab({
                           // warning rather than a neutral state.
                           const color = row.status === 'synced' ? 'success' : row.status === 'syncing' ? 'primary' : row.status === 'error' ? 'error' : ['suspended', 'skipped', 'reseed_required', 'source_missing'].includes(row.status) ? 'warning' : 'default'
                           const history = (row.throughput_history ?? []).map(p => ({ ts: new Date(p.timestamp).getTime(), bps: p.bytes_per_sec }))
-                          let captionColor = 'text.secondary'
-                          if (['error', 'skipped', 'reseed_required', 'source_missing'].includes(row.status) && row.last_error) captionColor = row.status === 'error' ? 'error.main' : 'warning.main'
+                          // A warning state keeps its reason on the row, next to
+                          // the action it explains. An error's reason lives in the
+                          // red status icon's tooltip instead: a truncated red
+                          // sentence in the middle of the row said nothing more.
+                          const inlineReason = ['skipped', 'reseed_required', 'source_missing'].includes(row.status) && !!row.last_error
+                          // The last run's figures would mislead next to a failure.
+                          const showFigures = !inlineReason && !(row.status === 'error' && row.last_error)
+                          const statusTooltip = row.last_error ? `${t(`siteRecovery.status.${row.status}`)}: ${row.last_error}` : t(`siteRecovery.status.${row.status}`)
                           return (
                             /* One line per guest, built like every other list row
                                in the app: type glyph carrying a state dot, then
@@ -1063,7 +1069,7 @@ export default function ProtectionTab({
                                cannot, and carries the error when there is one so
                                nothing is lost by folding the row up. */
                             <Box key={row.vmid} ref={index === 0 ? vmRowRef : undefined} sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.25, py: 0.75, borderBottom: 1, borderColor: 'divider', '&:last-child': { borderBottom: 0 } }}>
-                              <Tooltip title={row.last_error ? `${t(`siteRecovery.status.${row.status}`)} — ${row.last_error}` : t(`siteRecovery.status.${row.status}`)} arrow>
+                              <Tooltip title={statusTooltip} arrow>
                                 <Box
                                   component='span'
                                   role='img'
@@ -1091,9 +1097,10 @@ export default function ProtectionTab({
                               </Typography>
                               <Typography
                                 variant='caption'
-                                sx={{ flex: 1, px: 1, textAlign: 'center', color: captionColor, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                                sx={{ flex: 1, px: 1, textAlign: 'center', color: inlineReason ? 'warning.main' : 'text.secondary', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                               >
-                                {['error', 'skipped', 'reseed_required', 'source_missing'].includes(row.status) && row.last_error ? row.last_error : (
+                                {inlineReason && row.last_error}
+                                {showFigures && (
                                   <>
                                     {row.last_sync ? new Date(row.last_sync).toLocaleString() : '—'}
                                     {row.bytes_sent > 0 && ` · ${formatBytes(row.bytes_sent)}`}
@@ -1131,21 +1138,24 @@ export default function ProtectionTab({
                                   {t('siteRecovery.protection.reseed')}
                                 </Button>
                               )}
-                              <Box
-                                component='span'
-                                aria-hidden
-                                sx={{
-                                  flexShrink: 0, lineHeight: 0, fontSize: '1.05rem',
-                                  color: color === 'default' ? 'text.disabled' : `${color}.main`,
-                                  ...(row.status === 'syncing' ? {
-                                    animation: 'srVmSpin 1.5s linear infinite',
-                                    '@keyframes srVmSpin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } },
-                                    '@media (prefers-reduced-motion: reduce)': { animation: 'none' }
-                                  } : {})
-                                }}
-                              >
-                                <i className={vmStatusIcon(row.status)} />
-                              </Box>
+                              <Tooltip title={statusTooltip} arrow>
+                                <Box
+                                  component='span'
+                                  aria-hidden
+                                  data-testid={`vm-status-icon-${row.vmid}`}
+                                  sx={{
+                                    flexShrink: 0, lineHeight: 0, fontSize: '1.05rem',
+                                    color: color === 'default' ? 'text.disabled' : `${color}.main`,
+                                    ...(row.status === 'syncing' ? {
+                                      animation: 'srVmSpin 1.5s linear infinite',
+                                      '@keyframes srVmSpin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } },
+                                      '@media (prefers-reduced-motion: reduce)': { animation: 'none' }
+                                    } : {})
+                                  }}
+                                >
+                                  <i className={vmStatusIcon(row.status)} />
+                                </Box>
+                              </Tooltip>
                             </Box>
                           )
                         })}

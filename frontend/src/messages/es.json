@@ -7703,6 +7703,7 @@
       "colTransferred": "Transferido",
       "phase1Help": "La replicación inversa se ejecuta mientras las VM DR siguen en línea. Inicie el cutover cuando la última sincronización sea lo bastante reciente.",
       "neverSynced": "Aún sin sincronización inversa",
+      "passFailed": "Última pasada fallida, reintento automático",
       "cutoverNotReady": "Esperando la primera sincronización inversa de cada VM",
       "cutover": "Cutover",
       "cutoverConfirm": "¿Detener las VM DR, aplicar el delta final e iniciar las VM de origen?",

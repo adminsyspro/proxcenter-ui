@@ -320,6 +320,27 @@ describe('FailoverDialog failback reverse-sync monitor (issue #664 failback)', (
     expect(alerts[0].className).toContain('Warning')
   })
 
+  it('shows the pass in flight under its VM row while the other VM waits for the next one', () => {
+    renderDialog({
+      type: 'failback',
+      execution: execution({
+        type: 'failback',
+        status: 'running',
+        phase: 'reverse_sync',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'running', progress_percent: 0, reverse_sync_progress: { stage: 'transferring', disk: 2, disks: 3, bytes: 1024, total_bytes: 4096, started_at: new Date().toISOString() } },
+          { vm_id: 200, vm_name: 'web-02', status: 'running', progress_percent: 0, last_reverse_sync_at: '2026-08-10T10:05:00Z' },
+        ],
+      }),
+    })
+
+    const passes = screen.getAllByTestId('reverse-sync-pass')
+    expect(passes).toHaveLength(1)
+    expect(passes[0]).toHaveTextContent('Sending disk 2 of 3')
+    expect(passes[0]).toHaveTextContent('25%')
+    expect(screen.getByTestId('execution-trace')).toBeInTheDocument()
+  })
+
   it('shows the phase1Title heading and the table header row instead of the generic "Operation in progress" text', () => {
     renderDialog({
       type: 'failback',

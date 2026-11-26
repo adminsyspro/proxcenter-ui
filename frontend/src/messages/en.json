@@ -7710,7 +7710,13 @@
       "cancelFailback": "Cancel failback",
       "cancelConfirm": "Stop reverse replication and return the plan to failed over? Nothing is changed on the VMs.",
       "completeTitle": "Failback complete",
-      "completeReprotected": "Source VMs are running and replication protects them again in the original direction."
+      "completeReprotected": "Source VMs are running and replication protects them again in the original direction.",
+      "pass": {
+        "aligning": "Aligning the source VM on the last snapshot both sites share",
+        "transferring": "Sending disk {disk} of {disks}",
+        "sentOf": "{sent} of {total}",
+        "elapsed": "running for {elapsed}"
+      }
     },
     "screenshots": {
       "view": "View boot screenshot",

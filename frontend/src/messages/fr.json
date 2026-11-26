@@ -7710,7 +7710,13 @@
       "cancelFailback": "Annuler le failback",
       "cancelConfirm": "Arrêter la réplication inverse et remettre le plan en failed over ? Rien n'est modifié sur les VM.",
       "completeTitle": "Failback terminé",
-      "completeReprotected": "Les VM source tournent et la réplication les protège de nouveau dans le sens d'origine."
+      "completeReprotected": "Les VM source tournent et la réplication les protège de nouveau dans le sens d'origine.",
+      "pass": {
+        "aligning": "Alignement de la VM source sur le dernier snapshot commun aux deux sites",
+        "transferring": "Envoi du disque {disk} sur {disks}",
+        "sentOf": "{sent} sur {total}",
+        "elapsed": "depuis {elapsed}"
+      }
     },
     "screenshots": {
       "view": "Voir la capture au boot",

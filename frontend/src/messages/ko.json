@@ -7710,7 +7710,13 @@
       "cancelFailback": "페일백 취소",
       "cancelConfirm": "역방향 복제를 중지하고 플랜을 페일오버 상태로 되돌리시겠습니까? VM은 변경되지 않습니다.",
       "completeTitle": "페일백 완료",
-      "completeReprotected": "소스 VM이 실행 중이며 복제가 원래 방향으로 다시 보호합니다."
+      "completeReprotected": "소스 VM이 실행 중이며 복제가 원래 방향으로 다시 보호합니다.",
+      "pass": {
+        "aligning": "두 사이트가 공유하는 마지막 스냅샷에 소스 VM을 맞추는 중",
+        "transferring": "디스크 {disk}/{disks} 전송 중",
+        "sentOf": "{sent} / {total}",
+        "elapsed": "{elapsed} 경과"
+      }
     },
     "screenshots": {
       "view": "부팅 스크린샷 보기",

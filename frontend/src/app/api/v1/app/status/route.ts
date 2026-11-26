@@ -7,28 +7,29 @@ export const runtime = 'nodejs'
 
 /**
  * GET /api/v1/app/status
- * Retourne l'état de l'application pour l'onboarding
+ * Onboarding state, read by the sign-in page before any session exists: is
+ * the first-run setup due, and is at least one connection configured.
+ *
+ * Public, so it answers with those two decisions and no count
+ * (GHSA-5hx5-2429-mg7w): how many accounts or connections an instance holds
+ * is not for an unauthenticated caller, and nothing in the interface reads it.
  */
 export async function GET() {
   try {
     const prisma = await getSessionPrisma()
     const tenantId = await getCurrentTenantId()
 
-    // Vérifier le nombre d'utilisateurs (cross-tenant: setup wizard fires
-    // when ANY user exists, regardless of which tenant they belong to).
+    // Cross-tenant on purpose: the setup wizard is due only while NO user
+    // exists, whichever tenant they belong to.
     const userCount = await basePrisma.user.count()
 
-    // Vérifier le nombre de connexions Proxmox (direct or via vDC)
+    // Connections of the tenant, direct or through an enabled vDC.
     const connectionCount = await prisma.connection.count()
-
-    // For tenants with vDCs: they have connections indirectly via vDC assignments.
     const vdcCount = await basePrisma.vdc.count({ where: { tenantId, enabled: true } })
 
     return NextResponse.json({
       setupRequired: userCount === 0,
       connectionsConfigured: connectionCount > 0 || vdcCount > 0,
-      userCount,
-      connectionCount: connectionCount + vdcCount,
     })
   } catch (error) {
     console.error("Error checking app status:", error)
@@ -36,8 +37,6 @@ export async function GET() {
     return NextResponse.json({
       setupRequired: true,
       connectionsConfigured: false,
-      userCount: 0,
-      connectionCount: 0,
     })
   }
 }

@@ -296,21 +296,21 @@ export async function proxy(request: NextRequest) {
   const isApiPath = pathname.startsWith('/api/')
 
   // API tokens, gesture 1 (spec section 6): strip EVERY inbound x-pxc-*
-  // header, FIRST instruction of the normal-mode API path, before the storage
-  // upload bypass below. Absolute rule: no NextResponse.next() on any /api/*
-  // path is ever emitted with unsanitized client headers. Trusted values are
-  // re-set below only by the bounded derogation.
+  // header, FIRST instruction of the normal-mode API path. Absolute rule: no
+  // NextResponse.next() on any /api/* path is ever emitted with unsanitized
+  // client headers. Trusted values are re-set below only by the bounded
+  // derogation.
   const requestHeaders = new Headers(request.headers)
   if (isApiPath) {
     stripPxcHeaders(requestHeaders)
   }
 
-  // Gesture 2 (existing bypass, unchanged semantics, now AFTER the strip):
-  // skip the proxy for large upload routes (auth handled in route handler
-  // via checkPermission)
-  if (pathname.includes('/storage/') && pathname.endsWith('/upload')) {
-    return NextResponse.next({ request: { headers: requestHeaders } })
-  }
+  // No early return for the storage upload route any more (GHSA-hh9f-5mj2-8jfp).
+  // It used to leave here, before the session read, on a substring test that
+  // other routes could spell through their dynamic segments, so the 2FA
+  // enrollment gate below never applied to it. The shortcut bought nothing: an
+  // upload goes in 5 MB chunks, far under the size the proxy buffers, and the
+  // session read below only decodes the cookie.
 
   // Vérifier si c'est une route publique
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))

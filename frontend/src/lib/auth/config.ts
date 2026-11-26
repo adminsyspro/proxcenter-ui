@@ -32,6 +32,8 @@ export interface AuthUser {
   role: UserRole
   authProvider: "credentials" | "ldap" | "oidc"
   tenantId: string
+  /** Set only while the account still has to enroll in 2FA. */
+  mustEnroll2fa?: boolean
 }
 
 declare module "next-auth" {
@@ -921,6 +923,9 @@ export const authOptions: NextAuthOptions = {
         role: token.role as UserRole,
         authProvider: token.authProvider as "credentials" | "ldap" | "oidc",
         tenantId: (token.tenantId as string) || 'default',
+        // Refreshed from the database on every read by the jwt callback above.
+        // The permission checks refuse a session that carries it.
+        ...(token.mustEnroll2fa ? { mustEnroll2fa: true } : {}),
       }
 
       return session

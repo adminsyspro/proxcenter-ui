@@ -11,7 +11,8 @@ The Go orchestrator (proxcenter-backend) calls this service through
         Returns: 200 OK with a tiny JSON body so docker-compose can probe it.
 
 Errors come back as JSON with a non-2xx status — the Go client surfaces the
-body as the error message.
+body as the error message. A rendering failure answers a fixed message; its
+traceback is only written to the sidecar log.
 """
 
 import logging
@@ -65,9 +66,12 @@ def render() -> Response:
         # turns any other resource reference into a logged miss instead of a
         # network or filesystem access from this container.
         pdf_bytes = HTML(string=html, url_fetcher=InlineOnlyURLFetcher()).write_pdf()
-    except Exception as exc:  # noqa: BLE001 — surface the rendering failure verbatim.
+    except Exception:  # noqa: BLE001 — any rendering failure becomes a 500.
+        # The traceback stays in this container's log; the caller only gets a
+        # fixed message, so no exception text (file paths, library internals,
+        # fragments of the submitted HTML) leaves the sidecar.
         log.exception("PDF rendering failed")
-        return jsonify(error=str(exc)), 500
+        return jsonify(error="PDF rendering failed, see the reporting sidecar log"), 500
 
     return Response(pdf_bytes, mimetype="application/pdf")
 

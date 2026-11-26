@@ -186,8 +186,7 @@ jobs:
           category: 'trivy-weasyprint'
 
   # The HA images built from config/ha. Patroni is pip-installed without a
-  # lockfile and the postgres base ships Go binaries (gosu), so libraries are
-  # scanned along with the Alpine packages.
+  # lockfile, so libraries are scanned along with the Alpine packages.
   trivy-ha:
     name: Trivy — HA ${{ matrix.image }} Image
     runs-on: ubuntu-latest

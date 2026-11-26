@@ -255,4 +255,30 @@ describe('GuestPanel', () => {
     expect(await screen.findByText('No line in the firewall log of this guest.')).toBeTruthy()
     expect(screen.queryByText(/lines? left/)).toBeNull()
   })
+
+  it('opens the details of a line on a double click or Enter, organised as in the Firewall log view, and closes them', async () => {
+    const dropped = '100 6 tap100i0-IN 26/Nov/2026:15:16:58 +0100 policy DROP: IN=fwbr100i0 OUT=fwbr100i0 PHYSIN=fwln100o0 PHYSOUT=tap100i0 MAC=00:50:56:a1:b1:37:00:09:0f:09:00:10:08:00 SRC=10.11.11.27 DST=10.0.0.1 LEN=60 TOS=0x00 PREC=0x00 TTL=63 ID=3500 DF PROTO=TCP SPT=56888 DPT=3306 SEQ=3766400566 ACK=0 WINDOW=64240 SYN'
+    getGuestLogPage.mockResolvedValue({ total: 2, lines: [{ n: 1, t: 'not a firewall line' }, { n: 2, t: dropped }] })
+    render()
+    await pageMode()
+    await waitFor(() => expect(shown()).toHaveLength(2))
+    // A line in another shape has no details: no focus, nothing on a double click.
+    fireEvent.doubleClick(shown()[1])
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(shown()[1].getAttribute('tabindex')).toBeNull()
+
+    fireEvent.doubleClick(shown()[0])
+    const dialog = await screen.findByRole('dialog', { name: 'Firewall log line · web-1' })
+    for (const card of ['Decision', 'Flow', 'Raw line']) expect(within(dialog).getByText(card)).toBeTruthy()
+    expect(within(dialog).getByText('Default policy')).toBeTruthy()
+    expect(within(dialog).getByText('10.11.11.27')).toBeTruthy()
+    expect(within(dialog).getByText('3306')).toBeTruthy()
+    expect(within(dialog).getByText('pve1')).toBeTruthy()
+    expect(within(dialog).getByText(dropped)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    fireEvent.keyDown(shown()[0], { key: 'Enter' })
+    expect(await screen.findByRole('dialog', { name: 'Firewall log line · web-1' })).toBeTruthy()
+  })
 })

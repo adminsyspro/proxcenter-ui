@@ -34,16 +34,20 @@ type Props = Pick<ZoneRowProps, 'zone' | 'members' | 'membersKnown' | 'flows' | 
   id: string
 }
 
+/** A card of the details: framed on the theme's paper, its sections inside. */
+const BLOCK_SX = { minWidth: 0, border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', px: 1.5, pt: 0.5 } as const
+
 /**
  * The details of a zone card on the Policy sub-tab: the content of the zone panel of the map, laid out wide. On the
- * left the observed traffic of the zone over time and its top sources; on the right the pending observed flows to
- * accept or dismiss, the members, and the flows in and out, all editable in place. The pending flows of the zone are
- * read for it (the orchestrator database, every minute while shown, no Proxmox call).
+ * left the zone itself: its observed traffic over time (the chart taller than in the map panel), its members and its
+ * exceptions; on the right what is to be dealt with: its top sources, the pending observed flows to accept or dismiss,
+ * and the flows in and out, all editable in place. The pending flows of the zone are read for it (the orchestrator
+ * database, every minute while shown, no Proxmox call).
  */
 export default function ZoneWorkspace({ zone, members, membersKnown, flows, zonesById, onAssign, onToggle, work, id }: Props) {
   const t = useTranslations('microsegPilot.policy.zone')
   const { data, reload } = useMicrosegSuggestions(work.connectionId, { status: 'pending', zone: zone.id, limit: WORKSPACE_SUGGESTIONS_LIMIT })
-  const { trafficSections, dataSections, dialogs } = useZoneWork({
+  const { tallChart, topSection, suggestionsSection, memberSections, flowSections, dialogs } = useZoneWork({
     zone, members, membersKnown, flows, zonesById,
     edits: work.edits,
     onAssign: () => onAssign(zone),
@@ -75,9 +79,12 @@ export default function ZoneWorkspace({ zone, members, membersKnown, flows, zone
           <IconButton size='small' aria-label={t('hideDetailsOf', { zone: zone.name })} onClick={onToggle}><i className='ri-arrow-up-s-line' /></IconButton>
         </Tooltip>
       </Box>
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 2fr) minmax(0, 3fr)' }, columnGap: 3, px: 2, pb: 2, minWidth: 0 }}>
-        <Box sx={{ minWidth: 0 }}>{trafficSections}</Box>
-        <Box sx={{ minWidth: 0 }}>{dataSections}</Box>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 2fr) minmax(0, 3fr)' }, gap: 2, px: 2, pb: 2, minWidth: 0 }}>
+        {/* Two rows of two cards, the two of a row as tall as the taller: their frames and headers line up. */}
+        <Box data-block='traffic' sx={BLOCK_SX}>{tallChart}</Box>
+        <Box data-block='review' sx={BLOCK_SX}>{topSection}{suggestionsSection}</Box>
+        <Box data-block='members' sx={BLOCK_SX}>{memberSections}</Box>
+        <Box data-block='flows' sx={BLOCK_SX}>{flowSections}</Box>
       </Box>
       {dialogs}
     </Box>

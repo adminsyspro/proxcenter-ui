@@ -15,7 +15,7 @@ import {
 import { useBoxSize } from './useBoxSize'
 import { STATE_DOT } from './ZoneRow'
 import { EDGE_COLORS, UNZONED_ID, isPveGroup, type MapEdgeData, type MapNodeData } from './zoneGraph'
-import { onKeys } from './ZoneNode'
+import { ExternalTip, onKeys } from './ZoneNode'
 
 /** The scene as it opens: seen a little from above, so that the orbits read as ellipses. */
 const START: View = { yaw: 0.5, pitch: -0.36, zoom: 1 }
@@ -155,7 +155,7 @@ function starLook(star: Star, tNode: StarT, tState: StarT, zoneColor: string, tS
   }
   const boundary = d.kind === 'outside' ? 'outside' : 'external'
   const name = tNode(boundary)
-  return { size: 40, ring: 'text.disabled', ringWidth: 1, dashed: true, name, label: name, icon: <i className={boundary === 'outside' ? 'ri-cloud-line' : 'ri-global-line'} style={{ fontSize: 18 }} /> }
+  return { ...(boundary === 'external' && { tip: <ExternalTip /> }), size: 40, ring: 'text.disabled', ringWidth: 1, dashed: true, name, label: name, icon: <i className={boundary === 'outside' ? 'ri-cloud-line' : 'ri-global-line'} style={{ fontSize: 18 }} /> }
 }
 
 type PastilleProps = {

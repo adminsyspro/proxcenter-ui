@@ -574,23 +574,34 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
 
               <Stack spacing={1}>
                 {(execution.vm_results || []).map((vm: RecoveryVMResult) => (
-                  <Box key={vm.vm_id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant='body2' sx={{ fontWeight: 500, fontSize: '0.8rem' }}>
+                  <Box key={vm.vm_id}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Typography variant='body2' sx={{ flex: 1, minWidth: 0, fontWeight: 500, fontSize: '0.8rem' }}>
                         {vmNameMap?.[vm.vm_id] || vm.vm_name}
                       </Typography>
-                      {vm.error && (
-                        <Typography variant='caption' sx={{ color: 'error.main', fontSize: '0.65rem' }}>{vm.error}</Typography>
-                      )}
+                      <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.7rem', textAlign: 'right' }}>
+                        {vm.last_reverse_sync_at ? new Date(vm.last_reverse_sync_at).toLocaleString() : t('siteRecovery.failback.neverSynced')}
+                      </Typography>
+                      <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.7rem', minWidth: 70, textAlign: 'right' }}>
+                        {typeof vm.last_reverse_sync_bytes === 'number' && vm.last_reverse_sync_bytes > 0
+                          ? formatBytes(vm.last_reverse_sync_bytes)
+                          : '—'}
+                      </Typography>
                     </Box>
-                    <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.7rem', textAlign: 'right' }}>
-                      {vm.last_reverse_sync_at ? new Date(vm.last_reverse_sync_at).toLocaleString() : t('siteRecovery.failback.neverSynced')}
-                    </Typography>
-                    <Typography variant='caption' sx={{ color: 'text.secondary', fontSize: '0.7rem', minWidth: 70, textAlign: 'right' }}>
-                      {typeof vm.last_reverse_sync_bytes === 'number' && vm.last_reverse_sync_bytes > 0
-                        ? formatBytes(vm.last_reverse_sync_bytes)
-                        : '—'}
-                    </Typography>
+                    {/* A failed pass is retried on the next tick, hence a warning
+                        rather than an error. The reason is the orchestrator's own
+                        text, which names what blocks and what to do about it, so it
+                        gets a full-width block instead of a squeezed caption. */}
+                    {vm.error && (
+                      <Alert severity='warning' sx={{ mt: 0.75, py: 0.25, '& .MuiAlert-message': { minWidth: 0 } }}>
+                        <Typography variant='body2' sx={{ fontWeight: 600, fontSize: '0.8rem' }}>
+                          {t('siteRecovery.failback.passFailed')}
+                        </Typography>
+                        <Typography variant='body2' sx={{ fontSize: '0.75rem', mt: 0.25, overflowWrap: 'anywhere' }}>
+                          {vm.error}
+                        </Typography>
+                      </Alert>
+                    )}
                   </Box>
                 ))}
               </Stack>

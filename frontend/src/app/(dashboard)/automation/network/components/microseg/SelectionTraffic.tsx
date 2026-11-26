@@ -16,6 +16,7 @@ import { useTimelineRange } from '../useTimelineRange'
 import { usePolicyVolume } from '../usePolicyReads'
 import { useTrafficTimeline } from '../useTrafficTimeline'
 import { objectDotSx } from './objectColour'
+import { LIST_ROW_SX } from './PanelSection'
 import { bareIp } from './zoneGraph'
 import TruncatedText from './TruncatedText'
 
@@ -170,8 +171,11 @@ export function useSelectionTraffic(connectionId: string, zones: MicrosegZone[],
 
 export type SelectionTrafficState = ReturnType<typeof useSelectionTraffic>
 
-/** The compact chart of a panel section (its header is the title): verdict toggle, range chips for a zone. */
-export function SelectionTrafficChart({ traffic, emptyText }: { traffic: SelectionTrafficState; emptyText?: string }) {
+/**
+ * The compact chart of a panel section (its header is the title): verdict toggle, range chips for a zone. `tall`: the
+ * chart at a set height, taller than in a map panel (the Policy sub-tab's zone details).
+ */
+export function SelectionTrafficChart({ traffic, emptyText, tall = false }: { traffic: SelectionTrafficState; emptyText?: string; tall?: boolean }) {
   const t = useTranslations('microsegPilot.overview.sections')
   // Nothing in any verdict: no verdict to pick (a verdict that empties the chart keeps its toggle to go back).
   const nothing = traffic.phase === 'ready' && traffic.summary.total === 0
@@ -187,6 +191,7 @@ export function SelectionTrafficChart({ traffic, emptyText }: { traffic: Selecti
       mirror={traffic.mirror}
       hideVerdict={nothing}
       compact
+      tall={tall}
       phase={traffic.phase}
       timeline={traffic.timeline}
       verdict={traffic.verdict}
@@ -263,7 +268,7 @@ export function TopSourcesList({ top, phase, mode = 'in' }: { top: TopEntry[]; p
         const name = nameOf(s)
         const where = s.dir === 'in' ? t('fromInto', { name }) : t('toFrom', { name })
         return (
-          <Box role='listitem' key={`${s.dir}:${s.key}`} data-source={both ? `${s.dir}:${s.key}` : s.key} sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 28, minWidth: 0 }}>
+          <Box role='listitem' key={`${s.dir}:${s.key}`} data-source={both ? `${s.dir}:${s.key}` : s.key} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, ...LIST_ROW_SX }}>
             {both && (
               <Tooltip title={where}>
                 <i className={s.dir === 'in' ? 'ri-arrow-right-down-line' : 'ri-arrow-right-up-line'} aria-label={where} style={{ flexShrink: 0, opacity: 0.8 }} />

@@ -299,6 +299,27 @@ describe('FailoverDialog failback reverse-sync monitor (issue #664 failback)', (
     expect(screen.getByRole('button', { name: 'Cutover' })).toBeInTheDocument()
   })
 
+  it('shows a failed pass as a warning under its VM row, with the reason in full', () => {
+    const reason = 'reverse sync of rbd/vm-9100-disk-0 failed: rbd/vm-100-disk-0 was written after mirror-a, and it also carries snapshots newer than that base: mirror-b.'
+    renderDialog({
+      type: 'failback',
+      execution: execution({
+        type: 'failback',
+        status: 'running',
+        phase: 'reverse_sync',
+        vm_results: [
+          { vm_id: 100, vm_name: 'web-01', status: 'running', progress_percent: 0, error: reason },
+          { vm_id: 200, vm_name: 'web-02', status: 'running', progress_percent: 0, last_reverse_sync_at: '2026-08-10T10:05:00Z' },
+        ],
+      }),
+    })
+
+    const alerts = screen.getAllByRole('alert').filter(a => a.textContent?.includes('Last pass failed, retrying automatically'))
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0]).toHaveTextContent(reason)
+    expect(alerts[0].className).toContain('Warning')
+  })
+
   it('shows the phase1Title heading and the table header row instead of the generic "Operation in progress" text', () => {
     renderDialog({
       type: 'failback',

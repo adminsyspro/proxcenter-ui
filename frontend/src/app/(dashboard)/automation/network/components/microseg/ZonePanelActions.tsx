@@ -24,6 +24,7 @@ import ZoneDialog from './ZoneDialog'
 import ZoneEgressDialog from './ZoneEgressDialog'
 import ZoneEnforceDialog from './ZoneEnforceDialog'
 import { ZoneStateMenu } from './ZoneRow'
+import { LIST_ROW_SX } from './PanelSection'
 import ZoneStateDialog from './ZoneStateDialog'
 import type { ZoneFormValues } from './zoneForm'
 import type { ZoneMember } from './zoneModel'
@@ -226,7 +227,7 @@ export function FlowsList({ flows, zonesById, editor, size, unapplied = null }: 
       <PagedList items={flows} size={size} render={rows => (
         <Box role='list'>
           {rows.map(flow => (
-            <Box role='listitem' key={flow.id} sx={{ display: 'flex', minHeight: 28, alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+            <Box role='listitem' key={flow.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, ...LIST_ROW_SX }}>
               <FlowSummary flow={flow} zonesById={zonesById} />
               {unapplied?.has(flow.id) && (
                 <Tooltip title={t('edge.draft')}><Chip size='small' color='warning' variant='outlined' label={t('flowPanel.draft')} sx={{ flexShrink: 0 }} /></Tooltip>

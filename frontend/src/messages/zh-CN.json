@@ -7703,6 +7703,7 @@
       "colTransferred": "已传输",
       "phase1Help": "反向复制正在运行，DR 虚拟机保持在线。当最后一次同步足够新时，即可执行切换。",
       "neverSynced": "尚无反向同步",
+      "passFailed": "上次同步失败，将自动重试",
       "cutoverNotReady": "正在等待每台虚拟机完成首次反向同步",
       "cutover": "切换",
       "cutoverConfirm": "停止 DR 虚拟机，应用最终增量并启动源虚拟机？",
@@ -14906,6 +14907,7 @@
         "members": "{count, plural, other {# 个成员}}",
         "external": "未知 / 外部",
         "externalHint": "不匹配任何客户机的来源：IP 地址或网络（CIDR）",
+        "externalTop": "{count, plural, other {最活跃的地址（{shown}/#）}}",
         "outside": "区域之外",
         "outsideHint": "区域之外的目标（CIDR）。源区域阻断其出站流量后，发往这些目标的流量才会生效。",
         "notApplied": "出站未受控",
@@ -15240,7 +15242,9 @@
         "liveResume": "继续",
         "hideNoise": "隐藏组播和广播",
         "hideNoiseTip": "隐藏网络发送给所有客户机的流量（组播、广播）。最新的 {count} 行只读取一次，并在浏览器中过滤。",
-        "noiseShown": "最新的 {scanned} 行中{count, plural, =0 {没有剩余的行} other {剩余 # 行}}"
+        "noiseShown": "最新的 {scanned} 行中{count, plural, =0 {没有剩余的行} other {剩余 # 行}}",
+        "lineTitle": "防火墙日志行 · {name}",
+        "lineOpenHint": "双击查看详情"
       }
     },
     "preflight": {

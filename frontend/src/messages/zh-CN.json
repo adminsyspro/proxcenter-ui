@@ -7710,7 +7710,13 @@
       "cancelFailback": "取消故障回复",
       "cancelConfirm": "停止反向复制并将计划恢复为已故障转移状态？虚拟机不会有任何更改。",
       "completeTitle": "故障回复完成",
-      "completeReprotected": "源虚拟机正在运行，复制已恢复原方向的保护。"
+      "completeReprotected": "源虚拟机正在运行，复制已恢复原方向的保护。",
+      "pass": {
+        "aligning": "正在将源虚拟机对齐到两个站点共有的最新快照",
+        "transferring": "正在发送磁盘 {disk}/{disks}",
+        "sentOf": "{sent} / {total}",
+        "elapsed": "已运行 {elapsed}"
+      }
     },
     "screenshots": {
       "view": "查看启动截图",

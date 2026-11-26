@@ -7710,7 +7710,13 @@
       "cancelFailback": "Cancelar el failback",
       "cancelConfirm": "¿Detener la replicación inversa y devolver el plan a failed over? No se modifica nada en las VM.",
       "completeTitle": "Failback completado",
-      "completeReprotected": "Las VM de origen están en ejecución y la replicación vuelve a protegerlas en la dirección original."
+      "completeReprotected": "Las VM de origen están en ejecución y la replicación vuelve a protegerlas en la dirección original.",
+      "pass": {
+        "aligning": "Alineando la VM de origen con la última instantánea común a ambos sitios",
+        "transferring": "Enviando el disco {disk} de {disks}",
+        "sentOf": "{sent} de {total}",
+        "elapsed": "desde hace {elapsed}"
+      }
     },
     "screenshots": {
       "view": "Ver la captura de arranque",

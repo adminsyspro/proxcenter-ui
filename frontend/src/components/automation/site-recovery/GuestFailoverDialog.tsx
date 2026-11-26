@@ -14,6 +14,7 @@ import type { RecoveryExecution, RecoveryPlanGuestState, VMRestorePoints } from 
 import { GuestGlyph, NodeGlyph } from '@/components/ui/glyphs'
 
 import ExecutionTrace, { CUTOVER_STEPS, FAILOVER_STEPS } from './ExecutionTrace'
+import ReverseSyncPassProgress from './ReverseSyncPassProgress'
 
 /**
  * The guest a per-VM dialog acts on: one row of the Emergency DR tab, with
@@ -411,6 +412,7 @@ export default function GuestFailoverDialog({
                 lastSyncBytes={result?.last_reverse_sync_bytes}
                 error={result?.error}
               />
+              {result?.reverse_sync_progress && <ReverseSyncPassProgress progress={result.reverse_sync_progress} />}
               {result?.error && result.step === '' && (
                 <Alert severity='warning' sx={{ mt: 1.5 }}>{t('siteRecovery.guestDR.cutoverFailed', { name })}</Alert>
               )}

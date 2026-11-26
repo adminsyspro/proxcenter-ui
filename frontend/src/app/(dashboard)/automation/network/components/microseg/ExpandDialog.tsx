@@ -1,16 +1,19 @@
 'use client'
 
-import { useEffect, useId, useState, type ReactNode } from 'react'
+import { useContext, useEffect, useId, useMemo, useState, type ReactNode } from 'react'
 import { Box, CircularProgress, Dialog, DialogContent, DialogTitle, IconButton, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, Typography } from '@mui/material'
 import { visuallyHidden } from '@mui/utils'
 import { useFormatter, useTranslations } from 'next-intl'
 
-import { useMicrosegEvents } from '@/lib/microseg/useMicrosegEvents'
+import { useMicrosegEvents, type EventFilters } from '@/lib/microseg/useMicrosegEvents'
+import { useMergedClusters } from '@/lib/microseg/useMerged'
 import type { MicrosegEvent } from '@/lib/microseg/types'
 
+import { mergeClusterEvents } from '../MicrosegEventsView'
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { DirectionGlyph, ObservedKindGlyph } from './observationParts'
 import { PrevNextPager } from './PolicyPager'
+import { TrafficClustersContext } from './SelectionTraffic'
 import { formatWhen } from './summaryModel'
 import TruncatedText from './TruncatedText'
 import { rowsThatFit } from './useRowsPerPage'
@@ -44,12 +47,41 @@ export function rowsForViewport(viewport: number, rowPx: number, extraPx: number
 }
 const CELL_SX = { py: 0.5, px: 1, whiteSpace: 'nowrap' } as const
 
-/** The events of the engine's memory of the dialog's scope (a zone, a pair), newest first, older ones on demand. */
+const EVERY_EVENT: EventFilters = { zone: '', verdict: '', q: '' }
+
+/** The whole ring of one cluster, read when the dialog opens (the shape `useMergedClusters` merges). */
+function useClusterLog(id: string | null) {
+  const read = useMicrosegEvents(id, EVERY_EVENT, true)
+  return { data: read, error: read.error, loading: read.loading, reload: read.reload }
+}
+
+/**
+ * The events of the engine's memory of the dialog's scope (a zone, a pair), newest first, older ones on demand. On a
+ * shared policy each cluster logs its own guests: every cluster the panel reads is read and merged, as the Logging tab does.
+ */
 function ScopeLogs({ connectionId, keep, emptyText, viewport }: { connectionId: string; keep: (e: MicrosegEvent) => boolean; emptyText: string; viewport: number }) {
   const t = useTranslations('microsegPilot.overview.zonePanel')
   const to = useTranslations('microsegPilot.observation')
   const format = useFormatter()
-  const log = useMicrosegEvents(connectionId, { zone: '', verdict: '', q: '' }, true)
+  const group = useContext(TrafficClustersContext)
+  const groupKey = (group && group.length > 1 ? [...new Set(group)] : [connectionId]).join('|')
+  const ids = useMemo(() => groupKey.split('|'), [groupKey])
+  const reads = useMergedClusters(ids, useClusterLog)
+  const answered = ids.filter(id => !(id in reads.errors) && reads.byCluster[id])
+  const merged = useMemo(
+    () => mergeClusterEvents(Object.fromEntries(ids.filter(id => !(id in reads.errors)).map(id => [id, reads.byCluster[id]])), ids),
+    [reads, ids],
+  )
+  const log = {
+    events: merged.events,
+    more: merged.more,
+    // The list fails only when every cluster did; a cluster still reading shows the spinner while nothing is known.
+    error: answered.length === 0 ? Object.values(reads.errors)[0] : undefined,
+    loading: reads.loading,
+    olderBusy: answered.some(id => reads.byCluster[id]?.olderBusy),
+    reload: reads.reload,
+    loadOlder: () => Promise.all(answered.filter(id => reads.byCluster[id]?.more).map(id => reads.byCluster[id]!.loadOlder())),
+  }
   const rows = log.events.filter(keep)
   const known = log.events.length > 0
   const size = rowsForViewport(viewport, LOG_ROW_PX, LOG_HEAD_PX)
@@ -65,9 +97,9 @@ function ScopeLogs({ connectionId, keep, emptyText, viewport }: { connectionId: 
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-      {log.error && !known && <MicrosegErrorAlert error={log.error} onRetry={log.reload} />}
-      {log.loading && !known && <CircularProgress size={18} />}
-      {!log.loading && !log.error && rows.length === 0 && <Typography variant='body2' color='text.disabled'>{emptyText}</Typography>}
+      {log.error != null && !known && <MicrosegErrorAlert error={log.error} onRetry={log.reload} />}
+      {log.loading && !known && log.error == null && <CircularProgress size={18} />}
+      {!log.loading && log.error == null && rows.length === 0 && <Typography variant='body2' color='text.disabled'>{emptyText}</Typography>}
       {rows.length > 0 && (
         <Table size='small' stickyHeader aria-label={t('tabLogs')}>
           <TableHead>
@@ -83,7 +115,7 @@ function ScopeLogs({ connectionId, keep, emptyText, viewport }: { connectionId: 
           </TableHead>
           <TableBody>
             {shown.map(e => (
-              <TableRow key={e.seq} hover data-event={e.seq}>
+              <TableRow key={`${e.connection_id}-${e.seq}`} hover data-event={e.seq}>
                 <TableCell sx={CELL_SX}>{formatWhen(format, e.ts)}</TableCell>
                 <TableCell sx={CELL_SX}>
                   <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}><DirectionGlyph direction={e.direction} />{to(e.direction === 'out' ? 'direction.out' : 'direction.in')}</Box>

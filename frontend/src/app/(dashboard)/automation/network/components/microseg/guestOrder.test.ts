@@ -34,6 +34,14 @@ describe('the guests of the assign dialog', () => {
     // The inventory itself is left as it was handed.
     expect(BY_VMID[0].name).toBe('Debian13')
   })
+
+  it('puts the members of the zone first, then the guests it was opened for, each by name', () => {
+    const web = zone('zw', { name: 'web' })
+    const inventory = [...BY_VMID, guest(300, 'zz-member', { tags: ['zone-web'] }), guest(301, 'b-member', { tags: ['Zone-Web'] }), guest(302, 'yy-queued')]
+    const queued = [{ id: 'p1', policy_id: 'p', connection_id: 'c1', node: 'pve1', type: 'qemu' as const, vmid: 302, zone_id: 'zw' }]
+    const rows = assignRows(web, [web], 'zone-', inventory, queued, ['c1/qemu/113', 'c1/qemu/101'])
+    expect(rows.map(r => r.guest.name)).toEqual(['b-member', 'yy-queued', 'zz-member', 'c7-i1000', 'debian-test', 'app-01', 'audb-victim', 'Debian13', 'NginX', 'Win2025'])
+  })
 })
 
 describe('the guests of the map picker', () => {

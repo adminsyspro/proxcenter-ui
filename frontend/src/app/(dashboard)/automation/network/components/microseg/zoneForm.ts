@@ -201,6 +201,23 @@ export function maskedCidr(cidr: string): string | null {
   return `${p.width === 8 ? masked.join('.') : formatV6(masked)}/${p.length}`
 }
 
+/**
+ * The one address a value names, in its canonical form ("fd00::5" for "fd00:0::5/128"): a plain address, or a CIDR
+ * that holds a single host (/32, /128). Null for a network or anything else.
+ */
+export function singleHost(value: string): string | null {
+  const v = value.trim()
+  if (v.includes('/')) {
+    const p = parsePrefix(v)
+    if (!p || p.length !== p.groups.length * p.width) return null
+    return p.width === 8 ? p.groups.join('.') : formatV6(p.groups)
+  }
+  const v4 = parseV4(v)
+  if (v4) return v4.join('.')
+  const v6 = v.includes(':') ? parseV6(v) : null
+  return v6 ? formatV6(v6) : null
+}
+
 function validateSide(zoneId: string, cidr: string): string | null {
   if (!zoneId && !cidr) return `${V}.sideRequired`
   if (zoneId && cidr) return `${V}.sideBoth`

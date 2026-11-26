@@ -14191,6 +14191,9 @@
         "dportHint": "80, 443 또는 8000:8100. 비우면 모든 포트",
         "comment": "설명",
         "useMasked": "{masked} 사용",
+        "cidrBlocked": "한쪽은 반드시 영역이어야 합니다: 플로우는 해당 영역의 게스트에 적용됩니다",
+        "zoneHint": "{addr}은(는) 영역 {zone}의 멤버인 {guest}입니다",
+        "useZone": "영역 {zone} 사용",
         "create": "만들기",
         "save": "저장"
       },

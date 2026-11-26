@@ -1,16 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, InputLabel, MenuItem, Select, Stack,
-  TextField, ToggleButton, ToggleButtonGroup,
+  TextField, ToggleButton, ToggleButtonGroup, Tooltip,
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
 
 import { SMALL_SELECT_SX } from '@/components/settings/destinations/DestinationDialogParts'
-import type { MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
+import { useMergedClusters } from '@/lib/microseg/useMerged'
+import { useClusterIPFilter } from '@/lib/microseg/useMicrosegLists'
+import type { IPFilterGuest, MicrosegFlow, MicrosegZone } from '@/lib/microseg/types'
 
 import { DialogErrorLine, ONE_LINE_SX, useDialogAction } from './dialogParts'
+import { flowZoneHint, type FlowZoneHint } from './flowZoneHint'
 import { FLOW_PROTOS, maskedCidr, validateFlowForm } from './zoneForm'
 
 /** What the dialog hands to onSave: the strict body of POST/PUT /flows without the draft version. */
@@ -30,6 +33,8 @@ type Props = {
   zones: MicrosegZone[]
   /** What a new flow starts from (ignored when editing): the Network flows page prefills the zones and the service. */
   initial?: Partial<Pick<FlowSaveValues, 'src_zone_id' | 'dst_zone_id' | 'proto' | 'dport'>>
+  /** The clusters of the policy whose zone members a single-host CIDR is matched against (GET /ipfilter, no Proxmox call). */
+  clusterIds?: readonly string[]
   onSave: (values: FlowSaveValues) => Promise<void>
   onClose: () => void
 }
@@ -46,17 +51,35 @@ type SideProps = {
   zones: MicrosegZone[]
   error?: string
   disabled: boolean
+  /** The other side is a CIDR: a flow is enforced on the guests of a zone, so this side must be one. */
+  cidrBlocked: boolean
+  /** The zone whose member has the address the CIDR names: offered in its place. */
+  hint: FlowZoneHint | null
   onKind: (kind: Kind) => void
   onZone: (id: string) => void
   onCidr: (cidr: string) => void
 }
 
 /** One side of a flow: a zone or a CIDR, on one line. */
-function FlowSide({ side, kind, zoneId, cidr, zones, error, disabled, onKind, onZone, onCidr }: SideProps) {
+function FlowSide({ side, kind, zoneId, cidr, zones, error, disabled, cidrBlocked, hint, onKind, onZone, onCidr }: SideProps) {
   const t = useTranslations('microsegPilot.policy.flowDialog')
   const tv = useTranslations()
   const masked = kind === 'cidr' ? maskedCidr(cidr) : null
   const message = error ? tv(error, { masked: masked ?? '' }) : undefined
+  const shownHint = kind === 'cidr' && !message ? hint : null
+  const pickZone = (id: string) => {
+    onZone(id)
+    onKind('zone')
+  }
+  // The span carries the tooltip: a disabled button fires no pointer events. A side already on CIDR (a stored flow of
+  // before the check) keeps its button, the validation says what is wrong.
+  const blocked = cidrBlocked && kind !== 'cidr'
+  let adornment
+  if (masked) {
+    adornment = <Button size='small' onClick={() => onCidr(masked)} sx={{ textTransform: 'none', flexShrink: 0 }}>{t('useMasked', { masked })}</Button>
+  } else if (shownHint) {
+    adornment = <Button size='small' onClick={() => pickZone(shownHint.zoneId)} sx={{ textTransform: 'none', flexShrink: 0 }}>{t('useZone', { zone: shownHint.zone })}</Button>
+  }
   const sideLabel = t(side === 'src' ? 'srcKind' : 'dstKind')
   const zoneLabel = t(side === 'src' ? 'srcZone' : 'dstZone')
   const cidrLabel = t(side === 'src' ? 'srcCidr' : 'dstCidr')
@@ -73,7 +96,11 @@ function FlowSide({ side, kind, zoneId, cidr, zones, error, disabled, onKind, on
         sx={{ flexShrink: 0, height: 40 }}
       >
         <ToggleButton value='zone' sx={{ textTransform: 'none', px: 1.5 }}>{t('kindZone')}</ToggleButton>
-        <ToggleButton value='cidr' sx={{ textTransform: 'none', px: 1.5 }}>{t('kindCidr')}</ToggleButton>
+        <Tooltip title={blocked ? t('cidrBlocked') : ''}>
+          <Box component='span' sx={{ display: 'inline-flex' }}>
+            <ToggleButton value='cidr' disabled={disabled || blocked} sx={{ textTransform: 'none', px: 1.5 }}>{t('kindCidr')}</ToggleButton>
+          </Box>
+        </Tooltip>
       </ToggleButtonGroup>
       {kind === 'zone' ? (
         <FormControl size='small' fullWidth error={!!message} sx={SMALL_SELECT_SX} disabled={disabled}>
@@ -89,15 +116,13 @@ function FlowSide({ side, kind, zoneId, cidr, zones, error, disabled, onKind, on
           onChange={e => onCidr(e.target.value)}
           disabled={disabled}
           error={!!message}
-          helperText={message}
+          helperText={message ?? (shownHint ? t('zoneHint', { addr: shownHint.addr, guest: shownHint.guest, zone: shownHint.zone }) : undefined)}
           placeholder='10.0.0.0/24'
           size='small'
           fullWidth
           slotProps={{
             formHelperText: { sx: HELPER_SX },
-            input: masked ? {
-              endAdornment: <Button size='small' onClick={() => onCidr(masked)} sx={{ textTransform: 'none', flexShrink: 0 }}>{t('useMasked', { masked })}</Button>,
-            } : undefined,
+            input: adornment ? { endAdornment: adornment } : undefined,
           }}
         />
       )}
@@ -105,8 +130,20 @@ function FlowSide({ side, kind, zoneId, cidr, zones, error, disabled, onKind, on
   )
 }
 
+/**
+ * The zone members of the clusters, with their addresses, as the engine's last full run saw them. A cluster not yet
+ * computed, or whose read failed, gives none: the dialog then offers no zone, nothing else changes.
+ */
+function useZoneMembers(clusterIds: readonly string[] | undefined): IPFilterGuest[] {
+  const reads = useMergedClusters(clusterIds ?? [], useClusterIPFilter)
+  return useMemo(() => (clusterIds ?? []).flatMap(id => {
+    const data = reads.byCluster[id]
+    return data?.computed && !(id in reads.errors) ? data.guests : []
+  }), [clusterIds, reads])
+}
+
 /** Create or edit a flow: source, destination, protocol, ports, comment. */
-export default function FlowDialog({ flow, zones, initial, onSave, onClose }: Props) {
+export default function FlowDialog({ flow, zones, initial, clusterIds, onSave, onClose }: Props) {
   const t = useTranslations()
   const td = useTranslations('microsegPilot.policy.flowDialog')
   const editing = flow !== null
@@ -119,6 +156,7 @@ export default function FlowDialog({ flow, zones, initial, onSave, onClose }: Pr
   const [dport, setDport] = useState(seed?.dport ?? '')
   const [comment, setComment] = useState(flow?.comment ?? '')
   const { busy, error, run } = useDialogAction()
+  const members = useZoneMembers(clusterIds)
 
   const cleanCidr = (kind: Kind, value: string) => (kind === 'cidr' ? value.trim() : '')
   const values = {
@@ -132,6 +170,7 @@ export default function FlowDialog({ flow, zones, initial, onSave, onClose }: Pr
   const errors = validateFlowForm(values)
   // An empty side is not an error to shout about: the button just stays disabled.
   const shown = (key: 'src' | 'dst') => (errors[key] && !errors[key].endsWith('.sideRequired') ? errors[key] : undefined)
+  const hintOf = (kind: Kind, cidr: string) => (kind === 'cidr' ? flowZoneHint(cidr, members, zones) : null)
 
   const submit = () => {
     if (Object.keys(errors).length > 0) return
@@ -141,14 +180,17 @@ export default function FlowDialog({ flow, zones, initial, onSave, onClose }: Pr
   return (
     <Dialog open onClose={busy ? undefined : onClose} maxWidth='sm' fullWidth aria-labelledby='microseg-flow-title'>
       <DialogTitle id='microseg-flow-title' sx={ONE_LINE_SX}>{editing ? td('editTitle') : td('createTitle')}</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ pt: 1 }}>
+      {/* MUI zeroes the top padding of a content right under its title: the label of the first field would be cut. */}
+      <DialogContent sx={{ '&&': { pt: 2.5 } }}>
+        <Stack spacing={2}>
           <FlowSide
             side='src' kind={srcKind} zoneId={src.zone} cidr={src.cidr} zones={zones} error={shown('src')} disabled={busy}
+            cidrBlocked={dstKind === 'cidr'} hint={hintOf(srcKind, src.cidr)}
             onKind={setSrcKind} onZone={zone => setSrc(prev => ({ ...prev, zone }))} onCidr={cidr => setSrc(prev => ({ ...prev, cidr }))}
           />
           <FlowSide
             side='dst' kind={dstKind} zoneId={dst.zone} cidr={dst.cidr} zones={zones} error={shown('dst')} disabled={busy}
+            cidrBlocked={srcKind === 'cidr'} hint={hintOf(dstKind, dst.cidr)}
             onKind={setDstKind} onZone={zone => setDst(prev => ({ ...prev, zone }))} onCidr={cidr => setDst(prev => ({ ...prev, cidr }))}
           />
           <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>

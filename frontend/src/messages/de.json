@@ -13762,6 +13762,9 @@
         "dportHint": "80, 443 oder 8000:8100. Leer: alle Ports",
         "comment": "Kommentar",
         "useMasked": "{masked} verwenden",
+        "cidrBlocked": "Eine Seite muss eine Zone sein: der Fluss gilt für die Gäste dieser Zone",
+        "zoneHint": "{addr} ist {guest}, Mitglied der Zone {zone}",
+        "useZone": "Zone {zone} verwenden",
         "create": "Erstellen",
         "save": "Speichern"
       },

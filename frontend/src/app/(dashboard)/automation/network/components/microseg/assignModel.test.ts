@@ -24,7 +24,8 @@ describe('assignRows on a shared policy', () => {
 
   it('marks only the guest of the cluster a pending member belongs to', () => {
     const rows = assignRows(DB, [DB, WEB], 'zone-', guests, [pending('conn-2', 'zd')])
-    expect(rows.map(r => [r.key, r.member])).toEqual([['conn-1/lxc/100', null], ['conn-2/lxc/100', 'pending']])
+    // The member comes first: what the zone holds shows on the first page.
+    expect(rows.map(r => [r.key, r.member])).toEqual([['conn-2/lxc/100', 'pending'], ['conn-1/lxc/100', null]])
   })
 
   it('says a guest moves only when its own cluster queued it elsewhere', () => {

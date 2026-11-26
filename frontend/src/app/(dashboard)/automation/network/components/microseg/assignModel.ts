@@ -22,8 +22,10 @@ export type AssignRow = {
 }
 
 /**
- * One row per guest, by name, with its membership of `zone` and the other zones it is in (tag or queued). A pending
- * member counts only for the guest of its own cluster (`connection_id` + type + VMID).
+ * One row per guest with its membership of `zone` and the other zones it is in (tag or queued). A pending member
+ * counts only for the guest of its own cluster (`connection_id` + type + VMID). The rows go by name, the guests already
+ * in place first (the members, then the guests the dialog was opened for, `first`): what the zone holds shows on the
+ * first page. The order follows the data, never a tick, so a row never moves under the pointer.
  */
 export function assignRows(
   zone: MicrosegZone,
@@ -31,13 +33,14 @@ export function assignRows(
   tagPrefix: string,
   guests: PolicyGuest[],
   pending: PendingMember[],
+  first: readonly string[] = [],
 ): AssignRow[] {
   // PVE lowercases tags: tags are compared lowercased, like zoneMembers does.
   const tagOf = (z: MicrosegZone) => `${tagPrefix}${z.name}`.toLowerCase()
   const queuedByGuest = pendingByGuest(pending)
   const zoneById = new Map(zones.map(z => [z.id, z]))
 
-  return [...guests].sort(byGuestName).map(guest => {
+  const rows = [...guests].sort(byGuestName).map((guest): AssignRow => {
     const tags = new Set(guest.tags.map(tag => tag.toLowerCase()))
     const key = guestId(guest)
     const queued = queuedByGuest.get(key)
@@ -49,6 +52,13 @@ export function assignRows(
     const change = member === 'tag' ? memberChange(zone.id, queued, zoneById) : undefined
     return { key, guest, ref: { node: guest.node, type: guest.type, vmid: guest.vmid }, member, change, otherZones: others }
   })
+  const wanted = new Set(first)
+  const rank = (r: AssignRow) => {
+    if (r.member !== null) return 0
+    return wanted.has(r.key) ? 1 : 2
+  }
+  // Array.prototype.sort is stable: within a rank the rows keep their order by name.
+  return rows.sort((a, b) => rank(a) - rank(b))
 }
 
 /** Search by name or vmid, case-insensitive. */

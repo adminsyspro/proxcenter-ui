@@ -14907,6 +14907,7 @@
         "members": "{count, plural, one {# member} other {# members}}",
         "external": "Unknown / External",
         "externalHint": "Sources that match no guest: an IP address or a network (CIDR)",
+        "externalTop": "{count, plural, one {The address seen} other {The busiest addresses, {shown} of #}}",
         "outside": "Outside",
         "outsideHint": "Destinations outside the zones (a CIDR). Flows to them are applied once the source zone enforces its outbound traffic.",
         "notApplied": "outbound not controlled",
@@ -15241,7 +15242,9 @@
         "liveResume": "Resume",
         "hideNoise": "Hide multicast and broadcast",
         "hideNoiseTip": "Hides what the network sends to every guest (multicast, broadcast). The {count} newest lines are read once and filtered in the browser.",
-        "noiseShown": "{count, plural, =0 {No line left} one {# line left} other {# lines left}} of the {scanned} newest"
+        "noiseShown": "{count, plural, =0 {No line left} one {# line left} other {# lines left}} of the {scanned} newest",
+        "lineTitle": "Firewall log line · {name}",
+        "lineOpenHint": "Double-click for the details"
       }
     },
     "preflight": {

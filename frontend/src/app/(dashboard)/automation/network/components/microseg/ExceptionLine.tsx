@@ -10,6 +10,7 @@ import ClusterChip from './ClusterChip'
 import DiffChip from './DiffChip'
 import { useExceptionServiceName } from './ExceptionDialog'
 import { draftException, exceptionLabel, exceptionStatus, shownExceptionStatus, type ExceptionDraft, type ExceptionIssue, type ExceptionStatus } from './exceptionModel'
+import { LIST_ROW_SX } from './PanelSection'
 import TruncatedText from './TruncatedText'
 import { guestKey, type PolicyGuest, type ZoneMember } from './zoneModel'
 
@@ -90,7 +91,7 @@ export function ExceptionLine({ exception, guests, members, zoneState, guestsKno
   const first = exception.sources[0]
   const guest = first ? guests.find(g => guestKey(g) === guestKey(first)) : undefined
   return (
-    <Box role='listitem' aria-label={label} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, minHeight: 38 }}>
+    <Box role='listitem' aria-label={label} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, ...LIST_ROW_SX }}>
       <ExceptionGuestIcon guest={guest} />
       {cluster && <ClusterChip connectionId={cluster.id} name={cluster.name} compact />}
       <TruncatedText text={label} variant='body2' sx={{ flex: '1 1 0', minWidth: 0 }} struck={removed} />

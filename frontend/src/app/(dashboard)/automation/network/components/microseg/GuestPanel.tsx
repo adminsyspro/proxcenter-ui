@@ -9,6 +9,7 @@ import { getGuestLogAfter, getGuestLogPage, type GuestLogPage } from '@/lib/api/
 import { parseFirewallLogLine, type ParsedLogLine } from '@/lib/firewall/logParse'
 
 import GuestIPFilterSection from './GuestIPFilterSection'
+import GuestLogLineDialog from './GuestLogLineDialog'
 import { DirectionGlyph } from './observationParts'
 import PanelSection, { PanelFrame } from './PanelSection'
 import PolicyPager, { PagedList } from './PolicyPager'
@@ -197,7 +198,10 @@ function useLiveLog(conn: string, guest: MapMember, start: Read | null, size: nu
   return start?.data && state?.from === start ? state : null
 }
 
-function LogLine({ line }: { line: Line }) {
+/** A line opens its details (a double click, or Enter on it); a line PVE wrote in another shape has none. */
+type OpenLine = (line: Line) => void
+
+function LogLine({ line, onOpen }: { line: Line; onOpen: OpenLine }) {
   const t = useTranslations('microsegPilot.overview.guestPanel')
   const format = useFormatter()
   const { parsed, raw } = line
@@ -206,8 +210,18 @@ function LogLine({ line }: { line: Line }) {
     return p.policy ? t('policyAction', { action: p.action }) : p.action
   }
   return (
-    <Tooltip title={raw} disableInteractive placement='left'>
-      <Box role='listitem' data-log-line sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, height: LOG_ROW_HEIGHT, boxSizing: 'border-box', borderBottom: 1, borderColor: 'divider' }}>
+    <Tooltip title={parsed ? <>{raw}<Typography variant='caption' sx={{ display: 'block', mt: 0.5, opacity: 0.8 }}>{t('lineOpenHint')}</Typography></> : raw} disableInteractive placement='left'>
+      <Box
+        role='listitem'
+        data-log-line
+        tabIndex={parsed ? 0 : undefined}
+        onDoubleClick={parsed ? () => onOpen(line) : undefined}
+        onKeyDown={parsed ? e => { if (e.key === 'Enter') onOpen(line) } : undefined}
+        sx={{
+          display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, height: LOG_ROW_HEIGHT, boxSizing: 'border-box', borderBottom: 1, borderColor: 'divider',
+          ...(parsed && { cursor: 'pointer', userSelect: 'none', '&:hover': { bgcolor: 'action.hover' }, '&:focus-visible': { outline: 'none', bgcolor: 'action.selected' } }),
+        }}
+      >
         {parsed ? (
           <>
             <Typography variant='caption' color='text.secondary' noWrap sx={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
@@ -225,8 +239,8 @@ function LogLine({ line }: { line: Line }) {
   )
 }
 
-function LogLines({ lines, label }: { lines: Line[]; label: string }) {
-  return <Box role='list' aria-label={label}>{lines.map(line => <LogLine key={line.key} line={line} />)}</Box>
+function LogLines({ lines, label, onOpen }: { lines: Line[]; label: string; onOpen: OpenLine }) {
+  return <Box role='list' aria-label={label}>{lines.map(line => <LogLine key={line.key} line={line} onOpen={onOpen} />)}</Box>
 }
 
 /**
@@ -249,6 +263,8 @@ export default function GuestPanel({ guest, connectionId, onClose }: Readonly<Pr
   const [query, setQuery] = useState('')
   const searching = query.trim() !== ''
   const [hideNoise, setHideNoise] = useState(true)
+  // The line whose details are open (a double click on it).
+  const [opened, setOpened] = useState<Line | null>(null)
   // The search and the filter read the newest block of lines and filter it in the browser; else a page at a time.
   const blockMode = searching || hideNoise
   // The count of the first page, handed back to read the next pages (and the search) in one PVE read each.
@@ -349,10 +365,10 @@ export default function GuestPanel({ guest, connectionId, onClose }: Readonly<Pr
             <Typography variant='caption' color='text.secondary' noWrap sx={{ display: 'block', mb: 0.5 }}>
               {t(searching ? 'searchFound' : 'noiseShown', { count: found.length, scanned: format.number(scanned) })}
             </Typography>
-            <PagedList items={found} size={size} render={rows => <LogLines lines={rows} label={t('logTitle')} />} />
+            <PagedList items={found} size={size} render={rows => <LogLines lines={rows} label={t('logTitle')} onOpen={setOpened} />} />
           </>
         )}
-        {blockMode && live && liveState && (liveState.lines.length === 0 ? <Typography variant='body2' color='text.disabled'>{t('empty')}</Typography> : <LogLines lines={liveState.lines} label={t('logTitle')} />)}
+        {blockMode && live && liveState && (liveState.lines.length === 0 ? <Typography variant='body2' color='text.disabled'>{t('empty')}</Typography> : <LogLines lines={liveState.lines} label={t('logTitle')} onOpen={setOpened} />)}
         {liveExpired && !live && (
           <Alert severity='info' sx={{ py: 0, mb: 1 }} action={<Button size='small' onClick={startLive}>{t('liveResume')}</Button>}>{t('liveExpired', { minutes: LIVE_FOR_MS / 60_000 })}</Alert>
         )}
@@ -360,12 +376,13 @@ export default function GuestPanel({ guest, connectionId, onClose }: Readonly<Pr
         {!blockMode && pageRead?.data && (
           <>
             {pageRead.data.lines.length === 0 && !liveState?.lines.length && <Typography variant='body2' color='text.disabled'>{t('empty')}</Typography>}
-            <LogLines lines={live && liveState ? liveState.lines : newestFirst(pageRead.data)} label={t('logTitle')} />
+            <LogLines lines={live && liveState ? liveState.lines : newestFirst(pageRead.data)} label={t('logTitle')} onOpen={setOpened} />
             {/* While live the newest lines come in at the top: the pages would move under the reader. */}
             {!live && total !== undefined && <PolicyPager count={total} page={page} size={size} onPage={setPage} />}
           </>
         )}
       </PanelSection>
+      {opened?.parsed && <GuestLogLineDialog guest={guest} line={opened.parsed} lineKey={opened.key} onClose={() => setOpened(null)} />}
     </PanelFrame>
   )
 }

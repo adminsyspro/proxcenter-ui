@@ -3,12 +3,13 @@
 import { createContext, memo, useContext, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { Box, Tooltip, Typography, alpha } from '@mui/material'
-import { useTranslations } from 'next-intl'
+import { useFormatter, useTranslations } from 'next-intl'
 
 import { StatusIcon } from '@/app/(dashboard)/infrastructure/inventory/components/TreeIcons'
 import type { ZoneState } from '@/lib/microseg/types'
 
 import { STATE_DOT } from './ZoneRow'
+import { ExternalSourcesContext } from './externalSources'
 import { NODE_H, NODE_W, UNZONED_ID, isPveGroup, type BoundaryNodeData, type GuestNodeData, type MoreNodeData, type UnzonedNodeData, type ZoneNodeData } from './zoneGraph'
 import { GLYPH_Y, GUEST_H, GUEST_R, GUEST_W } from './zoneLayout'
 
@@ -182,7 +183,8 @@ function GuestNodeComponent({ id, data, selected }: NodeProps) {
     </Box>
   )
   return (
-    <Tooltip title={details} open={!!selected || hovered} onOpen={() => setHovered(true)} onClose={() => setHovered(false)} describeChild placement='bottom'>
+    // Kept open on the selected guest: under the dialogs (a log line's details), not over them.
+    <Tooltip title={details} open={!!selected || hovered} onOpen={() => setHovered(true)} onClose={() => setHovered(false)} describeChild placement='bottom' slotProps={{ popper: { sx: { zIndex: theme => theme.zIndex.modal - 1 } } }}>
       <Box
         role={d.inert ? 'img' : 'button'}
         tabIndex={d.inert ? undefined : 0}
@@ -253,13 +255,36 @@ export const MoreNode = memo(MoreNodeComponent)
 
 const BOUNDARY_ICON = { external: 'ri-global-line', outside: 'ri-cloud-line' } as const
 
+/**
+ * What the Unknown / External box tells on hover: what it stands for, then the busiest addresses the map draws from
+ * it, one per line with their hits (the box alone does not say which addresses they are). The same on every rendering.
+ */
+export function ExternalTip() {
+  const t = useTranslations('microsegPilot.overview.node')
+  const format = useFormatter()
+  const sources = useContext(ExternalSourcesContext)
+  if (!sources) return <>{t('externalHint')}</>
+  return (
+    <Box data-testid='external-tip' sx={{ minWidth: 200 }}>
+      <Typography variant='caption' sx={{ display: 'block' }}>{t('externalHint')}</Typography>
+      <Typography variant='caption' fontWeight={600} sx={{ display: 'block', mt: 0.75, mb: 0.25 }}>{t('externalTop', { count: sources.count, shown: sources.top.length })}</Typography>
+      {sources.top.map(s => (
+        <Box key={s.ip} data-source-ip={s.ip} sx={{ display: 'flex', gap: 2, justifyContent: 'space-between' }}>
+          <Typography variant='caption' noWrap>{s.ip}</Typography>
+          <Typography variant='caption' sx={{ fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{format.number(s.hits)}</Typography>
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
 /** The two places outside the zones: Unknown / External (sources that match no guest), Outside (CIDR destinations: their flows are applied once the source zone enforces its outbound traffic). */
 function BoundaryNodeComponent({ data }: NodeProps) {
   const d = data as unknown as BoundaryNodeData
   const t = useTranslations('microsegPilot.overview.node')
 
   return (
-    <Tooltip title={t(`${d.kind}Hint`)}>
+    <Tooltip title={d.kind === 'external' ? <ExternalTip /> : t(`${d.kind}Hint`)}>
       <Box
         sx={{
           width: NODE_W, height: NODE_H, boxSizing: 'border-box', border: '1px dashed', borderColor: 'text.disabled', borderRadius: 1.5,

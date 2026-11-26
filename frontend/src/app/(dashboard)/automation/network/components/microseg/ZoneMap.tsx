@@ -48,12 +48,13 @@ import { rangeOfPeriod } from './useEdgeVolumeHistory'
 import { MapRangeContext, TrafficClustersContext } from './SelectionTraffic'
 import { edgeVolumes } from './edgeVolume'
 import {
-  EXTERNAL_ID, OUTSIDE_ID, SEEN_PERIODS, STALE_AFTER_MS, UNZONED_ID, edgeServices, filterEdgeAge, filterEdgeServices, filterEdges, focusSets, isPveGroup, lastSeenOf, pveNodeName,
+  EXTERNAL_ID, OUTSIDE_ID, SEEN_PERIODS, STALE_AFTER_MS, UNZONED_ID, bareIp, edgeServices, filterEdgeAge, filterEdgeServices, filterEdges, focusSets, isPveGroup, lastSeenOf, pveNodeName,
   zoneNodeId,
   type MapCluster, type MapEdgeData, type MapInput, type MapMember, type MapNodeData, type PanelEdgeData,
 } from './zoneGraph'
 import { zoneMembers } from './zoneModel'
 import ZonePanel from './ZonePanel'
+import { ExternalSourcesContext, externalSources } from './externalSources'
 
 /** The whole map reads the pending observed flows (unprotected and blocked) once; the API caps a page at 200. */
 const PENDING_LIMIT = 200
@@ -125,6 +126,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
   // The node lists the page read for its connections (no request of their own): the other clusters' nodes and states.
   const connectionNodes = useConnectionNodes()
   const suggestions = useMicrosegSuggestions(connectionId, PENDING_OBSERVED)
+  const partial = (suggestions.data?.length ?? 0) >= PENDING_LIMIT ? t('partial', { count: PENDING_LIMIT }) : null
   const { revision } = useLastRevisionSnapshot(connectionId, policy.pending_changes ? policy.last_revision?.id : null)
   const [selection, setSelection] = useState<Selection | null>(null)
   const [hover, setHover] = useState<string | null>(null)
@@ -343,6 +345,9 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
     () => filterEdgeAge(filterEdgeServices(filterEdges(graph.edges, filters), shownServices), seenPeriod, now).filter(e => !isolated || isolated.edges.has(e.id)),
     [graph.edges, filters, shownServices, seenPeriod, now, isolated],
   )
+  // The busiest addresses behind Unknown / External, from the edges the map draws: told by the tooltip of its box.
+  const unzonedIps = useMemo(() => new Set((input.unzoned ?? []).flatMap(m => m.ips.map(bareIp))), [input.unzoned])
+  const externals = useMemo(() => externalSources(filteredEdges, input.suggestions, unzonedIps), [filteredEdges, input.suggestions, unzonedIps])
   // Where the volume read starts: a flow last refused before it shows none of that volume.
   const volumeSince = useMemo(() => { const at = volume ? Date.parse(volume.from) : NaN; return Number.isFinite(at) ? at : undefined }, [volume])
   const sankeyVolume = useMemo(() => (volume?.covered ? { rows: volume.buckets, zoneName, since: volumeSince } : null), [volume, zoneName, volumeSince])
@@ -528,9 +533,6 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
       {suggestions.error && !suggestions.data && (
         <Alert severity='warning' sx={{ mb: 1 }}>{t('suggestionsError')}</Alert>
       )}
-      {(suggestions.data?.length ?? 0) >= PENDING_LIMIT && (
-        <Alert severity='info' sx={{ mb: 1 }}>{t('partial', { count: PENDING_LIMIT })}</Alert>
-      )}
       {resolved && (
         <Alert severity='success' onClose={() => setResolved(null)} sx={{ mb: 1 }}>
           {tObs(resolved === 'dismiss' ? 'resolvedDismiss' : 'resolvedAccept', { count: 1 })}
@@ -543,6 +545,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
       <EdgeVolumeContext.Provider value={volumeSource}>
       <MapRangeContext.Provider value={rangeOfPeriod(seenPeriod)}>
       <TrafficClustersContext.Provider value={readIds}>
+      <ExternalSourcesContext.Provider value={externals}>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'stretch', flexWrap: { xs: 'wrap', lg: 'nowrap' }, flex: 1, minHeight: 560 }}>
           <Box
             role='region'
@@ -596,6 +599,20 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
                 </Box>
               )}
             </Box>
+            {/* Top right of the map: the map draws only the first page of pending flows, said on hover. */}
+            {partial && (
+              <Tooltip title={partial}>
+                <Box
+                  role='note'
+                  tabIndex={0}
+                  aria-label={partial}
+                  data-testid='map-partial'
+                  sx={{ position: 'absolute', top: 8, right: 8, zIndex: 6, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'info.main', bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '50%', boxShadow: 1 }}
+                >
+                  <i className='ri-information-line' aria-hidden style={{ fontSize: 16 }} />
+                </Box>
+              </Tooltip>
+            )}
             {filterEmpty && (
               <Typography data-testid='map-filter-empty' color='text.secondary' sx={{ position: 'absolute', inset: 0, zIndex: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, textAlign: 'center', pointerEvents: 'none' }}>
                 {t('target.empty')}
@@ -708,6 +725,7 @@ export default function ZoneMap({ connectionId, policy, reloadPolicy, goToSubTab
             />
           )}
         </Box>
+      </ExternalSourcesContext.Provider>
       </TrafficClustersContext.Provider>
       </MapRangeContext.Provider>
       </EdgeVolumeContext.Provider>

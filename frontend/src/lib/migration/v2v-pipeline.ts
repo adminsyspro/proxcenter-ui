@@ -2025,6 +2025,7 @@ export async function runV2vMigrationPipeline(
         targetConnectionId: config.targetConnectionId,
         sourceVmId: config.sourceVmId,
         nodeIp,
+        nodeName: config.targetNode,
         session: vmwareSession,
         // Source VMDKs land on the TEMP storage even in direct-write mode:
         // only the converted output moves to the target storage (#292).

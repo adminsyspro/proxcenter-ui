@@ -35,6 +35,7 @@ import type { SoapSession, NfcLeaseDeviceUrl, EsxiVmConfig } from "@/lib/vmware/
 import { NfcProgressTracker, runWithConcurrency } from "./nfc-progress"
 import { NFC_STREAM_PROBE_SCRIPT, probeCommand, parseNfcStreamProbe, type NfcStreamProbe } from "./nfc-stream-probe"
 import { type SshTarget } from "@/lib/ssh/node-endpoint-core"
+import { nfcEndpointsOf, probeNfcEndpoints, describeColdUnreachable } from "./cold-source-reach"
 
 export type NfcLogLevel = "info" | "success" | "warn" | "error"
 
@@ -50,6 +51,8 @@ export interface NfcExportParams {
   targetConnectionId: string
   sourceVmId: string
   nodeIp: SshTarget
+  /** Name of the target node, for the operator-facing messages. */
+  nodeName?: string
   session: SoapSession
   /** Staging directory on the node; disks land there as disk-<n>.vmdk. */
   outputDir: string
@@ -105,9 +108,10 @@ export async function runVcenterNfcExport(p: NfcExportParams, io: NfcJobIo): Pro
   await io.appendLog(jobId, `Initiating NFC export lease via vCenter ${p.snapshotMor ? "ExportSnapshot" : "ExportVm"}...`)
   const probeLease = await openLease()
   let diskCount: number
+  let probeDevices: NfcLeaseDeviceUrl[]
   try {
     await io.appendLog(jobId, `NFC lease ${probeLease} created, waiting for ready state...`)
-    const probeDevices = await soapWaitForNfcLease(session, probeLease)
+    probeDevices = await soapWaitForNfcLease(session, probeLease)
     diskCount = probeDevices.filter(d => d.disk).length
     if (diskCount === 0) {
       throw new Error("NFC lease returned no disk device URLs (VM has no disks?)")
@@ -118,6 +122,20 @@ export async function runVcenterNfcExport(p: NfcExportParams, io: NfcJobIo): Pro
     throw err
   }
   await soapNfcLeaseComplete(session, probeLease).catch(() => {})
+
+  // The download runs on the node, from the address the lease names (an ESXi
+  // host, or a proxy port on a hosted vCenter). A node that cannot connect
+  // used to wait for curl's connect timeout (134 s) and fail with misleading
+  // causes: probe it first, bounded to a few seconds.
+  const nodeLabel = p.nodeName || "target"
+  const reach = await probeNfcEndpoints(p.targetConnectionId, p.nodeIp, nfcEndpointsOf(probeDevices))
+  if ("error" in reach) {
+    await io.appendLog(jobId, `Could not probe the NFC download address from the node (${reach.error}); downloading anyway`, "warn")
+  } else if (reach.endpoints.some(e => !e.resolved || !e.open)) {
+    throw new Error(describeColdUnreachable(nodeLabel, reach.endpoints))
+  } else if (reach.endpoints.length) {
+    await io.appendLog(jobId, `NFC download address reachable from ${nodeLabel}: ${reach.endpoints.map(e => `${e.host}:${e.port}`).join(", ")}`, "success")
+  }
 
   // The stream probe runs on the node; without it progress falls back to bytes on the wire.
   const probeScript = `${outputDir}/${NFC_PROBE_SCRIPT_NAME}`
@@ -169,6 +187,7 @@ export async function runVcenterNfcExport(p: NfcExportParams, io: NfcJobIo): Pro
           jobId,
           targetConnectionId: p.targetConnectionId,
           nodeIp: p.nodeIp,
+          nodeName: nodeLabel,
           session,
           leaseMor,
           device: dev,
@@ -216,6 +235,7 @@ interface DiskDownload {
   jobId: string
   targetConnectionId: string
   nodeIp: SshTarget
+  nodeName: string
   session: SoapSession
   leaseMor: string
   device: NfcLeaseDeviceUrl
@@ -395,6 +415,8 @@ async function downloadDiskViaNfc(d: DiskDownload): Promise<void> {
 
       if (exitCode !== 0) {
         await ssh(`rm -f ${shellEscape(localPath)} ${ctrlFiles}`).catch(() => {})
+        const noConnection = nfcNoConnectionMessage(d.nodeName, device.url, exitCode, curlStats, curlStderr)
+        if (noConnection) throw new Error(noConnection)
         throw new Error(
           `NFC disk download failed (curl exit ${exitCode}). ` +
           `URL: ${device.url}. ` +
@@ -546,4 +568,24 @@ async function downloadDiskViaNfc(d: DiskDownload): Promise<void> {
       lastKeepAliveAt = Date.now()
     }
   }
+}
+
+/**
+ * curl could not open a connection at all (exit 7 "couldn't connect" or 28
+ * "timeout", with num_connects=0): the node has no route to the download
+ * address, which none of the usual causes (certificate, session, NFC service)
+ * explains. Null for any other failure.
+ */
+export function nfcNoConnectionMessage(node: string, url: string, exitCode: number, curlStats: string, curlStderr: string): string | null {
+  if (exitCode !== 7 && exitCode !== 28) return null
+  if (!/^num_connects=0$/m.test(curlStats)) return null
+  let where = url
+  try {
+    const u = new URL(url)
+    where = `${u.hostname}:${u.port || (u.protocol === "http:" ? "80" : "443")}`
+  } catch { /* keep the raw URL */ }
+  return `The Proxmox node ${node} could not connect to ${where} (curl exit ${exitCode}, no connection made). ` +
+    `The NFC download runs on the Proxmox node, not on ProxCenter: allow the node's IP on the vCenter side ` +
+    `(for a hosted vCenter, its allowed IPs) and in every firewall in between. ` +
+    `URL: ${url}. Curl stderr: ${curlStderr || "(empty)"}.`
 }

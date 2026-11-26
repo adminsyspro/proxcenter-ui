@@ -542,3 +542,100 @@ describe('bulk concurrency (roadmap#53)', () => {
     expect(await screen.findByText(/Insufficient space: 70\.0 GB available, ~100\.0 GB required for the 2 largest VM\(s\) running at once/)).toBeInTheDocument()
   })
 })
+
+describe('source reachability from the node (cold vCenter, warm hosted vCenter)', () => {
+  const preflights: any[] = []
+  beforeEach(() => { preflights.length = 0; seed(preflights) })
+  afterEach(() => cleanup())
+
+  const coldVm = (vmid: string) => ({ ...warmVm(vmid), name: 'c7-i1000', status: 'poweredOff' })
+  const DOWN = { host: '10.42.0.22', port: 443, resolved: true, open: false }
+  /** cold-source-check answers `verdict`, every other preflight the seed's ready node. */
+  const answerCold = (verdict: any) => server.use(http.post('*/api/v1/migrations/preflight', async ({ request }) => {
+    const body: any = await request.json()
+    preflights.push(body)
+    if (body.action === 'cold-source-check') return HttpResponse.json(verdict)
+    return HttpResponse.json({ ok: true, missing: [], kind: 'vddk', vddkSetupAvailable: false, errors: [] })
+  }))
+
+  it('tests a powered-off vCenter VM from the node picked, and blocks the launch when the node cannot reach the download address', async () => {
+    answerCold({ status: 'blocked', node: NODE_NAME, endpoints: [DOWN], message: 'x' })
+    renderWithProviders(<Harness vm={coldVm('vm-20446')} />)
+    expect((await screen.findByTestId('mig-cold-source-blocked')).textContent).toContain('10.42.0.22:443')
+    expect(preflights.find(b => b.action === 'cold-source-check')).toEqual({ targetConnectionId: CONN_ID, targetNode: NODE_NAME, action: 'cold-source-check', sourceConnectionId: VC_CONN, sourceVmId: 'vm-20446' })
+    expect(screen.getByTestId('migration-launch')).toBeDisabled()
+  })
+
+  it('lets the launch through when the address answers, or when the test could not run', async () => {
+    answerCold({ status: 'ok', node: NODE_NAME, endpoints: [{ ...DOWN, open: true }] })
+    renderWithProviders(<Harness vm={coldVm('vm-1')} />)
+    await screen.findByTestId('mig-cold-source-ok')
+    await waitFor(() => expect(screen.getByTestId('migration-launch')).toBeEnabled())
+    cleanup()
+    answerCold({ status: 'error', node: NODE_NAME, error: 'ExportVm failed: busy' })
+    renderWithProviders(<Harness vm={coldVm('vm-2')} />)
+    await screen.findByTestId('mig-cold-source-error')
+    await waitFor(() => expect(screen.getByTestId('migration-launch')).toBeEnabled())
+    cleanup()
+    server.use(http.post('*/api/v1/migrations/preflight', () => HttpResponse.json({ error: 'boom' }, { status: 500 })))
+    renderWithProviders(<Harness vm={coldVm('vm-3')} />)
+    await waitFor(() => expect(screen.queryByTestId('mig-cold-source-checking')).toBeNull())
+    await waitFor(() => expect(screen.getByTestId('migration-launch')).toBeEnabled())
+  })
+
+  it('does not test a running VM, nor a cold migration of a standalone ESXi source', async () => {
+    answerCold({ status: 'ok', node: NODE_NAME, endpoints: [] })
+    renderWithProviders(<Harness vm={warmVm('vm-9')} />)
+    await screen.findByText('Warm Migration', { exact: true })
+    cleanup()
+    renderWithProviders(<Harness vm={{ ...coldVm('468'), hostType: 'vmware', connId: 'esxi-1' }} />)
+    await screen.findByText('Warm Migration', { exact: true })
+    expect(preflights.some(b => b.action === 'cold-source-check')).toBe(false)
+  })
+
+  it('holds a cold vCenter batch whose node cannot reach a source host, the reason kept in view above the buttons', async () => {
+    const checks: any[] = []
+    server.use(http.post('*/api/v1/migrations/batches/cold-source-check', async ({ request }) => {
+      checks.push(await request.json())
+      return HttpResponse.json({ data: { problems: [{ node: NODE_NAME, endpoints: [DOWN], vms: ['c7-i1000'] }], unchecked: [], errors: [] } })
+    }))
+    renderWithProviders(<Harness bulk overrides={{
+      bulkMigHostInfo: { hostType: 'vcenter', connectionId: VC_CONN, connectionName: 'vCenter', vms: [{ vmid: 'vm-20446', name: 'c7-i1000', status: 'poweredOff' }] },
+      bulkMigSelected: new Set(['vm-20446']),
+    }} />)
+    const alert = await screen.findByTestId('bulk-cold-source-error')
+    expect(alert.textContent).toContain('c7-i1000')
+    expect(alert.closest('[data-testid="bulk-blocking-alerts"]')).not.toBeNull()
+    expect(checks[0]).toEqual({ sourceConnectionId: VC_CONN, targetConnectionId: CONN_ID, nodes: [NODE_NAME], vms: [{ sourceVmId: 'vm-20446', sourceVmName: 'c7-i1000' }] })
+    expect(screen.getByRole('button', { name: /migrate to proxmox/i })).toBeDisabled()
+  })
+
+  it('lets a cold vCenter batch through when every node answers, or when the check cannot be read', async () => {
+    server.use(http.post('*/api/v1/migrations/batches/cold-source-check', () => HttpResponse.json({ data: { problems: [], unchecked: [], errors: [] } })))
+    const props = { bulkMigHostInfo: { hostType: 'vcenter', connectionId: VC_CONN, connectionName: 'vCenter', vms: [{ vmid: 'vm-1', name: 'a', status: 'poweredOff' }] }, bulkMigSelected: new Set(['vm-1']) }
+    renderWithProviders(<Harness bulk overrides={props} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /migrate to proxmox/i })).toBeEnabled())
+    cleanup()
+    server.use(http.post('*/api/v1/migrations/batches/cold-source-check', () => HttpResponse.json({ error: 'boom' }, { status: 500 })))
+    renderWithProviders(<Harness bulk overrides={props} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /migrate to proxmox/i })).toBeEnabled())
+    cleanup()
+    server.use(http.post('*/api/v1/migrations/batches/cold-source-check', () => HttpResponse.error()))
+    renderWithProviders(<Harness bulk overrides={props} />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /migrate to proxmox/i })).toBeEnabled())
+  })
+
+  it('no longer says the node is ready when it cannot reach the copy adapter, and points a hosted vCenter to the offline path', async () => {
+    server.use(http.post('*/api/v1/migrations/preflight', async ({ request }) => {
+      const body: any = await request.json()
+      const copy = body.copyVmk ? { address: '10.42.0.21', ports: { 902: false }, ok: false, vcenter: { host: 'vc.lab', resolved: true, open: true } } : undefined
+      return HttpResponse.json({ ok: true, missing: [], kind: 'vddk', vddkSetupAvailable: false, space: { sufficient: true, availableBytes: 1e12, requiredBytes: 1e9, storage: 'san-lvm' }, ...(copy && { copy }) })
+    }))
+    renderWithProviders(<Harness vm={warmVm('vm-7')} />)
+    await pickWarm()
+    expect((await screen.findByTestId('mig-warm-prereq-copy')).textContent).toContain('not reachable from the node: 10.42.0.21:902')
+    expect(screen.getByTestId('mig-warm-prereqs').textContent).toContain(`${NODE_NAME} cannot run this warm migration`)
+    expect(await screen.findByText(/use an offline migration, which downloads through the vCenter/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('migration-launch')).toBeDisabled())
+  })
+})

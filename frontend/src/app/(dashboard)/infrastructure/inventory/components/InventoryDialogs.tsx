@@ -124,6 +124,7 @@ import MigrationLiveColumns, { type LiveJob } from './MigrationLiveColumns'
 import LiveLogBox from '@/components/ui/LiveLogBox'
 import BulkLoadProjectionBlock from './BulkLoadProjectionBlock'
 import BulkWarmReadinessAlert, { installGuestConversion, useBulkWarmReadiness, useWarmSetupConfirmText } from './BulkWarmReadiness'
+import { ColdSourceReachAlert, ColdBatchReachAlert, coldSourceBlocksLaunch, coldBatchBlocksLaunch, bulkColdState, hostedCloudShape, type ColdSourceReach, type ColdSourceReachState, type ColdBatchReach } from './ColdSourceReachability'
 import { OPENVDDK_DEFAULT_LIBDIR, OPENVDDK_KIT } from '@/lib/migration/warm/vddk-library'
 
 /**
@@ -1082,6 +1083,56 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
     warmPreflight && warmPreflight.key === `${migTargetConn}::${migTargetNode}::${migTargetStorage}::${copyVnic?.address ?? ''}` ? warmPreflight : null
   // Reachability verdict of the copy adapter; null while loading or when no adapter is known. Blocks the launch on its own.
   const warmCopyUnreachable = warmPreflightCurrent && !warmPreflightCurrent.loading && warmPreflightCurrent.copy && !warmPreflightCurrent.copy.ok ? warmPreflightCurrent.copy : null
+  // The readiness panel's short form: what does not answer; the field below says what to do.
+  const warmCopyRowDetail = (c: WarmCopyReach): string => {
+    if (c.error) return t('inventoryPage.esxiMigration.warmPrereqCopyProbeFailed', { error: c.error })
+    const items = [
+      ...(c.vcenter && !c.vcenter.open ? [`vCenter ${c.vcenter.host}:443`] : []),
+      ...Object.entries(c.ports).filter(([, open]) => !open).map(([p]) => `${c.address}:${p}`),
+    ]
+    return t('inventoryPage.esxiMigration.warmPrereqCopyUnreachable', { items: items.join(', ') })
+  }
+  // Why the copy adapter is unreachable, for the field.
+  const warmCopyUnreachableText = (c: WarmCopyReach): string => {
+    if (c.error) return t('inventoryPage.esxiMigration.copyVmkProbeFailed', { address: c.address, error: c.error })
+    // roadmap#175: on a vCenter source the node must also reach the vCenter on 443.
+    const vc = c.vcenter && !c.vcenter.open ? c.vcenter : null
+    const vcKey = vc?.resolved ? 'inventoryPage.esxiMigration.copyVcenterUnreachable' : 'inventoryPage.esxiMigration.copyVcenterUnresolved'
+    const closed = Object.entries(c.ports).filter(([, open]) => !open).map(([p]) => p)
+    return [
+      ...(vc ? [t(vcKey, { node: migTargetNode, host: vc.host })] : []),
+      ...(closed.length ? [t('inventoryPage.esxiMigration.copyVmkUnreachable', { address: c.address, ports: closed.join(', ') })] : []),
+      ...(hostedCloudShape(c) ? [t('inventoryPage.esxiMigration.copyHostedCloudHint')] : []),
+    ].map(sentence => (/[.!?]$/.test(sentence) ? sentence : `${sentence}.`)).join(' ')
+  }
+  // Cold vCenter source: can the node reach the address the disks are
+  // downloaded from (lib/migration/cold-source-reach)? Tested on a powered-off
+  // VM with a test export lease, from the node picked; "Auto" is left to the
+  // job's own probe. Keyed on the target so a stale verdict never gates another node.
+  const coldSourceKey = esxiMigrateVm?.hostType === 'vcenter' && migType === 'cold' && migTargetConn && migTargetNode && migTargetNode !== '__auto__'
+    && !(esxiMigrateVm?.status === 'running' || esxiMigrateVm?.status === 'poweredOn')
+    ? `${migTargetConn}::${migTargetNode}::${esxiMigrateVm?.connId}::${esxiMigrateVm?.vmid}`
+    : null
+  // The answer is kept with its key: a key without its answer is a check in flight.
+  const [coldSourceReach, setColdSourceReach] = useState<{ key: string; reach: ColdSourceReach | null } | null>(null)
+  React.useEffect(() => {
+    if (!coldSourceKey) return
+    let cancelled = false
+    fetch('/api/v1/migrations/preflight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetConnectionId: migTargetConn, targetNode: migTargetNode, action: 'cold-source-check', sourceConnectionId: esxiMigrateVm?.connId, sourceVmId: esxiMigrateVm?.vmid }),
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled) setColdSourceReach({ key: coldSourceKey, reach: d && typeof d.status === 'string' ? d : null }) })
+      .catch(() => { if (!cancelled) setColdSourceReach({ key: coldSourceKey, reach: null }) })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the key carries every input
+  }, [coldSourceKey])
+  const coldSourceCurrent: ColdSourceReachState | null = coldSourceKey
+    ? { key: coldSourceKey, loading: coldSourceReach?.key !== coldSourceKey, reach: coldSourceReach?.key === coldSourceKey ? coldSourceReach.reach : null }
+    : null
+
   // Free-space verdict for the selected storage; undefined while loading or when
   // no storage is chosen yet. Blocks the launch on its own, independently of ok.
   const warmSpaceShort = warmPreflightCurrent && !warmPreflightCurrent.loading && warmPreflightCurrent.space && !warmPreflightCurrent.space.sufficient ? warmPreflightCurrent.space : null
@@ -1222,7 +1273,13 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
     // was probed for it, ready or not, like the runtime row: the operator sees
     // what was checked, not only what failed.
     const conversionChecked = !!pf.guestConversion && migConvertGuest && (isVmwareSource || esxiMigrateVm?.hostType === 'xcpng')
-    const allOk = !nodeMissing && conversionMissing.length === 0
+    // The copy adapter's reachability belongs to the same go/no-go: a node
+    // that cannot reach the source must not read "ready" next to the red field.
+    const copyRow = pf.copy && !pf.loading ? pf.copy : null
+    const allOk = !nodeMissing && conversionMissing.length === 0 && !warmCopyUnreachable
+    // Something to install reads "Missing on"; a node complete that cannot reach the source reads "cannot run".
+    let warmPrereqTitleKey = 'inventoryPage.esxiMigration.warmPrereqTitleReady'
+    if (!allOk) warmPrereqTitleKey = nodeMissing || conversionMissing.length > 0 ? 'inventoryPage.esxiMigration.warmPrereqTitle' : 'inventoryPage.esxiMigration.warmPrereqTitleBlocked'
     const libName = pf.libdir === OPENVDDK_DEFAULT_LIBDIR ? `OpenVDDK ${OPENVDDK_KIT.version}` : 'VDDK'
     const runtimeLib = pf.kind === 'nbd'
       ? t('inventoryPage.esxiMigration.warmPrereqRuntimeReadyNbd')
@@ -1235,7 +1292,7 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
         data-testid="mig-warm-prereqs"
       >
         <Typography variant="body2" fontWeight={600} sx={{ mb: 1 }}>
-          {t(allOk ? 'inventoryPage.esxiMigration.warmPrereqTitleReady' : 'inventoryPage.esxiMigration.warmPrereqTitle', { node: migTargetNode })}
+          {t(warmPrereqTitleKey, { node: migTargetNode })}
         </Typography>
         <Stack spacing={1.25}>
           {!nodeMissing && prereqRow({
@@ -1267,6 +1324,14 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
             // OpenVDDK provisioning (roadmap#177) installs apt packages, may add
             // the Debian contrib source and writes under /usr/lib: confirm first.
             below: canPrepare ? renderWarmSetupStep(pf.libdir) : undefined,
+          })}
+          {copyRow && prereqRow({
+            testId: 'mig-warm-prereq-copy',
+            ok: copyRow.ok,
+            label: t('inventoryPage.esxiMigration.warmPrereqCopy'),
+            detail: copyRow.ok
+              ? t('inventoryPage.esxiMigration.warmPrereqCopyReady', { address: copyRow.address, ports: Object.keys(copyRow.ports).join(', ') })
+              : warmCopyRowDetail(copyRow),
           })}
           {conversionChecked && conversionMissing.length === 0 && prereqRow({
             testId: 'mig-convert-guest-ready',
@@ -1921,17 +1986,7 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
       helperText={(() => {
         if (copyIfacesLoading) return t('inventoryPage.esxiMigration.copyVmkLoading')
         if (!copyIfaces) return t('inventoryPage.esxiMigration.copyVmkFailed', { error: copyIfaceError || '' })
-        if (warmCopyUnreachable) {
-          if (warmCopyUnreachable.error) return t('inventoryPage.esxiMigration.copyVmkProbeFailed', { address: warmCopyUnreachable.address, error: warmCopyUnreachable.error })
-          // roadmap#175: on a vCenter source the node must also reach the vCenter on 443.
-          const vc = warmCopyUnreachable.vcenter && !warmCopyUnreachable.vcenter.open ? warmCopyUnreachable.vcenter : null
-          const vcKey = vc?.resolved ? 'inventoryPage.esxiMigration.copyVcenterUnreachable' : 'inventoryPage.esxiMigration.copyVcenterUnresolved'
-          const closed = Object.entries(warmCopyUnreachable.ports).filter(([, open]) => !open).map(([p]) => p)
-          return [
-            ...(vc ? [t(vcKey, { node: migTargetNode, host: vc.host })] : []),
-            ...(closed.length ? [t('inventoryPage.esxiMigration.copyVmkUnreachable', { address: warmCopyUnreachable.address, ports: closed.join(', ') })] : []),
-          ].join(' ')
-        }
+        if (warmCopyUnreachable) return warmCopyUnreachableText(warmCopyUnreachable)
         return undefined
       })()}
       // The empty value shows "Host default: …": keep the label on the border above it.
@@ -2141,6 +2196,38 @@ chmod 644 /etc/apt/sources.list.d/pve-no-subscription.sources`}</Box>
     }, 300)
     return () => { stale = true; clearTimeout(timer) }
   }, [bulkCopyRequest])
+  // Cold vCenter batch: can each target node reach the address the disks are
+  // downloaded from (lib/migration/cold-source-reach)? One test export lease
+  // per source host, one probe per node. An answer the dialog cannot read
+  // blocks nothing: each job probes the address again before downloading.
+  const [bulkColdResult, setBulkColdResult] = useState<{ key: string; reach: ColdBatchReach | null } | null>(null)
+  const bulkColdRequest = React.useMemo(() => {
+    if (!bulkMigOpen || bulkMigJobs.length > 0 || bulkMigHostInfo?.hostType !== 'vcenter' || migType !== 'cold' || !migTargetConn || !migTargetNode) return null
+    const nodes = bulkTargetNodes(migTargetNode, migTargetConn, migNodeOptions as any[])
+    const selected = (bulkMigHostInfo.vms || []).filter((vm: any) => bulkMigSelected.has(vm.vmid))
+    if (nodes.length === 0 || selected.length === 0) return null
+    return {
+      sourceConnectionId: bulkMigHostInfo.connectionId, targetConnectionId: migTargetConn, nodes,
+      vms: selected.map((vm: any) => ({ sourceVmId: vm.vmid, sourceVmName: vm.name || vm.vmid })),
+    }
+  }, [bulkMigOpen, bulkMigJobs.length, bulkMigHostInfo, migType, migTargetConn, migTargetNode, migNodeOptions, bulkMigSelected])
+  const bulkColdKey = bulkColdRequest ? JSON.stringify(bulkColdRequest) : null
+  React.useEffect(() => {
+    if (!bulkColdKey) return
+    let stale = false
+    const timer = setTimeout(() => {
+      fetch('/api/v1/migrations/batches/cold-source-check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: bulkColdKey })
+        .then(r => r.json())
+        .then(d => {
+          if (stale) return
+          const reach = d?.data ? { problems: d.data.problems || [], unchecked: d.data.unchecked || [], errors: d.data.errors || [] } : null
+          setBulkColdResult({ key: bulkColdKey, reach })
+        })
+        .catch(() => { if (!stale) setBulkColdResult({ key: bulkColdKey, reach: null }) })
+    }, 300)
+    return () => { stale = true; clearTimeout(timer) }
+  }, [bulkColdKey])
+  const bulkColdReach = bulkColdState(bulkColdKey, bulkColdResult)
   // Node of each selected VM: the copy-network placement on Auto once known,
   // else the round-robin. Shared by the launch, the space check and the projection.
   const bulkNodeOf = React.useCallback((vmid: string, idx: number, nodes: string[]) => {
@@ -4270,6 +4357,8 @@ return
                     )
                   })()}
 
+                  <ColdSourceReachAlert state={coldSourceCurrent} node={migTargetNode} />
+
                   {migType === 'cold' && (esxiMigrateVm?.hostType === 'vcenter' || esxiMigrateVm?.hostType === 'hyperv' || esxiMigrateVm?.hostType === 'nutanix' || esxiMigrateVm?.hostType === 'vmware')
                     && vcenterPreflight?.checked && renderColdUnsupportedWindows(esxiMigrateVm?.guestOS)}
 
@@ -4754,6 +4843,9 @@ return
                   const isRunning = esxiMigrateVm?.status === 'running' || esxiMigrateVm?.status === 'poweredOn'
                   if (migType === 'cold' && isRunning) return true
                   if (migType === 'warm' && !isRunning) return true
+                  // The node cannot reach the address the disks are downloaded from,
+                  // or the check is still running for this target.
+                  if (coldSourceBlocksLaunch(coldSourceCurrent)) return true
                   if (needsV2vDeps) {
                     if (!vcenterPreflight?.checked) return false // preflight not run yet, don't pre-gate
                     if (!vcenterPreflight.virtV2vInstalled) return true
@@ -5635,61 +5727,68 @@ return
 
             {bulkMigJobs.length === 0 && migType === 'warm' && <BulkWarmReadinessAlert readiness={bulkWarm} />}
 
-            {bulkMigJobs.length === 0 && bulkCopy.problems.length > 0 && (
-              <Alert severity="error" data-testid="bulk-copy-error">
-                {bulkCopy.problems.map((p, i) => {
-                  const where = { device: p.device, address: p.address, host: p.host }
-                  const vc = p.vcenter
-                  let text: string
-                  if (p.kind === 'noNode') {
-                    const noNodeKey = vc?.resolved ? 'inventoryPage.esxiMigration.copyNoNodeVcenterUnreachable' : 'inventoryPage.esxiMigration.copyNoNodeVcenterUnresolved'
-                    text = vc
-                      ? t(noNodeKey, { vm: p.vm ?? '', host: vc.host })
-                      : t('inventoryPage.esxiMigration.copyNoNode', { vm: p.vm ?? '', ...where })
-                  } else if (p.error) {
-                    text = t('inventoryPage.esxiMigration.copyProbeFailed', { node: p.node ?? '', ...where, error: p.error })
-                  } else {
-                    // roadmap#175: the vCenter on 443 and/or the adapter on 902.
-                    const vcKey = vc?.resolved ? 'inventoryPage.esxiMigration.copyVcenterUnreachable' : 'inventoryPage.esxiMigration.copyVcenterUnresolved'
-                    text = [
-                      ...(vc ? [t(vcKey, { node: p.node ?? '', host: vc.host })] : []),
-                      ...(p.ports?.length ? [t('inventoryPage.esxiMigration.copyUnreachable', { node: p.node ?? '', ...where, ports: p.ports.join(' / ') })] : []),
-                    ].join(' ')
-                  }
-                  return <Typography key={i} variant="body2">{text}</Typography>
-                })}
-              </Alert>
-            )}
-            {bulkMigJobs.length === 0 && bulkCopy.problems.length === 0 && bulkCopy.infos.length > 0 && (
-              <Alert severity="info" data-testid="bulk-copy-info">
-                {bulkCopy.infos.map((info, i) => (
-                  <Typography key={i} variant="body2">{t('inventoryPage.esxiMigration.copyOnlyNodes', { vm: info.vm, nodes: info.nodes.join(', '), excluded: info.excluded.join(', ') })}</Typography>
-                ))}
-              </Alert>
-            )}
-
-            {bulkMigJobs.length === 0 && (['problems', 'warnings'] as const).map(kind => {
-              let list = bulkSpace.warnings
-              if (kind === 'problems') list = bulkSpace.status === 'blocked' ? bulkSpace.problems : []
-              if (list.length === 0) return null
-              return (
-                <Alert key={kind} severity={kind === 'problems' ? 'error' : 'warning'} data-testid={kind === 'problems' ? 'bulk-space-error' : 'bulk-space-warning'}>
-                  {list.map((p, i) => {
-                    const values = { storage: p.storage, node: p.node ?? '', free: (p.availableBytes / 1073741824).toFixed(1), need: (p.requiredBytes / 1073741824).toFixed(1), error: p.error ?? '' }
-                    const shape = p.node ? 'Node' : 'Shared'
-                    const key = p.error ? 'batchSpaceUnreadable' : `batchSpace${p.estimated ? 'Estimated' : ''}${shape}`
-                    return <Typography key={i} variant="body2">{t(`inventoryPage.esxiMigration.${key}`, values)}</Typography>
+            {/* What blocks the launch stays in view above the buttons: the
+                content scrolls, and these alerts come last in it. */}
+            <Box data-testid="bulk-blocking-alerts" sx={{ position: 'sticky', bottom: 0, zIndex: 2, bgcolor: 'background.paper', pt: 3.5, display: 'flex', flexDirection: 'column', gap: 1, '&:empty': { display: 'none' } }}>
+              {bulkMigJobs.length === 0 && <ColdBatchReachAlert state={bulkColdReach} />}
+              {bulkMigJobs.length === 0 && bulkCopy.problems.length > 0 && (
+                <Alert severity="error" data-testid="bulk-copy-error">
+                  {bulkCopy.problems.map((p, i) => {
+                    const where = { device: p.device, address: p.address, host: p.host }
+                    const vc = p.vcenter
+                    let text: string
+                    if (p.kind === 'noNode') {
+                      const noNodeKey = vc?.resolved ? 'inventoryPage.esxiMigration.copyNoNodeVcenterUnreachable' : 'inventoryPage.esxiMigration.copyNoNodeVcenterUnresolved'
+                      text = vc
+                        ? t(noNodeKey, { vm: p.vm ?? '', host: vc.host })
+                        : t('inventoryPage.esxiMigration.copyNoNode', { vm: p.vm ?? '', ...where })
+                    } else if (p.error) {
+                      text = t('inventoryPage.esxiMigration.copyProbeFailed', { node: p.node ?? '', ...where, error: p.error })
+                    } else {
+                      // roadmap#175: the vCenter on 443 and/or the adapter on 902.
+                      const vcKey = vc?.resolved ? 'inventoryPage.esxiMigration.copyVcenterUnreachable' : 'inventoryPage.esxiMigration.copyVcenterUnresolved'
+                      text = [
+                        ...(vc ? [t(vcKey, { node: p.node ?? '', host: vc.host })] : []),
+                        ...(p.ports?.length ? [t('inventoryPage.esxiMigration.copyUnreachable', { node: p.node ?? '', ...where, ports: p.ports.join(' / ') })] : []),
+                        // The vCenter answers (no vCenter problem) but not the host on 902.
+                        ...(!vc && bulkMigHostInfo?.hostType === 'vcenter' && p.ports?.includes(902) ? [t('inventoryPage.esxiMigration.copyHostedCloudHint')] : []),
+                      ].map(sentence => (/[.!?]$/.test(sentence) ? sentence : `${sentence}.`)).join(' ')
+                    }
+                    return <Typography key={i} variant="body2">{text}</Typography>
                   })}
                 </Alert>
-              )
-            })}
+              )}
+              {bulkMigJobs.length === 0 && bulkCopy.problems.length === 0 && bulkCopy.infos.length > 0 && (
+                <Alert severity="info" data-testid="bulk-copy-info">
+                  {bulkCopy.infos.map((info, i) => (
+                    <Typography key={i} variant="body2">{t('inventoryPage.esxiMigration.copyOnlyNodes', { vm: info.vm, nodes: info.nodes.join(', '), excluded: info.excluded.join(', ') })}</Typography>
+                  ))}
+                </Alert>
+              )}
 
-            {bulkMigJobs.length === 0 && bulkStartError && (
-              <Alert severity="error" data-testid="bulk-start-error">
-                <Typography variant="body2" fontWeight={700}>{t('inventoryPage.esxiMigration.batchStartFailed')}</Typography>
-                <Typography variant="body2">{bulkStartError}</Typography>
-              </Alert>
-            )}
+              {bulkMigJobs.length === 0 && (['problems', 'warnings'] as const).map(kind => {
+                let list = bulkSpace.warnings
+                if (kind === 'problems') list = bulkSpace.status === 'blocked' ? bulkSpace.problems : []
+                if (list.length === 0) return null
+                return (
+                  <Alert key={kind} severity={kind === 'problems' ? 'error' : 'warning'} data-testid={kind === 'problems' ? 'bulk-space-error' : 'bulk-space-warning'}>
+                    {list.map((p, i) => {
+                      const values = { storage: p.storage, node: p.node ?? '', free: (p.availableBytes / 1073741824).toFixed(1), need: (p.requiredBytes / 1073741824).toFixed(1), error: p.error ?? '' }
+                      const shape = p.node ? 'Node' : 'Shared'
+                      const key = p.error ? 'batchSpaceUnreadable' : `batchSpace${p.estimated ? 'Estimated' : ''}${shape}`
+                      return <Typography key={i} variant="body2">{t(`inventoryPage.esxiMigration.${key}`, values)}</Typography>
+                    })}
+                  </Alert>
+                )
+              })}
+
+              {bulkMigJobs.length === 0 && bulkStartError && (
+                <Alert severity="error" data-testid="bulk-start-error">
+                  <Typography variant="body2" fontWeight={700}>{t('inventoryPage.esxiMigration.batchStartFailed')}</Typography>
+                  <Typography variant="body2">{bulkStartError}</Typography>
+                </Alert>
+              )}
+            </Box>
 
             {/* Bulk migration progress */}
             {bulkMigJobs.length > 0 && (() => {
@@ -6039,6 +6138,8 @@ return
                   if (bulkSpace.status === 'blocked') return true
                   // A target node cannot reach a VM's copy network (warm VMware).
                   if (bulkCopy.problems.length > 0) return true
+                  // A target node cannot reach the address the cold batch downloads from.
+                  if (coldBatchBlocksLaunch(bulkColdReach)) return true
                   // A target node is being checked for, or lacks, the warm runtime.
                   if (migType === 'warm' && bulkWarm.blocked) return true
                   // A row of the network table holds a VLAN tag that is not one (ui#1333).

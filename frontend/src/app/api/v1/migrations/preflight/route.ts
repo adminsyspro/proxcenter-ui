@@ -13,6 +13,8 @@ import { runWarmCopyReachability } from "@/lib/migration/warm/nfc-reachability"
 import { checkGuestConversionNode } from "@/lib/migration/warm/guest-conversion-node"
 import { readClusterCpuLevels } from "@/lib/migration/cpu-level-nodes"
 import { readVmCopyInterfaces } from "@/lib/vmware/copy-interfaces-server"
+import { checkColdSourceReach } from "@/lib/migration/cold-source-reach"
+import { isValidSourceVmId } from "@/lib/migration/source-vm-id"
 import { prisma } from "@/lib/db/prisma"
 import { getCurrentTenantId, getSessionPrisma } from "@/lib/tenant"
 import { safeLog } from "@/lib/log/sanitize"
@@ -121,6 +123,20 @@ export async function POST(req: Request) {
     // (requiredDiskBytes, the dialog's committed size) plus the 10 % margin the
     // cold engine applies. Only computed when the dialog names a storage; it is
     // independent of the runtime verdict so the dialog can show both.
+    // Cold vCenter source: can the node reach the address the disks are
+    // downloaded from? A test export lease on a powered-off VM names it, the
+    // node probes it (lib/migration/cold-source-reach). Same right to read the
+    // source as the copy adapter probe below.
+    if (action === "cold-source-check") {
+      if (!sourceConnectionId || !isValidSourceVmId(sourceVmId)) {
+        return NextResponse.json({ error: "sourceConnectionId and sourceVmId are required" }, { status: 400 })
+      }
+      const deniedSource = await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", sourceConnectionId)
+      if (deniedSource) return deniedSource
+      const reach = await checkColdSourceReach({ prisma: await getSessionPrisma(), sourceConnectionId, sourceVmId, targetConnectionId, node: targetNode })
+      return NextResponse.json(reach)
+    }
+
     if (action === "warm-check") {
       const sourceConn = sourceConnectionId
         ? await prisma.connection.findUnique({ where: { id: sourceConnectionId }, select: { type: true } })
@@ -159,7 +175,16 @@ export async function POST(req: Request) {
       // Independent of the runtime verdict, like `space`, so the dialog shows both.
       // The address is read from vSphere for the adapter named, never taken from
       // the request: the node only ever probes the source host's own adapters.
-      const copy = copyVmk ? await probeCopyAdapter(await getSessionPrisma(), sourceConnectionId!, sourceVmId!, copyVmk, targetConnectionId, targetNode) : undefined
+      // Without an adapter named, the host's default one (the one the job will
+      // use) is probed when the caller may read the source: only a probe that
+      // ran is reported, an unreadable source never blocks here.
+      let copy: Awaited<ReturnType<typeof probeCopyAdapter>> | undefined
+      if (copyVmk) {
+        copy = await probeCopyAdapter(await getSessionPrisma(), sourceConnectionId!, sourceVmId!, copyVmk, targetConnectionId, targetNode)
+      } else if (sourceConn?.type === "vmware" && sourceConnectionId && isValidSourceVmId(sourceVmId)
+        && !(await checkPermission(PERMISSIONS.CONNECTION_VIEW, "connection", sourceConnectionId))) {
+        copy = await probeDefaultCopyAdapter(await getSessionPrisma(), sourceConnectionId, sourceVmId, targetConnectionId, targetNode)
+      }
       // #946: the node can be perfectly provisioned and the run still be hopeless,
       // because the VDDK reads the SOURCE and Broadcom supports each generation
       // against its own vSphere release and the two before it. An ESXi 5.5 source
@@ -221,6 +246,19 @@ function parseStorageNeeds(raw: unknown): { needs: { storage: string; requiredBy
     needs.push({ storage, requiredBytes })
   }
   return { needs }
+}
+
+/** The host's default copy adapter, probed; undefined when it cannot be read or the probe could not run. */
+async function probeDefaultCopyAdapter(prisma: any, sourceConnectionId: string, sourceVmId: string, targetConnectionId: string, targetNode: string) {
+  try {
+    const ifaces = await readVmCopyInterfaces(prisma, sourceConnectionId, sourceVmId)
+    const vnic = ifaces.vnics.find(v => v.device === ifaces.defaultDevice)
+    if (!vnic?.address) return undefined
+    const r = await runWarmCopyReachability(targetConnectionId, targetNode, vnic.address, ifaces.source === "esxi", ifaces.source === "vcenter" ? ifaces.connectionHost : undefined)
+    return r.error ? undefined : { ...r, device: vnic.device }
+  } catch {
+    return undefined
+  }
 }
 
 /** Reachability of the source host's adapter `device`, at the address vSphere reports for it. */

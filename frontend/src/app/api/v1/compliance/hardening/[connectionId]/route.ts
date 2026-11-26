@@ -9,6 +9,7 @@ import {
   type HardeningData, type CheckConfig,
 } from '@/lib/compliance/hardening'
 import { getProfile, getProfileChecks, getActiveProfile } from '@/lib/compliance/profiles'
+import { applyRiskAcceptances, listRiskAcceptances } from '@/lib/compliance/riskAcceptance'
 import { getCurrentTenantId, verifyConnectionOwnership } from '@/lib/tenant'
 import { demoResponse } from '@/lib/demo/demo-api'
 import { getSessionPrisma } from "@/lib/tenant"
@@ -105,6 +106,10 @@ export async function GET(
       }
     }
 
+    // Risks accepted on this connection: the failing checks they cover read
+    // 'accepted' and leave the score, for the cluster view and a node's alike.
+    const acceptances = await listRiskAcceptances(tenantId, connectionId)
+
     // Categories to keep when filtering by node (exclude cluster-wide and access checks)
     const nodeCategories = ['node', 'vm', 'os', 'ssh', 'network', 'services', 'filesystem', 'logging']
     const filterForNode = (checks: any[]) =>
@@ -116,7 +121,7 @@ export async function GET(
       const filteredConfig = nodeFilter
         ? checkConfig.filter(c => !c.category || nodeCategories.includes(c.category))
         : checkConfig
-      const weightedChecks = filterForNode(runChecksWithProfile(hardeningData, filteredConfig))
+      const weightedChecks = applyRiskAcceptances(filterForNode(runChecksWithProfile(hardeningData, filteredConfig)), acceptances)
       const summary = computeWeightedScore(weightedChecks)
 
       return NextResponse.json({
@@ -133,7 +138,7 @@ export async function GET(
     }
 
     // Default: all checks (PVE + SSH), no weighting
-    const checks = filterForNode(runAllChecks(hardeningData))
+    const checks = applyRiskAcceptances(filterForNode(runAllChecks(hardeningData)), acceptances)
     const summary = computeScore(checks)
 
     return NextResponse.json({

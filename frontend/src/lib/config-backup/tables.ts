@@ -110,6 +110,7 @@ export const BACKUP_SECTIONS: BackupSection[] = [
       { name: 'report_schedules' },
       { name: 'compliance_profiles' },
       { name: 'compliance_profile_checks' },
+      { name: 'compliance_risk_acceptances' },
       { name: 'broadcast_messages' },
       // The availability ledger the orchestrator writes is history: only the
       // SLA policies and the declared maintenance windows are configuration.

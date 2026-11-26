@@ -48,6 +48,11 @@ export interface OidcConfig {
   requireVerifiedEmail: boolean
   /** Read a missing email_verified claim as verified (IdPs that never send it). */
   idpVerifiesEmail: boolean
+  /**
+   * Refuse the sign-in of anyone the group mapping grants nothing to: no
+   * account, no default role. Off, such a user gets the default role.
+   */
+  requireGroup: boolean
   /** Outbound proxy towards the IdP; null falls back to the environment. */
   proxyUrl: string | null
   proxyUsername: string | null
@@ -185,6 +190,17 @@ export function resolveOidcGrants(
     return [{ tenantId: config.tenantId || DEFAULT_TENANT_ID, vdcId: null, roleId: toRoleId(config.defaultRole) }]
   }
   return resolved
+}
+
+/**
+ * Whether at least one of the user's groups is named by a mapping row. This is
+ * the test behind `requireGroup`, and it reads a missing groups claim, an empty
+ * one and one that matches no row the same way: an IdP omits the claim for a
+ * user who holds no group at all, which is exactly who the setting keeps out.
+ */
+export function holdsMappedGroup(groups: string[] | undefined, config: Pick<OidcConfig, "groupGrants">): boolean {
+  const mapped = new Set((config.groupGrants || []).map(entry => entry.group))
+  return (groups || []).some(group => mapped.has(String(group).trim()))
 }
 
 /**

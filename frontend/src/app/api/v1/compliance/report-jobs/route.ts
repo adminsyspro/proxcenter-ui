@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server'
 import { getPrincipal, rejectionToResponse } from '@/lib/auth/principal'
 import { getHardeningData } from '@/lib/compliance/collectionCache'
 import { buildFrameworkReportPdf } from '@/lib/compliance/report/buildFrameworkReport'
+import { listRiskAcceptances } from '@/lib/compliance/riskAcceptance'
 import {
   E_TOO_MANY_REPORT_JOBS,
   MAX_REPORT_JOBS_PER_OWNER,
@@ -61,6 +62,7 @@ async function handlePost(req: Request) {
           connectionId: request.connectionId,
           connectionName: request.conn.name,
           data,
+          acceptances: await listRiskAcceptances(tenantId, request.connectionId),
           branding,
         })
       }),

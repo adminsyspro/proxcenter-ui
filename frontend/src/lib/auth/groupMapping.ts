@@ -275,6 +275,9 @@ function trimmed(value: unknown): string {
   return String(value).trim()
 }
 
+/** Answer to a save that requires a mapped group while the mapping is empty. */
+export const REQUIRE_GROUP_NEEDS_MAPPING = "Requiring a mapped group needs at least one group mapping row"
+
 /**
  * Parse a group->grant payload into a clean entry list. Accepts the new array
  * form, the legacy flat object, or a JSON string of either (the config form

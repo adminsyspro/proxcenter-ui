@@ -108,6 +108,18 @@ describe("PUT /api/v1/auth/oidc/connections/[tenantId]", () => {
     }))
   })
 
+  it("saves the mapped group requirement, keeps it when a client omits it, and refuses it without a mapping row", async () => {
+    expect((await put(T, body({ require_group: true }))).status).toBe(200)
+    expect(await prismaTest.oidcConfig.findUniqueOrThrow({ where: { id: T } })).toMatchObject({ requireGroup: true })
+    expect((await (await getOne(T)).json()).data.require_group).toBe(true)
+
+    await put(T, body({ provider_name: "Renamed" }))
+    expect(await prismaTest.oidcConfig.findUniqueOrThrow({ where: { id: T } })).toMatchObject({ providerName: "Renamed", requireGroup: true })
+
+    const refused = await put(T, body({ require_group: true, group_role_mapping: [] }))
+    expect(refused.status).toBe(400)
+  })
+
   it("keeps the stored secret when none is typed", async () => {
     await put(T, body())
     await put(T, body({ client_secret: "", provider_name: "Renamed" }))

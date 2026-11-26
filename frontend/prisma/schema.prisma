@@ -90,6 +90,7 @@ model Connection {
   // — they let the FKs exist without needing to be queried from this side.
   greenConfig     ConnectionGreenConfig?
   nodeGreenConfig NodeGreenConfig[]
+  complianceRiskAcceptances ComplianceRiskAcceptance[]
 
   providerConnection ProviderConnection?
   licenseMapping     LicenseMapping?
@@ -709,6 +710,9 @@ model OidcConfig {
   // reads a missing claim as verified, for IdPs that never send it.
   requireVerifiedEmail Boolean @default(true)  @map("require_verified_email")
   idpVerifiesEmail     Boolean @default(false) @map("idp_verifies_email")
+  // Refuse the sign-in of anyone the group mapping grants nothing to, instead
+  // of handing out the default role (same idea as ldap_config.require_group).
+  requireGroup         Boolean @default(false) @map("require_group")
   // Ordered JSON array of grants: [{ group, tenant, vdc, role }, ...], read top
   // to bottom at login time. Legacy flat objects still read back as entries.
   groupRoleMapping Json     @default("[]") @map("group_role_mapping")
@@ -1728,6 +1732,26 @@ model ComplianceProfileCheck {
   @@index([profileId])
   @@index([tenantId])
   @@map("compliance_profile_checks")
+}
+
+// A hardening check an administrator decided to live with on one connection:
+// who, why, and until when. While it stands, a failing check reads "accepted"
+// and leaves the hardening score; revoking deletes the row (the audit log
+// keeps the trace).
+model ComplianceRiskAcceptance {
+  id            String     @id
+  tenantId      String     @default("default") @map("tenant_id")
+  connectionId  String     @map("connection_id")
+  connection    Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  checkId       String     @map("check_id")
+  justification String
+  acceptedBy    String     @map("accepted_by")
+  acceptedAt    DateTime   @map("accepted_at")
+  expiresAt     DateTime?  @map("expires_at")
+
+  @@unique([tenantId, connectionId, checkId])
+  @@index([tenantId])
+  @@map("compliance_risk_acceptances")
 }
 
 // Multi-DC Green-IT (Phase A) — provider-managed datacentre catalogue.

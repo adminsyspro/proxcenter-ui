@@ -9,6 +9,7 @@ import type { FrameworkId } from '@/lib/compliance/frameworks/types'
 import { FRAMEWORK_LOGO_FILES } from '@/lib/compliance/frameworks/logos'
 import { assessFramework } from '@/lib/compliance/frameworkAssessment'
 import { computeNodeBreakdown } from '@/lib/compliance/nodeBreakdown'
+import { applyRiskAcceptances, type RiskAcceptance } from '@/lib/compliance/riskAcceptance'
 import { frameworkReportHtml } from '@/lib/compliance/report/frameworkReportHtml'
 import { sanitizeFilename } from '@/lib/compliance/report/escapeHtml'
 import { renderPdf } from '@/lib/reporting/weasyprintClient'
@@ -19,6 +20,8 @@ export interface BuildFrameworkReportInput {
   connectionId: string
   connectionName?: string | null
   data: HardeningData
+  /** Risks accepted on the connection: named as such in the report. */
+  acceptances?: RiskAcceptance[]
   branding: ReportBranding
 }
 
@@ -62,10 +65,10 @@ function frameworkLogoDataUri(frameworkId: FrameworkId): string {
 }
 
 export async function buildFrameworkReportPdf(input: BuildFrameworkReportInput): Promise<BuildFrameworkReportResult> {
-  const { frameworkId, connectionId, connectionName, data, branding } = input
+  const { frameworkId, connectionId, connectionName, data, branding, acceptances = [] } = input
 
   // Run ALL checks (no profile, no weighting) and assess against the requested framework
-  const checks = runAllChecks(data)
+  const checks = applyRiskAcceptances(runAllChecks(data), acceptances)
   const def = getFramework(frameworkId)
   const assessment = assessFramework(checks, def, getCrosswalk(def.id))
 

@@ -330,6 +330,7 @@
   },
   "auth": {
     "oidcLinkRefused": "Sign-in refused: this identity could not be linked to the existing account. Contact your administrator.",
+    "oidcGroupRequired": "Sign-in refused: your account is not a member of any group allowed to use ProxCenter. Contact your administrator.",
     "welcomeTitle": "Welcome to {appName}",
     "loginSubtitle": "Sign in to access your infrastructure",
     "loginMethod": "Login method",
@@ -8947,6 +8948,10 @@
     "idpVerifiesEmailDesc": "A missing email_verified claim counts as verified (Microsoft Entra ID). An explicit false is still refused.",
     "defaultRole": "Default role",
     "defaultRoleHelper": "Role assigned to auto-provisioned users when no group mapping matches",
+    "requireGroup": "Require a mapped group",
+    "requireGroupDesc": "Refuse the sign-in of anyone who belongs to none of the mapped groups. No account is created and no default role is given.",
+    "requireGroupNeedsMapping": "Add at least one group mapping row before requiring a mapped group.",
+    "defaultRoleUnused": "Not used while a mapped group is required",
     "groupMapping": "Group-to-role mapping",
     "groupMappingDesc": "Map IdP group names to ProxCenter roles. The rows are read from top to bottom.",
     "groupMappingScopedDesc": "Map IdP group names to a ProxCenter role, in a tenant and optionally inside a single vDC. A group can appear on several rows to grant access in several tenants. The rows are read from top to bottom.",
@@ -11095,7 +11100,23 @@
       "pass": "Pass",
       "fail": "Fail",
       "warning": "Warning",
-      "skip": "Skip"
+      "skip": "Skip",
+      "accepted": "Accepted"
+    },
+    "riskAcceptance": {
+      "accept": "Accept risk",
+      "revoke": "Revoke acceptance",
+      "acceptTitle": "Accept the risk of this check",
+      "revokeTitle": "Revoke the risk acceptance",
+      "acceptIntro": "The check stays visible as accepted and no longer counts in the hardening score. The compliance frameworks still report what the check found, with this justification.",
+      "revokeIntro": "The check counts in the hardening score again, with the result of the scan.",
+      "justification": "Justification",
+      "justificationHelper": "Why this practice cannot be applied here, at least 10 characters. Kept with your name and the date.",
+      "expiry": "Expires on",
+      "expiryHelper": "Optional. After this day the check counts as failed again.",
+      "acceptedBy": "Risk accepted by {user} on {date}",
+      "acceptedByUntil": "Risk accepted by {user} on {date}, until {until}",
+      "error": "The risk acceptance could not be saved"
     },
     "passwordPolicy": "Password Policy",
     "minLength": "Minimum length",

@@ -9,13 +9,14 @@ import {
 } from '@mui/material'
 
 import { useHardeningChecks } from '@/hooks/useHardeningChecks'
+import RiskAcceptanceNote from '@/components/compliance/RiskAcceptanceNote'
 
 const severityColors: Record<string, 'error' | 'warning' | 'info' | 'default'> = {
   critical: 'error', high: 'error', medium: 'warning', low: 'info',
 }
 
-const statusColors: Record<string, 'success' | 'error' | 'warning' | 'default'> = {
-  pass: 'success', fail: 'error', warning: 'warning', skip: 'default',
+const statusColors: Record<string, 'success' | 'error' | 'warning' | 'info' | 'default'> = {
+  pass: 'success', fail: 'error', warning: 'warning', accepted: 'info', skip: 'default',
 }
 
 const categoryIcons: Record<string, string> = {
@@ -127,9 +128,9 @@ export default function ComplianceTab({ connectionId, node }: ComplianceTabProps
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
 
-  const statusOrder: Record<string, number> = { fail: 0, warning: 1, pass: 2, skip: 3 }
+  const statusOrder: Record<string, number> = { fail: 0, warning: 1, accepted: 2, pass: 3, skip: 4 }
   const allChecks = [...(data?.checks || [])].sort(
-    (a: any, b: any) => (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4)
+    (a: any, b: any) => (statusOrder[a.status] ?? 5) - (statusOrder[b.status] ?? 5)
   )
 
   // When node param is set, the API already filters to node-relevant checks only
@@ -381,6 +382,7 @@ export default function ComplianceTab({ connectionId, node }: ComplianceTabProps
                                 <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
                                   {check.details || '—'}
                                 </Typography>
+                                {check.status === 'accepted' && check.acceptance && <RiskAcceptanceNote acceptance={check.acceptance} />}
                               </Box>
                               {check.status !== 'pass' && check.status !== 'skip' && info?.recommendation && (
                                 <>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { resolveOidcRole } from './oidc'
+import { holdsMappedGroup, resolveOidcRole } from './oidc'
 import type { OidcConfig } from './oidc'
 import { normalizeGroupGrantMapping } from './groupMapping'
 
@@ -68,5 +68,24 @@ describe('resolveOidcRole', () => {
     const cfg = makeConfig({ admin: 'role_admin', ops: 'role_ops' })
     expect(resolveOidcRole(['ops', 'admin'], cfg)).toBe('role_admin')
     expect(resolveOidcRole(['admin', 'ops'], cfg)).toBe('role_admin')
+  })
+})
+
+describe('holdsMappedGroup', () => {
+  const config = makeConfig({ 'pxc-admins': 'role_admin', 'pxc-ops': 'role_operator' })
+
+  it('is true as soon as one claimed group is named by a mapping row', () => {
+    expect(holdsMappedGroup(['staff', 'pxc-ops'], config)).toBe(true)
+    expect(holdsMappedGroup(['  pxc-admins  '], config)).toBe(true)
+  })
+
+  it('reads a missing claim, an empty one and one that matches nothing the same way', () => {
+    expect(holdsMappedGroup(undefined, config)).toBe(false)
+    expect(holdsMappedGroup([], config)).toBe(false)
+    expect(holdsMappedGroup(['staff'], config)).toBe(false)
+  })
+
+  it('is false for everyone when no mapping row exists', () => {
+    expect(holdsMappedGroup(['pxc-admins'], makeConfig({}))).toBe(false)
   })
 })

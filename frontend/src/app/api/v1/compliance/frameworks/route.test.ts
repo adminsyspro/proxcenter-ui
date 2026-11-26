@@ -41,6 +41,12 @@ vi.mock('@/lib/auth/requireEnterprise', () => ({
   requireEnterprise: requireEnterpriseMock,
 }))
 
+const listRiskAcceptancesMock = vi.fn<(tenantId: string, connectionId: string) => Promise<any[]>>(async () => [])
+vi.mock('@/lib/compliance/riskAcceptance', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/compliance/riskAcceptance')>()),
+  listRiskAcceptances: listRiskAcceptancesMock,
+}))
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -83,6 +89,25 @@ describe('GET /api/v1/compliance/frameworks', () => {
     // When the data was collected, for the screen to show.
     expect(Number.isNaN(Date.parse(body.collectedAt))).toBe(false)
     expect(Array.isArray(body.nodes[0].checks)).toBe(true)
+  })
+
+  it('names an accepted risk on the check line and keeps judging the control on what the check found', async () => {
+    const { GET } = await import('./route')
+    const controlsOf = (body: any) => body.data.flatMap((a: any) => a.controls).filter((c: any) => c.checks.some((ch: any) => ch.id === 'node_firewalls'))
+
+    const before = controlsOf(await readJson<any>(await callRoute(GET, { searchParams: { connectionId: 'conn-1' } })))
+    expect(before.length).toBeGreaterThan(0)
+    expect(before[0].checks.find((ch: any) => ch.id === 'node_firewalls').status).toBe('fail')
+
+    listRiskAcceptancesMock.mockResolvedValue([
+      { checkId: 'node_firewalls', justification: 'Handled by firewalld', acceptedBy: 'admin@example.test', acceptedAt: new Date('2026-11-25T10:00:00Z'), expiresAt: null },
+    ])
+    const after = controlsOf(await readJson<any>(await callRoute(GET, { searchParams: { connectionId: 'conn-1' } })))
+    expect(listRiskAcceptancesMock).toHaveBeenLastCalledWith('tenant-1', 'conn-1')
+    expect(after.map((c: any) => c.status)).toEqual(before.map((c: any) => c.status))
+    const line = after[0].checks.find((ch: any) => ch.id === 'node_firewalls')
+    expect(line.status).toBe('accepted')
+    expect(line.details).toMatch(/^Accepted by admin@example\.test on 2026-11-25: Handled by firewalld/)
   })
 
   it('returns 400 when connectionId is missing', async () => {

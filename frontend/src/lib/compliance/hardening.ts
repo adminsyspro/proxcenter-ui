@@ -4,7 +4,17 @@
 import { PVE_DEFAULT_POLICY_IN, PVE_DEFAULT_POLICY_OUT } from '@/lib/firewall/pveDefaults'
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low'
-export type CheckStatus = 'pass' | 'fail' | 'warning' | 'skip'
+// 'accepted' is never produced by a check: it replaces a fail or a warning the
+// administrator accepted the risk of (see riskAcceptance.ts).
+export type CheckStatus = 'pass' | 'fail' | 'warning' | 'skip' | 'accepted'
+
+/** Why a failing check reads 'accepted'. */
+export interface CheckAcceptance {
+  justification: string
+  acceptedBy: string
+  acceptedAt: string
+  expiresAt: string | null
+}
 export type CheckCategory = 'cluster' | 'node' | 'access' | 'vm' | 'os' | 'ssh' | 'network' | 'services' | 'filesystem' | 'logging'
 
 export interface HardeningCheck {
@@ -17,6 +27,14 @@ export interface HardeningCheck {
   earned: number
   entity?: string
   details?: string
+  /** Set with status 'accepted': the acceptance, and what the check really found. */
+  acceptance?: CheckAcceptance
+  rawStatus?: 'fail' | 'warning'
+}
+
+/** Checks that count in the score: an accepted risk leaves it, like a skipped check. */
+function countsInScore(check: Pick<HardeningCheck, 'status'>): boolean {
+  return check.status !== 'skip' && check.status !== 'accepted'
 }
 
 import { type SSHHardeningData, SSH_CHECK_FUNCTIONS, runAllSSHChecks } from './ssh-checks'
@@ -1033,7 +1051,7 @@ export function runChecksWithProfile(
 }
 
 export function computeWeightedScore(checks: WeightedHardeningCheck[]): HardeningScore {
-  const applicable = checks.filter(c => c.status !== 'skip')
+  const applicable = checks.filter(countsInScore)
   const earned = applicable.reduce((sum, c) => sum + c.weightedEarned, 0)
   const maxApplicable = applicable.reduce((sum, c) => sum + c.weightedMaxPoints, 0)
   const score = maxApplicable > 0 ? Math.round((earned / maxApplicable) * 100) : 0
@@ -1042,6 +1060,7 @@ export function computeWeightedScore(checks: WeightedHardeningCheck[]): Hardenin
   const failed = checks.filter(c => c.status === 'fail').length
   const warnings = checks.filter(c => c.status === 'warning').length
   const skipped = checks.filter(c => c.status === 'skip').length
+  const accepted = checks.filter(c => c.status === 'accepted').length
   const critical = checks.filter(c => c.status === 'fail' && c.severity === 'critical').length
 
   return {
@@ -1053,6 +1072,7 @@ export function computeWeightedScore(checks: WeightedHardeningCheck[]): Hardenin
     failed,
     warnings,
     skipped,
+    accepted,
     critical,
     color: score >= 80 ? 'success' : score >= 50 ? 'warning' : 'error',
   }
@@ -1067,12 +1087,14 @@ export interface HardeningScore {
   failed: number
   warnings: number
   skipped: number
+  /** Failing checks whose risk was accepted: out of the score, never counted as failed. */
+  accepted: number
   critical: number
   color: 'success' | 'warning' | 'error'
 }
 
 export function computeScore(checks: HardeningCheck[]): HardeningScore {
-  const applicable = checks.filter(c => c.status !== 'skip')
+  const applicable = checks.filter(countsInScore)
   const earned = applicable.reduce((sum, c) => sum + c.earned, 0)
   const maxApplicable = applicable.reduce((sum, c) => sum + c.maxPoints, 0)
   const score = maxApplicable > 0 ? Math.round((earned / maxApplicable) * 100) : 0
@@ -1081,6 +1103,7 @@ export function computeScore(checks: HardeningCheck[]): HardeningScore {
   const failed = checks.filter(c => c.status === 'fail').length
   const warnings = checks.filter(c => c.status === 'warning').length
   const skipped = checks.filter(c => c.status === 'skip').length
+  const accepted = checks.filter(c => c.status === 'accepted').length
   const critical = checks.filter(c => c.status === 'fail' && c.severity === 'critical').length
 
   return {
@@ -1092,6 +1115,7 @@ export function computeScore(checks: HardeningCheck[]): HardeningScore {
     failed,
     warnings,
     skipped,
+    accepted,
     critical,
     color: score >= 80 ? 'success' : score >= 50 ? 'warning' : 'error',
   }

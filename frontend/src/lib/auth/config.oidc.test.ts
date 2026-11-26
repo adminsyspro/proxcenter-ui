@@ -16,6 +16,7 @@ vi.mock('@/lib/db/prisma', () => ({
 vi.mock('@/lib/auth/oidc', () => ({
   getOidcConfig,
   isOidcEnabled: async () => true,
+  holdsMappedGroup: () => true,
   oidcSeedRoleId: vi.fn(),
   syncOidcRoleAssignment: vi.fn(),
 }))

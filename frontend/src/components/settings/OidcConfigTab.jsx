@@ -105,6 +105,7 @@ export default function OidcConnectionForm({
     force_sso_redirect: false,
     require_verified_email: true,
     idp_verifies_email: false,
+    require_group: false,
     group_role_mapping: '[]',
     group_mapping_strategy: 'first_match',
     proxy_url: '',
@@ -242,6 +243,12 @@ export default function OidcConnectionForm({
         if (!key || !role) return
         mapping.push({ group: key, tenant: tenant || 'default', vdc: vdc || '', role })
       })
+
+      // With no mapping row, requiring a mapped group would refuse everyone.
+      if (config.require_group && mapping.length === 0) {
+        setError(t('oidc.requireGroupNeedsMapping'))
+        return
+      }
 
       const res = await fetch(apiBase, {
         method: 'PUT',
@@ -923,7 +930,28 @@ export default function OidcConnectionForm({
             </>
           )}
 
-          <FormControl fullWidth sx={{ mb: 3 }} disabled={!config.enabled}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={!!config.require_group}
+                onChange={e => setConfig({ ...config, require_group: e.target.checked })}
+                disabled={!config.enabled}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant='body1' fontWeight={600}>
+                  {t('oidc.requireGroup')}
+                </Typography>
+                <Typography variant='body2' sx={{ opacity: 0.6 }}>
+                  {t('oidc.requireGroupDesc')}
+                </Typography>
+              </Box>
+            }
+            sx={{ mb: 3, display: 'flex' }}
+          />
+
+          <FormControl fullWidth sx={{ mb: 3 }} disabled={!config.enabled || !!config.require_group}>
             <InputLabel>{t('oidc.defaultRole')}</InputLabel>
             <Select
               value={config.default_role}
@@ -935,7 +963,7 @@ export default function OidcConnectionForm({
               ))}
             </Select>
             <Typography variant='caption' sx={{ mt: 0.5, opacity: 0.6 }}>
-              {t('oidc.defaultRoleHelper')}
+              {config.require_group ? t('oidc.defaultRoleUnused') : t('oidc.defaultRoleHelper')}
             </Typography>
           </FormControl>
 

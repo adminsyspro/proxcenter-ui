@@ -248,6 +248,26 @@ describe("PUT /api/v1/auth/oidc", () => {
     expect(arg.update.idpVerifiesEmail).toBe(true)
   })
 
+  it("persists the mapped group requirement, and keeps the stored one when a client does not send it", async () => {
+    normalizeGroupGrantMappingMock.mockReturnValue([{ group: "ops", tenantId: "default", vdcId: null, role: "role_viewer" }])
+    tenantFindManyMock.mockResolvedValue([{ id: "default" }])
+    const { PUT } = await importRoute()
+    const saved = await callRoute(PUT as any, { method: "PUT", body: { enabled: false, require_group: true } })
+    expect(saved.status).toBe(200)
+    expect(upsertMock.mock.calls[0][0].update.requireGroup).toBe(true)
+
+    await callRoute(PUT as any, { method: "PUT", body: { enabled: false } })
+    expect(upsertMock.mock.calls[1][0].update).not.toHaveProperty("requireGroup")
+  })
+
+  it("refuses to require a mapped group while the mapping is empty", async () => {
+    const { PUT } = await importRoute()
+    normalizeGroupGrantMappingMock.mockReturnValue([])
+    const res = await callRoute(PUT as any, { method: "PUT", body: { enabled: false, require_group: true } })
+    expect(res.status).toBe(400)
+    expect(upsertMock).not.toHaveBeenCalled()
+  })
+
   it("keeps the stored verified e-mail settings when a client does not send them", async () => {
     const { PUT } = await importRoute()
     await callRoute(PUT as any, { method: "PUT", body: { enabled: false } })

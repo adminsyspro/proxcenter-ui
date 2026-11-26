@@ -10,9 +10,14 @@ export type OidcLinkRefusal =
   | "email_domain_not_allowed"
   // A service account address (issue #1404): never a person, never signed in.
   | "service_account"
+  // The connection requires a mapped group and the user holds none.
+  | "no_mapped_group"
 
 /** Error code put in /login?error= when a sign-in is refused here. */
 export const OIDC_LINK_REFUSED = "OidcLinkRefused"
+
+/** Error code put in /login?error= when the connection requires a mapped group and the user holds none. */
+export const OIDC_GROUP_REQUIRED = "OidcGroupRequired"
 
 /**
  * Whether the IdP vouches for the e-mail claim. Some providers send the

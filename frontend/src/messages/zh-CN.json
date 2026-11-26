@@ -330,6 +330,7 @@
   },
   "auth": {
     "oidcLinkRefused": "登录被拒绝：无法将此身份关联到现有账户。请联系管理员。",
+    "oidcGroupRequired": "登录被拒绝：您的账户不属于任何获准使用 ProxCenter 的组。请联系管理员。",
     "welcomeTitle": "欢迎使用 {appName}",
     "loginSubtitle": "登录以访问您的基础设施",
     "loginMethod": "登录方式",
@@ -8947,6 +8948,10 @@
     "idpVerifiesEmailDesc": "缺失的 email_verified 声明视为已验证（Microsoft Entra ID）。显式的 false 仍被拒绝。",
     "defaultRole": "默认角色",
     "defaultRoleHelper": "当没有组映射匹配时分配给自动创建用户的角色",
+    "requireGroup": "要求已映射的组",
+    "requireGroupDesc": "拒绝不属于任何已映射组的用户登录。不会创建账户，也不会分配默认角色。",
+    "requireGroupNeedsMapping": "在要求已映射的组之前，请至少添加一行组映射。",
+    "defaultRoleUnused": "要求已映射的组时不使用",
     "groupMapping": "组到角色映射",
     "groupMappingDesc": "将身份提供商组名映射到 ProxCenter 角色。各行自上而下读取。",
     "groupMappingScopedDesc": "将 IdP 组映射到 ProxCenter 角色，可指定租户，也可进一步限定到单个 vDC。同一个组可以出现在多行中，以便在多个租户中授予访问权限。各行自上而下读取。",
@@ -11095,7 +11100,23 @@
       "pass": "通过",
       "fail": "失败",
       "warning": "警告",
-      "skip": "跳过"
+      "skip": "跳过",
+      "accepted": "已接受"
+    },
+    "riskAcceptance": {
+      "accept": "接受风险",
+      "revoke": "撤销接受",
+      "acceptTitle": "接受此检查的风险",
+      "revokeTitle": "撤销风险接受",
+      "acceptIntro": "该检查仍显示为已接受，并不再计入加固评分。合规框架仍会报告该检查的实际结果，并附上此理由。",
+      "revokeIntro": "该检查将按扫描结果重新计入加固评分。",
+      "justification": "理由",
+      "justificationHelper": "说明此实践为何无法在此应用，至少 10 个字符。将与您的姓名和日期一并保存。",
+      "expiry": "到期日",
+      "expiryHelper": "可选。此日期之后，该检查将重新计为失败。",
+      "acceptedBy": "{user} 于 {date} 接受了风险",
+      "acceptedByUntil": "{user} 于 {date} 接受了风险，有效期至 {until}",
+      "error": "无法保存风险接受"
     },
     "passwordPolicy": "密码策略",
     "minLength": "最小长度",

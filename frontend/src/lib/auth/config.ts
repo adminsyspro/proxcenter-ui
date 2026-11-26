@@ -10,8 +10,8 @@ import { verifyPassword, hashPassword, needsRehash, burnPasswordCheck } from "./
 import { auditKeptForLastSuperAdmin, isExternalProvider, isLastLocalSuperAdmin, localPasswordOnExternalSignIn } from "./localLogin"
 import { readGroupsClaim, isLdapGroupAllowed } from "./groupMapping"
 import { authenticateLdapDetailed, isLdapEnabled, getLdapConfig, resolveLdapRole, syncLdapRoleAssignment } from "./ldap"
-import { getOidcConfig, oidcSeedRoleId, syncOidcRoleAssignment, type OidcConfig } from "./oidc"
-import { auditOidcLinkRefusal, auditOidcUnverifiedLink, holdsProtectedRole, isEmailVouched, oidcLinkRefusal, OIDC_LINK_REFUSED } from "./oidcLinking"
+import { getOidcConfig, holdsMappedGroup, oidcSeedRoleId, syncOidcRoleAssignment, type OidcConfig } from "./oidc"
+import { auditOidcLinkRefusal, auditOidcUnverifiedLink, holdsProtectedRole, isEmailVouched, oidcLinkRefusal, OIDC_GROUP_REQUIRED, OIDC_LINK_REFUSED } from "./oidcLinking"
 import { connectionIdFromProvider, getOidcConnection, isTenantConnection, listActiveOidcConnections, PROVIDER_CONNECTION_ID, providerIdFor } from "./oidcConnections"
 import { signInWithTenantConnection } from "./tenantOidcSignIn"
 import { bindConnectionHttpOptions, connectionHttpOptions, resolveOidcMetadata, type OidcMetadata } from "./oidcMetadata"
@@ -586,6 +586,13 @@ export const authOptions: NextAuthOptions = {
         if (!email) return false
         // A service account address is never a person's (issue #1404).
         if (isServiceAccountEmail(email)) return false
+
+        // Checked before anything is read or written: a refused user leaves no
+        // account behind, and one who lost every mapped group no longer gets in.
+        if (oidcConfig.requireGroup && !holdsMappedGroup(groups, oidcConfig)) {
+          await auditOidcLinkRefusal(email, "no_mapped_group", PROVIDER_CONNECTION_ID)
+          return `/login?error=${OIDC_GROUP_REQUIRED}`
+        }
 
         // Look up by (provider connection, sub) first, then by email. The
         // subject alone is not an identity: a tenant IdP may issue the same one.

@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server'
 
 import { getHardeningData } from '@/lib/compliance/collectionCache'
 import { buildFrameworkReportPdf } from '@/lib/compliance/report/buildFrameworkReport'
+import { listRiskAcceptances } from '@/lib/compliance/riskAcceptance'
 import { resolveReportRequest } from '@/lib/compliance/report/reportRequest'
 import { resolveReportBranding } from '@/lib/reporting/reportBranding'
 import { safeLog } from '@/lib/log/sanitize'
@@ -38,6 +39,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ frameworkId: st
       connectionId: request.connectionId,
       connectionName: request.conn.name,
       data,
+      acceptances: await listRiskAcceptances(request.tenantId, request.connectionId),
       branding,
     })
     if ('error' in out) {

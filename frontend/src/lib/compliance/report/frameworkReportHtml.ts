@@ -64,6 +64,7 @@ const STATUS_LABEL: Record<string, string> = {
   fail: 'Fail',
   warning: 'Warning',
   skip: 'Skip',
+  accepted: 'Risk accepted',
 }
 
 function buildCss(primary: string, appName: string): string {

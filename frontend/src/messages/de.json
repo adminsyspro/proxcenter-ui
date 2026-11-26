@@ -334,6 +334,7 @@
   },
   "auth": {
     "oidcLinkRefused": "Anmeldung abgelehnt: Diese Identität konnte nicht mit dem bestehenden Konto verknüpft werden. Wenden Sie sich an Ihren Administrator.",
+    "oidcGroupRequired": "Anmeldung abgelehnt: Ihr Konto gehört keiner Gruppe an, die ProxCenter verwenden darf. Wenden Sie sich an Ihren Administrator.",
     "welcomeTitle": "Willkommen bei {appName}",
     "loginSubtitle": "Melden Sie sich an, um auf Ihre Infrastruktur zuzugreifen",
     "loginMethod": "Anmeldemethode",
@@ -8923,6 +8924,10 @@
     "idpVerifiesEmailDesc": "Ein fehlender email_verified-Claim gilt als verifiziert (Microsoft Entra ID). Ein explizites false wird abgelehnt.",
     "defaultRole": "Standard role",
     "defaultRoleHelper": "Rolle, die automatisch bereitgestellten Benutzern zugewiesen wird, wenn keine Gruppenzuordnung passt",
+    "requireGroup": "Zugeordnete Gruppe erforderlich",
+    "requireGroupDesc": "Lehnt die Anmeldung aller Personen ab, die keiner der zugeordneten Gruppen angehören. Es wird kein Konto erstellt und keine Standardrolle vergeben.",
+    "requireGroupNeedsMapping": "Fügen Sie mindestens eine Gruppenzuordnung hinzu, bevor Sie eine zugeordnete Gruppe verlangen.",
+    "defaultRoleUnused": "Nicht verwendet, solange eine zugeordnete Gruppe erforderlich ist",
     "groupMapping": "Gruppen-zu-Rollen-Mapping",
     "groupMappingDesc": "IdP-Gruppennamen auf ProxCenter-Rollen abbilden. Die Zeilen werden von oben nach unten gelesen.",
     "groupMappingScopedDesc": "Ordnen Sie IdP-Gruppen einer ProxCenter-Rolle zu, in einem Tenant und optional innerhalb eines einzelnen vDC. Eine Gruppe kann in mehreren Zeilen stehen, um Zugriff in mehreren Tenants zu gewähren. Die Zeilen werden von oben nach unten gelesen.",
@@ -11042,7 +11047,23 @@
       "pass": "Bestanden",
       "fail": "Fehlgeschlagen",
       "warning": "Warnung",
-      "skip": "Überspringen"
+      "skip": "Überspringen",
+      "accepted": "Akzeptiert"
+    },
+    "riskAcceptance": {
+      "accept": "Risiko akzeptieren",
+      "revoke": "Akzeptanz widerrufen",
+      "acceptTitle": "Risiko dieser Prüfung akzeptieren",
+      "revokeTitle": "Risikoakzeptanz widerrufen",
+      "acceptIntro": "Die Prüfung bleibt als akzeptiert sichtbar und zählt nicht mehr im Härtungs-Score. Die Compliance-Frameworks weisen weiterhin das Ergebnis der Prüfung aus, mit dieser Begründung.",
+      "revokeIntro": "Die Prüfung zählt wieder im Härtungs-Score, mit dem Ergebnis des Scans.",
+      "justification": "Begründung",
+      "justificationHelper": "Warum diese Praxis hier nicht umgesetzt werden kann, mindestens 10 Zeichen. Wird mit Ihrem Namen und dem Datum gespeichert.",
+      "expiry": "Läuft ab am",
+      "expiryHelper": "Optional. Nach diesem Tag zählt die Prüfung wieder als fehlgeschlagen.",
+      "acceptedBy": "Risiko akzeptiert von {user} am {date}",
+      "acceptedByUntil": "Risiko akzeptiert von {user} am {date}, bis {until}",
+      "error": "Die Risikoakzeptanz konnte nicht gespeichert werden"
     },
     "passwordPolicy": "Passwort Policy",
     "minLength": "minimal length",

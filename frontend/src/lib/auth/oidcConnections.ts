@@ -78,6 +78,7 @@ export function toOidcConfig(row: any): OidcConfig {
     forceSsoRedirect: row.forceSsoRedirect,
     requireVerifiedEmail: row.requireVerifiedEmail,
     idpVerifiesEmail: row.idpVerifiesEmail,
+    requireGroup: row.requireGroup === true,
     allowedDomains: normalizeAllowedDomains(row.allowedDomains),
     strictUrls: row.id !== PROVIDER_CONNECTION_ID && isCheckedTenantConnection(row.tenant?.oidcSelfService === true, row.trustedEndpoints === true),
     proxyUrl: row.proxyUrl ?? null,

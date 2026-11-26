@@ -330,6 +330,7 @@
   },
   "auth": {
     "oidcLinkRefused": "Connexion refusée : cette identité n'a pas pu être liée au compte existant. Contactez votre administrateur.",
+    "oidcGroupRequired": "Connexion refusée : votre compte n'appartient à aucun groupe autorisé à utiliser ProxCenter. Contactez votre administrateur.",
     "welcomeTitle": "Bienvenue sur {appName}",
     "loginSubtitle": "Connectez-vous pour accéder à votre infrastructure",
     "loginMethod": "Méthode de connexion",
@@ -8947,6 +8948,10 @@
     "idpVerifiesEmailDesc": "Un claim email_verified absent vaut vérifié (Microsoft Entra ID). Un false explicite reste refusé.",
     "defaultRole": "Rôle par défaut",
     "defaultRoleHelper": "Rôle attribué aux utilisateurs auto-provisionnés lorsqu'aucun mapping de groupe ne correspond",
+    "requireGroup": "Exiger un groupe mappé",
+    "requireGroupDesc": "Refuse la connexion de toute personne qui n'appartient à aucun des groupes mappés. Aucun compte n'est créé et aucun rôle par défaut n'est attribué.",
+    "requireGroupNeedsMapping": "Ajoutez au moins une ligne de mapping de groupe avant d'exiger un groupe mappé.",
+    "defaultRoleUnused": "Non utilisé tant qu'un groupe mappé est exigé",
     "groupMapping": "Mapping groupes vers rôles",
     "groupMappingDesc": "Associer les noms de groupes de l'IdP aux rôles ProxCenter. Les lignes sont lues de haut en bas.",
     "groupMappingScopedDesc": "Associez les groupes de l'IdP à un rôle ProxCenter, dans un tenant et éventuellement dans un seul vDC. Un même groupe peut figurer sur plusieurs lignes pour ouvrir l'accès à plusieurs tenants. Les lignes sont lues de haut en bas.",
@@ -11096,7 +11101,23 @@
       "pass": "OK",
       "fail": "Échec",
       "warning": "Attention",
-      "skip": "Ignoré"
+      "skip": "Ignoré",
+      "accepted": "Accepté"
+    },
+    "riskAcceptance": {
+      "accept": "Accepter le risque",
+      "revoke": "Révoquer l'acceptation",
+      "acceptTitle": "Accepter le risque de ce contrôle",
+      "revokeTitle": "Révoquer l'acceptation du risque",
+      "acceptIntro": "Le contrôle reste visible comme accepté et ne compte plus dans le score de durcissement. Les référentiels de conformité continuent d'indiquer ce que le contrôle a constaté, avec cette justification.",
+      "revokeIntro": "Le contrôle compte de nouveau dans le score de durcissement, avec le résultat du scan.",
+      "justification": "Justification",
+      "justificationHelper": "Pourquoi cette pratique ne peut pas être appliquée ici, 10 caractères au minimum. Conservée avec votre nom et la date.",
+      "expiry": "Expire le",
+      "expiryHelper": "Facultatif. Après ce jour, le contrôle compte de nouveau en échec.",
+      "acceptedBy": "Risque accepté par {user} le {date}",
+      "acceptedByUntil": "Risque accepté par {user} le {date}, jusqu'au {until}",
+      "error": "L'acceptation du risque n'a pas pu être enregistrée"
     },
     "passwordPolicy": "Politique de mot de passe",
     "minLength": "Longueur minimale",

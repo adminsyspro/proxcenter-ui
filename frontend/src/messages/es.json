@@ -330,6 +330,7 @@
   },
   "auth": {
     "oidcLinkRefused": "Inicio de sesión rechazado: esta identidad no se pudo vincular a la cuenta existente. Contacte con su administrador.",
+    "oidcGroupRequired": "Inicio de sesión rechazado: su cuenta no pertenece a ningún grupo autorizado a usar ProxCenter. Contacte con su administrador.",
     "welcomeTitle": "Bienvenido a {appName}",
     "loginSubtitle": "Inicia sesión para acceder a tu infraestructura",
     "loginMethod": "Método de inicio de sesión",
@@ -8947,6 +8948,10 @@
     "idpVerifiesEmailDesc": "Un claim email_verified ausente cuenta como verificado (Microsoft Entra ID). Un false explícito se rechaza.",
     "defaultRole": "Rol predeterminado",
     "defaultRoleHelper": "Rol asignado a usuarios aprovisionados automáticamente cuando no coincide ningún mapeo de grupo",
+    "requireGroup": "Exigir un grupo mapeado",
+    "requireGroupDesc": "Rechaza el inicio de sesión de quien no pertenece a ninguno de los grupos mapeados. No se crea ninguna cuenta ni se asigna el rol predeterminado.",
+    "requireGroupNeedsMapping": "Añada al menos una fila de mapeo de grupo antes de exigir un grupo mapeado.",
+    "defaultRoleUnused": "No se usa mientras se exija un grupo mapeado",
     "groupMapping": "Mapeo de grupos a roles",
     "groupMappingDesc": "Mapee nombres de grupos IdP a roles de ProxCenter. Las filas se leen de arriba abajo.",
     "groupMappingScopedDesc": "Asigna los grupos del IdP a un rol de ProxCenter, en un tenant y opcionalmente dentro de un solo vDC. Un mismo grupo puede aparecer en varias filas para dar acceso a varios tenants. Las filas se leen de arriba abajo.",
@@ -11095,7 +11100,23 @@
       "pass": "Superada",
       "fail": "Fallida",
       "warning": "Advertencia",
-      "skip": "Omitida"
+      "skip": "Omitida",
+      "accepted": "Aceptado"
+    },
+    "riskAcceptance": {
+      "accept": "Aceptar el riesgo",
+      "revoke": "Revocar la aceptación",
+      "acceptTitle": "Aceptar el riesgo de esta comprobación",
+      "revokeTitle": "Revocar la aceptación del riesgo",
+      "acceptIntro": "La comprobación sigue visible como aceptada y deja de contar en la puntuación de endurecimiento. Los marcos de cumplimiento siguen indicando lo que encontró la comprobación, con esta justificación.",
+      "revokeIntro": "La comprobación vuelve a contar en la puntuación de endurecimiento, con el resultado del análisis.",
+      "justification": "Justificación",
+      "justificationHelper": "Por qué esta práctica no puede aplicarse aquí, al menos 10 caracteres. Se guarda con su nombre y la fecha.",
+      "expiry": "Caduca el",
+      "expiryHelper": "Opcional. Después de ese día la comprobación vuelve a contar como fallida.",
+      "acceptedBy": "Riesgo aceptado por {user} el {date}",
+      "acceptedByUntil": "Riesgo aceptado por {user} el {date}, hasta el {until}",
+      "error": "No se pudo guardar la aceptación del riesgo"
     },
     "passwordPolicy": "Política de contraseñas",
     "minLength": "Longitud mínima",

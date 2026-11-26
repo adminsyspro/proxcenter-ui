@@ -268,3 +268,63 @@ describe("connections that cannot sign anyone in", () => {
     expect(await signIn(`oidc-${T}`, { sub: "s-off", email: "off@acme.example" })).toBe(false)
   })
 })
+
+describe("a connection that requires a mapped group", () => {
+  const refused = "/login?error=OidcGroupRequired"
+  const providerMapping = { requireGroup: true, defaultRole: "viewer", groupRoleMapping: [{ group: "pxc-admins", tenant: "default", role: "role_viewer" }] }
+  const tenantMapping = { requireGroup: true, groupRoleMapping: [{ group: "ops", tenant: T, role: "role_tenant_operator" }] }
+
+  it("refuses a provider identity whose token carries no groups claim, creates nothing and audits it", async () => {
+    await connection("default", providerMapping)
+
+    expect(await signIn("oidc", { sub: "s-carol", email: "carol@provider.example", email_verified: true })).toBe(refused)
+
+    expect(await prismaTest.user.findUnique({ where: { email: "carol@provider.example" } })).toBeNull()
+    expect(auditMock).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      action: "login_failed", userEmail: "carol@provider.example", details: { reason: "no_mapped_group", provider: "oidc", connection: "default" },
+    }))
+  })
+
+  it("refuses an empty claim and a claim that matches no row alike", async () => {
+    await connection("default", providerMapping)
+
+    expect(await signIn("oidc", { sub: "s-1", email: "one@provider.example", groups: [] })).toBe(refused)
+    expect(await signIn("oidc", { sub: "s-2", email: "two@provider.example", groups: ["staff"] })).toBe(refused)
+    expect(await prismaTest.user.count({ where: { authProvider: "oidc" } })).toBe(0)
+  })
+
+  it("lets a member of a mapped group in, then refuses the same account once it left the group", async () => {
+    await connection("default", providerMapping)
+    const profile = { sub: "s-alice", email: "alice@provider.example", email_verified: true }
+
+    expect(await signIn("oidc", { ...profile, groups: ["pxc-admins"] })).toBe(true)
+    const alice = await prismaTest.user.findUniqueOrThrow({ where: { email: "alice@provider.example" } })
+    expect(await rolesOf(alice.id)).toEqual(["role_viewer@default"])
+
+    expect(await signIn("oidc", profile)).toBe(refused)
+  })
+
+  it("keeps handing out the default role while the requirement is off", async () => {
+    await connection("default", { ...providerMapping, requireGroup: false })
+
+    expect(await signIn("oidc", { sub: "s-carol", email: "carol@provider.example", email_verified: true })).toBe(true)
+    const carol = await prismaTest.user.findUniqueOrThrow({ where: { email: "carol@provider.example" } })
+    expect(await rolesOf(carol.id)).toEqual(["role_viewer@default"])
+  })
+
+  it("applies to a tenant connection: no group, no account", async () => {
+    await connection(T, tenantMapping)
+
+    expect(await signIn(`oidc-${T}`, { sub: "s-tom", email: "tom@acme.example" })).toBe(refused)
+    expect(await signIn(`oidc-${T}`, { sub: "s-tom", email: "tom@acme.example", groups: ["staff"] })).toBe(refused)
+    expect(await prismaTest.user.findUnique({ where: { email: "tom@acme.example" } })).toBeNull()
+
+    expect(await signIn(`oidc-${T}`, { sub: "s-tina", email: "tina@acme.example", groups: ["ops"] })).toBe(true)
+  })
+
+  it("does not count a tenant mapping row the tenant cannot be granted", async () => {
+    await connection(T, { requireGroup: true, groupRoleMapping: [{ group: "ops", tenant: T, role: "role_other_custom" }] })
+
+    expect(await signIn(`oidc-${T}`, { sub: "s-tina", email: "tina@acme.example", groups: ["ops"] })).toBe(refused)
+  })
+})

@@ -112,3 +112,33 @@ describe('assessFramework over the CIS Controls catalogue', () => {
     expect([...prefixes].sort()).toEqual(prefixes)
   })
 })
+
+describe('assessFramework with an accepted risk', () => {
+  const accepted = (id: string, rawStatus: 'fail' | 'warning', details?: string): HardeningCheck => ({
+    ...check(id, 'accepted', details), rawStatus,
+    acceptance: { justification: 'Handled by the host firewall', acceptedBy: 'admin@example.test', acceptedAt: '2026-11-25T10:00:00.000Z', expiresAt: null },
+  })
+
+  it('still judges the control on what the check found: an accepted risk is not compliance', () => {
+    const a = assessFramework([check('chk_pass', 'pass'), accepted('chk_fail', 'fail')], def, crosswalk)
+    expect(a.controls.find(c => c.id === 'B')!.status).toBe('failed')
+    expect(a.score).toBe(50)
+  })
+
+  it('names the acceptance on the check line, before what the check found', () => {
+    const a = assessFramework([accepted('chk_fail', 'fail', '3/3 nodes without firewall')], def, crosswalk)
+    expect(a.controls.find(c => c.id === 'B')!.checks[0]).toEqual({
+      id: 'chk_fail', name: 'chk_fail', status: 'accepted',
+      details: 'Accepted by admin@example.test on 2026-11-25: Handled by the host firewall (3/3 nodes without firewall)',
+    })
+  })
+
+  it('adds the expiry day, and stands alone when the check gave no detail', () => {
+    const withExpiry = accepted('chk_fail', 'warning')
+    withExpiry.acceptance!.expiresAt = '2027-02-23T22:59:59.000Z'
+    const a = assessFramework([withExpiry], def, crosswalk)
+    expect(a.controls.find(c => c.id === 'B')!.checks[0].details).toBe('Accepted by admin@example.test on 2026-11-25, until 2027-02-23: Handled by the host firewall')
+    expect(a.controls.find(c => c.id === 'B')!.status).toBe('partial')
+  })
+})
+

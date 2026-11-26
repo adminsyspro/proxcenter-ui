@@ -19,6 +19,15 @@ export interface FrameworkAssessment {
   controls: AssessedControl[]
 }
 
+/** Detail line of a check: for an accepted risk, the acceptance comes first. */
+function acceptedDetails(check: HardeningCheck): string | undefined {
+  if (check.status !== 'accepted' || !check.acceptance) return check.details
+  const { acceptedBy, acceptedAt, expiresAt, justification } = check.acceptance
+  const until = expiresAt ? `, until ${expiresAt.slice(0, 10)}` : ''
+  const head = `Accepted by ${acceptedBy} on ${acceptedAt.slice(0, 10)}${until}: ${justification}`
+  return check.details ? `${head} (${check.details})` : head
+}
+
 export function assessFramework(checks: HardeningCheck[], def: FrameworkDef, crosswalk: Crosswalk): FrameworkAssessment {
   const byId = new Map(checks.map(c => [c.id, c]))
   // control id -> contributing checks
@@ -35,13 +44,17 @@ export function assessFramework(checks: HardeningCheck[], def: FrameworkDef, cro
 
   const controls: AssessedControl[] = def.controls.map(ctrl => {
     const mapped = controlChecks.get(ctrl.id) ?? []
-    const applicable = mapped.filter(c => c.status !== 'skip')
+    // An accepted risk is a documented exception, not compliance: the control
+    // is judged on what the check really found, and the check line says the
+    // risk was accepted, by whom and why.
+    const found = mapped.map(c => (c.status === 'accepted' ? c.rawStatus ?? 'fail' : c.status))
+    const applicable = found.filter(s => s !== 'skip')
     let status: ControlStatus
     if (applicable.length === 0) status = 'not_assessed'
-    else if (applicable.every(c => c.status === 'pass')) status = 'satisfied'
-    else if (applicable.every(c => c.status === 'fail')) status = 'failed'
+    else if (applicable.every(s => s === 'pass')) status = 'satisfied'
+    else if (applicable.every(s => s === 'fail')) status = 'failed'
     else status = 'partial'
-    return { id: ctrl.id, title: ctrl.title, family: ctrl.family, status, checks: mapped.map(c => ({ id: c.id, name: c.name, status: c.status, details: c.details })) }
+    return { id: ctrl.id, title: ctrl.title, family: ctrl.family, status, checks: mapped.map(c => ({ id: c.id, name: c.name, status: c.status, details: acceptedDetails(c) })) }
   })
 
   const count = (s: ControlStatus) => controls.filter(c => c.status === s).length

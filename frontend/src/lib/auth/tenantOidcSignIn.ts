@@ -14,7 +14,7 @@ import { nanoid } from "nanoid"
 import { prisma } from "@/lib/db/prisma"
 import { normalizeRoleId, readGroupsClaim } from "./groupMapping"
 import { resolveOidcGrants, toRoleId, type OidcConfig } from "./oidc"
-import { auditOidcLinkRefusal, OIDC_LINK_REFUSED, type OidcLinkRefusal } from "./oidcLinking"
+import { auditOidcLinkRefusal, OIDC_GROUP_REQUIRED, OIDC_LINK_REFUSED, type OidcLinkRefusal } from "./oidcLinking"
 import { syncProviderGrants, type ProviderGrantRow } from "./roleSync"
 import { confineTenantGrants, isEmailDomainAllowed, TENANT_DEFAULT_ROLE_ID, tenantRoleRefSelect, tenantRoleRefusal } from "./tenantOidc"
 import { loadVdcScopes, toProviderGrantRows } from "./vdcScope"
@@ -99,6 +99,13 @@ export async function signInWithTenantConnection(params: {
   const rows = await resolveTenantGrantRows(config, groups, groupsClaimIsArray, refs)
 
   if (!isEmailDomainAllowed(email, config.allowedDomains)) return refuse(email, "email_domain_not_allowed", tenantId)
+
+  // A mapped group is required: a row the tenant cannot grant does not count,
+  // so only the rows that really grant something let the user in.
+  if (config.requireGroup && !rows?.length) {
+    await auditOidcLinkRefusal(email, "no_mapped_group", tenantId)
+    return `/login?error=${OIDC_GROUP_REQUIRED}`
+  }
 
   const existing = await prisma.user.findFirst({
     where: { oidcConnectionId: tenantId, oidcSub: sub },

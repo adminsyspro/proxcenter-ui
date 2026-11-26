@@ -5,6 +5,7 @@ import {
   ALL_PUBLISHED_TENANTS,
   DEFAULT_TENANT_ID,
   normalizeGroupGrantMapping,
+  REQUIRE_GROUP_NEEDS_MAPPING,
   normalizeMappingStrategy,
   protectedRoleTargets,
   type GroupGrant,
@@ -72,6 +73,7 @@ export async function GET(req: Request) {
           force_sso_redirect: false,
           require_verified_email: true,
           idp_verifies_email: false,
+          require_group: false,
           // Frontend expects a string here (it does JSON.parse with a string|object guard).
           group_role_mapping: "[]",
           group_mapping_strategy: "first_match",
@@ -114,6 +116,7 @@ export async function GET(req: Request) {
         force_sso_redirect: config.forceSsoRedirect,
         require_verified_email: config.requireVerifiedEmail,
         idp_verifies_email: config.idpVerifiesEmail,
+        require_group: config.requireGroup,
         group_role_mapping: groupRoleMappingStr,
         group_mapping_strategy: normalizeMappingStrategy(config.groupMappingStrategy),
         hasClientSecret: !!config.clientSecretEnc,
@@ -296,6 +299,7 @@ async function handlePut(req: Request) {
       force_sso_redirect,
       require_verified_email,
       idp_verifies_email,
+      require_group,
       group_role_mapping,
       group_mapping_strategy,
       proxy_url,
@@ -321,6 +325,12 @@ async function handlePut(req: Request) {
     const persistForceSsoRedirect = enabled ? !!force_sso_redirect : false
 
     const grants = normalizeGroupGrantMapping(group_role_mapping)
+
+    // Requiring a mapped group with no mapping at all would refuse every SSO
+    // sign-in, the administrator saving it included.
+    if (require_group === true && grants.length === 0) {
+      return NextResponse.json({ error: REQUIRE_GROUP_NEEDS_MAPPING }, { status: 400 })
+    }
 
     // Same rule as POST /rbac/assignments: only a super admin hands out the
     // wildcard roles. Through SSO the grant lands on whoever the IdP sends
@@ -378,6 +388,7 @@ async function handlePut(req: Request) {
       // configuration gets the strict default from the column).
       ...(typeof require_verified_email === "boolean" ? { requireVerifiedEmail: require_verified_email } : {}),
       ...(typeof idp_verifies_email === "boolean" ? { idpVerifiesEmail: idp_verifies_email } : {}),
+      ...(typeof require_group === "boolean" ? { requireGroup: require_group } : {}),
       groupRoleMapping: grants,
       groupMappingStrategy: normalizeMappingStrategy(group_mapping_strategy),
       proxyUrl,
@@ -429,6 +440,7 @@ async function handlePut(req: Request) {
         issuer_url: issuer_url || null,
         client_id: client_id || null,
         clientSecretChanged: !!client_secret,
+        ...(typeof require_group === "boolean" ? { require_group } : {}),
         proxy_url: proxyUrl,
         proxyPasswordChanged: !!(proxyUsername && proxy_password),
       },

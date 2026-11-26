@@ -330,6 +330,7 @@
   },
   "auth": {
     "oidcLinkRefused": "로그인이 거부되었습니다. 이 ID를 기존 계정에 연결할 수 없습니다. 관리자에게 문의하세요.",
+    "oidcGroupRequired": "로그인이 거부되었습니다. 계정이 ProxCenter 사용이 허용된 그룹에 속해 있지 않습니다. 관리자에게 문의하세요.",
     "welcomeTitle": "{appName}에 오신 것을 환영합니다",
     "loginSubtitle": "인프라에 액세스하려면 로그인하세요",
     "loginMethod": "로그인 방식",
@@ -8947,6 +8948,10 @@
     "idpVerifiesEmailDesc": "email_verified 클레임이 없으면 확인된 것으로 봅니다(Microsoft Entra ID). 명시적 false는 거부됩니다.",
     "defaultRole": "기본 역할",
     "defaultRoleHelper": "일치하는 그룹 매핑이 없을 때 자동 프로비저닝된 사용자에게 할당되는 역할",
+    "requireGroup": "매핑된 그룹 필수",
+    "requireGroupDesc": "매핑된 그룹 중 어디에도 속하지 않은 사용자의 로그인을 거부합니다. 계정이 생성되지 않으며 기본 역할도 부여되지 않습니다.",
+    "requireGroupNeedsMapping": "매핑된 그룹을 필수로 하려면 먼저 그룹 매핑 행을 하나 이상 추가하세요.",
+    "defaultRoleUnused": "매핑된 그룹이 필수인 동안에는 사용되지 않습니다",
     "groupMapping": "그룹-역할 매핑",
     "groupMappingDesc": "IdP 그룹 이름을 ProxCenter 역할에 매핑합니다. 행은 위에서 아래로 읽습니다.",
     "groupMappingScopedDesc": "IdP 그룹을 ProxCenter 역할에 매핑합니다. 테넌트를 지정할 수 있고 필요하면 단일 vDC로 한정할 수도 있습니다. 하나의 그룹을 여러 행에 넣어 여러 테넌트에 접근 권한을 부여할 수 있습니다. 행은 위에서 아래로 읽습니다.",
@@ -11095,7 +11100,23 @@
       "pass": "통과",
       "fail": "실패",
       "warning": "경고",
-      "skip": "건너뜀"
+      "skip": "건너뜀",
+      "accepted": "수용됨"
+    },
+    "riskAcceptance": {
+      "accept": "위험 수용",
+      "revoke": "수용 철회",
+      "acceptTitle": "이 점검의 위험 수용",
+      "revokeTitle": "위험 수용 철회",
+      "acceptIntro": "점검은 수용됨으로 계속 표시되며 하드닝 점수에 더 이상 반영되지 않습니다. 컴플라이언스 프레임워크에는 점검 결과가 이 사유와 함께 그대로 보고됩니다.",
+      "revokeIntro": "점검이 스캔 결과와 함께 다시 하드닝 점수에 반영됩니다.",
+      "justification": "사유",
+      "justificationHelper": "이 권장 사항을 여기에 적용할 수 없는 이유를 10자 이상 입력하세요. 이름 및 날짜와 함께 저장됩니다.",
+      "expiry": "만료일",
+      "expiryHelper": "선택 사항입니다. 이 날짜 이후에는 점검이 다시 실패로 계산됩니다.",
+      "acceptedBy": "{user} 님이 {date}에 위험을 수용함",
+      "acceptedByUntil": "{user} 님이 {date}에 위험을 수용함, {until}까지",
+      "error": "위험 수용을 저장할 수 없습니다"
     },
     "passwordPolicy": "비밀번호 정책",
     "minLength": "최소 길이",

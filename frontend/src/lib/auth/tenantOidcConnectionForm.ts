@@ -7,7 +7,7 @@
 
 import { prisma } from "@/lib/db/prisma"
 import { encryptSecret } from "@/lib/crypto/secret"
-import { normalizeGroupGrantMapping, normalizeMappingStrategy, normalizeRoleId, type GroupGrant } from "./groupMapping"
+import { normalizeGroupGrantMapping, normalizeMappingStrategy, normalizeRoleId, REQUIRE_GROUP_NEEDS_MAPPING, type GroupGrant } from "./groupMapping"
 import { checkProxyUrl, environmentProxyDisplay, PROXY_REFUSED_MESSAGE, proxyFor, type OidcProxySettings } from "./oidcProxy"
 import { PROVIDER_CONNECTION_ID, providerIdFor } from "./oidcConnections"
 import { isCheckedTenantConnection, normalizeAllowedDomains, TENANT_DEFAULT_ROLE_ID, tenantRoleRefSelect, tenantRoleRefusal } from "./tenantOidc"
@@ -99,6 +99,7 @@ export async function serializeTenantConnection(tenant: CustomerTenant, appOrigi
     group_role_mapping: JSON.stringify(toWireEntries(row ? normalizeGroupGrantMapping(row.groupRoleMapping) : [])),
     group_mapping_strategy: normalizeMappingStrategy(row?.groupMappingStrategy),
     allowed_domains: normalizeAllowedDomains(row?.allowedDomains),
+    require_group: row?.requireGroup ?? false,
     hasClientSecret: !!row?.clientSecretEnc,
     ...proxy,
     tenants: [{ id: tenant.id, name: tenant.name, slug: tenant.slug }],
@@ -226,6 +227,7 @@ export async function saveTenantConnection(
   const defaultRoleId = normalizeRoleId(body.default_role) || TENANT_DEFAULT_ROLE_ID
   const invalid = await grantsError(tenant.id, grants, defaultRoleId)
   if (invalid) return { status: 400, error: invalid }
+  if (body.require_group === true && grants.length === 0) return { status: 400, error: REQUIRE_GROUP_NEEDS_MAPPING }
 
   const now = new Date()
   const data: Record<string, unknown> = {
@@ -249,6 +251,8 @@ export async function saveTenantConnection(
     groupRoleMapping: grants,
     groupMappingStrategy: normalizeMappingStrategy(body.group_mapping_strategy),
     allowedDomains,
+    // Omitted by an older client: the stored choice is kept.
+    ...(typeof body.require_group === "boolean" ? { requireGroup: body.require_group } : {}),
     updatedAt: now,
   }
   if (opts.provider || selfService) data.trustedEndpoints = trustedEndpoints
@@ -290,6 +294,7 @@ export async function saveTenantConnection(
       clientSecretChanged: !!secret,
       self_service: selfService,
       trusted_endpoints: trustedEndpoints,
+      ...(typeof body.require_group === "boolean" ? { require_group: body.require_group } : {}),
       ...(allowProxy ? { proxy_url: proxyUrl } : {}),
     },
     status: "success",

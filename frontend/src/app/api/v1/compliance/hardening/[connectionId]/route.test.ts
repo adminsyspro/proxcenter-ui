@@ -52,6 +52,12 @@ vi.mock('@/lib/demo/demo-api', () => ({
   demoResponse: () => null,
 }))
 
+const listRiskAcceptancesMock = vi.fn<(tenantId: string, connectionId: string) => Promise<any[]>>(async () => [])
+vi.mock('@/lib/compliance/riskAcceptance', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/compliance/riskAcceptance')>()),
+  listRiskAcceptances: listRiskAcceptancesMock,
+}))
+
 vi.mock('@/lib/ssh/exec', () => ({
   executeSSH: executeSSHMock,
 }))
@@ -128,6 +134,29 @@ describe('GET /api/v1/compliance/hardening/[connectionId]', () => {
     expect(Array.isArray(body.checks)).toBe(true)
     expect(typeof body.score).toBe('number')
     expect(body.sshStatus).toMatchObject({ enabled: false })
+  })
+
+  it('reports an accepted risk as accepted and takes it out of the score, with and without a profile', async () => {
+    const { GET } = await import('./route')
+    const before = await readJson<any>(await callRoute(GET, { params: { connectionId: 'conn-1' } }))
+    const failing = before.checks.find((c: any) => c.status === 'fail')
+    expect(failing).toBeDefined()
+
+    listRiskAcceptancesMock.mockResolvedValue([
+      { checkId: failing.id, justification: 'Handled elsewhere', acceptedBy: 'admin@example.test', acceptedAt: new Date('2026-11-25T10:00:00Z'), expiresAt: null },
+    ])
+    const after = await readJson<any>(await callRoute(GET, { params: { connectionId: 'conn-1' } }))
+    expect(listRiskAcceptancesMock).toHaveBeenLastCalledWith('tenant-1', 'conn-1')
+    expect(after.checks.find((c: any) => c.id === failing.id)).toMatchObject({
+      status: 'accepted', rawStatus: 'fail', acceptance: { justification: 'Handled elsewhere', acceptedBy: 'admin@example.test' },
+    })
+    expect(after.summary).toMatchObject({ accepted: 1, failed: before.summary.failed - 1 })
+    expect(after.summary.maxApplicable).toBe(before.summary.maxApplicable - failing.maxPoints)
+
+    getActiveProfileMock.mockResolvedValue({ id: 'p1', checks: [{ check_id: failing.id, enabled: 1, weight: 2, control_ref: null, category: null }] })
+    const weighted = await readJson<any>(await callRoute(GET, { params: { connectionId: 'conn-1' } }))
+    expect(weighted.checks).toMatchObject([{ id: failing.id, status: 'accepted', weight: 2 }])
+    expect(weighted.summary).toMatchObject({ accepted: 1, failed: 0, maxApplicable: 0 })
   })
 
   it('reuses the collection of a second read, and collects afresh on refresh=1', async () => {

@@ -23,6 +23,8 @@ import {
 import FrameworksTab from '@/components/compliance/FrameworksTab'
 import LoginLockoutsCard from '@/components/compliance/LoginLockoutsCard'
 import CollectionSettingsCard from '@/components/compliance/CollectionSettingsCard'
+import RiskAcceptanceDialog, { type RiskAcceptanceTarget } from '@/components/compliance/RiskAcceptanceDialog'
+import RiskAcceptanceNote from '@/components/compliance/RiskAcceptanceNote'
 import { jsonInit, requireOk } from '@/lib/api/fetchJsonSafe'
 
 // Severity config
@@ -33,10 +35,11 @@ const severityColors: Record<string, 'error' | 'warning' | 'info' | 'default'> =
   low: 'info',
 }
 
-const statusColors: Record<string, 'success' | 'error' | 'warning' | 'default'> = {
+const statusColors: Record<string, 'success' | 'error' | 'warning' | 'info' | 'default'> = {
   pass: 'success',
   fail: 'error',
   warning: 'warning',
+  accepted: 'info',
   skip: 'default',
 }
 
@@ -271,7 +274,23 @@ function HardeningTab() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
 
   const profileId = selectedProfile?.id || null
-  const { data, isLoading, rescan, isScanning } = useHardeningChecks(selectedConnection?.id, profileId)
+  const { data, isLoading, rescan, isScanning, mutate } = useHardeningChecks(selectedConnection?.id, profileId)
+  const [acceptanceTarget, setAcceptanceTarget] = useState<RiskAcceptanceTarget | null>(null)
+
+  // Accept risk / Revoke acceptance, at the right end of the recommendation line.
+  const acceptanceButton = (check: any) =>
+    (check.status === 'fail' || check.status === 'warning' || check.status === 'accepted') && (
+      <Button
+        size="small"
+        variant="outlined"
+        color={check.status === 'accepted' ? 'error' : 'primary'}
+        startIcon={<i className={check.status === 'accepted' ? 'ri-close-circle-line' : 'ri-shield-check-line'} />}
+        onClick={() => setAcceptanceTarget({ id: check.id, name: check.name, status: check.status })}
+        sx={{ ml: 'auto', my: -0.5, flexShrink: 0, whiteSpace: 'nowrap' }}
+      >
+        {check.status === 'accepted' ? t('compliance.riskAcceptance.revoke') : t('compliance.riskAcceptance.accept')}
+      </Button>
+    )
 
   // Auto-select first connection
   useEffect(() => {
@@ -280,12 +299,12 @@ function HardeningTab() {
     }
   }, [connections, selectedConnection])
 
-  // Sort checks: fail > warning > pass > skip
-  const statusOrder: Record<string, number> = { fail: 0, warning: 1, pass: 2, skip: 3 }
-  const checks = [...(data?.checks || [])].sort((a: any, b: any) => (statusOrder[a.status] ?? 4) - (statusOrder[b.status] ?? 4))
+  // Sort checks: fail > warning > accepted > pass > skip
+  const statusOrder: Record<string, number> = { fail: 0, warning: 1, accepted: 2, pass: 3, skip: 4 }
+  const checks = [...(data?.checks || [])].sort((a: any, b: any) => (statusOrder[a.status] ?? 5) - (statusOrder[b.status] ?? 5))
   const categories = [...new Set(checks.map((c: any) => c.category))]
   const filteredChecks = categoryFilter ? checks.filter((c: any) => c.category === categoryFilter) : checks
-  const summary = data?.summary || { score: 0, total: 0, passed: 0, failed: 0, warnings: 0, skipped: 0, critical: 0 }
+  const summary = data?.summary || { score: 0, total: 0, passed: 0, failed: 0, warnings: 0, skipped: 0, accepted: 0, critical: 0 }
   const score = data?.score ?? 0
   const hasProfile = !!profileId || !!data?.profileId
 
@@ -573,12 +592,14 @@ function HardeningTab() {
                                   <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
                                     {check.details || '—'}
                                   </Typography>
+                                  {check.status === 'accepted' && check.acceptance && <RiskAcceptanceNote acceptance={check.acceptance} />}
+                                  {!CHECK_RECOMMENDATIONS[check.id] && acceptanceButton(check)}
                                 </Box>
                                 {check.status !== 'pass' && check.status !== 'skip' && CHECK_RECOMMENDATIONS[check.id] && (
                                   <>
                                     <Divider sx={{ my: 1.5 }} />
-                                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                                      <i className="ri-lightbulb-line" style={{ fontSize: 16, color: '#f59e0b', marginTop: 2, flexShrink: 0 }} />
+                                    <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1 }}>
+                                      <i className="ri-lightbulb-line" style={{ fontSize: 16, color: '#f59e0b', marginTop: 2, flexShrink: 0, alignSelf: 'flex-start' }} />
                                       <Box>
                                         <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
                                           {t('compliance.recommendation')}
@@ -587,6 +608,7 @@ function HardeningTab() {
                                           {CHECK_RECOMMENDATIONS[check.id]}
                                         </Typography>
                                       </Box>
+                                      {acceptanceButton(check)}
                                     </Box>
                                   </>
                                 )}
@@ -612,6 +634,15 @@ function HardeningTab() {
 
       {!isLoading && !data && selectedConnection && (
         <Alert severity="info">{t('compliance.clickScan')}</Alert>
+      )}
+
+      {selectedConnection && (
+        <RiskAcceptanceDialog
+          connectionId={selectedConnection.id}
+          check={acceptanceTarget}
+          onClose={() => setAcceptanceTarget(null)}
+          onDone={() => void mutate()}
+        />
       )}
     </Box>
   )

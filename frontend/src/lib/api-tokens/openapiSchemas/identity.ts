@@ -63,6 +63,7 @@ const OIDC_SETTINGS = {
   claim_groups: { type: "string" },
   auto_provision: { type: "boolean", description: "Create the account on first sign-in" },
   default_role: { type: "string", description: "A role assignable in the tenant" },
+  require_group: { type: "boolean", description: "Refuse the sign-in of a user no group mapping row matches; needs at least one row" },
   show_local_login: { type: "boolean" },
   force_sso_redirect: { type: "boolean" },
   group_mapping_strategy: { type: "string" },

@@ -112,7 +112,9 @@ export default function LoginPage({ forceLocal = false, tenantSlug = null }: Log
     if (!errorParam) return
     const decoded = decodeURIComponent(errorParam)
 
-    setError(decoded === 'OidcLinkRefused' ? t('auth.oidcLinkRefused') : decoded)
+    if (decoded === 'OidcLinkRefused') setError(t('auth.oidcLinkRefused'))
+    else if (decoded === 'OidcGroupRequired') setError(t('auth.oidcGroupRequired'))
+    else setError(decoded)
   }, [errorParam, t])
 
   // Auto-redirect to the IdP when forced. Skipped on the /access escape hatch

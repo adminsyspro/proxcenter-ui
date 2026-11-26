@@ -77,6 +77,7 @@ vi.mock("@/lib/demo/demo-api", () => ({ demoResponse: () => null }))
 /** Paths relative to src/app/api/v1/compliance. Every handler of these files is refused to an IaaS tenant. */
 const DENIED_FILES = [
   "hardening/[connectionId]/route.ts",
+  "hardening/[connectionId]/acceptances/route.ts",
   "frameworks/route.ts",
   "frameworks/[frameworkId]/report/route.ts",
   "report-jobs/route.ts",
@@ -200,8 +201,10 @@ describe("denied compliance routes refuse an IaaS tenant", () => {
       expect(await res.json(), label).toEqual({ error: "Not found" })
       for (const k of SIDE_EFFECTS) expect(h[k], `${label}: ${k}`).not.toHaveBeenCalled()
       // A mutating handler (withAudit) leaves the audit row of the refusal and
-      // its syslog forwarding lookup: never a read of the cluster or its data.
-      expect(h.prismaCalls, label).toEqual(c.method === "GET" ? [] : AUDIT_TRAIL_CALLS)
+      // its syslog forwarding lookup (read once, then cached for the next
+      // refusals): never a read of the cluster or its data.
+      expect(h.prismaCalls.filter(call => !AUDIT_TRAIL_CALLS.includes(call)), label).toEqual([])
+      expect(h.prismaCalls.includes("auditLog.create"), label).toBe(c.method !== "GET")
     }
   })
 

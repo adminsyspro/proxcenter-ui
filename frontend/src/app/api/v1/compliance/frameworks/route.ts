@@ -12,6 +12,7 @@ import { getHardeningData } from '@/lib/compliance/collectionCache'
 import { runAllChecks } from '@/lib/compliance/hardening'
 import { FRAMEWORKS, getCrosswalk } from '@/lib/compliance/frameworks'
 import { assessFramework } from '@/lib/compliance/frameworkAssessment'
+import { applyRiskAcceptances, listRiskAcceptances } from '@/lib/compliance/riskAcceptance'
 import { computeNodeBreakdown } from '@/lib/compliance/nodeBreakdown'
 
 export const runtime = 'nodejs'
@@ -56,15 +57,16 @@ export async function GET(req: Request) {
     })
 
     // Collect raw data, or reuse the collection another compliance screen just made
+    const tenantId = await getCurrentTenantId()
     const { data: hardeningData, collectedAt } = await getHardeningData({
-      tenantId: await getCurrentTenantId(),
+      tenantId,
       connectionId,
       conn,
       sshEnabled: !!connectionRecord?.sshEnabled,
     })
 
     // Run ALL checks (no profile, no weighting) and assess against each framework
-    const checks = runAllChecks(hardeningData)
+    const checks = applyRiskAcceptances(runAllChecks(hardeningData), await listRiskAcceptances(tenantId, connectionId))
     const assessments = FRAMEWORKS.map(def => assessFramework(checks, def, getCrosswalk(def.id)))
 
     // Per-node breakdown: re-run checks for each node using a node-scoped slice

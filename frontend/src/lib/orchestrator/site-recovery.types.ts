@@ -294,6 +294,23 @@ export interface RecoveryVMResult {
   // VM completes.
   last_reverse_sync_at?: string
   last_reverse_sync_bytes?: number
+  // The reverse-sync pass running for this VM right now, while a failback is
+  // in phase 'reverse_sync'. Absent between passes.
+  reverse_sync_progress?: ReverseSyncProgress
+}
+
+/** Where the reverse sync pass in flight stands for one VM of a failback. */
+export interface ReverseSyncProgress {
+  stage: 'aligning' | 'transferring'
+  disk?: number
+  disks?: number
+  // What this disk's stream carried so far, and the orchestrator's estimate
+  // of it (absent when unknown).
+  bytes: number
+  total_bytes?: number
+  throughput_bps?: number
+  // Start of this VM's pass, across its disks.
+  started_at: string
 }
 
 /** One line of the step log of a failover or failback (ui#943). */

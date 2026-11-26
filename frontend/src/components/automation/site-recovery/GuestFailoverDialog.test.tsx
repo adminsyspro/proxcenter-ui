@@ -185,6 +185,15 @@ describe('GuestFailoverDialog: failback of one guest', () => {
     expect(within(screen.getByTestId('guest-reverse-sync')).getByText('0 B')).toBeInTheDocument()
   })
 
+  it('shows the reverse sync pass running for the guest', () => {
+    render({
+      mode: 'failback', guestState: 'failing_back',
+      execution: execution({ type: 'failback', phase: 'reverse_sync', vm_results: [{ vm_id: 9943, vm_name: 'i943-a', status: 'running', progress_percent: 0, reverse_sync_progress: { stage: 'aligning', bytes: 0, started_at: new Date().toISOString() } }] }),
+    })
+
+    expect(screen.getByTestId('reverse-sync-pass')).toHaveTextContent('Aligning the source VM on the last snapshot both sites share')
+  })
+
   it('offers the cutover once a reverse sync landed, confirmed first', async () => {
     const h = render({
       mode: 'failback', guestState: 'failing_back',

@@ -7704,7 +7704,13 @@
       "cancelFailback": "Failback abbrechen",
       "cancelConfirm": "Umgekehrte Replikation stoppen und den Plan auf failed over zurücksetzen? An den VMs ändert sich nichts.",
       "completeTitle": "Failback abgeschlossen",
-      "completeReprotected": "Die Quell-VMs laufen und die Replikation schützt sie wieder in der ursprünglichen Richtung."
+      "completeReprotected": "Die Quell-VMs laufen und die Replikation schützt sie wieder in der ursprünglichen Richtung.",
+      "pass": {
+        "aligning": "Quell-VM wird auf den letzten gemeinsamen Snapshot beider Standorte ausgerichtet",
+        "transferring": "Datenträger {disk} von {disks} wird gesendet",
+        "sentOf": "{sent} von {total}",
+        "elapsed": "seit {elapsed}"
+      }
     },
     "screenshots": {
       "view": "Boot-Screenshot ansehen",

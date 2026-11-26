@@ -9,6 +9,8 @@ import {
 } from '@mui/material'
 
 import { ScreenshotPreviewDialog, useExecutionScreenshots, type ScreenshotMeta } from './ExecutionScreenshots'
+import ExecutionTrace from './ExecutionTrace'
+import ReverseSyncPassProgress from './ReverseSyncPassProgress'
 
 import { formatBytes } from '@/utils/format'
 
@@ -588,6 +590,7 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                           : '—'}
                       </Typography>
                     </Box>
+                    {vm.reverse_sync_progress && <ReverseSyncPassProgress progress={vm.reverse_sync_progress} />}
                     {/* A failed pass is retried on the next tick, hence a warning
                         rather than an error. The reason is the orchestrator's own
                         text, which names what blocks and what to do about it, so it
@@ -606,6 +609,11 @@ export default function FailoverDialog({ open, onClose, plan, type, onConfirm, o
                 ))}
               </Stack>
               <Alert severity='info' sx={{ mt: 1.5 }}>{t('siteRecovery.failback.phase1Help')}</Alert>
+              {/* What each pass did, as the orchestrator logs it: aligned,
+                  sent, failed and retried. */}
+              <Box sx={{ mt: 1.5 }}>
+                <ExecutionTrace key={execution.id} executionId={execution.id} steps={[]} status={execution.status} />
+              </Box>
             </Box>
           )}
 

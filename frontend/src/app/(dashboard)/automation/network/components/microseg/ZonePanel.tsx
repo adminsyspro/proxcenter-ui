@@ -11,7 +11,7 @@ import type { IPFilterGuest, MicrosegFlow, MicrosegSuggestion, MicrosegZone, Sug
 
 import MicrosegErrorAlert from './MicrosegErrorAlert'
 import { DirectionGlyph, ObservedKindGlyph, ResolveActions, outboundZoneAcceptTip, ServiceHits, useResolveSuggestions } from './observationParts'
-import PanelSection, { PanelFrame, usePanelSection } from './PanelSection'
+import PanelSection, { LIST_ROW_SX, PanelFrame, usePanelSection } from './PanelSection'
 import { PagedList, POLICY_PAGE_SIZE } from './PolicyPager'
 import { SelectionTrafficChart, TOP_TITLE, TopSourcesList, TrafficSummaryLine, VolumeSummaryLine, useSelectionTraffic } from './SelectionTraffic'
 import { MemberChangeChip } from './ZoneRow'
@@ -91,7 +91,7 @@ function MemberLine({ member, zoneId, edits, firewallOff, cluster, ipFilter }: {
   const { guest, ref } = member
   const name = guest?.name ?? `${ref.type}/${ref.vmid}`
   return (
-    <Box role='listitem' aria-label={name} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, minHeight: 28 }}>
+    <Box role='listitem' aria-label={name} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, ...LIST_ROW_SX }}>
       {guest
         ? (
           <Tooltip title={guest.status === 'running' ? tsec('memberRunning') : tsec('memberStopped')}>
@@ -131,7 +131,7 @@ function SuggestionLine({ suggestion: s, zonesById, peers, busy, onResolve }: {
     ? destinationName(s, zonesById, ip => peers?.get(bareIp(ip)) ?? gatewayName(ip), to as (key: string) => string)
     : sourceName(s, zonesById, to as (key: string) => string, gatewayName, networks)
   return (
-    <Box role='listitem' aria-label={source} data-suggestion={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minHeight: 36, minWidth: 0, borderBottom: 1, borderColor: 'divider' }}>
+    <Box role='listitem' aria-label={source} data-suggestion={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, ...LIST_ROW_SX }}>
       <DirectionGlyph direction={s.direction} />
       <ObservedKindGlyph kind={s.kind} />
       <TruncatedText text={source} fontWeight={600} sx={{ flex: '1 1 0', minWidth: 0 }} />
@@ -194,25 +194,27 @@ export function useZoneWork({
     if (outcome?.resolved) onResolved(action)
   }
 
-  const trafficSections = (
-    <>
-      <PanelSection id='zone.traffic' title={tsec('traffic')} state={trafficSection}>
-        <SelectionTrafficChart traffic={traffic} />
-        <TrafficSummaryLine traffic={traffic} />
-        <VolumeSummaryLine traffic={traffic} />
-      </PanelSection>
-
-      <PanelSection
-        id='zone.sources'
-        title={tsec(TOP_TITLE[traffic.direction])}
-        count={traffic.phase === 'ready' ? traffic.summary.count : null}
-        state={sourcesSection}
-      >
-        <TopSourcesList top={traffic.summary.top} phase={traffic.phase} mode={traffic.direction} />
-      </PanelSection>
-
-    </>
+  // `tall`: the chart taller than in the map panel (the Policy sub-tab's details, the Top list beside it).
+  const chartSection = (tall: boolean) => (
+    <PanelSection id='zone.traffic' icon='ri-line-chart-line' title={tsec('traffic')} state={trafficSection}>
+      <SelectionTrafficChart traffic={traffic} tall={tall} />
+      <TrafficSummaryLine traffic={traffic} />
+      <VolumeSummaryLine traffic={traffic} />
+    </PanelSection>
   )
+  const topSection = (
+    <PanelSection
+      id='zone.sources'
+      icon='ri-bar-chart-horizontal-line'
+      title={tsec(TOP_TITLE[traffic.direction])}
+      count={traffic.phase === 'ready' ? traffic.summary.count : null}
+      state={sourcesSection}
+    >
+      <TopSourcesList top={traffic.summary.top} phase={traffic.phase} mode={traffic.direction} />
+    </PanelSection>
+  )
+  const trafficSections = <>{chartSection(false)}{topSection}</>
+  const tallChart = chartSection(true)
 
   const suggestionsBody = (size = FLOWS_PAGE_SIZE) => (
     <>
@@ -258,15 +260,21 @@ export function useZoneWork({
   const incomingBody = (size = FLOWS_PAGE_SIZE) => <FlowsList flows={incoming} zonesById={zonesById} editor={editor} size={size} />
   const outgoingBody = (size = FLOWS_PAGE_SIZE) => <FlowsList flows={outgoing} zonesById={zonesById} editor={editor} size={size} />
 
-  const dataSections = (
+  // In the map panel one after the other; on the Policy sub-tab the members and exceptions go under the chart.
+  const suggestionsSection = <PanelSection id='zone.suggestions' icon='ri-lightbulb-flash-line' title={tsec('suggestions')} count={pending.length}>{suggestionsBody()}</PanelSection>
+  const memberSections = (
     <>
-      <PanelSection id='zone.suggestions' title={tsec('suggestions')} count={pending.length}>{suggestionsBody()}</PanelSection>
-      <PanelSection id='zone.members' title={t('members')} count={membersKnown ? members.length : null}>{membersBody()}</PanelSection>
-      <PanelSection id='zone.exceptions' title={te('title')} count={exceptions.count} action={newException}>{exceptionsBody()}</PanelSection>
-      <PanelSection id='zone.incoming' title={ts('incoming')} count={incoming.length} action={newIncoming}>{incomingBody()}</PanelSection>
-      <PanelSection id='zone.outgoing' title={ts('outgoing')} count={outgoing.length} action={newOutgoing}>{outgoingBody()}</PanelSection>
+      <PanelSection id='zone.members' icon='ri-computer-line' title={t('members')} count={membersKnown ? members.length : null}>{membersBody()}</PanelSection>
+      <PanelSection id='zone.exceptions' icon='ri-shield-user-line' title={te('title')} count={exceptions.count} action={newException}>{exceptionsBody()}</PanelSection>
     </>
   )
+  const flowSections = (
+    <>
+      <PanelSection id='zone.incoming' icon='ri-login-box-line' title={ts('incoming')} count={incoming.length} action={newIncoming}>{incomingBody()}</PanelSection>
+      <PanelSection id='zone.outgoing' icon='ri-logout-box-r-line' title={ts('outgoing')} count={outgoing.length} action={newOutgoing}>{outgoingBody()}</PanelSection>
+    </>
+  )
+  const dataSections = <>{suggestionsSection}{memberSections}{flowSections}</>
 
   // The same bodies in the dialog, one sub-tab each, the count in the label and the add button above the flows.
   const dataTabs: DataTab[] = [
@@ -279,7 +287,7 @@ export function useZoneWork({
 
   const dialogs = <>{editor.dialogs}{exceptions.dialogs}</>
 
-  return { trafficSections, dataSections, dataTabs, dialogs, signals, egress, egressReady }
+  return { trafficSections, tallChart, topSection, dataSections, suggestionsSection, memberSections, flowSections, dataTabs, dialogs, signals, egress, egressReady }
 }
 
 /**

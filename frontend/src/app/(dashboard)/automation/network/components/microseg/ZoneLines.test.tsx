@@ -46,7 +46,14 @@ describe('zones as rows on the Policy sub-tab', () => {
     expect(within(rows).getByRole('listitem', { name: 'db' }).querySelector('[data-stat=incoming]')?.textContent).toBe('1')
 
     fireEvent.click(within(row).getByRole('button', { name: 'Show details of web' }))
-    expect(await screen.findByRole('region', { name: 'Details of web' })).toBeTruthy()
+    const details = await screen.findByRole('region', { name: 'Details of web' })
+    // Two rows of two blocks: the traffic beside what is to be reviewed, the members beside the flows.
+    const block = (id: string) => details.querySelector(`[data-section="${id}"]`)?.parentElement?.getAttribute('data-block')
+    expect(['zone.traffic', 'zone.sources', 'zone.suggestions', 'zone.members', 'zone.exceptions', 'zone.incoming', 'zone.outgoing'].map(block))
+      .toEqual(['traffic', 'review', 'review', 'members', 'members', 'flows', 'flows'])
+    expect([...details.querySelectorAll('[data-block]')].map(b => b.getAttribute('data-block'))).toEqual(['traffic', 'review', 'members', 'flows'])
+    // Every section header carries its icon.
+    for (const id of ['zone.traffic', 'zone.members', 'zone.outgoing']) expect(within(details).getByTestId(`section-${id}-icon`)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cards' }))
     expect(window.localStorage.getItem(ZONE_LAYOUT_KEY)).toBe('cards')

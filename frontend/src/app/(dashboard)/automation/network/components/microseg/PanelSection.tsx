@@ -57,10 +57,15 @@ type Props = {
   state?: [boolean, () => void]
   /** False: folded until the user opens it (context the panel does not lead with). */
   defaultOpen?: boolean
+  /** A Remix icon class before the title ("ri-computer-line"). */
+  icon?: string
   children: ReactNode
 }
 
-function SectionBody({ id, title, count, action, open, toggle, children }: Omit<Props, 'state' | 'defaultOpen'> & { open: boolean; toggle: () => void }) {
+/** One line of a section's list: the same height and the same rule under it in every section, so they line up. */
+export const LIST_ROW_SX = { minHeight: 36, borderBottom: 1, borderColor: 'divider' } as const
+
+function SectionBody({ id, title, count, action, icon, open, toggle, children }: Omit<Props, 'state' | 'defaultOpen'> & { open: boolean; toggle: () => void }) {
   return (
     <Box component='section' aria-label={title} data-section={id} sx={{ minWidth: 0 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, minHeight: 32 }}>
@@ -71,6 +76,7 @@ function SectionBody({ id, title, count, action, open, toggle, children }: Omit<
           sx={{ flex: '1 1 0', minWidth: 0, justifyContent: 'flex-start', gap: 0.75, py: 0.5, borderRadius: 1 }}
         >
           <i className={open ? 'ri-arrow-down-s-line' : 'ri-arrow-right-s-line'} style={{ fontSize: 16, opacity: 0.7 }} aria-hidden />
+          {icon && <i className={icon} data-testid={`section-${id}-icon`} style={{ fontSize: 15, opacity: 0.8, flexShrink: 0 }} aria-hidden />}
           <Typography variant='caption' component='span' noWrap sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.4, minWidth: 0 }}>
             {title}
           </Typography>

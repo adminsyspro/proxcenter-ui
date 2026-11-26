@@ -442,6 +442,11 @@ const snapshotsBlocker = {
   type: 'error', code: 'SNAPSHOTS_PRESENT', message: 'Snapshots must be removed',
   remediation: { kind: 'snapshots', names: ['before-upgrade', 'release-2026'], reversible: false },
 }
+// Lab 26/11: PVE-DR 9.3.1 (qemu-server 9.2.24) to PVE-PROD 9.2 (qemu-server 9.2.15).
+const tunnelBlocker = {
+  type: 'error', code: 'TARGET_TUNNEL_TOO_OLD', message: 'The target cluster must be upgraded to Proxmox VE 9.3 first',
+  context: { pkg: 'qemu-server', source: '9.2.24', target: '9.2.15', required: '9.2.21' },
+}
 const haCapture: CcmPrereqCapture = {
   ha: { sid: 'vm:100', state: 'stopped', group: 'production' },
   replication: [], snapshotsDeleted: [],
@@ -691,8 +696,21 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
     await renderPrereqs()
     fireEvent.click(screen.getByRole('button', { name: 'Delete 2 snapshot(s)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
-    await waitFor(() => expect(prepare).toHaveBeenCalledExactlyOnceWith({ removeSnapshots: snapshotsBlocker.remediation.names }))
+    // The target goes along, so the route clears nothing for a migration PVE would refuse.
+    await waitFor(() => expect(prepare).toHaveBeenCalledExactlyOnceWith({
+      removeSnapshots: snapshotsBlocker.remediation.names,
+      target: { connectionId: REMOTE_CONN_ID, node: 'remote1' },
+    }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete snapshots permanently?' })).not.toBeInTheDocument())
+  })
+
+  it('offers no removal while the target is too old for a Proxmox VE 9.3 source', async () => {
+    const { prepare } = seedPrereqHandlers({ issues: [snapshotsBlocker, tunnelBlocker] })
+    await renderPrereqs('Proxmox VE version')
+    expect(screen.getByText(/target qemu-server 9\.2\.15, needs 9\.2\.21\+/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete 2 snapshot(s)' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start Cross-Cluster Migration' })).toBeDisabled()
+    expect(prepare).not.toHaveBeenCalled()
   })
 
   it('shows pending replication removals and continues blocking migration', async () => {

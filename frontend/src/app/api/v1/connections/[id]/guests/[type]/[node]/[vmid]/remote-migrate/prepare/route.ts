@@ -13,6 +13,7 @@ import {
   type CcmPrereqCapture,
 } from "@/lib/migration/ccm-prereqs"
 import { pveFetch } from "@/lib/proxmox/client"
+import { checkMigrationTunnel, tunnelTooOldMessage } from "@/lib/migration/tunnelVersion"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
 import { getCurrentTenantId } from "@/lib/tenant"
@@ -28,6 +29,11 @@ type PrepareBody = {
   removeReplication?: boolean
   /** Explicit snapshot names. The route refuses names absent from the guest. */
   removeSnapshots?: string[]
+  /**
+   * The migration target, when known: nothing is cleared for a migration
+   * Proxmox VE would refuse (9.3 source, older target).
+   */
+  target?: { connectionId: string; node: string }
 }
 
 /** Capture reversible prerequisites before clearing the explicitly requested blockers. */
@@ -66,7 +72,9 @@ async function postHandler(
       (body.removeHa !== undefined && typeof body.removeHa !== 'boolean') ||
       (body.removeReplication !== undefined && typeof body.removeReplication !== 'boolean') ||
       (body.removeSnapshots !== undefined && (!Array.isArray(body.removeSnapshots) ||
-        !body.removeSnapshots.every(name => typeof name === 'string' && name.length > 0)))) {
+        !body.removeSnapshots.every(name => typeof name === 'string' && name.length > 0))) ||
+      (body.target !== undefined && (!body.target || typeof body.target !== 'object' ||
+        typeof body.target.connectionId !== 'string' || typeof body.target.node !== 'string'))) {
       return NextResponse.json({ error: "Invalid prerequisite removal request" }, { status: 400 })
     }
     const { removeHa = false, removeReplication = false } = body
@@ -99,6 +107,31 @@ async function postHandler(
     // A vDC session must not clear the prerequisites of a guest outside its pools.
     const scopeDenied = await guardSessionGuest({ connectionId: id, conn, type, node: safeNode, vmid: safeVmid })
     if (scopeDenied) return scopeDenied
+
+    if (body.target) {
+      let targetNode: string
+      try {
+        targetNode = assertNodeName(body.target.node)
+      } catch {
+        return NextResponse.json({ error: "Invalid target node name" }, { status: 400 })
+      }
+      const targetDenied = await checkPermission(PERMISSIONS.VM_MIGRATE, "connection", body.target.connectionId)
+      if (targetDenied) return targetDenied
+      if (!canMigrateConnections(infra, id, body.target.connectionId)) {
+        return NextResponse.json(
+          { error: 'Migration is restricted to the provider or the MSP tenant that owns both connections' },
+          { status: 403 },
+        )
+      }
+      const targetConn = await getConnectionById(body.target.connectionId)
+      const tunnel = await checkMigrationTunnel('qemu', { conn, node: safeNode }, { conn: targetConn, node: targetNode })
+      if (tunnel) {
+        return NextResponse.json(
+          { error: tunnelTooOldMessage(tunnel), code: 'TARGET_TUNNEL_TOO_OLD', context: tunnel },
+          { status: 409 },
+        )
+      }
+    }
 
     const vmSid = 'vm:' + safeVmid
     const ha = await captureHaResource(conn, vmSid)

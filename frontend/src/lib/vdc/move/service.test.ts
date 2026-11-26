@@ -305,6 +305,25 @@ describe('planMove', () => {
     expect(offline.plan?.online).toBe(false)
   })
 
+  // Proxmox VE 9.3 migration tunnel (lab 26/11: PVE-DR 9.3.1 to PVE-PROD 9.2).
+  it('refuses a move from Proxmox VE 9.3 onto a cluster still on an older version', async () => {
+    const { clearTunnelVersionCache } = await import('@/lib/migration/tunnelVersion')
+    clearTunnelVersionCache()
+    defaultPve({
+      'conn-a /nodes/pve1/apt/versions': [{ Package: 'qemu-server', Version: '9.2.24', OldVersion: '9.2.24' }],
+      'conn-b /nodes/pve1-dr/apt/versions': [{ Package: 'qemu-server', Version: '9.2.24', OldVersion: '9.2.15' }],
+    })
+    const { blockers } = await planMove(TENANT, 'conn-a', 'pve1', 105, { ...REQUEST, online: false })
+    expect(blockers).toEqual([{ code: 'TARGET_TUNNEL_TOO_OLD', context: { target: '9.2.15', required: '9.2.21' } }])
+
+    clearTunnelVersionCache()
+    defaultPve({
+      'conn-a /nodes/pve1/apt/versions': [{ Package: 'qemu-server', Version: '9.2.24', OldVersion: '9.2.24' }],
+      'conn-b /nodes/pve1-dr/apt/versions': [{ Package: 'qemu-server', Version: '9.2.24', OldVersion: '9.2.24' }],
+    })
+    expect((await planMove(TENANT, 'conn-a', 'pve1', 105, { ...REQUEST, online: false })).blockers).toEqual([])
+  })
+
   it('copies offline a stopped guest even when live was asked', async () => {
     defaultPve({ 'conn-a /cluster/resources?type=vm': [{ ...SOURCE_RESOURCES[0], status: 'stopped' }] })
     const { plan } = await planMove(TENANT, 'conn-a', 'pve1', 105, REQUEST)

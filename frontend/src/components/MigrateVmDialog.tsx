@@ -209,6 +209,7 @@ const CHECK_DETAIL_KEY: Record<string, string> = {
   VMID_EXISTS_ON_TARGET: 'vmidExists',
   INSUFFICIENT_CPU: 'insufficientCpu',
   INSUFFICIENT_MEMORY: 'insufficientMemory',
+  TARGET_TUNNEL_TOO_OLD: 'tunnelTooOld',
 }
 
 const CHECK_LABEL_SLUG: Record<string, string> = {
@@ -238,6 +239,7 @@ const CHECK_LABEL_SLUG: Record<string, string> = {
   VMID_EXISTS_ON_TARGET: 'vmid',
   INSUFFICIENT_CPU: 'targetResources',
   INSUFFICIENT_MEMORY: 'targetResources',
+  TARGET_TUNNEL_TOO_OLD: 'pveVersion',
   LXC_NOT_SUPPORTED: 'guestType',
   SOURCE_VM_NOT_FOUND: 'sourceVm',
 }
@@ -1192,6 +1194,11 @@ export function MigrateVmDialog({
     removeReplication?: boolean
     removeSnapshots?: string[]
   }) => {
+    // With a target known, the route clears nothing for a migration Proxmox VE
+    // would refuse (9.3 source, older target).
+    const target = selectedRemoteConn && selectedRemoteNode
+      ? { connectionId: selectedRemoteConn, node: selectedRemoteNode }
+      : undefined
     setPrereqBusy(true)
     setPrereqError(null)
     try {
@@ -1200,7 +1207,7 @@ export function MigrateVmDialog({
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(target ? { ...payload, target } : payload),
         },
       )
       const data = await res.json().catch(() => ({}))
@@ -1301,6 +1308,7 @@ export function MigrateVmDialog({
   // button under the user's cursor with every blocker still in place.
   const hasValidationErrors =
     orderedIssues.some(i => i.type === 'error') || prereqPendingJobs.length > 0
+  const tunnelBlocked = orderedIssues.some(i => i.code === 'TARGET_TUNNEL_TOO_OLD')
 
   // Must come from the SAME list the rows are built from: before the preflight
   // has run the rows come from the source-only read, and deriving the names from
@@ -1445,6 +1453,8 @@ export function MigrateVmDialog({
 
     const remediation = issue.remediation
     if (!remediation) return null
+    // Nothing is worth clearing for a migration the target would refuse.
+    if (tunnelBlocked) return null
 
     if (remediation.kind === 'ha') {
       return prereqButton(t('hardware.crossCluster.prereq.removeHa'), handleRemoveHa, false)

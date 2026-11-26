@@ -138,8 +138,8 @@ export default function AssignGuestsDialog({ open, connectionId, clusterIds, clu
   const [removed, setRemoved] = useState<Set<string>>(() => new Set())
 
   const rows = useMemo(
-    () => assignRows(zone, policy.zones, policy.policy.tag_prefix, guests, policy.pending_members),
-    [zone, policy.zones, policy.policy.tag_prefix, guests, policy.pending_members],
+    () => assignRows(zone, policy.zones, policy.policy.tag_prefix, guests, policy.pending_members, preselected),
+    [zone, policy.zones, policy.policy.tag_prefix, guests, policy.pending_members, preselected],
   )
   const filtered = useMemo(() => filterRows(rows, search), [rows, search])
   const paged = usePaged(filtered, GUESTS_PAGE_SIZE)

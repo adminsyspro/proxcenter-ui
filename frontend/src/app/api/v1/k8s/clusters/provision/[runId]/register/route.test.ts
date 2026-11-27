@@ -29,7 +29,7 @@ vi.mock('next-auth', () => ({ getServerSession: (...a: any[]) => getServerSessio
 vi.mock('@/lib/auth/config', () => ({ authOptions: {} }))
 
 const completedRun = {
-  run: { id: 'run-1', status: 'completed', phase: 'done', progress: 100, distro: 'talos' },
+  run: { id: 'run-1', status: 'completed', phase: 'done', progress: 100, distro: 'talos', clusterName: 'demo', connectionId: 'conn-1' },
   outputs: {
     kubeconfig: 'kc-text',
     talosconfig: 'tc-text',
@@ -79,30 +79,43 @@ describe('POST /api/v1/k8s/clusters/provision/[runId]/register', () => {
     expect(res.status).toBe(403)
   })
 
-  it('400 when clusterName is missing', async () => {
+  it('502 when the run carries no cluster name or connection', async () => {
     const POST = (await import('./route')).POST
-    const res = await callRoute(POST, { params: { runId: 'run-1' }, body: { connectionId: 'conn-1' } })
-    expect(res.status).toBe(400)
+    getProvisionRunMock.mockResolvedValue({ ok: true, value: { ...completedRun, run: { ...completedRun.run, clusterName: '' } } })
+    expect((await callRoute(POST, { params: { runId: 'run-1' }, body })).status).toBe(502)
+    getProvisionRunMock.mockResolvedValue({ ok: true, value: { ...completedRun, run: { ...completedRun.run, connectionId: undefined } } })
+    expect((await callRoute(POST, { params: { runId: 'run-1' }, body })).status).toBe(502)
+    expect(createClusterMock).not.toHaveBeenCalled()
   })
 
-  it('400 when connectionId is missing', async () => {
+  it('registers under the name and connection of the run, whatever the browser sends', async () => {
     const POST = (await import('./route')).POST
-    const res = await callRoute(POST, { params: { runId: 'run-1' }, body: { clusterName: 'demo' } })
-    expect(res.status).toBe(400)
+    const res = await callRoute(POST, { params: { runId: 'run-1' }, body: { clusterName: 'other', connectionId: 'someone-elses-conn' } })
+    expect(res.status).toBe(201)
+    expect(createClusterMock).toHaveBeenCalledWith('t1', expect.objectContaining({ name: 'demo', proxmoxConnectionId: 'conn-1', provisioningRunId: 'run-1' }))
+    expect(recordNodeMappingMock).toHaveBeenCalledWith('new-cluster-id', expect.arrayContaining([expect.objectContaining({ connectionId: 'conn-1' })]))
   })
 
-  it('idempotent: an existing cluster with that name short-circuits to 200 without touching the run/createCluster', async () => {
-    listClustersMock.mockResolvedValue([{ id: 'existing-id', name: 'demo' }])
+  it('idempotent: the cluster already registered for the run short-circuits to 200', async () => {
     const POST = (await import('./route')).POST
+    listClustersMock.mockResolvedValue([{ id: 'by-run', name: 'renamed', provisioningRunId: 'run-1' }])
     const res = await callRoute(POST, { params: { runId: 'run-1' }, body })
     expect(res.status).toBe(200)
-    expect(await readJson(res)).toEqual({ clusterId: 'existing-id', alreadyRegistered: true })
-    expect(getProvisionRunMock).not.toHaveBeenCalled()
+    expect(await readJson(res)).toEqual({ clusterId: 'by-run', alreadyRegistered: true })
+    expect(createClusterMock).not.toHaveBeenCalled()
+  })
+
+  it('409 when another cluster already holds the name: never handed out as this run\'s cluster', async () => {
+    const POST = (await import('./route')).POST
+    listClustersMock.mockResolvedValue([{ id: 'imported-id', name: 'demo', provisioningRunId: null }])
+    const res = await callRoute(POST, { params: { runId: 'run-1' }, body })
+    expect(res.status).toBe(409)
+    expect(await readJson(res)).toEqual({ error: 'cluster_name_taken' })
     expect(createClusterMock).not.toHaveBeenCalled()
   })
 
   it('409 when the run is not completed', async () => {
-    getProvisionRunMock.mockResolvedValue({ ok: true, value: { run: { id: 'run-1', status: 'running', phase: 'p', progress: 40 } } })
+    getProvisionRunMock.mockResolvedValue({ ok: true, value: { run: { id: 'run-1', status: 'running', phase: 'p', progress: 40, clusterName: 'demo', connectionId: 'conn-1' } } })
     const POST = (await import('./route')).POST
     const res = await callRoute(POST, { params: { runId: 'run-1' }, body })
     expect(res.status).toBe(409)
@@ -110,7 +123,7 @@ describe('POST /api/v1/k8s/clusters/provision/[runId]/register', () => {
   })
 
   it('409 when the run is completed but outputs are missing', async () => {
-    getProvisionRunMock.mockResolvedValue({ ok: true, value: { run: { id: 'run-1', status: 'completed', phase: 'done', progress: 100 } } })
+    getProvisionRunMock.mockResolvedValue({ ok: true, value: { run: { id: 'run-1', status: 'completed', phase: 'done', progress: 100, clusterName: 'demo', connectionId: 'conn-1' } } })
     const POST = (await import('./route')).POST
     const res = await callRoute(POST, { params: { runId: 'run-1' }, body })
     expect(res.status).toBe(409)
@@ -178,7 +191,7 @@ describe('POST /api/v1/k8s/clusters/provision/[runId]/register', () => {
     getProvisionRunMock.mockResolvedValue({
       ok: true,
       value: {
-        run: { id: 'run-1', status: 'completed', phase: 'done', progress: 100, distro: 'k3s' },
+        run: { id: 'run-1', status: 'completed', phase: 'done', progress: 100, distro: 'k3s', clusterName: 'demo', connectionId: 'conn-1' },
         outputs: {
           kubeconfig: 'kc-text',
           nodes: [{ name: 'demo-cp-1', role: 'controlplane', vmid: 100, ip: '10.0.0.10' }],
@@ -195,7 +208,7 @@ describe('POST /api/v1/k8s/clusters/provision/[runId]/register', () => {
     getProvisionRunMock.mockResolvedValue({
       ok: true,
       value: {
-        run: { id: 'run-1', status: 'completed', phase: 'done', progress: 100 },
+        run: { id: 'run-1', status: 'completed', phase: 'done', progress: 100, clusterName: 'demo', connectionId: 'conn-1' },
         outputs: completedRun.outputs,
       },
     })
@@ -209,7 +222,7 @@ describe('POST /api/v1/k8s/clusters/provision/[runId]/register', () => {
     getProvisionRunMock.mockResolvedValue({
       ok: true,
       value: {
-        run: { id: 'run-1', status: 'completed', phase: 'done', progress: 100, distro: 'rke2' },
+        run: { id: 'run-1', status: 'completed', phase: 'done', progress: 100, distro: 'rke2', clusterName: 'demo', connectionId: 'conn-1' },
         outputs: {
           kubeconfig: 'kc-text',
           nodes: [{ name: 'demo-cp-1', role: 'controlplane', vmid: 100, ip: '10.0.0.10' }],
@@ -226,7 +239,7 @@ describe('POST /api/v1/k8s/clusters/provision/[runId]/register', () => {
     getProvisionRunMock.mockResolvedValue({
       ok: true,
       value: {
-        run: { id: 'run-1', status: 'completed', phase: 'done', progress: 100, distro: 'kubeadm' },
+        run: { id: 'run-1', status: 'completed', phase: 'done', progress: 100, distro: 'kubeadm', clusterName: 'demo', connectionId: 'conn-1' },
         outputs: {
           kubeconfig: 'kc-text',
           nodes: [{ name: 'demo-cp-1', role: 'controlplane', vmid: 100, ip: '10.0.0.10' }],
@@ -243,7 +256,7 @@ describe('POST /api/v1/k8s/clusters/provision/[runId]/register', () => {
     getProvisionRunMock.mockResolvedValue({
       ok: true,
       value: {
-        run: { id: 'run-1', status: 'completed', phase: 'done', progress: 100, distro: 'microk8s' },
+        run: { id: 'run-1', status: 'completed', phase: 'done', progress: 100, distro: 'microk8s', clusterName: 'demo', connectionId: 'conn-1' },
         outputs: completedRun.outputs,
       },
     })

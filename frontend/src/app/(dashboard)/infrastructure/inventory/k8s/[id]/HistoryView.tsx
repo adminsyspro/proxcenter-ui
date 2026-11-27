@@ -63,7 +63,10 @@ export function HistoryView({
   const shown = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const text = (e: TimelineEntry): string => {
-    if (e.source === 'event') return `${e.reason}: ${e.message}${e.count > 1 ? ` (x${e.count})` : ''}`
+    if (e.source === 'event') {
+      const repeat = e.count > 1 ? ` (x${e.count})` : ''
+      return `${e.reason}: ${e.message}${repeat}`
+    }
     if (e.source === 'rollout') {
       if (e.change === 'image') return t('rollout', { revision: e.revision, from: e.previousImages.join(', '), to: e.images.join(', ') })
       return t(e.change === 'restart' ? 'rolloutRestart' : 'rolloutConfig', { revision: e.revision })

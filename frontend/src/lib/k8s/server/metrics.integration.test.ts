@@ -1,7 +1,7 @@
 /**
  * Integration tests for getNodeMetrics:
  * Real HTTPS fixture server -> real buildKubeClient -> real Metrics class.
- * No module mocks — runs against actual @kubernetes/client-node.
+ * No module mocks - runs against actual @kubernetes/client-node.
  */
 import { describe, it, expect, afterAll } from 'vitest'
 import * as https from 'node:https'
@@ -30,7 +30,7 @@ function makeSelfSignedPem(): { caPem: string; certPem: string; keyPem: string; 
   }
 }
 
-describe('getNodeMetrics — real client integration', () => {
+describe('getNodeMetrics: real client integration', () => {
   const cleanups: Array<() => void> = []
   afterAll(() => cleanups.forEach(c => c()))
 

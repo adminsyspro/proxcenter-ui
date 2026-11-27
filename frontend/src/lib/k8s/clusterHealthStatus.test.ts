@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isIntegrating, pollClusterHealthUntilResolved } from './clusterHealthStatus'
+import { integrationState, isIntegrating, pollClusterHealthUntilResolved } from './clusterHealthStatus'
 
 describe('isIntegrating', () => {
   it('true when never checked (lastHealthAt null/undefined)', () => {
@@ -37,5 +37,17 @@ describe('pollClusterHealthUntilResolved', () => {
       now: () => { const v = t; t += 100000; return v }, timeoutMs: 180000,
     })
     expect(r).toBeNull()
+  })
+})
+
+describe('integrationState', () => {
+  it('stays integrating while fewer nodes are ready than the run deployed', () => {
+    expect(integrationState({ state: 'healthy', nodesReady: 1 }, null, 3)).toBe('integrating')
+    expect(integrationState({ state: 'healthy', nodesReady: 3 }, null, 3)).toBe('healthy')
+  })
+  it('passes any other state through, and falls back to the stored one', () => {
+    expect(integrationState({ state: 'degraded', nodesReady: 1 }, null, 3)).toBe('degraded')
+    expect(integrationState(null, 'unreachable', 3)).toBe('unreachable')
+    expect(integrationState({ state: 'healthy' }, null, 0)).toBe('healthy')
   })
 })

@@ -1,5 +1,5 @@
 /**
- * TDD tests for detail.ts — ports resourcedetail_test.go.
+ * TDD tests for detail.ts - ports resourcedetail_test.go.
  * All fixtures are raw deserialized K8s object shapes (no .body wrapper).
  */
 import { describe, it, expect } from 'vitest'

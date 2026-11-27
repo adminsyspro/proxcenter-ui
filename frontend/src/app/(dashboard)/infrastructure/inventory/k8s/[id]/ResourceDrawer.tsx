@@ -19,6 +19,13 @@ const OK = '#4caf50'
 const BAD = '#f44336'
 const WARN = '#ff9800'
 
+function httpErrorCode(status: number): 'forbidden' | 'not_found' | 'unreachable' {
+  if (status === 403) return 'forbidden'
+  if (status === 404) return 'not_found'
+
+  return 'unreachable'
+}
+
 function copy(text: string) {
   try { navigator.clipboard?.writeText(text) } catch { /* clipboard unavailable */ }
 }
@@ -119,7 +126,7 @@ function NodeDrainStatus({ state }: { state: DrainRowState }) {
   if (state.phase === 'done') return <Alert severity="success" sx={{ mt: 1 }}>{t('drained')}</Alert>
   if (state.phase === 'error') return <Alert severity="error" sx={{ mt: 1 }}>{state.error}</Alert>
 
-  // stopped: could not fully drain — surface why.
+  // stopped: could not fully drain - surface why.
   const refused = r ? [...r.refusedEmptyDir, ...r.refusedUnmanaged] : []
   return (
     <Box sx={{ mt: 1 }}>
@@ -287,7 +294,7 @@ export function ResourceDrawer({
     fetch(`/api/v1/k8s/clusters/${clusterId}/resources?${qs.toString()}`)
       .then(async res => {
         if (!res.ok) {
-          const code = res.status === 403 ? 'forbidden' : res.status === 404 ? 'not_found' : 'unreachable'
+          const code = httpErrorCode(res.status)
           setDetail({ detail: null, errorCode: code })
         } else {
           setDetail(await res.json())
@@ -300,7 +307,7 @@ export function ResourceDrawer({
     fetch(`/api/v1/k8s/clusters/${clusterId}/events?${eq.toString()}`)
       .then(async res => {
         if (!res.ok) {
-          const code = res.status === 403 ? 'forbidden' : res.status === 404 ? 'not_found' : 'unreachable'
+          const code = httpErrorCode(res.status)
           setEvents({ items: [], errorCode: code })
         } else {
           setEvents(await res.json())

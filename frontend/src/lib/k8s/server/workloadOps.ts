@@ -63,11 +63,10 @@ export async function restartWorkload(
   const req = { name, namespace, body }
   const opts = patchOpts(PatchStrategy.StrategicMergePatch)
   try {
-    const call = kind === 'deployment'
-      ? api.patchNamespacedDeployment(req, opts)
-      : kind === 'statefulset'
-        ? api.patchNamespacedStatefulSet(req, opts)
-        : api.patchNamespacedDaemonSet(req, opts)
+    let call: Promise<unknown>
+    if (kind === 'deployment') call = api.patchNamespacedDeployment(req, opts)
+    else if (kind === 'statefulset') call = api.patchNamespacedStatefulSet(req, opts)
+    else call = api.patchNamespacedDaemonSet(req, opts)
     await withDeadline(call, PER_CALL_TIMEOUT_MS)
     return { ok: true, value: { restartedAt } }
   } catch (err) {

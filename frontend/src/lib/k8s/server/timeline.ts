@@ -73,7 +73,7 @@ function ownerOf(obj: any): Revisioned['owner'] | null {
  */
 export function revisionTime(rs: any): string {
   if (rs.metadata?.annotations?.[REVISION_HISTORY_ANNOTATION]) {
-    const writes = (rs.metadata?.managedFields ?? []).map((f: any) => rfc3339(f.time)).filter(Boolean).sort()
+    const writes = (rs.metadata?.managedFields ?? []).map((f: any) => rfc3339(f.time)).filter(Boolean).sort((a: string, b: string) => a.localeCompare(b))
     if (writes.length) return writes[writes.length - 1]
   }
   return rfc3339(rs.metadata?.creationTimestamp)
@@ -131,11 +131,9 @@ export function rolloutEntries(replicaSets: any[], controllerRevisions: any[]): 
 /** Parses the resourceId the K8S routes audit with: cluster, cluster/node, cluster/ns/kind/name. */
 export function actionEntry(row: { timestamp: Date; action: string; status: string; resourceType: string | null; resourceId: string | null; resourceName: string | null; userEmail: string | null; details: unknown }): TimelineEntry {
   const parts = (row.resourceId ?? '').split('/')
-  const base = parts.length === 4
-    ? { kind: parts[2], namespace: parts[1], name: parts[3] }
-    : parts.length === 2
-      ? { kind: 'node', name: parts[1] }
-      : { kind: 'cluster', name: row.resourceName ?? '' }
+  let base: Omit<Base, 'at'> = { kind: 'cluster', name: row.resourceName ?? '' }
+  if (parts.length === 4) base = { kind: parts[2], namespace: parts[1], name: parts[3] }
+  else if (parts.length === 2) base = { kind: 'node', name: parts[1] }
   const details = row.details && typeof row.details === 'object' ? row.details as Record<string, unknown> : undefined
   return { source: 'action', at: rfc3339(row.timestamp), ...base, action: row.action, status: row.status, user: row.userEmail ?? undefined, details }
 }

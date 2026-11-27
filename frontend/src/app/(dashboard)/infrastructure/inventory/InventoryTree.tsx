@@ -83,14 +83,17 @@ import PoolDialog, { type PoolDialogState, type PoolOwner } from './components/P
 import PoolMembersDialog, { type PoolMembersState } from './components/PoolMembersDialog'
 import { isVdcPool } from './components/poolMembers'
 import { InventoryLoadedContext } from './inventoryLoadedContext'
-import type { K8sClusterRow } from './k8s/ClusterCard'
+import { healthDotColor, type K8sClusterRow } from './k8s/ClusterCard'
 import { podPhaseColor } from '@/lib/k8s/overviewCharts'
 import { distroLogo } from '@/lib/k8s/distros'
 import type { ListResourcesResult, ResourceListItem } from '@/lib/k8s/types'
 
 // Node readiness → status-dot colour for the node rows.
 function nodeDotColor(ready?: string): string {
-  return ready === 'True' ? '#4caf50' : ready === 'False' ? '#f44336' : '#9e9e9e'
+  if (ready === 'True') return '#4caf50'
+  if (ready === 'False') return '#f44336'
+
+  return '#9e9e9e'
 }
 
 // Re-export for external consumers (e.g. InventoryDetails.tsx)
@@ -884,7 +887,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
       return
     }
     let cancelled = false
-    ;(async () => {
+    void (async () => {
       try {
         const res = await fetch('/api/v1/k8s/clusters', { cache: 'no-store' })
         if (!res.ok) return
@@ -906,7 +909,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     if (k8sNodesFetched.current.has(clusterId)) return
     k8sNodesFetched.current.add(clusterId)
     setK8sNodes(prev => ({ ...prev, [clusterId]: { items: prev[clusterId]?.items ?? [], loading: true, error: false } }))
-    ;(async () => {
+    void (async () => {
       try {
         const res = await fetch(`/api/v1/k8s/clusters/${clusterId}/resources?kind=node`, { cache: 'no-store' })
         if (!res.ok) throw new Error('http')
@@ -937,7 +940,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
     if (k8sPodsFetched.current.has(clusterId)) return
     k8sPodsFetched.current.add(clusterId)
     setK8sPods(prev => ({ ...prev, [clusterId]: { byNode: prev[clusterId]?.byNode ?? {}, loading: true, error: false, truncated: false } }))
-    ;(async () => {
+    void (async () => {
       try {
         const res = await fetch(`/api/v1/k8s/clusters/${clusterId}/resources?kind=pod`, { cache: 'no-store' })
         if (!res.ok) throw new Error('http')
@@ -5187,11 +5190,7 @@ return (
               // failure, grey = unknown. Mirrors the host/VM status pastilles used
               // elsewhere in this tree. A never-checked cluster (integrating)
               // shows a tiny spinner instead of the dot.
-              const dotColor =
-                cluster.healthState === 'healthy' ? '#4caf50' :
-                cluster.healthState === 'degraded' || cluster.healthState === 'stale' ? '#ff9800' :
-                cluster.healthState === 'unreachable' || cluster.healthState === 'auth_failed' ? '#f44336' :
-                '#9e9e9e'
+              const dotColor = healthDotColor(cluster.healthState)
               // Cluster overview is selected only when no resource view is set.
               const clusterSelected = selected?.type === 'kubernetes-cluster' && selected.id === cluster.id && !selected.view
               const expanded = k8sExpanded.has(cluster.id)
@@ -5334,7 +5333,7 @@ return (
                               </Box>
                             )}
                             {/* When the pod list is capped, this node's slice may be incomplete
-                                (or empty only because it was cut off) — never show "no pods". */}
+                                (or empty only because it was cut off) - never show "no pods". */}
                             {podState?.truncated && (
                               <Box sx={{ pl: 11, py: 0.2 }}>
                                 <Typography variant="caption" sx={{ opacity: 0.45 }}>{t('kubernetes.explorer.charts.incomplete')}</Typography>

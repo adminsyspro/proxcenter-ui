@@ -35,6 +35,13 @@ export function orchestratorStatus(error: string | undefined): number {
   return PASSED_THROUGH.has(status) ? status : 502
 }
 
+function codeForStatus(status: number): ProvisionErrorCode {
+  if (status === 404) return 'not_found'
+  if (status === 409) return 'conflict'
+
+  return 'invalid_request'
+}
+
 export function orchestratorFailure(error: string | undefined): OrchestratorFailure {
   const status = orchestratorStatus(error)
   if (status === 502) return { status, code: 'unavailable' }
@@ -47,7 +54,7 @@ export function orchestratorFailure(error: string | undefined): OrchestratorFail
   }
   const code: ProvisionErrorCode = typeof body.code === 'string' && KNOWN_CODES.has(body.code)
     ? (body.code as ProvisionErrorCode)
-    : status === 404 ? 'not_found' : status === 409 ? 'conflict' : 'invalid_request'
+    : codeForStatus(status)
   const message = code === 'invalid_request' && typeof body.error === 'string' ? body.error : undefined
   return { status, code, message }
 }

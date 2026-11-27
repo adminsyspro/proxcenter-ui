@@ -31,9 +31,8 @@ export function K8sNodeCard({ data, selected }: { data: K8sNodeCardData; selecte
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const readyColor = data.ready ? '#4caf50' : '#f44336'
-  const borderNormal = selected
-    ? theme.palette.primary.main
-    : isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'
+  const borderIdle = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'
+  const borderNormal = selected ? theme.palette.primary.main : borderIdle
 
   return (
     <Box

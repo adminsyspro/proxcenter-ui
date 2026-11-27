@@ -14,39 +14,56 @@ import { withAudit } from '@/lib/audit/withAudit'
 
 type Ctx = { params: Promise<{ runId: string }> }
 
+// Maps the run's distro to the registry's literal union (null when unknown).
+function registryDistro(runDistro: unknown): 'k3s' | 'talos' | 'rke2' | 'kubeadm' | null {
+  switch (runDistro) {
+    case 'k3s': return 'k3s'
+    case 'talos': return 'talos'
+    case 'rke2': return 'rke2'
+    case 'kubeadm': return 'kubeadm'
+    default: return null
+  }
+}
+
 /**
  * Idempotent registration of a completed provisioning run as a cluster.
- * The client supplies clusterName + connectionId (it owns them, it just
- * submitted them in the ProvisionRequest); the secrets (kubeconfig, nodes)
- * are always fetched server-side from the orchestrator by runId, never
- * trusted from the client. The clusterId used for recordNodeMapping is
+ * Everything comes from the run, read server-side from the orchestrator by
+ * runId: the cluster name, the Proxmox connection and the secrets
+ * (kubeconfig, nodes). Nothing in the request body is used. The clusterId used for recordNodeMapping is
  * always the one createCluster just returned for this tenant, never a
  * client-supplied id.
  */
-async function handlePost(req: Request, ctx: Ctx) {
+async function handlePost(_req: Request, ctx: Ctx) {
   const denied = await requireK8sProvision()
   if (denied) return denied
   const tenant = await resolveStrictTenant()
   if (!tenant.ok) return tenant.response
 
   const { runId } = await ctx.params
-  const body = await req.json().catch(() => null)
-  const clusterName: string = body?.clusterName
-  const connectionId: string = body?.connectionId
-  if (typeof clusterName !== 'string' || !clusterName || typeof connectionId !== 'string' || !connectionId) {
-    return NextResponse.json({ error: 'clusterName, connectionId required' }, { status: 400 })
-  }
 
-  // Idempotency: skip if a cluster with that name already exists for the tenant.
-  const existing = (await listClusters(tenant.tenantId)).find((c: any) => c.name === clusterName)
-  if (existing) {
-    return NextResponse.json({ clusterId: existing.id, alreadyRegistered: true }, { status: 200 })
-  }
-
+  // The run is read from the orchestrator (scoped to the caller's tenant):
+  // its cluster name, its connection and its nodes are what the cluster is
+  // registered under, never values the browser sends.
   const r = await getProvisionRun(runId)
   if (!r.ok) {
     const failure = orchestratorFailure(r.error)
     return NextResponse.json(failureBody(failure), { status: failure.status })
+  }
+  const clusterName = r.value!.run.clusterName
+  const connectionId = r.value!.run.connectionId
+  if (typeof clusterName !== 'string' || !clusterName || typeof connectionId !== 'string' || !connectionId) {
+    return NextResponse.json({ error: 'run without a cluster name or connection' }, { status: 502 })
+  }
+
+  // Idempotency: the cluster already registered for this run. Another
+  // cluster under the same name (an imported one, say) is not this one.
+  const clusters = await listClusters(tenant.tenantId)
+  const existing = clusters.find((c: any) => c.provisioningRunId === runId)
+  if (existing) {
+    return NextResponse.json({ clusterId: existing.id, alreadyRegistered: true }, { status: 200 })
+  }
+  if (clusters.some((c: any) => c.name === clusterName)) {
+    return NextResponse.json({ error: 'cluster_name_taken' }, { status: 409 })
   }
   if (r.value!.run.status !== 'completed' || !r.value!.outputs) {
     return NextResponse.json({ error: 'run not completed' }, { status: 409 })
@@ -57,12 +74,7 @@ async function handlePost(req: Request, ctx: Ctx) {
   // narrow: the repo tsconfig has strict:false where narrowing is
   // unreliable, and createCluster wants the literal union.
   const runDistro = r.value!.run.distro
-  const distro =
-    runDistro === 'k3s' ? ('k3s' as const)
-    : runDistro === 'talos' ? ('talos' as const)
-    : runDistro === 'rke2' ? ('rke2' as const)
-    : runDistro === 'kubeadm' ? ('kubeadm' as const)
-    : null
+  const distro = registryDistro(runDistro)
   if (!distro) {
     await audit({ action: 'create', category: 'k8s', resourceType: 'kubernetesCluster', resourceName: clusterName, status: 'failure' })
     return NextResponse.json({ error: 'unsupported or missing distro on the provisioning run' }, { status: 422 })
@@ -92,6 +104,7 @@ async function handlePost(req: Request, ctx: Ctx) {
     source: 'deployed',
     cred: san.value!,
     proxmoxConnectionId: connectionId,
+    provisioningRunId: runId,
     createdBy,
   })
 
@@ -109,4 +122,4 @@ async function handlePost(req: Request, ctx: Ctx) {
   return NextResponse.json({ clusterId }, { status: 201 })
 }
 
-export const POST = withAudit({ category: 'k8s', resourceType: 'kubernetesCluster', resourceNameBodyField: 'clusterName' }, handlePost)
+export const POST = withAudit({ category: 'k8s', resourceType: 'kubernetesCluster' }, handlePost)

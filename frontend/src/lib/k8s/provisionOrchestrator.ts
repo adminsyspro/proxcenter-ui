@@ -68,6 +68,9 @@ export interface RunStatus {
   progress: number
   // Present on backends that speak the multi-distro contract.
   distro?: string
+  // What the run was started with; the cluster is registered under them.
+  clusterName?: string
+  connectionId?: string
   error?: string
 }
 

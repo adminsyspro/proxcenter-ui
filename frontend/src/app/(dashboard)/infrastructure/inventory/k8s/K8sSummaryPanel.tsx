@@ -85,7 +85,10 @@ export default function K8sSummaryPanel({ summary }: { summary: K8sSummary }) {
 
   // Heart tint = the most attention-worthy state present (down > degraded >
   // healthy > pending-only).
-  const heartColor = down > 0 ? DOT.down : degraded > 0 ? DOT.degraded : healthy > 0 ? DOT.healthy : DOT.pending
+  let heartColor = DOT.pending
+  if (down > 0) heartColor = DOT.down
+  else if (degraded > 0) heartColor = DOT.degraded
+  else if (healthy > 0) heartColor = DOT.healthy
 
   // Legend: always show the three definitive buckets; add "pending" only when a
   // cluster is still integrating.

@@ -15,6 +15,13 @@ type Connectivity = {
   errorMessage?: string
 }
 
+function connectivityChipColor(state?: string): 'success' | 'warning' | 'error' {
+  if (state === 'healthy') return 'success'
+  if (state === 'degraded') return 'warning'
+
+  return 'error'
+}
+
 type SanitizedPreview = {
   apiServerUrl?: string
   credentialType?: string
@@ -230,7 +237,7 @@ export default function ImportClusterDialog({ open, onClose, onImported, replace
                 <Chip
                   size="small"
                   sx={{ mt: 0.5 }}
-                  color={connectivity.state === 'healthy' ? 'success' : connectivity.state === 'degraded' ? 'warning' : 'error'}
+                  color={connectivityChipColor(connectivity.state)}
                   label={t(`kubernetes.health.${connectivity.state}`)}
                 />
               )}

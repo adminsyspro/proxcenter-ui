@@ -16618,7 +16618,8 @@
       "confirm": "ProxCenter에서 이 클러스터를 제거할까요? 클러스터 자체는 변경되지 않습니다.",
       "destroyNodes": "{count, plural, =0 {Proxmox의 노드 VM도 삭제} other {Proxmox의 노드 VM #개도 삭제}}",
       "destroyNodesWarn": "Proxmox에서 클러스터 VM과 디스크가 영구적으로 삭제됩니다. 되돌릴 수 없습니다.",
-      "destroyFailed": "일부 노드 VM을 삭제하지 못해 클러스터를 유지했습니다. 노드를 확인한 후 다시 시도하세요."
+      "destroyFailed": "일부 노드 VM을 삭제하지 못해 클러스터를 유지했습니다. 노드를 확인한 후 다시 시도하세요.",
+      "destroyRefused": "VM을 삭제하지 않았습니다. 이 VM들은 더 이상 클러스터를 배포할 때의 노드가 아닙니다(이름 변경 또는 VMID 재사용). 클러스터는 유지됩니다."
     },
     "explore": "클러스터 탐색",
     "explorer": {
@@ -17006,7 +17007,8 @@
         "kubeadmChip": "Calico / Cilium",
         "cniSelect": "컨테이너 네트워크(CNI)",
         "podCidr": "파드 네트워크 CIDR",
-        "kubeadmHaNote": "kubeadm은 컨트롤 플레인 가상 IP(kube-vip, ARP 모드)로 사용할 노드 서브넷의 전용 여유 IP가 필요합니다. 네트워크 단계에서 입력합니다. 컨트롤 플레인이 3대 또는 5대이면 etcd와 API 엔드포인트 모두 고가용성입니다."
+        "kubeadmHaNote": "kubeadm은 컨트롤 플레인 가상 IP(kube-vip, ARP 모드)로 사용할 노드 서브넷의 전용 여유 IP가 필요합니다. 네트워크 단계에서 입력합니다. 컨트롤 플레인이 3대 또는 5대이면 etcd와 API 엔드포인트 모두 고가용성입니다.",
+        "rke2Cni": "Canal CNI"
       },
       "topology": {
         "cpCount": "컨트롤 플레인 노드",
@@ -17036,7 +17038,8 @@
         "summary": "배포하기 전에 클러스터 구성을 검토하세요",
         "deployNow": "지금 배포",
         "deployFailed": "배포 실패",
-        "nodes": "컨트롤 플레인 노드 {cp}개, 워커 {workers}개"
+        "nodes": "컨트롤 플레인 노드 {cp}개, 워커 {workers}개",
+        "vms": "가상 머신"
       },
       "progress": {
         "noRun": "표시할 프로비저닝 실행이 없습니다",
@@ -17063,7 +17066,8 @@
         "openCluster": "클러스터 열기",
         "showLogs": "로그 표시",
         "hideLogs": "로그 숨기기",
-        "waitingForLogs": "로그를 기다리는 중..."
+        "waitingForLogs": "로그를 기다리는 중...",
+        "nameTaken": "이 이름의 클러스터가 이미 등록되어 있습니다. 다른 이름을 선택하세요."
       },
       "error": {
         "connection_busy": "이 Proxmox 클러스터에서 다른 Kubernetes 배포가 진행 중입니다. 완료될 때까지 기다리세요.",
@@ -17075,7 +17079,53 @@
         "generic": "배포를 시작할 수 없습니다.",
         "cidrInvalid": "{cidr}은(는) 유효한 범위가 아닙니다(예: 10.244.0.0/16).",
         "cidrOverlapNodes": "범위 {cidr}이(가) 노드 네트워크({nodes})와 겹칩니다. 다른 범위를 선택하세요.",
-        "cidrOverlapEach": "파드와 서비스 범위가 겹칩니다."
+        "cidrOverlapEach": "파드와 서비스 범위가 겹칩니다.",
+        "cluster_name_taken": "이 이름의 클러스터가 이미 등록되어 있습니다. 다른 이름을 선택하세요."
+      },
+      "validation": {
+        "snippetRequired": "스니펫 데이터스토어가 필요합니다",
+        "osImageUrlRequired": "OS 이미지 URL이 필요합니다",
+        "osImageChecksumRequired": "이미지 체크섬이 필요합니다",
+        "osImageChecksumFormat": "이미지 체크섬은 64자리 16진수 SHA-256이어야 합니다",
+        "clusterNameRequired": "클러스터 이름이 필요합니다",
+        "connectionRequired": "Proxmox 연결이 필요합니다",
+        "nodeRequired": "Proxmox 노드가 필요합니다",
+        "imageDatastoreRequired": "이미지 데이터스토어가 필요합니다",
+        "vmDatastoreRequired": "VM 데이터스토어가 필요합니다",
+        "bridgeRequired": "네트워크 브리지가 필요합니다",
+        "gatewayRequired": "게이트웨이가 필요합니다",
+        "dnsRequired": "DNS 서버가 하나 이상 필요합니다",
+        "talosVersionRequired": "Talos 버전이 필요합니다",
+        "kubernetesVersionRequired": "Kubernetes 버전이 필요합니다",
+        "schematicRequired": "Schematic ID가 필요합니다",
+        "k3sVersionRequired": "k3s 버전이 필요합니다",
+        "rke2VersionRequired": "RKE2 버전이 필요합니다",
+        "kubernetesVersionPrefix": "Kubernetes 버전은 \"v\"로 시작하면 안 됩니다(예: 1.34.9)",
+        "cniInvalid": "CNI는 Calico 또는 Cilium이어야 합니다",
+        "vipRequired": "컨트롤 플레인 가상 IP가 필요합니다",
+        "vipInvalid": "컨트롤 플레인 가상 IP는 유효한 IPv4 주소여야 합니다",
+        "distroRequired": "Kubernetes 배포판을 선택하세요",
+        "controlPlaneRequired": "컨트롤 플레인 노드가 하나 이상 필요합니다",
+        "controlPlaneCount": "컨트롤 플레인 노드 수는 1 또는 3 이상의 홀수여야 합니다",
+        "controlPlaneCores": "컨트롤 플레인에는 코어가 1개 이상 필요합니다",
+        "controlPlaneMemory": "컨트롤 플레인에는 메모리가 2048MiB 이상 필요합니다",
+        "controlPlaneDisk": "컨트롤 플레인에는 디스크가 10GiB 이상 필요합니다",
+        "workerCores": "워커에는 코어가 1개 이상 필요합니다",
+        "workerMemory": "워커에는 메모리가 2048MiB 이상 필요합니다",
+        "workerDisk": "워커에는 디스크가 10GiB 이상 필요합니다",
+        "rangesOverlap": "파드 네트워크와 서비스 네트워크가 겹칩니다",
+        "nodeIpMissing": "모든 노드에 IP 주소가 있어야 합니다",
+        "nodeIpInvalid": "모든 노드 IP는 유효한 IPv4 주소여야 합니다",
+        "nodeIpGateway": "노드 IP는 게이트웨이와 같을 수 없습니다",
+        "nodeIpDuplicate": "노드 IP 주소는 고유해야 합니다",
+        "vmidDuplicate": "노드 VMID는 고유해야 합니다",
+        "vipGateway": "컨트롤 플레인 가상 IP는 게이트웨이와 같을 수 없습니다",
+        "vipNodeIp": "컨트롤 플레인 가상 IP는 노드 IP일 수 없습니다",
+        "clusterNameFormat": "클러스터 이름은 유효한 DNS 이름이어야 합니다(소문자, 숫자, 하이픈, 문자나 숫자로 시작하고 끝남, 최대 63자)",
+        "podCidrInvalid": "파드 네트워크는 유효한 IPv4 범위여야 합니다(예: 10.244.0.0/16)",
+        "serviceCidrInvalid": "서비스 네트워크는 유효한 IPv4 범위여야 합니다(예: 10.96.0.0/16)",
+        "podCidrOverlapNodes": "파드 네트워크 {cidr}이(가) 노드 네트워크 {nodes}와 겹칩니다",
+        "serviceCidrOverlapNodes": "서비스 네트워크 {cidr}이(가) 노드 네트워크 {nodes}와 겹칩니다"
       }
     }
   }

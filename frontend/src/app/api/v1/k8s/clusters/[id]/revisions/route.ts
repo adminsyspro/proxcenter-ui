@@ -23,7 +23,9 @@ export async function GET(req: Request, ctx: Ctx) {
     clusterId: id, credentialVersion: gate.cluster.credentialVersion, cred: gate.credential, namespace, name,
   })
   if (!r.ok) {
-    const status = r.error === 'not_found' ? 404 : r.error === 'forbidden' ? 403 : 502
+    let status = 502
+    if (r.error === 'not_found') status = 404
+    else if (r.error === 'forbidden') status = 403
     return NextResponse.json({ error: r.error }, { status })
   }
   return NextResponse.json(r.value, { status: 200 })

@@ -102,11 +102,12 @@ function NodeStatusIcons({ item, drainState }: { item: ResourceListItem; drainSt
 
   const r = drainState?.result
   const stopped = drainState?.phase === 'stopped' || drainState?.phase === 'error'
+  const failureReason = r?.evictionFailureReason ? ` (${r.evictionFailureReason})` : ''
   const stoppedReason = drainState?.phase === 'error'
     ? (drainState.error ?? '')
     : [
         r?.blockedByPdb.length ? t('blockedByPdb', { pods: podListPreview(r.blockedByPdb) }) : '',
-        r?.evictionFailures.length ? `${t('evictionFailed', { pods: podListPreview(r.evictionFailures) })}${r.evictionFailureReason ? ` (${r.evictionFailureReason})` : ''}` : '',
+        r?.evictionFailures.length ? `${t('evictionFailed', { pods: podListPreview(r.evictionFailures) })}${failureReason}` : '',
         r && [...r.refusedEmptyDir, ...r.refusedUnmanaged].length ? t('refusedHint') : '',
         r?.remaining.length ? t('draining', { count: r.remaining.length }) : '',
       ].filter(Boolean).join(' · ')
@@ -208,6 +209,24 @@ export function ResourceTable({ kind, items, onRowClick, canManage, drainStates,
     }
   }
 
+  const renderCell = (item: ResourceListItem, col: ColumnDef, ci: number) => {
+    if (ci === 0) {
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <KindIcon icon={kind.icon} iconImg={kind.iconImg} size={16} sx={{ color: 'text.secondary' }} />
+          <span>{cellValue(item, col)}</span>
+          {kind.apiKind === 'node' && (
+            <NodeStatusIcons item={item} drainState={drainStates?.[item.name]} />
+          )}
+        </Box>
+      )
+    }
+    if (col.type === 'progress') return <ProgressCell value={cellValue(item, col)} />
+    if (col.type === 'age') return <span title={cellValue(item, col)}>{relativeAge(cellValue(item, col))}</span>
+
+    return cellValue(item, col)
+  }
+
   return (
     <Box>
       <TextField
@@ -249,21 +268,7 @@ export function ResourceTable({ kind, items, onRowClick, canManage, drainStates,
             >
               {kind.columns.map((col, ci) => (
                 <TableCell key={col.key} sx={col.key === 'message' ? { minWidth: 320 } : { whiteSpace: 'nowrap' }}>
-                  {ci === 0 ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                      <KindIcon icon={kind.icon} iconImg={kind.iconImg} size={16} sx={{ color: 'text.secondary' }} />
-                      <span>{cellValue(item, col)}</span>
-                      {kind.apiKind === 'node' && (
-                        <NodeStatusIcons item={item} drainState={drainStates?.[item.name]} />
-                      )}
-                    </Box>
-                  ) : col.type === 'progress' ? (
-                    <ProgressCell value={cellValue(item, col)} />
-                  ) : col.type === 'age' ? (
-                    <span title={cellValue(item, col)}>{relativeAge(cellValue(item, col))}</span>
-                  ) : (
-                    cellValue(item, col)
-                  )}
+                  {renderCell(item, col, ci)}
                 </TableCell>
               ))}
               {showActions && (

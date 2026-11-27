@@ -9,6 +9,7 @@ export interface CreateClusterInput {
   source: 'imported' | 'deployed'
   cred: SanitizedCredential
   proxmoxConnectionId?: string | null
+  provisioningRunId?: string | null
   clusterUid?: string | null
   createdBy?: string | null
 }
@@ -41,6 +42,7 @@ export async function createCluster(tenantId: string, input: CreateClusterInput)
       credentialEnc: encryptSecret(input.cred.credential),
       credentialType: input.cred.credentialType,
       proxmoxConnectionId: input.proxmoxConnectionId ?? null,
+      provisioningRunId: input.provisioningRunId ?? null,
       clusterUid: input.clusterUid ?? null,
       createdBy: input.createdBy ?? null,
     },
@@ -156,13 +158,12 @@ export async function recordNodeMapping(
   clusterId: string,
   nodes: { name: string; vmid: number; connectionId: string }[],
 ): Promise<void> {
-  for (const node of nodes) {
-    await prisma.kubernetesClusterNode.upsert({
-      where: { clusterId_nodeName: { clusterId, nodeName: node.name } },
-      create: { clusterId, nodeName: node.name, vmid: node.vmid, connectionId: node.connectionId },
-      update: { vmid: node.vmid, connectionId: node.connectionId },
-    })
-  }
+  // All or nothing: a half-recorded mapping would let a later delete miss VMs.
+  await prisma.$transaction(nodes.map(node => prisma.kubernetesClusterNode.upsert({
+    where: { clusterId_nodeName: { clusterId, nodeName: node.name } },
+    create: { clusterId, nodeName: node.name, vmid: node.vmid, connectionId: node.connectionId },
+    update: { vmid: node.vmid, connectionId: node.connectionId },
+  })))
 }
 
 /**

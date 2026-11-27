@@ -46,8 +46,7 @@ import { defaultWizardState, MIN_CORES, MIN_MEMORY, MIN_DISK } from '@/lib/k8s/p
 import type { WizardState, WizardNodeAddr } from '@/lib/k8s/provision/types'
 import { validateProvision } from '@/lib/k8s/provision/validate'
 import { buildProvisionRequest } from '@/lib/k8s/provision/buildRequest'
-import { tfvarsPreview } from '@/lib/k8s/provision/tfvarsPreview'
-import { defaultRanges, rangeErrors, rangesConfigurable } from '@/lib/k8s/provision/networks'
+import { defaultRanges, effectiveRanges, rangeErrors, rangesConfigurable } from '@/lib/k8s/provision/networks'
 import ProvisionProgress from '@/components/k8s/ProvisionProgress'
 
 interface KubernetesDeployWizardProps {
@@ -108,7 +107,11 @@ const MEMORY_MARKS = [2048, 4096, 8192, 16384, 32768, 65536]
 const DISK_MARKS = [10, 20, 40, 80, 160, 320, 640]
 
 const formatCores = (v: number) => `${v} ${v === 1 ? 'vCPU' : 'vCPUs'}`
-const formatMemory = (v: number) => (v >= 1024 ? `${(v / 1024).toFixed(v % 1024 === 0 ? 0 : 1)} GB` : `${v} MB`)
+const formatMemory = (v: number) => {
+  if (v < 1024) return `${v} MB`
+  const digits = v % 1024 === 0 ? 0 : 1
+  return `${(v / 1024).toFixed(digits)} GB`
+}
 const formatDisk = (v: number) => `${v} GB`
 
 /** Log-style slider (marks + free-typed override), mirroring DeployWizard's
@@ -250,7 +253,9 @@ function NodeAddrRow({
 function StorageOptionContent({ s }: { s: StorageInfo }) {
   const hasUsage = typeof s.total === 'number' && s.total > 0
   const usedPct = hasUsage ? Math.round(((s.used ?? 0) / (s.total as number)) * 100) : 0
-  const barColor = usedPct > 90 ? 'error.main' : usedPct > 70 ? 'warning.main' : 'success.main'
+  let barColor = 'success.main'
+  if (usedPct > 90) barColor = 'error.main'
+  else if (usedPct > 70) barColor = 'warning.main'
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
@@ -460,7 +465,7 @@ export default function KubernetesDeployWizard({ open, onClose, onCreated }: Kub
         const choices = Array.isArray(res?.data) ? res.data : []
         const list: BridgeChoice[] = choices.map((c: any) => ({
           iface: c.name,
-          type: c.kind === 'vnet' ? 'vnet' : c.kind === 'shared' ? 'shared' : (c.type || 'bridge'),
+          type: c.kind === 'vnet' || c.kind === 'shared' ? c.kind : (c.type || 'bridge'),
           displayName: c.displayName ?? null,
         }))
         setBridges(list)
@@ -515,6 +520,17 @@ export default function KubernetesDeployWizard({ open, onClose, onCreated }: Kub
   const handleNext = useCallback(() => setActiveStep(s => Math.min(s + 1, STEP_REVIEW)), [])
   const handleBack = useCallback(() => setActiveStep(s => Math.max(s - 1, STEP_TARGET)), [])
 
+  // The text of a refused deployment: the route answers with a code; a
+  // validation refusal also carries the orchestrator's sentence.
+  const deployErrorText = useCallback((body: { error?: unknown; message?: unknown } | null): string => {
+    const code = typeof body?.error === 'string' ? body.error : ''
+    if (code === 'invalid_request' && typeof body?.message === 'string') {
+      return t('kubernetes.provision.error.invalid_request', { message: body.message })
+    }
+    const key = `kubernetes.provision.error.${code}`
+    return code && t.has(key) ? t(key) : t('kubernetes.provision.error.generic')
+  }, [t])
+
   const handleDeploy = useCallback(async () => {
     setDeploying(true)
     setDeployError(null)
@@ -531,21 +547,15 @@ export default function KubernetesDeployWizard({ open, onClose, onCreated }: Kub
         setRunId(body.runId)
         setActiveStep(STEP_PROGRESS)
       } else {
-        const code = typeof body?.error === 'string' ? body.error : ''
-        setDeployError(
-          code === 'invalid_request' && body?.message
-            ? t('kubernetes.provision.error.invalid_request', { message: body.message })
-            : t.has(`kubernetes.provision.error.${code}`)
-              ? t(`kubernetes.provision.error.${code}`)
-              : t('kubernetes.provision.error.generic'),
-        )
+        setDeployError(deployErrorText(body))
       }
-    } catch (e: any) {
+    } catch {
+      // Network failure or an unreadable answer: nothing more precise to say.
       setDeployError(t('kubernetes.provision.error.generic'))
     } finally {
       setDeploying(false)
     }
-  }, [state, t])
+  }, [state, t, deployErrorText])
 
   const validationErrors = useMemo(() => validateProvision(state), [state])
 
@@ -787,7 +797,7 @@ export default function KubernetesDeployWizard({ open, onClose, onCreated }: Kub
           logo="/images/rke2-logo.svg"
           name={t('kubernetes.provision.distro.rke2')}
           description={t('kubernetes.provision.distro.rke2Desc')}
-          chip={t('kubernetes.provision.distro.cni')}
+          chip={t('kubernetes.provision.distro.rke2Cni')}
           onSelect={() => setField('distro', 'rke2')}
         />
         <DistroCard
@@ -1136,6 +1146,8 @@ export default function KubernetesDeployWizard({ open, onClose, onCreated }: Kub
               placeholder={defaultRanges(state.distro).pod}
               error={!!rangeErrorText('pod')}
               helperText={rangeErrorText('pod') ?? undefined}
+              // The default range shows as the placeholder: keep the label up.
+              slotProps={{ inputLabel: { shrink: true } }}
             />
             <TextField
               size="small"
@@ -1145,9 +1157,11 @@ export default function KubernetesDeployWizard({ open, onClose, onCreated }: Kub
               placeholder={defaultRanges(state.distro).service}
               error={!!rangeErrorText('service')}
               helperText={rangeErrorText('service') ?? undefined}
+              // The default range shows as the placeholder: keep the label up.
+              slotProps={{ inputLabel: { shrink: true } }}
             />
           </Box>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, px: 1.75 }}>
             {t('kubernetes.provision.network.cidrHelp')}
           </Typography>
         </Box>
@@ -1227,15 +1241,44 @@ export default function KubernetesDeployWizard({ open, onClose, onCreated }: Kub
   )
 
   const renderReviewStep = () => {
-    const preview = tfvarsPreview(buildProvisionRequest(state))
+    const ranges = effectiveRanges(state)
+    const connectionName = connections.find(c => c.id === state.connectionId)?.name ?? state.connectionId
+    const distroVersion: Record<string, string> = {
+      talos: `${state.talosVersion} (Kubernetes ${state.kubernetesVersion})`,
+      k3s: state.k3sVersion,
+      rke2: state.rke2Version,
+      kubeadm: `${state.kubeadmVersion} (${state.cni})`,
+    }
+    const sizing = (cores: number, memory: number, disk: number) =>
+      `${formatCores(cores)}, ${formatMemory(memory)}, ${formatDisk(disk)}`
+    const nodeName = (role: 'cp' | 'worker', i: number) => `${state.clusterName || 'cluster'}-${role}-${i + 1}`
+    const rows: [string, string][] = [
+      [t('kubernetes.provision.target.clusterName'), state.clusterName],
+      [t('kubernetes.provision.steps.distro'), [t(`kubernetes.provision.distro.${state.distro}`), distroVersion[state.distro] ?? ''].join(' ')],
+      [t('kubernetes.provision.target.connection'), `${connectionName} / ${state.pveNode}`],
+      [t('kubernetes.provision.target.vmDatastore'), state.vmDatastore],
+      [t('kubernetes.provision.target.imageDatastore'), state.imageDatastore],
+      [t('kubernetes.provision.target.bridge'), state.vlan ? `${state.bridge}, VLAN ${state.vlan}` : state.bridge],
+      [t('kubernetes.provision.network.gateway'), `${state.gateway} (/${state.subnetPrefix}), DNS ${state.dns.join(', ')}`],
+      [t('kubernetes.provision.topology.cpSizing'), sizing(state.cpCores, state.cpMemory, state.cpDisk)],
+      ...(state.workers.length > 0
+        ? [[t('kubernetes.provision.topology.workerSizing'), sizing(state.workerCores, state.workerMemory, state.workerDisk)] as [string, string]]
+        : []),
+      [`${t('kubernetes.provision.network.podCidr')} / ${t('kubernetes.provision.network.serviceCidr')}`, `${ranges.pod} / ${ranges.service}`],
+      ...(state.distro === 'kubeadm' ? [[t('kubernetes.provision.network.vip'), state.controlPlaneVip] as [string, string]] : []),
+    ]
+    const nodes = [
+      ...state.controlPlane.map((n, i) => ({ name: nodeName('cp', i), ...n })),
+      ...state.workers.map((n, i) => ({ name: nodeName('worker', i), ...n })),
+    ]
     return (
       <Stack spacing={2}>
         {validationErrors.length > 0 && (
           <Alert severity="warning">
             <Stack spacing={0.5}>
-              {validationErrors.map(msg => (
-                <Typography key={msg} variant="body2">
-                  {msg}
+              {validationErrors.map(issue => (
+                <Typography key={issue.key + JSON.stringify(issue.values ?? {})} variant="body2">
+                  {t(`kubernetes.provision.validation.${issue.key}`, issue.values)}
                 </Typography>
               ))}
             </Stack>
@@ -1246,24 +1289,28 @@ export default function KubernetesDeployWizard({ open, onClose, onCreated }: Kub
           <Typography variant="overline" sx={{ opacity: 0.6 }}>
             {t('kubernetes.provision.review.summary')}
           </Typography>
-          <Typography variant="body2">
+          <Typography variant="body2" sx={{ mb: 1 }}>
             {state.clusterName} &middot; {t('kubernetes.provision.review.nodes', { cp: state.controlPlane.length, workers: state.workers.length })}
           </Typography>
+          {rows.map(([label, value]) => (
+            <Box key={label} sx={{ display: 'flex', gap: 2, py: 0.4, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ width: 220, flexShrink: 0 }}>{label}</Typography>
+              <Typography variant="body2" noWrap title={value} sx={{ minWidth: 0 }}>{value}</Typography>
+            </Box>
+          ))}
         </Box>
 
-        <Box
-          component="pre"
-          sx={{
-            fontFamily: 'monospace',
-            fontSize: 12,
-            p: 2,
-            borderRadius: 1,
-            bgcolor: 'action.hover',
-            overflow: 'auto',
-            maxHeight: 320,
-          }}
-        >
-          {preview}
+        <Box>
+          <Typography variant="overline" sx={{ opacity: 0.6 }}>
+            {t('kubernetes.provision.review.vms')}
+          </Typography>
+          {nodes.map(n => (
+            <Box key={n.name} sx={{ display: 'flex', gap: 2, py: 0.4, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="body2" sx={{ width: 220, flexShrink: 0 }} noWrap title={n.name}>{n.name}</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ width: 140 }}>{n.ip}</Typography>
+              <Typography variant="body2" color="text.secondary">VMID {n.vmid}</Typography>
+            </Box>
+          ))}
         </Box>
 
         {deployError && <Alert severity="error">{deployError}</Alert>}

@@ -16618,7 +16618,8 @@
       "confirm": "从 ProxCenter 移除此集群？集群本身不受影响。",
       "destroyNodes": "{count, plural, =0 {同时销毁 Proxmox 上的节点 VM} other {同时销毁 Proxmox 上的 # 个节点 VM}}",
       "destroyNodesWarn": "这将永久删除该集群在 Proxmox 上的虚拟机及其磁盘，无法撤销。",
-      "destroyFailed": "部分节点虚拟机无法销毁；集群已保留。请检查节点后重试。"
+      "destroyFailed": "部分节点虚拟机无法销毁；集群已保留。请检查节点后重试。",
+      "destroyRefused": "未销毁任何虚拟机：这些虚拟机已不再是部署此集群时的节点（已重命名或 VMID 被重用）。集群已保留。"
     },
     "explore": "探索集群",
     "explorer": {
@@ -17006,7 +17007,8 @@
         "kubeadmChip": "Calico / Cilium",
         "cniSelect": "容器网络（CNI）",
         "podCidr": "Pod 网络 CIDR",
-        "kubeadmHaNote": "kubeadm 需要在节点子网中预留一个专用空闲 IP，作为控制平面的虚拟 IP（kube-vip，ARP 模式），将在网络步骤中填写。使用 3 或 5 个控制平面时，etcd 和 API 端点均具备高可用性。"
+        "kubeadmHaNote": "kubeadm 需要在节点子网中预留一个专用空闲 IP，作为控制平面的虚拟 IP（kube-vip，ARP 模式），将在网络步骤中填写。使用 3 或 5 个控制平面时，etcd 和 API 端点均具备高可用性。",
+        "rke2Cni": "Canal CNI"
       },
       "topology": {
         "cpCount": "控制平面节点",
@@ -17036,7 +17038,8 @@
         "summary": "部署前请检查集群配置",
         "deployNow": "立即部署",
         "deployFailed": "部署失败",
-        "nodes": "{cp} 个控制平面节点，{workers} 个工作节点"
+        "nodes": "{cp} 个控制平面节点，{workers} 个工作节点",
+        "vms": "虚拟机"
       },
       "progress": {
         "noRun": "没有可显示的部署任务",
@@ -17063,7 +17066,8 @@
         "openCluster": "打开集群",
         "showLogs": "显示日志",
         "hideLogs": "隐藏日志",
-        "waitingForLogs": "等待日志..."
+        "waitingForLogs": "等待日志...",
+        "nameTaken": "已有同名集群注册，请换一个名称。"
       },
       "error": {
         "connection_busy": "此 Proxmox 集群上已有一个 Kubernetes 部署正在进行。请等待其完成。",
@@ -17075,7 +17079,53 @@
         "generic": "无法启动部署。",
         "cidrInvalid": "{cidr} 不是有效的范围（应为 10.244.0.0/16 的形式）。",
         "cidrOverlapNodes": "范围 {cidr} 与节点网络（{nodes}）重叠。请选择其他范围。",
-        "cidrOverlapEach": "Pod 和 Service 的范围重叠。"
+        "cidrOverlapEach": "Pod 和 Service 的范围重叠。",
+        "cluster_name_taken": "已有同名集群注册，请换一个名称。"
+      },
+      "validation": {
+        "snippetRequired": "必须选择 Snippet 存储",
+        "osImageUrlRequired": "必须填写系统镜像 URL",
+        "osImageChecksumRequired": "必须填写镜像校验和",
+        "osImageChecksumFormat": "镜像校验和必须是 64 位十六进制 SHA-256",
+        "clusterNameRequired": "必须填写集群名称",
+        "connectionRequired": "必须选择 Proxmox 连接",
+        "nodeRequired": "必须选择 Proxmox 节点",
+        "imageDatastoreRequired": "必须选择镜像存储",
+        "vmDatastoreRequired": "必须选择 VM 存储",
+        "bridgeRequired": "必须选择网桥",
+        "gatewayRequired": "必须填写网关",
+        "dnsRequired": "至少需要一个 DNS 服务器",
+        "talosVersionRequired": "必须填写 Talos 版本",
+        "kubernetesVersionRequired": "必须填写 Kubernetes 版本",
+        "schematicRequired": "必须填写 Schematic ID",
+        "k3sVersionRequired": "必须填写 k3s 版本",
+        "rke2VersionRequired": "必须填写 RKE2 版本",
+        "kubernetesVersionPrefix": "Kubernetes 版本不能以“v”开头（例如 1.34.9）",
+        "cniInvalid": "CNI 必须是 Calico 或 Cilium",
+        "vipRequired": "必须填写控制平面虚拟 IP",
+        "vipInvalid": "控制平面虚拟 IP 必须是有效的 IPv4 地址",
+        "distroRequired": "请选择一个 Kubernetes 发行版",
+        "controlPlaneRequired": "至少需要一个控制平面节点",
+        "controlPlaneCount": "控制平面节点数必须为 1 或大于等于 3 的奇数",
+        "controlPlaneCores": "控制平面至少需要 1 个核心",
+        "controlPlaneMemory": "控制平面至少需要 2048 MiB 内存",
+        "controlPlaneDisk": "控制平面至少需要 10 GiB 磁盘",
+        "workerCores": "工作节点至少需要 1 个核心",
+        "workerMemory": "工作节点至少需要 2048 MiB 内存",
+        "workerDisk": "工作节点至少需要 10 GiB 磁盘",
+        "rangesOverlap": "Pod 网络与 Service 网络重叠",
+        "nodeIpMissing": "每个节点都必须有 IP 地址",
+        "nodeIpInvalid": "每个节点 IP 都必须是有效的 IPv4 地址",
+        "nodeIpGateway": "节点 IP 不能与网关相同",
+        "nodeIpDuplicate": "节点 IP 地址必须唯一",
+        "vmidDuplicate": "节点 VMID 必须唯一",
+        "vipGateway": "控制平面虚拟 IP 不能与网关相同",
+        "vipNodeIp": "控制平面虚拟 IP 不能是节点的 IP",
+        "clusterNameFormat": "集群名称必须是有效的 DNS 名称（小写字母、数字和连字符，以字母或数字开头和结尾，最多 63 个字符）",
+        "podCidrInvalid": "Pod 网络必须是有效的 IPv4 范围（例如 10.244.0.0/16）",
+        "serviceCidrInvalid": "Service 网络必须是有效的 IPv4 范围（例如 10.96.0.0/16）",
+        "podCidrOverlapNodes": "Pod 网络 {cidr} 与节点网络 {nodes} 重叠",
+        "serviceCidrOverlapNodes": "Service 网络 {cidr} 与节点网络 {nodes} 重叠"
       }
     }
   }

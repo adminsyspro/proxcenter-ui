@@ -61,11 +61,10 @@ export function WorkloadActionDialog({
 
   const replicaCount = Number(replicas)
   const replicasValid = replicas !== '' && Number.isInteger(replicaCount) && replicaCount >= 0 && replicaCount <= MAX_REPLICAS
-  const canSubmit = !busy && (
-    action === 'scale' ? replicasValid && replicaCount !== desired
-      : action === 'rollback' ? revision !== null
-        : true
-  )
+  let actionReady = true
+  if (action === 'scale') actionReady = replicasValid && replicaCount !== desired
+  else if (action === 'rollback') actionReady = revision !== null
+  const canSubmit = !busy && actionReady
 
   const submit = async () => {
     setBusy(true)
@@ -79,11 +78,11 @@ export function WorkloadActionDialog({
       })
       const data = await res.json().catch(() => null)
       if (!res.ok) { setError(errorText(data?.error)); return }
-      onDone(
-        action === 'scale' ? t('done.scale', { name: item.name, count: data?.replicas ?? replicaCount })
-          : action === 'rollback' ? t('done.rollback', { name: item.name, revision: revision ?? 0 })
-            : t(`done.${action}`, { name: item.name }),
-      )
+      let doneMessage: string
+      if (action === 'scale') doneMessage = t('done.scale', { name: item.name, count: data?.replicas ?? replicaCount })
+      else if (action === 'rollback') doneMessage = t('done.rollback', { name: item.name, revision: revision ?? 0 })
+      else doneMessage = t(`done.${action}`, { name: item.name })
+      onDone(doneMessage)
     } catch {
       setError(t('error.generic'))
     } finally {
@@ -92,6 +91,7 @@ export function WorkloadActionDialog({
   }
 
   const title = t(`title.${action}`, { name: item.name })
+  const noRevision = revisions !== null && revisions.filter(r => !r.current).length === 0 && !error
 
   return (
     <Dialog open onClose={busy ? undefined : onClose} maxWidth={action === 'rollback' ? 'sm' : 'xs'} fullWidth>
@@ -121,33 +121,33 @@ export function WorkloadActionDialog({
           </Box>
         )}
 
-        {action === 'rollback' && (
-          revisions === null ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={22} /></Box>
-          ) : revisions.filter(r => !r.current).length === 0 && !error ? (
-            <DialogContentText>{t('noRevision')}</DialogContentText>
-          ) : (
-            <Box role="radiogroup" aria-label={title}>
-              {revisions.map(r => (
-                <Box
-                  key={r.revision}
-                  onClick={() => { if (!r.current) setRevision(r.revision) }}
-                  sx={{
-                    display: 'flex', alignItems: 'center', gap: 1, py: 0.25, px: 0.5, borderRadius: 1,
-                    cursor: r.current ? 'default' : 'pointer', opacity: r.current ? 0.6 : 1,
-                    '&:hover': r.current ? undefined : { bgcolor: 'action.hover' },
-                  }}
-                >
-                  <Radio size="small" checked={revision === r.revision} disabled={r.current} slotProps={{ input: { 'aria-label': t('revision', { revision: r.revision }) } }} />
-                  <Typography sx={{ width: 110, flexShrink: 0 }}>{t('revision', { revision: r.revision })}</Typography>
-                  <Typography noWrap sx={{ flex: 1, minWidth: 0 }} title={r.images.join(', ')}>{r.images.join(', ')}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ width: 70, textAlign: 'right', flexShrink: 0 }} title={r.createdAt}>
-                    {r.current ? t('current') : relativeAge(r.createdAt)}
-                  </Typography>
-                </Box>
-              ))}
-            </Box>
-          )
+        {action === 'rollback' && revisions === null && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={22} /></Box>
+        )}
+        {action === 'rollback' && noRevision && (
+          <DialogContentText>{t('noRevision')}</DialogContentText>
+        )}
+        {action === 'rollback' && revisions !== null && !noRevision && (
+          <Box role="radiogroup" aria-label={title}>
+            {revisions.map(r => (
+              <Box
+                key={r.revision}
+                onClick={() => { if (!r.current) setRevision(r.revision) }}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 1, py: 0.25, px: 0.5, borderRadius: 1,
+                  cursor: r.current ? 'default' : 'pointer', opacity: r.current ? 0.6 : 1,
+                  '&:hover': r.current ? undefined : { bgcolor: 'action.hover' },
+                }}
+              >
+                <Radio size="small" checked={revision === r.revision} disabled={r.current} slotProps={{ input: { 'aria-label': t('revision', { revision: r.revision }) } }} />
+                <Typography sx={{ width: 110, flexShrink: 0 }}>{t('revision', { revision: r.revision })}</Typography>
+                <Typography noWrap sx={{ flex: 1, minWidth: 0 }} title={r.images.join(', ')}>{r.images.join(', ')}</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ width: 70, textAlign: 'right', flexShrink: 0 }} title={r.createdAt}>
+                  {r.current ? t('current') : relativeAge(r.createdAt)}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
         )}
 
         {error && <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert>}

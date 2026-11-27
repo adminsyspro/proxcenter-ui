@@ -17,6 +17,14 @@ export interface GetClusterHealthInput {
   skipCache?: boolean
 }
 
+function healthStateFor(nodesReady: number, nodesTotal: number): ClusterHealth['state'] {
+  if (nodesTotal === 0) return 'unknown'
+  if (nodesReady === nodesTotal) return 'healthy'
+  if (nodesReady === 0) return 'unreachable'
+
+  return 'degraded'
+}
+
 export async function getClusterHealth(
   input: GetClusterHealthInput,
 ): Promise<{ ok: boolean; errorCode?: K8sErrorCode; value?: ClusterHealth }> {
@@ -65,14 +73,7 @@ export async function getClusterHealth(
     return conds.some((c: any) => c.type === 'Ready' && c.status === 'True')
   }).length
 
-  const state: ClusterHealth['state'] =
-    nodesTotal === 0
-      ? 'unknown'
-      : nodesReady === nodesTotal
-        ? 'healthy'
-        : nodesReady === 0
-          ? 'unreachable'
-          : 'degraded'
+  const state = healthStateFor(nodesReady, nodesTotal)
 
   return {
     ok: true,

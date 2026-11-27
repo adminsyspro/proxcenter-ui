@@ -16632,7 +16632,8 @@
       "confirm": "Retirer ce cluster de ProxCenter? Le cluster lui-même n'est pas affecté.",
       "destroyNodes": "{count, plural, =0 {Détruire aussi les VM des nœuds sur Proxmox} one {Détruire aussi la VM du nœud sur Proxmox} other {Détruire aussi les # VM des nœuds sur Proxmox}}",
       "destroyNodesWarn": "Ceci supprime définitivement les VM du cluster et leurs disques sur Proxmox. Action irréversible.",
-      "destroyFailed": "Certaines VM de nœuds n'ont pas pu être détruites ; le cluster a été conservé. Vérifiez les nœuds et réessayez."
+      "destroyFailed": "Certaines VM de nœuds n'ont pas pu être détruites ; le cluster a été conservé. Vérifiez les nœuds et réessayez.",
+      "destroyRefused": "Aucune VM n'a été détruite : ces VM ne sont plus les nœuds avec lesquels ce cluster a été déployé (renommées ou VMID réutilisé). Le cluster est conservé."
     },
     "explore": "Explorer le cluster",
     "explorer": {
@@ -17020,7 +17021,8 @@
         "kubeadmChip": "Calico / Cilium",
         "cniSelect": "Réseau de conteneurs (CNI)",
         "podCidr": "CIDR du réseau de pods",
-        "kubeadmHaNote": "kubeadm nécessite une IP libre dédiée dans le sous-réseau des noeuds comme IP virtuelle du plan de contrôle (kube-vip, mode ARP). Elle est saisie à l'étape Réseau. Avec 3 ou 5 plans de contrôle, etcd et le point d'accès API sont hautement disponibles."
+        "kubeadmHaNote": "kubeadm nécessite une IP libre dédiée dans le sous-réseau des noeuds comme IP virtuelle du plan de contrôle (kube-vip, mode ARP). Elle est saisie à l'étape Réseau. Avec 3 ou 5 plans de contrôle, etcd et le point d'accès API sont hautement disponibles.",
+        "rke2Cni": "CNI Canal"
       },
       "topology": {
         "cpCount": "Nœuds du plan de contrôle",
@@ -17050,7 +17052,8 @@
         "summary": "Vérifiez la configuration du cluster avant de déployer",
         "deployNow": "Déployer maintenant",
         "deployFailed": "Le déploiement a échoué",
-        "nodes": "{cp, plural, one {# nœud de plan de contrôle} other {# nœuds de plan de contrôle}}, {workers, plural, =0 {aucun worker} one {# worker} other {# workers}}"
+        "nodes": "{cp, plural, one {# nœud de plan de contrôle} other {# nœuds de plan de contrôle}}, {workers, plural, =0 {aucun worker} one {# worker} other {# workers}}",
+        "vms": "Machines virtuelles"
       },
       "progress": {
         "noRun": "Aucun déploiement à afficher",
@@ -17077,7 +17080,8 @@
         "openCluster": "Ouvrir le cluster",
         "showLogs": "Afficher les logs",
         "hideLogs": "Masquer les logs",
-        "waitingForLogs": "En attente des logs..."
+        "waitingForLogs": "En attente des logs...",
+        "nameTaken": "Un cluster porte déjà ce nom : choisissez-en un autre."
       },
       "error": {
         "connection_busy": "Un autre déploiement Kubernetes est en cours sur ce cluster Proxmox. Attendez qu'il se termine.",
@@ -17089,7 +17093,53 @@
         "generic": "Le déploiement n'a pas pu démarrer.",
         "cidrInvalid": "{cidr} n'est pas une plage valide (forme attendue : 10.244.0.0/16).",
         "cidrOverlapNodes": "La plage {cidr} chevauche le réseau des nœuds ({nodes}). Choisissez une autre plage.",
-        "cidrOverlapEach": "Les plages des pods et des services se chevauchent."
+        "cidrOverlapEach": "Les plages des pods et des services se chevauchent.",
+        "cluster_name_taken": "Un cluster porte déjà ce nom : choisissez-en un autre."
+      },
+      "validation": {
+        "snippetRequired": "Le stockage des snippets est obligatoire",
+        "osImageUrlRequired": "L'adresse de l'image du système est obligatoire",
+        "osImageChecksumRequired": "La somme de contrôle de l'image est obligatoire",
+        "osImageChecksumFormat": "La somme de contrôle de l'image doit être un SHA-256 hexadécimal de 64 caractères",
+        "clusterNameRequired": "Le nom du cluster est obligatoire",
+        "connectionRequired": "La connexion Proxmox est obligatoire",
+        "nodeRequired": "Le nœud Proxmox est obligatoire",
+        "imageDatastoreRequired": "Le stockage des images est obligatoire",
+        "vmDatastoreRequired": "Le stockage des VM est obligatoire",
+        "bridgeRequired": "Le pont réseau est obligatoire",
+        "gatewayRequired": "La passerelle est obligatoire",
+        "dnsRequired": "Au moins un serveur DNS est obligatoire",
+        "talosVersionRequired": "La version de Talos est obligatoire",
+        "kubernetesVersionRequired": "La version de Kubernetes est obligatoire",
+        "schematicRequired": "L'identifiant de schematic est obligatoire",
+        "k3sVersionRequired": "La version de k3s est obligatoire",
+        "rke2VersionRequired": "La version de RKE2 est obligatoire",
+        "kubernetesVersionPrefix": "La version de Kubernetes ne doit pas commencer par « v » (par exemple 1.34.9)",
+        "cniInvalid": "Le CNI doit être Calico ou Cilium",
+        "vipRequired": "L'IP virtuelle du plan de contrôle est obligatoire",
+        "vipInvalid": "L'IP virtuelle du plan de contrôle doit être une adresse IPv4 valide",
+        "distroRequired": "Choisissez une distribution Kubernetes",
+        "controlPlaneRequired": "Il faut au moins un nœud de plan de contrôle",
+        "controlPlaneCount": "Le nombre de nœuds de plan de contrôle doit être 1 ou un nombre impair supérieur ou égal à 3",
+        "controlPlaneCores": "Le plan de contrôle doit avoir au moins 1 cœur",
+        "controlPlaneMemory": "Le plan de contrôle doit avoir au moins 2048 Mio de mémoire",
+        "controlPlaneDisk": "Le plan de contrôle doit avoir au moins 10 Gio de disque",
+        "workerCores": "Les workers doivent avoir au moins 1 cœur",
+        "workerMemory": "Les workers doivent avoir au moins 2048 Mio de mémoire",
+        "workerDisk": "Les workers doivent avoir au moins 10 Gio de disque",
+        "rangesOverlap": "Les réseaux des pods et des services se chevauchent",
+        "nodeIpMissing": "Chaque nœud doit avoir une adresse IP",
+        "nodeIpInvalid": "Chaque adresse IP de nœud doit être une adresse IPv4 valide",
+        "nodeIpGateway": "Une adresse IP de nœud ne peut pas être celle de la passerelle",
+        "nodeIpDuplicate": "Les adresses IP des nœuds doivent être uniques",
+        "vmidDuplicate": "Les VMID des nœuds doivent être uniques",
+        "vipGateway": "L'IP virtuelle du plan de contrôle ne peut pas être celle de la passerelle",
+        "vipNodeIp": "L'IP virtuelle du plan de contrôle ne peut pas être l'adresse d'un nœud",
+        "clusterNameFormat": "Le nom du cluster doit être un nom DNS valide (lettres minuscules, chiffres et tirets, commençant et finissant par une lettre ou un chiffre, 63 caractères au plus)",
+        "podCidrInvalid": "Le réseau des pods doit être une plage IPv4 valide (par exemple 10.244.0.0/16)",
+        "serviceCidrInvalid": "Le réseau des services doit être une plage IPv4 valide (par exemple 10.96.0.0/16)",
+        "podCidrOverlapNodes": "Le réseau des pods {cidr} chevauche le réseau des nœuds {nodes}",
+        "serviceCidrOverlapNodes": "Le réseau des services {cidr} chevauche le réseau des nœuds {nodes}"
       }
     }
   }

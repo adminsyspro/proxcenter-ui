@@ -64,7 +64,7 @@ function a(name: string, cpuAllocMilli: number, memAllocBytes: number): RawNodeA
   return { name, cpuAllocMilli, memAllocBytes }
 }
 
-describe('joinMetrics — happy path', () => {
+describe('joinMetrics: happy path', () => {
   it('joins metrics with allocatable, sorts by name, sets sampleTime to oldest', () => {
     const result = joinMetrics(
       [
@@ -93,7 +93,7 @@ describe('joinMetrics — happy path', () => {
   })
 })
 
-describe('joinMetrics — partial reporting', () => {
+describe('joinMetrics: partial reporting', () => {
   it('drops metrics entry with no matching allocatable node', () => {
     const result = joinMetrics(
       [m('phantom', '100m', '1Gi'), m('real', '200m', '2Gi')],
@@ -129,7 +129,7 @@ describe('joinMetrics — partial reporting', () => {
   })
 })
 
-describe('joinMetrics — zero / non-positive allocatable', () => {
+describe('joinMetrics: zero / non-positive allocatable', () => {
   it('drops node when cpuAllocMilli is 0', () => {
     const result = joinMetrics([m('n', '100m', '1Gi')], [a('n', 0, 1024 ** 3)])
     expect(result.nodes).toHaveLength(0)
@@ -148,7 +148,7 @@ describe('joinMetrics — zero / non-positive allocatable', () => {
   })
 })
 
-describe('joinMetrics — over-allocated usage (usage > allocatable)', () => {
+describe('joinMetrics: over-allocated usage (usage > allocatable)', () => {
   it('allows usage > allocatable (clamping is the UI layer responsibility)', () => {
     const result = joinMetrics(
       [m('n', '8000m', '32Gi')],
@@ -159,7 +159,7 @@ describe('joinMetrics — over-allocated usage (usage > allocatable)', () => {
   })
 })
 
-describe('joinMetrics — duplicate metrics entries', () => {
+describe('joinMetrics: duplicate metrics entries', () => {
   it('de-dupes: first entry wins, subsequent dropped', () => {
     const result = joinMetrics(
       [
@@ -175,7 +175,7 @@ describe('joinMetrics — duplicate metrics entries', () => {
 })
 
 // ---------------------------------------------------------------------------
-// getNodeMetrics — unit tests with mocked buildKubeClient
+// getNodeMetrics - unit tests with mocked buildKubeClient
 // ---------------------------------------------------------------------------
 
 const buildKubeClientMock = vi.fn()
@@ -192,7 +192,7 @@ vi.mock('./errors', () => ({
   classifyK8sError: (...a: any[]) => classifyK8sErrorMock(...a),
 }))
 
-// Mock @kubernetes/client-node Metrics class — kept active for unit tests.
+// Mock @kubernetes/client-node Metrics class - kept active for unit tests.
 // Integration tests use vi.importActual to get the real implementation.
 vi.mock('@kubernetes/client-node', async (importOriginal) => {
   const actual = await importOriginal() as any
@@ -220,7 +220,7 @@ function makeBuiltClient(
     },
     listPodForAllNamespaces: async () => podListResult,
   }
-  // kc only needs to exist — the Metrics constructor is mocked away
+  // kc only needs to exist - the Metrics constructor is mocked away
   const kc = { _placeholder: true }
   return { ok: true, makeApiClient: () => coreApi, kc, api: coreApi }
 }
@@ -251,7 +251,7 @@ beforeEach(() => {
   getPodMetricsMock.mockReset()
 })
 
-describe('getNodeMetrics — buildKubeClient failure', () => {
+describe('getNodeMetrics: buildKubeClient failure', () => {
   it('returns ok:false with errorCode config when client build fails', async () => {
     buildKubeClientMock.mockReturnValueOnce({ ok: false, error: 'bad url' })
     const r = await getNodeMetrics(baseInput)
@@ -260,7 +260,7 @@ describe('getNodeMetrics — buildKubeClient failure', () => {
   })
 })
 
-describe('getNodeMetrics — node list error', () => {
+describe('getNodeMetrics: node list error', () => {
   it('returns ok:false with classified error when listNode throws', async () => {
     const err: any = new Error('Forbidden')
     err.code = 403
@@ -273,7 +273,7 @@ describe('getNodeMetrics — node list error', () => {
   })
 })
 
-describe('getNodeMetrics — metrics_unavailable', () => {
+describe('getNodeMetrics: metrics_unavailable', () => {
   it('returns ok:false errorCode metrics_unavailable when metrics API missing', async () => {
     buildKubeClientMock.mockReturnValueOnce(makeBuiltClient(nodeListFixture))
     const err: any = new Error('Not Found')
@@ -289,7 +289,7 @@ describe('getNodeMetrics — metrics_unavailable', () => {
   })
 })
 
-describe('getNodeMetrics — happy path', () => {
+describe('getNodeMetrics: happy path', () => {
   it('joins node list + metrics, sorts by name, computes sampleTime (oldest)', async () => {
     buildKubeClientMock.mockReturnValueOnce(makeBuiltClient(nodeListFixture))
     getNodeMetricsMock.mockResolvedValueOnce(metricsListFixture)
@@ -434,4 +434,4 @@ describe('getPodMetrics', () => {
 })
 
 // Integration tests live in metrics.integration.test.ts (separate file,
-// no module mocks) — see that file for real HTTPS fixture server tests.
+// no module mocks) - see that file for real HTTPS fixture server tests.

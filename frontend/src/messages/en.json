@@ -16631,7 +16631,8 @@
       "confirm": "Remove this cluster from ProxCenter? The cluster itself is not affected.",
       "destroyNodes": "{count, plural, =0 {Also destroy the node VMs on Proxmox} one {Also destroy the # node VM on Proxmox} other {Also destroy the # node VMs on Proxmox}}",
       "destroyNodesWarn": "This permanently deletes the cluster VMs and their disks on Proxmox. This cannot be undone.",
-      "destroyFailed": "Some node VMs could not be destroyed; the cluster was kept. Check the nodes and retry."
+      "destroyFailed": "Some node VMs could not be destroyed; the cluster was kept. Check the nodes and retry.",
+      "destroyRefused": "No VM was destroyed: these VMs are no longer the nodes this cluster was deployed with (renamed or reused VMID). The cluster was kept."
     },
     "explore": "Explore cluster",
     "explorer": {
@@ -17019,7 +17020,8 @@
         "kubeadmChip": "Calico / Cilium",
         "cniSelect": "Container network (CNI)",
         "podCidr": "Pod network CIDR",
-        "kubeadmHaNote": "kubeadm needs a dedicated free IP in the node subnet as the control-plane virtual IP (kube-vip, ARP mode). You will enter it on the Network step. With 3 or 5 control planes, both etcd and the API endpoint are highly available."
+        "kubeadmHaNote": "kubeadm needs a dedicated free IP in the node subnet as the control-plane virtual IP (kube-vip, ARP mode). You will enter it on the Network step. With 3 or 5 control planes, both etcd and the API endpoint are highly available.",
+        "rke2Cni": "Canal CNI"
       },
       "topology": {
         "cpCount": "Control plane nodes",
@@ -17049,7 +17051,8 @@
         "summary": "Review the cluster configuration before deploying",
         "deployNow": "Deploy now",
         "deployFailed": "Deployment failed",
-        "nodes": "{cp, plural, one {# control plane node} other {# control plane nodes}}, {workers, plural, =0 {no worker} one {# worker} other {# workers}}"
+        "nodes": "{cp, plural, one {# control plane node} other {# control plane nodes}}, {workers, plural, =0 {no worker} one {# worker} other {# workers}}",
+        "vms": "Virtual machines"
       },
       "progress": {
         "noRun": "No provisioning run to display",
@@ -17076,7 +17079,8 @@
         "openCluster": "Open cluster",
         "showLogs": "Show logs",
         "hideLogs": "Hide logs",
-        "waitingForLogs": "Waiting for logs..."
+        "waitingForLogs": "Waiting for logs...",
+        "nameTaken": "A cluster with this name is already registered: choose another name."
       },
       "error": {
         "connection_busy": "Another Kubernetes deployment is in progress on this Proxmox cluster. Wait for it to finish.",
@@ -17088,7 +17092,53 @@
         "generic": "The deployment could not be started.",
         "cidrInvalid": "{cidr} is not a valid range (expected form: 10.244.0.0/16).",
         "cidrOverlapNodes": "The range {cidr} overlaps the network of the nodes ({nodes}). Choose another range.",
-        "cidrOverlapEach": "The pod and service ranges overlap."
+        "cidrOverlapEach": "The pod and service ranges overlap.",
+        "cluster_name_taken": "A cluster with this name is already registered: choose another name."
+      },
+      "validation": {
+        "snippetRequired": "Snippet datastore is required",
+        "osImageUrlRequired": "OS image URL is required",
+        "osImageChecksumRequired": "OS image checksum is required",
+        "osImageChecksumFormat": "OS image checksum must be a 64-character SHA-256 hex string",
+        "clusterNameRequired": "Cluster name is required",
+        "connectionRequired": "Proxmox connection is required",
+        "nodeRequired": "Proxmox node is required",
+        "imageDatastoreRequired": "Image datastore is required",
+        "vmDatastoreRequired": "VM datastore is required",
+        "bridgeRequired": "Network bridge is required",
+        "gatewayRequired": "Gateway is required",
+        "dnsRequired": "At least one DNS server is required",
+        "talosVersionRequired": "Talos version is required",
+        "kubernetesVersionRequired": "Kubernetes version is required",
+        "schematicRequired": "Schematic ID is required",
+        "k3sVersionRequired": "k3s version is required",
+        "rke2VersionRequired": "rke2 version is required",
+        "kubernetesVersionPrefix": "Kubernetes version must not start with \"v\" (e.g. 1.34.9)",
+        "cniInvalid": "CNI must be Calico or Cilium",
+        "vipRequired": "Control-plane VIP is required",
+        "vipInvalid": "Control-plane VIP must be a valid IPv4 address",
+        "distroRequired": "A Kubernetes distribution must be selected",
+        "controlPlaneRequired": "At least one control-plane node is required",
+        "controlPlaneCount": "Control-plane count must be 1 or an odd number >= 3",
+        "controlPlaneCores": "Control-plane cores must be at least 1",
+        "controlPlaneMemory": "Control-plane memory must be at least 2048 MiB",
+        "controlPlaneDisk": "Control-plane disk must be at least 10 GiB",
+        "workerCores": "Worker cores must be at least 1",
+        "workerMemory": "Worker memory must be at least 2048 MiB",
+        "workerDisk": "Worker disk must be at least 10 GiB",
+        "rangesOverlap": "Pod and service networks overlap",
+        "nodeIpMissing": "Every control-plane and worker node must have an IP address",
+        "nodeIpInvalid": "Every node IP address must be a valid IPv4 address",
+        "nodeIpGateway": "A node IP address cannot be the same as the gateway",
+        "nodeIpDuplicate": "Node IP addresses must be unique",
+        "vmidDuplicate": "Node vmid values must be unique",
+        "vipGateway": "Control-plane VIP cannot be the same as the gateway",
+        "vipNodeIp": "Control-plane VIP cannot be one of the node IP addresses",
+        "clusterNameFormat": "Cluster name must be a valid DNS-1123 label (lowercase letters, digits, and hyphens; must start and end with a letter or digit; max 63 characters)",
+        "podCidrInvalid": "Pod network CIDR must be a valid IPv4 CIDR (e.g. 10.244.0.0/16)",
+        "serviceCidrInvalid": "Service network CIDR must be a valid IPv4 CIDR (e.g. 10.244.0.0/16)",
+        "podCidrOverlapNodes": "Pod network {cidr} overlaps the node network {nodes}",
+        "serviceCidrOverlapNodes": "Service network {cidr} overlaps the node network {nodes}"
       }
     }
   }

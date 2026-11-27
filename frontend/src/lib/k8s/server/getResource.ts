@@ -20,19 +20,19 @@ import { sanitizeToYaml } from './sanitize'
 //
 // C1-C3 LESSON: all ObjectParamAPI get methods return the object directly
 // (no .body wrapper). Verified against:
-//   ObjectParamAPI.d.ts — readNamespacedPod  -> Promise<V1Pod>
-//                       — readNode           -> Promise<V1Node>
-//                       — readNamespace      -> Promise<V1Namespace>
-//                       — readNamespacedDeployment -> Promise<V1Deployment>
-//                       — readNamespacedStatefulSet -> Promise<V1StatefulSet>
-//                       — readNamespacedDaemonSet   -> Promise<V1DaemonSet>
-//                       — readNamespacedJob         -> Promise<V1Job>
-//                       — readNamespacedCronJob     -> Promise<V1CronJob>
-//                       — readNamespacedService     -> Promise<V1Service>
-//                       — readNamespacedIngress     -> Promise<V1Ingress>
-//                       — readNamespacedConfigMap   -> Promise<V1ConfigMap>
-//                       — readNamespacedPersistentVolumeClaim -> Promise<V1PersistentVolumeClaim>
-//                       — readPersistentVolume      -> Promise<V1PersistentVolume>
+//   ObjectParamAPI.d.ts - readNamespacedPod  -> Promise<V1Pod>
+//                       - readNode           -> Promise<V1Node>
+//                       - readNamespace      -> Promise<V1Namespace>
+//                       - readNamespacedDeployment -> Promise<V1Deployment>
+//                       - readNamespacedStatefulSet -> Promise<V1StatefulSet>
+//                       - readNamespacedDaemonSet   -> Promise<V1DaemonSet>
+//                       - readNamespacedJob         -> Promise<V1Job>
+//                       - readNamespacedCronJob     -> Promise<V1CronJob>
+//                       - readNamespacedService     -> Promise<V1Service>
+//                       - readNamespacedIngress     -> Promise<V1Ingress>
+//                       - readNamespacedConfigMap   -> Promise<V1ConfigMap>
+//                       - readNamespacedPersistentVolumeClaim -> Promise<V1PersistentVolumeClaim>
+//                       - readPersistentVolume      -> Promise<V1PersistentVolume>
 
 type FetchFn = (
   makeApiClient: <T>(cls: new (...a: any[]) => T) => T,

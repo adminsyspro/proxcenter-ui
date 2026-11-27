@@ -111,9 +111,10 @@ export function ClusterOverview({ clusterId, refreshTick = 0, onOpenResource }: 
     let cancelled = false
     const ac = new AbortController()
     const id = setInterval(() => {
-      void fetchMetrics(clusterId, ac.signal).then(m => {
+      // fetchMetrics resolves on every failure, so the catch never fires.
+      fetchMetrics(clusterId, ac.signal).then(m => {
         if (!cancelled && !ac.signal.aborted) setMetrics(m)
-      })
+      }).catch(() => {})
     }, 5000)
     return () => { cancelled = true; ac.abort(); clearInterval(id) }
   }, [clusterId])

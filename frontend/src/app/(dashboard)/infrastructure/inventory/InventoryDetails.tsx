@@ -3008,6 +3008,26 @@ return vm?.isCluster ?? false
     </Box>
   )
 
+  let kubernetesPanel: React.ReactNode = null
+
+  if (selection?.type === 'kubernetes-root') {
+    kubernetesPanel = (
+      <Box sx={{ p: 2.5, height: '100%', overflow: 'auto' }}>
+        <KubernetesDashboard onClusterClick={(sel) => onSelect?.(sel)} onClustersChanged={onRefresh} />
+      </Box>
+    )
+  } else if (selection?.type === 'kubernetes-cluster') {
+    kubernetesPanel = (
+      <Box sx={{ height: '100%', overflow: 'hidden' }}>
+        <ClusterExplorer
+          clusterId={selection.id}
+          initialView={selection.view}
+          onBack={() => onSelect?.({ type: 'kubernetes-root', id: 'kubernetes-root' })}
+        />
+      </Box>
+    )
+  }
+
   return (
     <Box sx={{ p: selection && selection.type !== 'root' && !selection.type.endsWith('-root') ? 2.5 : 0, width: '100%', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', fontSize: 13, '& .MuiTypography-body2': { fontSize: '13px !important', fontWeight: '400 !important' }, '& .MuiTypography-body1': { fontSize: '13px !important' }, '& .MuiTypography-caption': { fontSize: '11px !important' } }}>
       {progress}
@@ -3058,19 +3078,7 @@ return vm?.isCluster ?? false
             onHostClick={(sel) => onSelect?.(sel)}
           />
         </Box>
-      ) : selection?.type === 'kubernetes-root' ? (
-        <Box sx={{ p: 2.5, height: '100%', overflow: 'auto' }}>
-          <KubernetesDashboard onClusterClick={(sel) => onSelect?.(sel)} onClustersChanged={onRefresh} />
-        </Box>
-      ) : selection?.type === 'kubernetes-cluster' ? (
-        <Box sx={{ height: '100%', overflow: 'hidden' }}>
-          <ClusterExplorer
-            clusterId={selection.id}
-            initialView={selection.view}
-            onBack={() => onSelect?.({ type: 'kubernetes-root', id: 'kubernetes-root' })}
-          />
-        </Box>
-      ) :
+      ) : kubernetesPanel ?? (
 
       /* Quand sélection root et mode tree: afficher vue hiérarchique collapsable */
       selection?.type === 'root' && viewMode === 'tree' ? (
@@ -3322,7 +3330,7 @@ return vm?.isCluster ?? false
             )}
           </>
         )
-      ) : null}
+      ) : null)}
 
       {selection && data ? (
         /* Scrolls when the header and summary leave the tabs too little room.

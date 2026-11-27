@@ -12,6 +12,14 @@ const ANNOTATION_NOISE = [
 /** Lines compared at most per side; past it the diff is cut and flagged. */
 export const MAX_DIFF_LINES = 2000
 
+/** Row type of a paired removed/added line: both sides present means a change. */
+function pairType(left: string | undefined, right: string | undefined): DiffRowType {
+  if (left !== undefined && right !== undefined) return 'changed'
+  if (left !== undefined) return 'removed'
+
+  return 'added'
+}
+
 export function normalizeForCompare(yamlText: string): string {
   let obj: any
   try {
@@ -82,7 +90,7 @@ export function diffLines(leftText: string, rightText: string): { rows: DiffRow[
     for (let x = 0; x < len; x++) {
       const left = removed[x]
       const right = added[x]
-      rows.push({ type: left !== undefined && right !== undefined ? 'changed' : left !== undefined ? 'removed' : 'added', left, right })
+      rows.push({ type: pairType(left, right), left, right })
     }
   }
   return { rows, truncated, changes: rows.filter(r => r.type !== 'same').length }

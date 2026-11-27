@@ -65,7 +65,7 @@ export function ClusterExplorer({
   // False once the explorer unmounts, so a background drain loop stops touching state.
   const drainAliveRef = useRef(true)
   useEffect(() => { drainAliveRef.current = true; return () => { drainAliveRef.current = false } }, [])
-  // Node names with a drain loop in flight — prevents a second concurrent loop.
+  // Node names with a drain loop in flight - prevents a second concurrent loop.
   const drainingRef = useRef<Set<string>>(new Set())
   // Follow tree-driven deep-links: reset to the requested kind (or overview)
   // and close any open drawer/YAML when the incoming selection changes (the
@@ -123,7 +123,7 @@ export function ClusterExplorer({
       .then((d) => {
         if (cancelled || !d?.items) return
         setNamespaces(
-          (d.items as ResourceListItem[]).map((i) => i.name).filter(Boolean).sort(),
+          (d.items as ResourceListItem[]).map((i) => i.name).filter(Boolean).sort((a, b) => a.localeCompare(b)),
         )
       })
       .catch(() => { /* selector falls back to All namespaces only */ })
@@ -208,7 +208,7 @@ export function ClusterExplorer({
     { paused },
   )
   // `refresh` closes over the current view's kind, so a long-running background
-  // drain must call the LATEST one (via ref) — never the one captured at confirm
+  // drain must call the LATEST one (via ref) - never the one captured at confirm
   // time, which would refetch node data into whatever view the user navigated to.
   const refreshRef = useRef(refresh)
   useEffect(() => { refreshRef.current = refresh }, [refresh])
@@ -217,33 +217,34 @@ export function ClusterExplorer({
 
   // For the Nodes/Pods tables, merge live CPU/RAM utilization into each row's
   // summary (nodes keyed by name; pods by namespace/name).
-  const displayItems = kind?.apiKind === 'node'
-    ? items.map((it) => {
-        const m = nodeMetrics[it.name]
-        const pc = podCounts[it.name]
-        return {
-          ...it,
-          summary: {
-            ...it.summary,
-            cpuPct: m ? String(m.cpuPct) : '',
-            memPct: m ? String(m.memPct) : '',
-            pods: pc != null ? String(pc) : '',
-          },
-        }
-      })
-    : kind?.apiKind === 'pod'
-    ? items.map((it) => {
-        const m = podMetrics[`${it.namespace ?? ''}/${it.name}`]
-        return {
-          ...it,
-          summary: {
-            ...it.summary,
-            cpuPct: m ? String(m.cpuPct) : '',
-            memPct: m ? String(m.memPct) : '',
-          },
-        }
-      })
-    : items
+  let displayItems = items
+  if (kind?.apiKind === 'node') {
+    displayItems = items.map((it) => {
+      const m = nodeMetrics[it.name]
+      const pc = podCounts[it.name]
+      return {
+        ...it,
+        summary: {
+          ...it.summary,
+          cpuPct: m ? String(m.cpuPct) : '',
+          memPct: m ? String(m.memPct) : '',
+          pods: pc != null ? String(pc) : '',
+        },
+      }
+    })
+  } else if (kind?.apiKind === 'pod') {
+    displayItems = items.map((it) => {
+      const m = podMetrics[`${it.namespace ?? ''}/${it.name}`]
+      return {
+        ...it,
+        summary: {
+          ...it.summary,
+          cpuPct: m ? String(m.cpuPct) : '',
+          memPct: m ? String(m.memPct) : '',
+        },
+      }
+    })
+  }
 
   // Derived header values
   const state: K8sHealthState | undefined = liveHealth?.state ?? cluster?.healthState

@@ -3,16 +3,16 @@
 // The library ships a `Metrics` class (dist/metrics.js) that wraps the
 // raw aggregated-API endpoint: GET /apis/metrics.k8s.io/v1beta1/nodes.
 // It accepts the KubeConfig instance and calls config.applyToFetchOptions()
-// internally, which in turn calls this.createAgent() — the very same method
+// internally, which in turn calls this.createAgent() - the very same method
 // we monkey-patch in buildKubeClient to inject our guarded SSRF-blocking
 // transport. So passing `built.kc` to `new Metrics(built.kc)` is sufficient;
 // no separate agent injection is needed.
 //
 // `Metrics.getNodeMetrics()` returns a NodeMetricsList where each item has:
-//   item.metadata.name      — node name
-//   item.timestamp          — RFC3339 sample time
-//   item.usage.cpu          — CPU usage string (e.g. "250m")
-//   item.usage.memory       — memory usage string (e.g. "512Mi")
+//   item.metadata.name      - node name
+//   item.timestamp          - RFC3339 sample time
+//   item.usage.cpu          - CPU usage string (e.g. "250m")
+//   item.usage.memory       - memory usage string (e.g. "512Mi")
 //
 // Quantity parsing: the library does NOT export a quantity parser. We use the
 // same logic as the Go side: cpu strings ending in "m" are millicores; bare
@@ -53,7 +53,7 @@ export function parseCpuMillis(raw: string): number {
 /** Parse a Kubernetes memory quantity string to bytes (integer). */
 export function parseMemBytes(raw: string): number {
   if (!raw) return 0
-  // IEC (Ki, Mi, Gi, …) — must check before SI to avoid "M" matching "Mi"
+  // IEC (Ki, Mi, Gi, …) - must check before SI to avoid "M" matching "Mi"
   for (const [suffix, mult] of Object.entries(IEC_SUFFIXES)) {
     if (raw.endsWith(suffix)) return Math.floor(Number(raw.slice(0, -suffix.length)) * mult)
   }
@@ -83,7 +83,7 @@ export function classifyMetricsError(err: unknown): K8sErrorCode {
 }
 
 // ---------------------------------------------------------------------------
-// Core join logic (pure, no I/O — easily unit-testable)
+// Core join logic (pure, no I/O - easily unit-testable)
 // ---------------------------------------------------------------------------
 
 export interface RawNodeMetric {

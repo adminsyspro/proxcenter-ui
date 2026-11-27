@@ -3,6 +3,8 @@ export const runtime = 'nodejs'
 import { NextResponse } from 'next/server'
 import { requireK8sProvision } from '@/lib/k8s/requireK8sProvision'
 import { resolveStrictTenant } from '@/lib/k8s/strictTenant'
+import { requireProvisionTarget } from '@/lib/k8s/provisionAccess'
+import { listClusters } from '@/lib/k8s/repository'
 import { startProvision, type ProvisionRequest } from '@/lib/k8s/provisionOrchestrator'
 import { orchestratorFailure, failureBody } from '@/lib/k8s/provision/orchestratorStatus'
 import { audit } from '@/lib/audit'
@@ -24,6 +26,15 @@ async function handlePost(req: Request) {
     !Array.isArray(controlPlane) || controlPlane.length === 0
   ) {
     return NextResponse.json({ error: 'clusterName, connectionId, controlPlane required' }, { status: 400 })
+  }
+
+  const target = await requireProvisionTarget(tenant.tenantId, connectionId, 'create')
+  if (target) return target
+
+  // The cluster is registered under this name once deployed: refuse now
+  // rather than after the VMs are built.
+  if ((await listClusters(tenant.tenantId)).some((c: any) => c.name === clusterName)) {
+    return NextResponse.json({ error: 'cluster_name_taken' }, { status: 409 })
   }
 
   const distro: string = body?.distro

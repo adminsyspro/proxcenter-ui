@@ -33,9 +33,8 @@ export function WorkloadCard({ data, selected }: { data: WorkloadCardData; selec
   const bgUnhealthy = isDark ? 'rgba(244,67,54,0.08)' : 'rgba(244,67,54,0.05)'
   const borderUnhealthy = isDark ? 'rgba(244,67,54,0.4)' : 'rgba(244,67,54,0.3)'
   const bgNormal = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'
-  const borderNormal = selected
-    ? theme.palette.primary.main
-    : isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'
+  const borderIdle = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'
+  const borderNormal = selected ? theme.palette.primary.main : borderIdle
 
   const podLine = typeof data.podCount === 'number'
     ? `${data.healthyCount ?? 0}/${data.podCount} ${t('card.ready')}`

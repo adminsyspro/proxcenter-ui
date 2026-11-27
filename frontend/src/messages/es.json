@@ -16618,7 +16618,8 @@
       "confirm": "¿Quitar este clúster de ProxCenter? El clúster en sí no se modifica.",
       "destroyNodes": "{count, plural, =0 {Destruir también las VM de los nodos en Proxmox} one {Destruir también la VM del nodo en Proxmox} other {Destruir también las # VM de los nodos en Proxmox}}",
       "destroyNodesWarn": "Esto elimina de forma permanente las VM del clúster y sus discos en Proxmox. No se puede deshacer.",
-      "destroyFailed": "No se han podido destruir algunas VM de nodos; el clúster se ha conservado. Compruebe los nodos y vuelva a intentarlo."
+      "destroyFailed": "No se han podido destruir algunas VM de nodos; el clúster se ha conservado. Compruebe los nodos y vuelva a intentarlo.",
+      "destroyRefused": "No se destruyó ninguna VM: estas VM ya no son los nodos con los que se desplegó el clúster (renombradas o VMID reutilizado). El clúster se conserva."
     },
     "explore": "Explorar el clúster",
     "explorer": {
@@ -17006,7 +17007,8 @@
         "kubeadmChip": "Calico / Cilium",
         "cniSelect": "Red de contenedores (CNI)",
         "podCidr": "CIDR de la red de pods",
-        "kubeadmHaNote": "kubeadm necesita una IP libre dedicada en la subred de los nodos como IP virtual del plano de control (kube-vip, modo ARP). La indicará en el paso Red. Con 3 o 5 planos de control, tanto etcd como el punto de acceso de la API tienen alta disponibilidad."
+        "kubeadmHaNote": "kubeadm necesita una IP libre dedicada en la subred de los nodos como IP virtual del plano de control (kube-vip, modo ARP). La indicará en el paso Red. Con 3 o 5 planos de control, tanto etcd como el punto de acceso de la API tienen alta disponibilidad.",
+        "rke2Cni": "CNI Canal"
       },
       "topology": {
         "cpCount": "Nodos del plano de control",
@@ -17036,7 +17038,8 @@
         "summary": "Revise la configuración del clúster antes de desplegar",
         "deployNow": "Desplegar ahora",
         "deployFailed": "El despliegue ha fallado",
-        "nodes": "{cp, plural, one {# nodo del plano de control} other {# nodos del plano de control}}, {workers, plural, =0 {ningún nodo de trabajo} one {# nodo de trabajo} other {# nodos de trabajo}}"
+        "nodes": "{cp, plural, one {# nodo del plano de control} other {# nodos del plano de control}}, {workers, plural, =0 {ningún nodo de trabajo} one {# nodo de trabajo} other {# nodos de trabajo}}",
+        "vms": "Máquinas virtuales"
       },
       "progress": {
         "noRun": "No hay ninguna ejecución de aprovisionamiento que mostrar",
@@ -17063,7 +17066,8 @@
         "openCluster": "Abrir el clúster",
         "showLogs": "Mostrar los registros",
         "hideLogs": "Ocultar los registros",
-        "waitingForLogs": "Esperando los registros..."
+        "waitingForLogs": "Esperando los registros...",
+        "nameTaken": "Ya hay un clúster registrado con este nombre: elija otro."
       },
       "error": {
         "connection_busy": "Ya hay otro despliegue de Kubernetes en curso en este clúster de Proxmox. Espere a que termine.",
@@ -17075,7 +17079,53 @@
         "generic": "No se ha podido iniciar el despliegue.",
         "cidrInvalid": "{cidr} no es un rango válido (forma esperada: 10.244.0.0/16).",
         "cidrOverlapNodes": "El rango {cidr} se solapa con la red de los nodos ({nodes}). Elija otro rango.",
-        "cidrOverlapEach": "Los rangos de pods y de servicios se solapan."
+        "cidrOverlapEach": "Los rangos de pods y de servicios se solapan.",
+        "cluster_name_taken": "Ya hay un clúster registrado con este nombre: elija otro."
+      },
+      "validation": {
+        "snippetRequired": "El almacén de snippets es obligatorio",
+        "osImageUrlRequired": "La URL de la imagen del sistema es obligatoria",
+        "osImageChecksumRequired": "La suma de comprobación de la imagen es obligatoria",
+        "osImageChecksumFormat": "La suma de comprobación de la imagen debe ser un SHA-256 hexadecimal de 64 caracteres",
+        "clusterNameRequired": "El nombre del clúster es obligatorio",
+        "connectionRequired": "La conexión de Proxmox es obligatoria",
+        "nodeRequired": "El nodo de Proxmox es obligatorio",
+        "imageDatastoreRequired": "El almacén de imágenes es obligatorio",
+        "vmDatastoreRequired": "El almacén de las VM es obligatorio",
+        "bridgeRequired": "El puente de red es obligatorio",
+        "gatewayRequired": "La puerta de enlace es obligatoria",
+        "dnsRequired": "Se necesita al menos un servidor DNS",
+        "talosVersionRequired": "La versión de Talos es obligatoria",
+        "kubernetesVersionRequired": "La versión de Kubernetes es obligatoria",
+        "schematicRequired": "El ID de schematic es obligatorio",
+        "k3sVersionRequired": "La versión de k3s es obligatoria",
+        "rke2VersionRequired": "La versión de RKE2 es obligatoria",
+        "kubernetesVersionPrefix": "La versión de Kubernetes no debe empezar por «v» (por ejemplo 1.34.9)",
+        "cniInvalid": "El CNI debe ser Calico o Cilium",
+        "vipRequired": "La IP virtual del plano de control es obligatoria",
+        "vipInvalid": "La IP virtual del plano de control debe ser una dirección IPv4 válida",
+        "distroRequired": "Elija una distribución de Kubernetes",
+        "controlPlaneRequired": "Se necesita al menos un nodo del plano de control",
+        "controlPlaneCount": "El número de nodos del plano de control debe ser 1 o un número impar mayor o igual que 3",
+        "controlPlaneCores": "El plano de control necesita al menos 1 núcleo",
+        "controlPlaneMemory": "El plano de control necesita al menos 2048 MiB de memoria",
+        "controlPlaneDisk": "El plano de control necesita al menos 10 GiB de disco",
+        "workerCores": "Los nodos de trabajo necesitan al menos 1 núcleo",
+        "workerMemory": "Los nodos de trabajo necesitan al menos 2048 MiB de memoria",
+        "workerDisk": "Los nodos de trabajo necesitan al menos 10 GiB de disco",
+        "rangesOverlap": "Las redes de pods y de servicios se solapan",
+        "nodeIpMissing": "Cada nodo debe tener una dirección IP",
+        "nodeIpInvalid": "Cada IP de nodo debe ser una dirección IPv4 válida",
+        "nodeIpGateway": "Una IP de nodo no puede ser la de la puerta de enlace",
+        "nodeIpDuplicate": "Las IP de los nodos deben ser únicas",
+        "vmidDuplicate": "Los VMID de los nodos deben ser únicos",
+        "vipGateway": "La IP virtual del plano de control no puede ser la de la puerta de enlace",
+        "vipNodeIp": "La IP virtual del plano de control no puede ser la IP de un nodo",
+        "clusterNameFormat": "El nombre del clúster debe ser un nombre DNS válido (minúsculas, cifras y guiones, empezar y terminar por letra o cifra, 63 caracteres como máximo)",
+        "podCidrInvalid": "La red de pods debe ser un rango IPv4 válido (por ejemplo 10.244.0.0/16)",
+        "serviceCidrInvalid": "La red de servicios debe ser un rango IPv4 válido (por ejemplo 10.96.0.0/16)",
+        "podCidrOverlapNodes": "La red de pods {cidr} se solapa con la red de los nodos {nodes}",
+        "serviceCidrOverlapNodes": "La red de servicios {cidr} se solapa con la red de los nodos {nodes}"
       }
     }
   }

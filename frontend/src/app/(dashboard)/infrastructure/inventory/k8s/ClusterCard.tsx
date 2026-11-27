@@ -49,6 +49,17 @@ export function healthDotColor(state?: K8sHealthState): string {
   }
 }
 
+/** Colour of the "ready/total nodes" figure: green all ready, red none, orange some. */
+function nodesReadyColor(ready?: number | null, total?: number | null): string | undefined {
+  const hasTotal = typeof total === 'number' && total > 0
+  if (!hasTotal) return undefined
+  const readyCount = ready ?? 0
+  if (readyCount === total) return '#4caf50'
+  if (readyCount === 0) return '#f44336'
+
+  return '#ff9800'
+}
+
 /** Compact, locale-agnostic "checked N ago" relative time. Reused by ClusterDetail. */
 export function formatChecked(iso?: string | null): string {
   if (!iso) return ''
@@ -70,7 +81,7 @@ type Props = {
   /** Live enrichment, fetched once by the dashboard and passed down. */
   util?: { cpuPct: number; memPct: number } | null
   pods?: { count: number; truncated: boolean } | null
-  /** Delete — shown only when provided (manage perm). */
+  /** Delete - shown only when provided (manage perm). */
   onDelete?: () => void
   /** Manual health re-check: button shown only when provided (wired by the dashboard). */
   onRecheck?: (id: string) => void
@@ -130,10 +141,7 @@ export default function ClusterCard({ cluster, onClick, util, pods, onDelete, on
   const checked = formatChecked(cluster.lastHealthAt)
   const distroVersion = [cluster.distro, cluster.version].filter(Boolean).join(' · ')
 
-  const nodesColor =
-    typeof total === 'number' && total > 0
-      ? ((ready ?? 0) === total ? '#4caf50' : (ready ?? 0) === 0 ? '#f44336' : '#ff9800')
-      : undefined
+  const nodesColor = nodesReadyColor(ready, total)
   return (
     <Card variant="outlined">
       <Box sx={{ display: 'flex', alignItems: 'center' }}>

@@ -10,6 +10,10 @@ vi.mock('@/lib/k8s/requireK8sProvision', () => ({ requireK8sProvision: (...a: an
 vi.mock('@/lib/k8s/strictTenant', () => ({ resolveStrictTenant: (...a: any[]) => resolveStrictTenantMock(...a) }))
 vi.mock('@/lib/k8s/provisionOrchestrator', () => ({ startProvision: (...a: any[]) => startProvisionMock(...a) }))
 vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => auditMock(...a) }))
+const provisionTargetMock = vi.fn()
+const listClustersMock = vi.fn()
+vi.mock('@/lib/k8s/repository', () => ({ listClusters: (...a: any[]) => listClustersMock(...a) }))
+vi.mock('@/lib/k8s/provisionAccess', () => ({ requireProvisionTarget: (...a: any[]) => provisionTargetMock(...a) }))
 
 const validBody = {
   clusterName: 'demo',
@@ -37,6 +41,8 @@ const validBody = {
 }
 
 beforeEach(() => {
+  listClustersMock.mockReset().mockResolvedValue([{ id: 'x', name: 'other' }])
+  provisionTargetMock.mockReset().mockResolvedValue(null)
   requireK8sProvisionMock.mockReset().mockResolvedValue(null)
   resolveStrictTenantMock.mockReset().mockResolvedValue({ ok: true, tenantId: 't1' })
   startProvisionMock.mockReset().mockResolvedValue({ ok: true, value: { runId: 'run-1', status: 'queued' } })
@@ -116,6 +122,15 @@ describe('POST /api/v1/k8s/clusters/provision', () => {
     const res = await callRoute(POST, { body: validBody })
     expect(res.status).toBe(409)
     expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'failure' }))
+  })
+
+  it('checks the caller may create VMs on the target connection before anything reaches the orchestrator', async () => {
+    provisionTargetMock.mockResolvedValue(new Response(JSON.stringify({ error: 'connection_not_found' }), { status: 404 }))
+    const POST = (await import('./route')).POST
+    const res = await callRoute(POST, { body: validBody })
+    expect(res.status).toBe(404)
+    expect(provisionTargetMock).toHaveBeenCalledWith('t1', validBody.connectionId, 'create')
+    expect(startProvisionMock).not.toHaveBeenCalled()
   })
 
   it('answers a refusal with the code the UI translates, not the orchestrator text', async () => {
@@ -231,5 +246,13 @@ describe('POST /api/v1/k8s/clusters/provision', () => {
     const res = await callRoute(POST, { body: kubeadmBody })
     expect(res.status).toBe(202)
     expect(startProvisionMock.mock.calls[0][0]).toMatchObject({ distro: 'kubeadm', controlPlaneVip: '10.17.17.108', snippetDatastore: 'local' })
+  })
+
+  it('409 when a cluster of the tenant already holds the name, before anything is deployed', async () => {
+    listClustersMock.mockResolvedValue([{ id: 'x', name: validBody.clusterName }])
+    const res = await callRoute((await import('./route')).POST, { body: validBody })
+    expect(res.status).toBe(409)
+    expect(await readJson(res)).toEqual({ error: 'cluster_name_taken' })
+    expect(startProvisionMock).not.toHaveBeenCalled()
   })
 })

@@ -13,7 +13,7 @@ import {
   Typography
 } from '@mui/material'
 
-import { pollClusterHealthUntilResolved } from '@/lib/k8s/clusterHealthStatus'
+import { integrationState, pollClusterHealthUntilResolved } from '@/lib/k8s/clusterHealthStatus'
 import { deriveProvisionSteps, type ProvisionStepState } from '@/lib/k8s/provisionSteps'
 
 interface ProvisionProgressProps {
@@ -201,8 +201,7 @@ export default function ProvisionProgress({ runId, clusterName, connectionId, on
       try {
         const res = await fetch(`/api/v1/k8s/clusters/provision/${runId}/register`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clusterName, connectionId })
+          // The route reads the name and the connection from the run itself.
         })
         const body = await res.json().catch(() => ({}))
         if (!mountedRef.current) return
@@ -216,13 +215,18 @@ export default function ProvisionProgress({ runId, clusterName, connectionId, on
 
         // Raced: our poll saw `completed` but the register route's own read of
         // the run is not there yet. Retry once after a short delay.
+        if (res.status === 409 && body?.error === 'cluster_name_taken') {
+          setRegistering(false)
+          setRegisterError(t('nameTaken'))
+          return
+        }
         if (res.status === 409 && attempt === 0) {
           setTimeout(() => attemptRegister(1), 2000)
           return
         }
 
         setRegistering(false)
-        setRegisterError(body?.error || t('registerFailed'))
+        setRegisterError(t('registerFailed'))
       } catch {
         if (mountedRef.current) {
           setRegistering(false)
@@ -243,18 +247,23 @@ export default function ProvisionProgress({ runId, clusterName, connectionId, on
     if (!clusterId || integrationStartedRef.current) return
     integrationStartedRef.current = true
     setIntegrating(true)
+    // Every VM the run deployed: the cluster is only integrated once each of
+    // them has joined and is ready, not when the first control plane answers.
+    const expectedNodes = outputs?.nodes?.length ?? 0
 
     const fetchState = async (id: string): Promise<string | null> => {
       const res = await fetch(`/api/v1/k8s/clusters/${id}?refresh=1`, { cache: 'no-store' })
       if (!res.ok) return null
       const body = await res.json()
-      return body?.health?.state ?? body?.cluster?.healthState ?? null
+      return integrationState(body?.health ?? null, body?.cluster?.healthState ?? null, expectedNodes)
     }
 
     // pollClusterHealthUntilResolved never throws; finally covers both outcomes.
-    pollClusterHealthUntilResolved(clusterId, { fetchState }).finally(() => {
+    // Workers join after the run ends: up to ten minutes for all of them.
+    pollClusterHealthUntilResolved(clusterId, { fetchState, timeoutMs: 600_000 }).finally(() => {
       if (mountedRef.current) setIntegrating(false)
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clusterId])
 
   // Surface the retained logs by default when a run fails (still toggleable).

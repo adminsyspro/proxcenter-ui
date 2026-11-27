@@ -27,7 +27,6 @@ export function buildK8sTopologyGraph(data: K8sTopologyData): { nodes: Node[]; e
   // ---- Workload region ----
   // Build one appGroup parent per group + its children
   const groupBoxSizes: Array<{ id: string; width: number; height: number }> = []
-  const groupNodeMap = new Map<string, Node>() // groupKey -> parent node (position TBD)
 
   for (const group of data.groups) {
     const groupId = `appGroup-${group.key}`
@@ -122,7 +121,6 @@ export function buildK8sTopologyGraph(data: K8sTopologyData): { nodes: Node[]; e
       },
     }
 
-    groupNodeMap.set(group.key, parentNode)
     allNodes.push(parentNode)
     allNodes.push(...laidOutChildren)
   }

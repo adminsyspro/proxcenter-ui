@@ -52,92 +52,99 @@ function isSha256Hex(value: string): boolean {
 // version field (extracted so the third copy does not trip the Sonar
 // new-code duplication gate). Push order preserved from the original
 // branches: snippet datastore, image URL, checksum.
-function cloudImageErrors(state: WizardState): string[] {
-  const errors: string[] = []
-  if (!state.snippetDatastore) errors.push('Snippet datastore is required')
-  if (!state.osImageUrl) errors.push('OS image URL is required')
+function cloudImageErrors(state: WizardState): ValidationIssue[] {
+  const errors: ValidationIssue[] = []
+  if (!state.snippetDatastore) errors.push(issue('snippetRequired'))
+  if (!state.osImageUrl) errors.push(issue('osImageUrlRequired'))
   if (!state.osImageChecksum) {
-    errors.push('OS image checksum is required')
+    errors.push(issue('osImageChecksumRequired'))
   } else if (!isSha256Hex(state.osImageChecksum)) {
-    errors.push('OS image checksum must be a 64-character SHA-256 hex string')
+    errors.push(issue('osImageChecksumFormat'))
   }
   return errors
 }
 
-export function validateProvision(state: WizardState): string[] {
-  const errors: string[] = []
+/**
+ * One problem with the wizard state: a key under
+ * kubernetes.provision.validation and the values its message takes.
+ */
+export interface ValidationIssue { key: string; values?: Record<string, string | number> }
+
+function issue(key: string, values?: Record<string, string | number>): ValidationIssue {
+  return values ? { key, values } : { key }
+}
+
+export function validateProvision(state: WizardState): ValidationIssue[] {
+  const errors: ValidationIssue[] = []
 
   if (!state.clusterName) {
-    errors.push('Cluster name is required')
+    errors.push(issue('clusterNameRequired'))
   } else if (!isValidClusterName(state.clusterName)) {
-    errors.push(
-      'Cluster name must be a valid DNS-1123 label (lowercase letters, digits, and hyphens; ' +
-        'must start and end with a letter or digit; max 63 characters)',
-    )
+    errors.push(issue('clusterNameFormat'))
   }
 
-  if (!state.connectionId) errors.push('Proxmox connection is required')
-  if (!state.pveNode) errors.push('Proxmox node is required')
-  if (!state.imageDatastore) errors.push('Image datastore is required')
-  if (!state.vmDatastore) errors.push('VM datastore is required')
-  if (!state.bridge) errors.push('Network bridge is required')
-  if (!state.gateway) errors.push('Gateway is required')
-  if (!state.dns || state.dns.length === 0) errors.push('At least one DNS server is required')
+  if (!state.connectionId) errors.push(issue('connectionRequired'))
+  if (!state.pveNode) errors.push(issue('nodeRequired'))
+  if (!state.imageDatastore) errors.push(issue('imageDatastoreRequired'))
+  if (!state.vmDatastore) errors.push(issue('vmDatastoreRequired'))
+  if (!state.bridge) errors.push(issue('bridgeRequired'))
+  if (!state.gateway) errors.push(issue('gatewayRequired'))
+  if (!state.dns || state.dns.length === 0) errors.push(issue('dnsRequired'))
   // Distro dispatch on a plain string (never a discriminated union; the
   // repo tsconfig has strict:false where union narrowing is unreliable).
   if (state.distro === 'talos') {
-    if (!state.talosVersion) errors.push('Talos version is required')
-    if (!state.kubernetesVersion) errors.push('Kubernetes version is required')
-    if (!state.schematicId) errors.push('Schematic ID is required')
+    if (!state.talosVersion) errors.push(issue('talosVersionRequired'))
+    if (!state.kubernetesVersion) errors.push(issue('kubernetesVersionRequired'))
+    if (!state.schematicId) errors.push(issue('schematicRequired'))
   } else if (state.distro === 'k3s') {
-    if (!state.k3sVersion) errors.push('k3s version is required')
+    if (!state.k3sVersion) errors.push(issue('k3sVersionRequired'))
     errors.push(...cloudImageErrors(state))
   } else if (state.distro === 'rke2') {
-    if (!state.rke2Version) errors.push('rke2 version is required')
+    if (!state.rke2Version) errors.push(issue('rke2VersionRequired'))
     errors.push(...cloudImageErrors(state))
   } else if (state.distro === 'kubeadm') {
     if (!state.kubeadmVersion) {
-      errors.push('Kubernetes version is required')
+      errors.push(issue('kubernetesVersionRequired'))
     } else if (state.kubeadmVersion.startsWith('v') || state.kubeadmVersion.startsWith('V')) {
       // The backend handler rejects a v-prefixed version outright (kubeadm
       // package versions are bare, e.g. 1.34.9), so surface it here too.
-      errors.push('Kubernetes version must not start with "v" (e.g. 1.34.9)')
+      errors.push(issue('kubernetesVersionPrefix'))
     }
     // An empty CNI is allowed: the backend defaults it to calico.
     if (state.cni && state.cni !== 'calico' && state.cni !== 'cilium') {
-      errors.push('CNI must be Calico or Cilium')
+      errors.push(issue('cniInvalid'))
     }
     if (!state.controlPlaneVip) {
-      errors.push('Control-plane VIP is required')
+      errors.push(issue('vipRequired'))
     } else if (!isValidIPv4(state.controlPlaneVip)) {
-      errors.push('Control-plane VIP must be a valid IPv4 address')
+      errors.push(issue('vipInvalid'))
     }
     errors.push(...cloudImageErrors(state))
   } else {
-    errors.push('A Kubernetes distribution must be selected')
+    errors.push(issue('distroRequired'))
   }
 
   const cpCount = state.controlPlane.length
   if (cpCount < 1) {
-    errors.push('At least one control-plane node is required')
+    errors.push(issue('controlPlaneRequired'))
   } else if (cpCount !== 1 && cpCount % 2 === 0) {
-    errors.push('Control-plane count must be 1 or an odd number >= 3')
+    errors.push(issue('controlPlaneCount'))
   }
 
   // CP sizing mirrors the backend's orDefault(v, def) rule: an omitted (zero)
   // field is backfilled with the CP default BEFORE the floor check, so
   // cpCores: 0 is accepted (backend substitutes the default), while an
   // explicit positive value below the floor is still rejected.
-  if ((state.cpCores || DEFAULT_CP_CORES) < MIN_CORES) errors.push('Control-plane cores must be at least 1')
-  if ((state.cpMemory || DEFAULT_CP_MEMORY) < MIN_MEMORY) errors.push('Control-plane memory must be at least 2048 MiB')
-  if ((state.cpDisk || DEFAULT_CP_DISK) < MIN_DISK) errors.push('Control-plane disk must be at least 10 GiB')
+  if ((state.cpCores || DEFAULT_CP_CORES) < MIN_CORES) errors.push(issue('controlPlaneCores'))
+  if ((state.cpMemory || DEFAULT_CP_MEMORY) < MIN_MEMORY) errors.push(issue('controlPlaneMemory'))
+  if ((state.cpDisk || DEFAULT_CP_DISK) < MIN_DISK) errors.push(issue('controlPlaneDisk'))
 
   // Worker sizing is validated with RAW values (no backfill) and only when
   // workers are present, matching the backend's Validate().
   if (state.workers.length > 0) {
-    if (state.workerCores < MIN_CORES) errors.push('Worker cores must be at least 1')
-    if (state.workerMemory < MIN_MEMORY) errors.push('Worker memory must be at least 2048 MiB')
-    if (state.workerDisk < MIN_DISK) errors.push('Worker disk must be at least 10 GiB')
+    if (state.workerCores < MIN_CORES) errors.push(issue('workerCores'))
+    if (state.workerMemory < MIN_MEMORY) errors.push(issue('workerMemory'))
+    if (state.workerDisk < MIN_DISK) errors.push(issue('workerDisk'))
   }
 
   // Pod and service ranges: valid, apart from each other and from the node
@@ -149,10 +156,9 @@ export function validateProvision(state: WizardState): string[] {
     subnetPrefix: state.subnetPrefix,
     nodeIps: [...state.controlPlane, ...state.workers].map(n => n.ip).filter(Boolean),
   })) {
-    const label = e.field === 'pod' ? 'Pod network' : 'Service network'
-    if (e.code === 'cidrInvalid') errors.push(`${label} CIDR must be a valid IPv4 CIDR (e.g. 10.244.0.0/16)`)
-    else if (e.code === 'cidrOverlapNodes') errors.push(`${label} ${e.cidr} overlaps the node network ${e.nodes}`)
-    else errors.push('Pod and service networks overlap')
+    if (e.code === 'cidrInvalid') errors.push(issue(e.field === 'pod' ? 'podCidrInvalid' : 'serviceCidrInvalid'))
+    else if (e.code === 'cidrOverlapNodes') errors.push(issue(e.field === 'pod' ? 'podCidrOverlapNodes' : 'serviceCidrOverlapNodes', { cidr: e.cidr, nodes: e.nodes }))
+    else errors.push(issue('rangesOverlap'))
   }
 
   const allNodes = [...state.controlPlane, ...state.workers]
@@ -177,21 +183,21 @@ export function validateProvision(state: WizardState): string[] {
     seenVmids.add(node.vmid)
   }
 
-  if (hasMissingIp) errors.push('Every control-plane and worker node must have an IP address')
-  if (hasInvalidIp) errors.push('Every node IP address must be a valid IPv4 address')
-  if (hasIpEqualsGateway) errors.push('A node IP address cannot be the same as the gateway')
-  if (duplicateIps.size > 0) errors.push('Node IP addresses must be unique')
-  if (duplicateVmids.size > 0) errors.push('Node vmid values must be unique')
+  if (hasMissingIp) errors.push(issue('nodeIpMissing'))
+  if (hasInvalidIp) errors.push(issue('nodeIpInvalid'))
+  if (hasIpEqualsGateway) errors.push(issue('nodeIpGateway'))
+  if (duplicateIps.size > 0) errors.push(issue('nodeIpDuplicate'))
+  if (duplicateVmids.size > 0) errors.push(issue('vmidDuplicate'))
 
   // kubeadm only: the VIP must be a FREE address. Same safe subset as the
   // node-IP checks above (no CIDR-containment math): not the gateway, not
   // any node IP. Well-formedness is already checked in the distro branch.
   if (state.distro === 'kubeadm' && state.controlPlaneVip) {
     if (state.gateway && state.controlPlaneVip === state.gateway) {
-      errors.push('Control-plane VIP cannot be the same as the gateway')
+      errors.push(issue('vipGateway'))
     }
     if (allNodes.some(n => n.ip === state.controlPlaneVip)) {
-      errors.push('Control-plane VIP cannot be one of the node IP addresses')
+      errors.push(issue('vipNodeIp'))
     }
   }
 

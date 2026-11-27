@@ -28,6 +28,7 @@ CREATE TABLE "kubernetes_clusters" (
     "credential_version" INTEGER NOT NULL DEFAULT 1,
     "credential_updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "proxmox_connection_id" TEXT,
+    "provisioning_run_id" TEXT,
     "version" TEXT,
     "health_state" "K8sHealthState" NOT NULL DEFAULT 'unknown',
     "health_detail" JSONB,

@@ -60,7 +60,8 @@ export function CompareDialog({
   }, [clusterId, kind.apiKind, base, others, otherKey])
 
   const diff = useMemo(() => (texts ? diffLines(texts.left, texts.right) : null), [texts])
-  const rows = diff ? (onlyChanges ? diff.rows.filter(r => r.type !== 'same') : diff.rows) : []
+  let rows = diff?.rows ?? []
+  if (diff && onlyChanges) rows = diff.rows.filter(r => r.type !== 'same')
   const label = (i: ResourceListItem) => (i.namespace ? `${i.namespace} / ${i.name}` : i.name)
 
   const cell = (text: string | undefined, bg: string | undefined) => (

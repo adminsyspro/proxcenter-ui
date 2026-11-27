@@ -52,3 +52,17 @@ export async function pollClusterHealthUntilResolved(
     await delay(intervalMs)
   }
 }
+
+/**
+ * Health of a freshly deployed cluster as the progress step reads it: still
+ * integrating while fewer nodes are ready than the run deployed.
+ */
+export function integrationState(
+  health: { state?: string; nodesReady?: number } | null,
+  storedState: string | null,
+  expectedNodes: number,
+): string | null {
+  const state = health?.state ?? storedState
+  if (state === 'healthy' && expectedNodes > 0 && (health?.nodesReady ?? 0) < expectedNodes) return 'integrating'
+  return state
+}

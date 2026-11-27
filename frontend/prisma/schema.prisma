@@ -2176,6 +2176,9 @@ model KubernetesCluster {
   credentialVersion     Int      @default(1) @map("credential_version")
   credentialUpdatedAt   DateTime @default(now()) @map("credential_updated_at")
   proxmoxConnectionId   String?  @map("proxmox_connection_id")
+  /// Orchestrator run that deployed the cluster (source deployed), torn down
+  /// with it so its working files and state do not outlive the cluster.
+  provisioningRunId     String?  @map("provisioning_run_id")
   version               String?
   healthState           K8sHealthState @default(unknown) @map("health_state")
   healthDetail          Json?    @map("health_detail")

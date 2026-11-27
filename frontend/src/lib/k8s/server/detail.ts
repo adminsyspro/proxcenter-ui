@@ -1,7 +1,7 @@
 /**
  * Per-kind K8s resource detail section builders.
  * Ports /internal/kubernetes/resourcedetail.go + the buildDetail base from resources.go.
- * Pure logic — no client calls. YAML is added by Task 6.
+ * Pure logic - no client calls. YAML is added by Task 6.
  */
 import type {
   ResourceDetail,
@@ -89,7 +89,7 @@ export function tableSection(
 export function selectorTable(sel: any): DetailSection | null {
   if (!sel) return null
   const rowsOut: string[][] = []
-  const keys = Object.keys(sel.matchLabels ?? {}).sort()
+  const keys = Object.keys(sel.matchLabels ?? {}).sort((a, b) => a.localeCompare(b))
   for (const k of keys) {
     rowsOut.push([k, '=', sel.matchLabels[k]])
   }
@@ -190,7 +190,7 @@ export function detailNamespace(ns: any): DetailSection[] {
   return [kvSection(sectionInfo, row('Phase', ns.status?.phase ?? ''))]
 }
 
-/** Returns volume type label only — no secret/configMap/projected details. */
+/** Returns volume type label only - no secret/configMap/projected details. */
 function volumeType(v: any): string {
   const vs = v
   if (vs.secret != null) return 'Secret'
@@ -377,7 +377,7 @@ export function detailService(s: any): DetailSection[] {
   if (portSec) secs.push(portSec)
 
   const selector: Record<string, string> = s.spec?.selector ?? {}
-  const selKeys = Object.keys(selector).sort()
+  const selKeys = Object.keys(selector).sort((a, b) => a.localeCompare(b))
   const selRows: string[][] = []
   for (const k of selKeys) {
     selRows.push([k, '=', selector[k]])
@@ -434,7 +434,7 @@ export function detailConfigMap(cm: any): DetailSection[] {
   const keys = [
     ...Object.keys(cm.data ?? {}),
     ...Object.keys(cm.binaryData ?? {}),
-  ].sort()
+  ].sort((a, b) => a.localeCompare(b))
   const rows: string[][] = keys.map(k => [k])
   const sec = tableSection(sectionDataKeys, ['key'], rows)
   if (sec) return [sec]
@@ -523,7 +523,7 @@ function containerState(s: any): string {
 
 /**
  * Assembles a ResourceDetail for any kind from a raw deserialized K8s object.
- * yaml is intentionally left as '' — Task 6 fills it via Task 3's sanitizer.
+ * yaml is intentionally left as '' - Task 6 fills it via Task 3's sanitizer.
  */
 export function buildDetailBase(kind: string, obj: any): ResourceDetail {
   const meta = obj.metadata ?? {}

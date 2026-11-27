@@ -6,11 +6,13 @@ import { requireK8sPermission } from '@/lib/k8s/requireK8sPermission'
 import { resolveStrictTenant } from '@/lib/k8s/strictTenant'
 import { sanitizeKubeconfig } from '@/lib/k8s/kubeconfig'
 import {
-  getClusterWithCredential, replaceCredential, updateMeta, persistHealth, deleteCluster, deleteClusterNodes,
+  getClusterWithCredential, replaceCredential, updateMeta, persistHealth, deleteCluster, deleteClusterNodes, getNodeMapping,
 } from '@/lib/k8s/repository'
 import { fetchHealth, invalidateClient } from '@/lib/k8s/orchestrator'
 import { destroyClusterNodes } from '@/lib/k8s/server/destroyClusterNodes'
 import { requireK8sProvision } from '@/lib/k8s/requireK8sProvision'
+import { requireProvisionTarget } from '@/lib/k8s/provisionAccess'
+import { destroyProvisionRun } from '@/lib/k8s/provisionOrchestrator'
 import { audit } from '@/lib/audit'
 import { withAudit } from '@/lib/audit/withAudit'
 
@@ -77,7 +79,11 @@ async function handleDelete(req: Request, ctx: Ctx) {
   const destroyingVms = destroyNodes && existing.row.source === 'deployed'
   if (destroyingVms) {
     const refused = await requireK8sProvision(); if (refused) return refused
-    const outcome = await destroyClusterNodes(tenant.tenantId, id)
+    // vm.delete on every Proxmox connection the cluster's VMs live on.
+    const connections = [...new Set((await getNodeMapping(tenant.tenantId, id)).map(n => n.connectionId))]
+    const refusal = (await Promise.all(connections.map(c => requireProvisionTarget(tenant.tenantId, c, 'delete')))).find(r => r !== null)
+    if (refusal) return refusal
+    const outcome = await destroyClusterNodes(tenant.tenantId, id, existing.row.name)
     if (!outcome.allOk) {
       // The cluster row and its node mapping stay, so the destroy can be retried.
       await audit({ action: 'delete', category: 'k8s', resourceType: 'kubernetesCluster', resourceId: id, resourceName: existing.row.name, status: 'failure', details: { error: 'node destruction failed', results: outcome.results } })
@@ -90,7 +96,14 @@ async function handleDelete(req: Request, ctx: Ctx) {
   await deleteClusterNodes(id)
   await deleteCluster(tenant.tenantId, id)
   await invalidateClient(id)
-  await audit({ action: 'delete', category: 'k8s', resourceType: 'kubernetesCluster', resourceId: id, resourceName: existing.row.name, status: 'success', details: { destroyedNodes: destroyingVms } })
+  // The VMs are gone: let the orchestrator tear down the run that deployed
+  // them, which also removes its working files (the VMs' SSH key, the join
+  // tokens) and its state. Best effort: the cluster is already deleted.
+  let runTornDown: boolean | undefined
+  if (destroyingVms && existing.row.provisioningRunId) {
+    runTornDown = (await destroyProvisionRun(existing.row.provisioningRunId)).ok
+  }
+  await audit({ action: 'delete', category: 'k8s', resourceType: 'kubernetesCluster', resourceId: id, resourceName: existing.row.name, status: 'success', details: { destroyedNodes: destroyingVms, runTornDown } })
   return NextResponse.json({ ok: true }, { status: 200 })
 }
 

@@ -101,7 +101,7 @@ export function projectNode(n: any): ResourceListItem {
       roles.push(k.slice('node-role.kubernetes.io/'.length))
     }
   }
-  roles.sort()
+  roles.sort((a, b) => a.localeCompare(b))
   it.summary['roles'] = roles.join(',')
   // Identity fields for VM-to-K8s-node correlation.
   const rawUuid: string = n.status?.nodeInfo?.systemUUID ?? ''

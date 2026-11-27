@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { validateProvision } from './validate'
+import { createTranslator } from 'next-intl'
+import en from '@/messages/en.json'
+import { validateProvision as validateIssues } from './validate'
+
+// The wizard shows each issue through the English messages; the assertions
+// below read the same text.
+const tr = createTranslator({ locale: 'en', messages: en, namespace: 'kubernetes.provision.validation' })
+const validateProvision = (state: Parameters<typeof validateIssues>[0]): string[] =>
+  validateIssues(state).map(i => tr(i.key as any, i.values as any))
 import { defaultWizardState } from './types'
 import type { WizardState, WizardNodeAddr } from './types'
 

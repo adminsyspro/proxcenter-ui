@@ -12,9 +12,12 @@ export interface ClusterUtil {
 }
 
 export function pct(used: number, alloc: number): number {
-  if (!(alloc > 0)) return 0
-  const p = Math.round((used / alloc) * 100)
-  return Math.max(0, Math.min(100, p))
+  // Written as a positive test so a NaN alloc also yields 0.
+  if (alloc > 0) {
+    const p = Math.round((used / alloc) * 100)
+    return Math.max(0, Math.min(100, p))
+  }
+  return 0
 }
 
 export function clusterUtilization(nodes: NodeUtilization[]): ClusterUtil {

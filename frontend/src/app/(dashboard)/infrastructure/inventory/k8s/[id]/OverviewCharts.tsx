@@ -237,11 +237,9 @@ export function OverviewCharts({ pods, nodeNames, podsTruncated, events, eventsE
 
       {/* Current warning events - full-width block (more room than a grid cell) */}
       <Card title={t('warningsTitle')} count={eventsError ? undefined : warnings.length}>
-        {eventsError ? (
-          <Empty label={t('forbidden')} />
-        ) : warnings.length === 0 ? (
-          <Empty label={t('noWarnings')} />
-        ) : (
+        {eventsError ? <Empty label={t('forbidden')} /> : null}
+        {!eventsError && warnings.length === 0 && <Empty label={t('noWarnings')} />}
+        {!eventsError && warnings.length > 0 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 320, overflowY: 'auto' }}>
             {warnings.map((w, i) => (
               <Box key={`${w.object}-${w.reason}-${i}`} sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>

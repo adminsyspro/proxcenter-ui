@@ -23,6 +23,12 @@ function isReachable(state?: K8sClusterRow['healthState']): boolean {
   return state === 'healthy' || state === 'degraded' || state === 'stale'
 }
 
+// Calls the parent's refresh callback; a rejected promise from it is ignored
+// so it never surfaces as an unhandled rejection.
+function notifyChanged(cb?: () => void | Promise<void>): void {
+  Promise.resolve(cb?.()).catch(() => {})
+}
+
 type Props = {
   onClusterClick?: (sel: InventorySelection) => void
   /** Notifies the parent that the cluster list changed (create/import/delete) so it can refresh the inventory tree. */
@@ -148,15 +154,16 @@ export default function KubernetesDashboard({ onClusterClick, onClustersChanged 
       if (res.ok) {
         setDeleteId(null)
         load()
-        void onClustersChanged?.()
+        notifyChanged(onClustersChanged)
       } else if (res.status === 409) {
-        // Partial destruction: the server kept the cluster and its node
-        // mapping so the destroy can be retried; name the VMs that failed.
+        // The server kept the cluster and its node mapping so the destroy can
+        // be retried; name the VMs that failed. When a VM was refused before
+        // anything was touched, the others are reported as kept.
         const body = await res.json().catch(() => null)
-        const failed: number[] = Array.isArray(body?.results)
-          ? body.results.filter((r: { status?: string }) => r?.status === 'error').map((r: { vmid: number }) => r.vmid)
-          : []
-        setDeleteError(t('kubernetes.delete.destroyFailed') + (failed.length > 0 ? ` (VMID: ${failed.join(', ')})` : ''))
+        const results: { status?: string; vmid: number }[] = Array.isArray(body?.results) ? body.results : []
+        const failed = results.filter(r => r?.status === 'error').map(r => r.vmid)
+        const key = results.some(r => r?.status === 'kept') ? 'kubernetes.delete.destroyRefused' : 'kubernetes.delete.destroyFailed'
+        setDeleteError(t(key) + (failed.length > 0 ? ` (VMID: ${failed.join(', ')})` : ''))
       } else {
         setDeleteError(t('common.error'))
       }
@@ -356,7 +363,7 @@ export default function KubernetesDashboard({ onClusterClick, onClustersChanged 
           onImported={() => {
             setImportOpen(false)
             load()
-            void onClustersChanged?.()
+            notifyChanged(onClustersChanged)
           }}
         />
       )}
@@ -368,7 +375,7 @@ export default function KubernetesDashboard({ onClusterClick, onClustersChanged 
             // The dialog stays open on its "cluster ready" panel; the user
             // closes it from there.
             load()
-            void onClustersChanged?.()
+            notifyChanged(onClustersChanged)
           }}
         />
       )}

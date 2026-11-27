@@ -6,7 +6,6 @@ import {
   Background,
   Controls,
   useReactFlow,
-  type Node,
   type Edge,
   type NodeMouseHandler,
 } from '@xyflow/react'

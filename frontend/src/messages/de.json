@@ -16202,7 +16202,8 @@
       "confirm": "Diesen Cluster aus ProxCenter entfernen? Der Cluster selbst wird nicht beeinflusst.",
       "destroyNodes": "{count, plural, =0 {Auch die Node-VMs auf Proxmox zerstören} one {Auch die # Node-VM auf Proxmox zerstören} other {Auch die # Node-VMs auf Proxmox zerstören}}",
       "destroyNodesWarn": "Dies löscht die Cluster-VMs und ihre Datenträger auf Proxmox endgültig. Nicht umkehrbar.",
-      "destroyFailed": "Einige Node-VMs konnten nicht zerstört werden; der Cluster wurde behalten. Nodes prüfen und erneut versuchen."
+      "destroyFailed": "Einige Node-VMs konnten nicht zerstört werden; der Cluster wurde behalten. Nodes prüfen und erneut versuchen.",
+      "destroyRefused": "Keine VM wurde gelöscht: Diese VMs sind nicht mehr die Nodes, mit denen der Cluster bereitgestellt wurde (umbenannt oder VMID wiederverwendet). Der Cluster bleibt erhalten."
     },
     "explore": "Cluster erkunden",
     "explorer": {
@@ -16590,7 +16591,8 @@
         "kubeadmChip": "Calico / Cilium",
         "cniSelect": "Container-Netzwerk (CNI)",
         "podCidr": "Pod-Netzwerk-CIDR",
-        "kubeadmHaNote": "kubeadm benötigt eine dedizierte freie IP im Node-Subnetz als virtuelle IP der Control Plane (kube-vip, ARP-Modus). Sie wird im Schritt Netzwerk eingegeben. Mit 3 oder 5 Control-Planes sind etcd und der API-Endpunkt hochverfügbar."
+        "kubeadmHaNote": "kubeadm benötigt eine dedizierte freie IP im Node-Subnetz als virtuelle IP der Control Plane (kube-vip, ARP-Modus). Sie wird im Schritt Netzwerk eingegeben. Mit 3 oder 5 Control-Planes sind etcd und der API-Endpunkt hochverfügbar.",
+        "rke2Cni": "Canal-CNI"
       },
       "topology": {
         "cpCount": "Control-Plane-Nodes",
@@ -16620,7 +16622,8 @@
         "summary": "Überprüfen Sie die Cluster-Konfiguration vor der Bereitstellung",
         "deployNow": "Jetzt bereitstellen",
         "deployFailed": "Bereitstellung fehlgeschlagen",
-        "nodes": "{cp, plural, one {# Control-Plane-Node} other {# Control-Plane-Nodes}}, {workers, plural, =0 {kein Worker} one {# Worker} other {# Worker}}"
+        "nodes": "{cp, plural, one {# Control-Plane-Node} other {# Control-Plane-Nodes}}, {workers, plural, =0 {kein Worker} one {# Worker} other {# Worker}}",
+        "vms": "Virtuelle Maschinen"
       },
       "progress": {
         "noRun": "Kein Bereitstellungslauf zum Anzeigen",
@@ -16647,7 +16650,8 @@
         "openCluster": "Cluster öffnen",
         "showLogs": "Logs anzeigen",
         "hideLogs": "Logs ausblenden",
-        "waitingForLogs": "Warten auf Logs..."
+        "waitingForLogs": "Warten auf Logs...",
+        "nameTaken": "Ein Cluster mit diesem Namen ist bereits registriert: Wählen Sie einen anderen Namen."
       },
       "error": {
         "connection_busy": "Auf diesem Proxmox-Cluster läuft bereits eine Kubernetes-Bereitstellung. Warten Sie, bis sie abgeschlossen ist.",
@@ -16659,7 +16663,53 @@
         "generic": "Die Bereitstellung konnte nicht gestartet werden.",
         "cidrInvalid": "{cidr} ist kein gültiger Bereich (erwartete Form: 10.244.0.0/16).",
         "cidrOverlapNodes": "Der Bereich {cidr} überschneidet sich mit dem Netzwerk der Nodes ({nodes}). Wählen Sie einen anderen Bereich.",
-        "cidrOverlapEach": "Die Bereiche für Pods und Services überschneiden sich."
+        "cidrOverlapEach": "Die Bereiche für Pods und Services überschneiden sich.",
+        "cluster_name_taken": "Ein Cluster mit diesem Namen ist bereits registriert: Wählen Sie einen anderen Namen."
+      },
+      "validation": {
+        "snippetRequired": "Snippet-Datenspeicher ist erforderlich",
+        "osImageUrlRequired": "Die URL des Betriebssystem-Images ist erforderlich",
+        "osImageChecksumRequired": "Die Image-Prüfsumme ist erforderlich",
+        "osImageChecksumFormat": "Die Image-Prüfsumme muss ein 64-stelliger SHA-256-Hexwert sein",
+        "clusterNameRequired": "Der Clustername ist erforderlich",
+        "connectionRequired": "Die Proxmox-Verbindung ist erforderlich",
+        "nodeRequired": "Der Proxmox-Node ist erforderlich",
+        "imageDatastoreRequired": "Der Image-Datenspeicher ist erforderlich",
+        "vmDatastoreRequired": "Der VM-Datenspeicher ist erforderlich",
+        "bridgeRequired": "Die Netzwerkbrücke ist erforderlich",
+        "gatewayRequired": "Das Gateway ist erforderlich",
+        "dnsRequired": "Mindestens ein DNS-Server ist erforderlich",
+        "talosVersionRequired": "Die Talos-Version ist erforderlich",
+        "kubernetesVersionRequired": "Die Kubernetes-Version ist erforderlich",
+        "schematicRequired": "Die Schematic-ID ist erforderlich",
+        "k3sVersionRequired": "Die k3s-Version ist erforderlich",
+        "rke2VersionRequired": "Die RKE2-Version ist erforderlich",
+        "kubernetesVersionPrefix": "Die Kubernetes-Version darf nicht mit „v“ beginnen (z. B. 1.34.9)",
+        "cniInvalid": "Das CNI muss Calico oder Cilium sein",
+        "vipRequired": "Die virtuelle IP der Control Plane ist erforderlich",
+        "vipInvalid": "Die virtuelle IP der Control Plane muss eine gültige IPv4-Adresse sein",
+        "distroRequired": "Wählen Sie eine Kubernetes-Distribution",
+        "controlPlaneRequired": "Mindestens ein Control-Plane-Node ist erforderlich",
+        "controlPlaneCount": "Die Anzahl der Control-Plane-Nodes muss 1 oder eine ungerade Zahl ab 3 sein",
+        "controlPlaneCores": "Die Control Plane braucht mindestens 1 Kern",
+        "controlPlaneMemory": "Die Control Plane braucht mindestens 2048 MiB Speicher",
+        "controlPlaneDisk": "Die Control Plane braucht mindestens 10 GiB Festplatte",
+        "workerCores": "Worker brauchen mindestens 1 Kern",
+        "workerMemory": "Worker brauchen mindestens 2048 MiB Speicher",
+        "workerDisk": "Worker brauchen mindestens 10 GiB Festplatte",
+        "rangesOverlap": "Die Pod- und Service-Netzwerke überschneiden sich",
+        "nodeIpMissing": "Jeder Node braucht eine IP-Adresse",
+        "nodeIpInvalid": "Jede Node-IP muss eine gültige IPv4-Adresse sein",
+        "nodeIpGateway": "Eine Node-IP darf nicht die des Gateways sein",
+        "nodeIpDuplicate": "Die IP-Adressen der Nodes müssen eindeutig sein",
+        "vmidDuplicate": "Die VMIDs der Nodes müssen eindeutig sein",
+        "vipGateway": "Die virtuelle IP der Control Plane darf nicht die des Gateways sein",
+        "vipNodeIp": "Die virtuelle IP der Control Plane darf keine Node-IP sein",
+        "clusterNameFormat": "Der Clustername muss ein gültiger DNS-Name sein (Kleinbuchstaben, Ziffern und Bindestriche, Anfang und Ende Buchstabe oder Ziffer, höchstens 63 Zeichen)",
+        "podCidrInvalid": "Das Pod-Netzwerk muss ein gültiger IPv4-Bereich sein (z. B. 10.244.0.0/16)",
+        "serviceCidrInvalid": "Das Service-Netzwerk muss ein gültiger IPv4-Bereich sein (z. B. 10.96.0.0/16)",
+        "podCidrOverlapNodes": "Das Pod-Netzwerk {cidr} überschneidet sich mit dem Node-Netzwerk {nodes}",
+        "serviceCidrOverlapNodes": "Das Service-Netzwerk {cidr} überschneidet sich mit dem Node-Netzwerk {nodes}"
       }
     }
   }

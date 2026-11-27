@@ -5,6 +5,10 @@ FROM postgres:16.16-alpine3.24
 # apk upgrade: the packages fixed in Alpine since the base image was built.
 # gosu goes: the base image's own entrypoint is its only user, and this image
 # starts Patroni through su-exec instead.
+# PACKAGES_REFRESH (the UTC day, passed by the CI) is only there to change
+# the cache key: a layer restored from the build cache would otherwise keep
+# the packages of the day it was first built, whatever Alpine fixed since.
+ARG PACKAGES_REFRESH
 RUN apk upgrade --no-cache && \
     apk add --no-cache python3 py3-pip py3-psycopg2 su-exec gettext && \
     pip3 install --break-system-packages patroni[etcd3]==4.0.4 && \

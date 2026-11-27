@@ -16344,7 +16344,8 @@
       },
       "topology": {
         "title": "Topologie"
-      }
+      },
+      "compareWith": "Vergleichen mit..."
     },
     "topology": {
       "title": "Topologie",
@@ -16465,6 +16466,75 @@
         "conflict": "Diese Revision ist bereits die aktuelle.",
         "generic": "Die Aktion ist fehlgeschlagen."
       }
+    },
+    "issues": {
+      "title": "Probleme",
+      "counts": "{critical} kritisch, {warning} Warnungen",
+      "empty": "Keine Probleme erkannt.",
+      "loading": "Wird geprüft...",
+      "severity": {
+        "critical": "Kritisch",
+        "warning": "Warnung"
+      },
+      "reason": {
+        "nodeNotReady": "Node nicht bereit",
+        "nodePressure": "Unter Druck: {detail}",
+        "nodeCordoned": "Gesperrt (cordon), hier werden keine neuen Pods geplant",
+        "crashLoop": "Absturzschleife (CrashLoopBackOff)",
+        "imagePull": "Image kann nicht abgerufen werden",
+        "oomKilled": "Wegen Speichermangel beendet (OOMKilled)",
+        "configError": "Container startet nicht (Konfigurationsfehler)",
+        "podFailed": "Pod fehlgeschlagen {detail}",
+        "evicted": "Vom Node verdrängt",
+        "unschedulable": "Kein Node kann ihn ausführen (Unschedulable)",
+        "pending": "Ausstehend",
+        "restarting": "{detail}-mal neu gestartet",
+        "workloadDown": "Kein Replikat bereit ({detail})",
+        "workloadDegraded": "Nicht alle Replikate bereit ({detail})",
+        "jobFailed": "Job fehlgeschlagen",
+        "pvcPending": "Volume-Anforderung nicht gebunden"
+      }
+    },
+    "compare": {
+      "title": "{name} vergleichen",
+      "with": "Vergleichen mit",
+      "onlyChanges": "Nur Unterschiede",
+      "noOther": "Keine andere Ressource dieser Art zum Vergleichen.",
+      "error": "Eine der beiden Ressourcen konnte nicht gelesen werden.",
+      "identical": "Kein Unterschied (von Kubernetes verwaltete Felder werden ignoriert).",
+      "changes": "{count, plural, one {# Zeile unterscheidet sich} other {# Zeilen unterscheiden sich}} (von Kubernetes verwaltete Felder werden ignoriert).",
+      "truncated": "Nur die ersten 2000 Zeilen werden verglichen.",
+      "close": "Schließen"
+    },
+    "history": {
+      "title": "Verlauf",
+      "filter": {
+        "all": "Alle",
+        "event": "Ereignisse",
+        "rollout": "Rollouts",
+        "action": "Aktionen"
+      },
+      "warningsOnly": "Nur Warnungen",
+      "retention": "Kubernetes behält Ereignisse etwa eine Stunde; Rollouts und ProxCenter-Aktionen bleiben.",
+      "empty": "Keine Einträge im Verlauf.",
+      "partial": "Ein Teil des Verlaufs konnte nicht gelesen werden (der importierten kubeconfig fehlen RBAC-Rechte).",
+      "error": "Der Verlauf konnte nicht gelesen werden.",
+      "rollout": "Revision {revision}: {from} zu {to}",
+      "failed": "(fehlgeschlagen)",
+      "by": "von {user}",
+      "action": {
+        "create": "In ProxCenter importiert",
+        "update": "Verbindungseinstellungen geändert",
+        "delete": "Gelöscht",
+        "cordon": "Gesperrt (cordon)",
+        "uncordon": "Sperre aufgehoben",
+        "drain": "Geleert (drain)",
+        "restart": "Neu gestartet",
+        "scale": "{count, plural, one {Auf # Replikat skaliert} other {Auf # Replikate skaliert}}",
+        "rollback": "Auf Revision {revision} zurückgesetzt"
+      },
+      "rolloutRestart": "Revision {revision}: Pods neu gestartet",
+      "rolloutConfig": "Revision {revision}: Pod-Einstellungen geändert, gleiche Images"
     }
   }
 }

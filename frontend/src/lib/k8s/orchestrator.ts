@@ -12,6 +12,7 @@ import {
   deletePod as _deletePod,
   type RestartableKind, type ScalableKind, type DeploymentRevision,
 } from './server/workloadOps'
+import { readClusterHistory, type TimelineEntry } from './server/timeline'
 import { setNodeCordon as _setNodeCordon, drainNode as _drainNode } from './server/nodeOps'
 import type { DrainResult } from './nodeDrain'
 
@@ -152,4 +153,9 @@ export async function rollbackDeployment(a: Base & { namespace: string; name: st
 export async function deletePod(a: Base & { namespace: string; name: string }): OpOut<{ deleted: true }> {
   const r = await _deletePod(credToInput(a), a.namespace, a.name)
   return r.ok ? { ok: true, value: r.value } : { ok: false, error: r.errorCode ?? 'delete failed' }
+}
+
+export async function readHistory(a: Base & { namespace?: string }): OpOut<{ entries: TimelineEntry[]; partial: boolean }> {
+  const r = await readClusterHistory(credToInput(a), a.namespace)
+  return r.ok ? { ok: true, value: { entries: r.value ?? [], partial: !!r.partial } } : { ok: false, error: r.errorCode ?? 'history failed' }
 }

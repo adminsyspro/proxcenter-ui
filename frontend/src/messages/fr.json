@@ -16774,7 +16774,8 @@
       },
       "topology": {
         "title": "Topologie"
-      }
+      },
+      "compareWith": "Comparer avec..."
     },
     "topology": {
       "title": "Topologie",
@@ -16895,6 +16896,75 @@
         "conflict": "Cette révision est déjà la révision actuelle.",
         "generic": "L'action a échoué."
       }
+    },
+    "issues": {
+      "title": "Problèmes",
+      "counts": "{critical} critiques, {warning} avertissements",
+      "empty": "Aucun problème détecté.",
+      "loading": "Vérification...",
+      "severity": {
+        "critical": "Critique",
+        "warning": "Avertissement"
+      },
+      "reason": {
+        "nodeNotReady": "Nœud non prêt",
+        "nodePressure": "Sous pression : {detail}",
+        "nodeCordoned": "Cordonné, aucun nouveau pod n'y est placé",
+        "crashLoop": "Redémarre en boucle (CrashLoopBackOff)",
+        "imagePull": "Image impossible à récupérer",
+        "oomKilled": "Tué par manque de mémoire (OOMKilled)",
+        "configError": "Le conteneur ne démarre pas (erreur de configuration)",
+        "podFailed": "Pod en échec {detail}",
+        "evicted": "Évincé de son nœud",
+        "unschedulable": "Aucun nœud ne peut l'exécuter (Unschedulable)",
+        "pending": "En attente",
+        "restarting": "Redémarré {detail} fois",
+        "workloadDown": "Aucun réplica prêt ({detail})",
+        "workloadDegraded": "Réplicas pas tous prêts ({detail})",
+        "jobFailed": "Job en échec",
+        "pvcPending": "Demande de volume non liée"
+      }
+    },
+    "compare": {
+      "title": "Comparer {name}",
+      "with": "Comparer avec",
+      "onlyChanges": "Différences seulement",
+      "noOther": "Aucune autre ressource de ce type à comparer.",
+      "error": "Impossible de lire l'une des deux ressources.",
+      "identical": "Aucune différence (les champs gérés par Kubernetes sont ignorés).",
+      "changes": "{count, plural, one {# ligne diffère} other {# lignes diffèrent}} (les champs gérés par Kubernetes sont ignorés).",
+      "truncated": "Seules les 2000 premières lignes sont comparées.",
+      "close": "Fermer"
+    },
+    "history": {
+      "title": "Historique",
+      "filter": {
+        "all": "Tout",
+        "event": "Événements",
+        "rollout": "Déploiements",
+        "action": "Actions"
+      },
+      "warningsOnly": "Avertissements seulement",
+      "retention": "Kubernetes garde les événements environ une heure ; les déploiements et les actions ProxCenter restent.",
+      "empty": "Rien dans l'historique.",
+      "partial": "Une partie de l'historique n'a pas pu être lue (le kubeconfig importé n'a pas tous les droits RBAC nécessaires).",
+      "error": "Impossible de lire l'historique.",
+      "rollout": "Révision {revision} : {from} vers {to}",
+      "failed": "(échec)",
+      "by": "par {user}",
+      "action": {
+        "create": "Importé dans ProxCenter",
+        "update": "Paramètres de connexion modifiés",
+        "delete": "Supprimé",
+        "cordon": "Cordonné",
+        "uncordon": "Cordon levé",
+        "drain": "Drainé",
+        "restart": "Redémarré",
+        "scale": "{count, plural, one {Passé à # réplica} other {Passé à # réplicas}}",
+        "rollback": "Revenu à la révision {revision}"
+      },
+      "rolloutRestart": "Révision {revision} : pods redémarrés",
+      "rolloutConfig": "Révision {revision} : réglages des pods modifiés, mêmes images"
     }
   }
 }

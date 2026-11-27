@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
-import { listResources, KIND_TABLE, projectNode } from './resources'
+import { listResources, KIND_TABLE, projectNode, podReason } from './resources'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -433,5 +433,37 @@ describe('projectNode scheduling', () => {
   it('projectNode surfaces spec.unschedulable', () => {
     expect(projectNode({ metadata: { name: 'n1' }, spec: { unschedulable: true }, status: {} }).summary['unschedulable']).toBe('true')
     expect(projectNode({ metadata: { name: 'n2' }, spec: {}, status: {} }).summary['unschedulable']).toBe('false')
+  })
+})
+
+describe('podReason', () => {
+  const pod = (status: any) => ({ metadata: { name: 'p' }, status })
+  it('is empty for a healthy pod', () => {
+    expect(podReason(pod({ phase: 'Running', containerStatuses: [{ ready: true, state: { running: {} } }] }))).toBe('')
+  })
+  it('reports the waiting reason of a failing container, OOMKilled when its last run was killed', () => {
+    expect(podReason(pod({ containerStatuses: [{ ready: false, state: { waiting: { reason: 'CrashLoopBackOff' } } }] }))).toBe('CrashLoopBackOff')
+    expect(podReason(pod({ containerStatuses: [{ ready: false, state: { waiting: { reason: 'CrashLoopBackOff' } }, lastState: { terminated: { reason: 'OOMKilled' } } }] }))).toBe('OOMKilled')
+  })
+  it('ignores a container that is only being created', () => {
+    expect(podReason(pod({ phase: 'Pending', containerStatuses: [{ ready: false, state: { waiting: { reason: 'ContainerCreating' } } }] }))).toBe('')
+  })
+  it('reports an init container failure, a terminated reason, the pod reason, then Unschedulable', () => {
+    expect(podReason(pod({ initContainerStatuses: [{ ready: false, state: { waiting: { reason: 'ImagePullBackOff' } } }] }))).toBe('ImagePullBackOff')
+    expect(podReason(pod({ containerStatuses: [{ ready: false, state: { terminated: { reason: 'Error' } } }] }))).toBe('Error')
+    expect(podReason(pod({ phase: 'Failed', reason: 'Evicted' }))).toBe('Evicted')
+    expect(podReason(pod({ phase: 'Pending', conditions: [{ type: 'PodScheduled', status: 'False', reason: 'Unschedulable' }] }))).toBe('Unschedulable')
+  })
+})
+
+describe('projectNode pressure', () => {
+  it('lists the pressure conditions that are true', () => {
+    const n = projectNode({ metadata: { name: 'n' }, status: { conditions: [
+      { type: 'Ready', status: 'True' }, { type: 'MemoryPressure', status: 'True' }, { type: 'DiskPressure', status: 'False' }, { type: 'PIDPressure', status: 'True' },
+    ] } })
+    expect(n.summary['pressure']).toBe('MemoryPressure,PIDPressure')
+  })
+  it('has no pressure entry on a healthy node', () => {
+    expect(projectNode({ metadata: { name: 'n' }, status: { conditions: [{ type: 'Ready', status: 'True' }] } }).summary['pressure']).toBeUndefined()
   })
 })

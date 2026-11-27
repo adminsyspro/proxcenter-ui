@@ -16760,7 +16760,8 @@
       },
       "topology": {
         "title": "토폴로지"
-      }
+      },
+      "compareWith": "다른 리소스와 비교..."
     },
     "topology": {
       "title": "토폴로지",
@@ -16881,6 +16882,75 @@
         "conflict": "이 리비전은 이미 현재 리비전입니다.",
         "generic": "작업에 실패했습니다."
       }
+    },
+    "issues": {
+      "title": "문제",
+      "counts": "심각 {critical}개, 경고 {warning}개",
+      "empty": "감지된 문제가 없습니다.",
+      "loading": "확인 중...",
+      "severity": {
+        "critical": "심각",
+        "warning": "경고"
+      },
+      "reason": {
+        "nodeNotReady": "노드가 준비되지 않음",
+        "nodePressure": "리소스 압박: {detail}",
+        "nodeCordoned": "코든됨, 새 파드가 배치되지 않음",
+        "crashLoop": "반복 충돌(CrashLoopBackOff)",
+        "imagePull": "이미지를 가져올 수 없음",
+        "oomKilled": "메모리 부족으로 종료됨(OOMKilled)",
+        "configError": "컨테이너를 시작할 수 없음(구성 오류)",
+        "podFailed": "파드 실패 {detail}",
+        "evicted": "노드에서 축출됨",
+        "unschedulable": "실행할 수 있는 노드가 없음(Unschedulable)",
+        "pending": "대기 중",
+        "restarting": "{detail}회 재시작됨",
+        "workloadDown": "준비된 레플리카 없음({detail})",
+        "workloadDegraded": "일부 레플리카가 준비되지 않음({detail})",
+        "jobFailed": "잡 실패",
+        "pvcPending": "볼륨 클레임이 바인딩되지 않음"
+      }
+    },
+    "compare": {
+      "title": "{name} 비교",
+      "with": "비교 대상",
+      "onlyChanges": "차이만 표시",
+      "noOther": "비교할 같은 유형의 다른 리소스가 없습니다.",
+      "error": "두 리소스 중 하나를 읽을 수 없습니다.",
+      "identical": "차이가 없습니다(Kubernetes가 관리하는 필드는 무시됨).",
+      "changes": "{count}줄이 다릅니다(Kubernetes가 관리하는 필드는 무시됨).",
+      "truncated": "처음 2000줄만 비교합니다.",
+      "close": "닫기"
+    },
+    "history": {
+      "title": "기록",
+      "filter": {
+        "all": "전체",
+        "event": "이벤트",
+        "rollout": "롤아웃",
+        "action": "작업"
+      },
+      "warningsOnly": "경고만",
+      "retention": "Kubernetes는 이벤트를 약 1시간 동안 보관합니다. 롤아웃과 ProxCenter 작업은 유지됩니다.",
+      "empty": "기록이 없습니다.",
+      "partial": "기록의 일부를 읽을 수 없습니다(가져온 kubeconfig에 일부 RBAC 권한이 없습니다).",
+      "error": "기록을 읽을 수 없습니다.",
+      "rollout": "리비전 {revision}: {from}에서 {to}(으)로",
+      "failed": "(실패)",
+      "by": "{user} 실행",
+      "action": {
+        "create": "ProxCenter로 가져옴",
+        "update": "연결 설정 변경됨",
+        "delete": "삭제됨",
+        "cordon": "코든됨",
+        "uncordon": "코든 해제됨",
+        "drain": "드레인됨",
+        "restart": "재시작됨",
+        "scale": "레플리카 {count}개로 조정됨",
+        "rollback": "리비전 {revision}(으)로 롤백됨"
+      },
+      "rolloutRestart": "리비전 {revision}: 파드 재시작됨",
+      "rolloutConfig": "리비전 {revision}: 파드 설정 변경됨, 이미지 동일"
     }
   }
 }

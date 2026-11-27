@@ -23,6 +23,7 @@ import { KindIcon } from './KindIcon'
 import { ResourceDrawer } from './ResourceDrawer'
 import { ClusterOverview } from './ClusterOverview'
 import { K8sTopologyView } from './K8sTopologyView'
+import { HistoryView } from './HistoryView'
 
 export function ClusterExplorer({
   clusterId,
@@ -40,6 +41,7 @@ export function ClusterExplorer({
   const t = useTranslations('kubernetes.explorer')
   const tc = useTranslations('common')
   const tNodeOps = useTranslations('kubernetes.node.ops')
+  const tHistory = useTranslations('kubernetes.history')
   const { hasPermission } = useRBAC()
   // Cosmetic gate for the node day-2 actions; the API routes re-check k8s.manage.
   const canManage = hasPermission('k8s.manage')
@@ -433,6 +435,16 @@ export function ClusterExplorer({
               <ListItemText primary={t('topology.title')} />
             </ListItemButton>
 
+            <ListItemButton
+              selected={view === 'history'}
+              onClick={() => { setView('history'); setSelected(null) }}
+            >
+              <ListItemIcon sx={{ minWidth: 30 }}>
+                <i className="ri-time-line" style={{ fontSize: 17 }} />
+              </ListItemIcon>
+              <ListItemText primary={tHistory('title')} />
+            </ListItemButton>
+
             {NAV_GROUPS.map(g => (
               <li key={g.group}>
                 <ul style={{ padding: 0, listStyle: 'none', margin: 0 }}>
@@ -473,7 +485,22 @@ export function ClusterExplorer({
         {/* Main content */}
         <Box sx={{ flex: 1, p: view === 'topology' ? 0 : 2, overflow: view === 'topology' ? 'hidden' : 'auto', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           {/* Overview */}
-          {view === 'overview' && <ClusterOverview clusterId={clusterId} refreshTick={overviewTick} />}
+          {view === 'overview' && (
+            <ClusterOverview
+              clusterId={clusterId}
+              refreshTick={overviewTick}
+              onOpenResource={(k, item) => { setView(k); setSelected(item) }}
+            />
+          )}
+
+          {view === 'history' && (
+            <HistoryView
+              clusterId={clusterId}
+              namespace={namespace || undefined}
+              refreshTick={overviewTick}
+              onOpenResource={(k, item) => { setView(k); setSelected(item) }}
+            />
+          )}
 
           {/* Topology - full height canvas */}
           {view === 'topology' && (
@@ -552,6 +579,7 @@ export function ClusterExplorer({
                 onOpenDrainDialog={() => { if (selected) handleNodeDrain(selected) }}
                 onClose={handleDrawerClose}
                 onYamlOpenChange={setYamlOpen}
+                compareCandidates={items}
               />
 
               {drainDialog && (

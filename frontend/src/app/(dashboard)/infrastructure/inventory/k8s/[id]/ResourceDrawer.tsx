@@ -13,6 +13,7 @@ import type { KindDef } from '@/lib/k8s/resourceKinds'
 import type { ResourceListItem, GetResourceResult, EventsResult, ContainerInfo } from '@/lib/k8s/types'
 import { PodLogsPanel } from './PodLogsPanel'
 import { KindIcon } from './KindIcon'
+import { CompareDialog } from './CompareDialog'
 
 const OK = '#4caf50'
 const BAD = '#f44336'
@@ -229,6 +230,7 @@ export function ResourceDrawer({
   onOpenDrainDialog,
   onClose,
   onYamlOpenChange,
+  compareCandidates,
 }: {
   clusterId: string
   kind: KindDef
@@ -242,11 +244,14 @@ export function ResourceDrawer({
   onOpenDrainDialog?: () => void
   onClose: () => void
   onYamlOpenChange?: (open: boolean) => void
+  /** Resources of the same kind the YAML can be compared with (the current list). */
+  compareCandidates?: ResourceListItem[]
 }) {
   const t = useTranslations('kubernetes.explorer')
   const tOps = useTranslations('kubernetes.node.ops')
   const theme = useTheme()
   const [tab, setTab] = useState(0)
+  const [compareOpen, setCompareOpen] = useState(false)
   const [detail, setDetail] = useState<GetResourceResult | null>(null)
   const [events, setEvents] = useState<EventsResult | null>(null)
   // Bumped after a node op so the detail refetches without resetting the tab.
@@ -506,12 +511,24 @@ export function ResourceDrawer({
           )}
 
           {tab === 1 && (
-            <Box
-              component="pre"
-              sx={{ fontFamily: 'monospace', fontSize: '0.8rem', whiteSpace: 'pre-wrap', maxHeight: 480, overflow: 'auto', mt: 1 }}
-            >
-              {d?.yaml || ''}
-            </Box>
+            <>
+              {item && (compareCandidates?.length ?? 0) > 1 && (
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                  <Button size="small" variant="outlined" startIcon={<i className="ri-git-compare-line" />} onClick={() => setCompareOpen(true)}>
+                    {t('compareWith')}
+                  </Button>
+                </Box>
+              )}
+              <Box
+                component="pre"
+                sx={{ fontFamily: 'monospace', fontSize: '0.8rem', whiteSpace: 'pre-wrap', maxHeight: 480, overflow: 'auto', mt: 1 }}
+              >
+                {d?.yaml || ''}
+              </Box>
+              {compareOpen && item && (
+                <CompareDialog clusterId={clusterId} kind={kind} base={item} candidates={compareCandidates ?? []} onClose={() => setCompareOpen(false)} />
+              )}
+            </>
           )}
 
           {tab === 2 && (

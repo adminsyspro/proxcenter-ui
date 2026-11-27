@@ -11,6 +11,9 @@ import {
 import type { ResourceListItem, EventItem, NodeMetricsResult } from '@/lib/k8s/types'
 import { OverviewCharts } from './OverviewCharts'
 import { KindIcon } from './KindIcon'
+import { IssuesPanel } from './IssuesPanel'
+import { detectIssues, type Issue } from '@/lib/k8s/issues'
+import type { K8sResourceKind } from '@/lib/k8s/types'
 
 interface ListFetch { items: ResourceListItem[]; truncated: boolean; errorCode?: string }
 
@@ -47,7 +50,12 @@ async function fetchMetrics(clusterId: string, signal: AbortSignal): Promise<{ v
   }
 }
 
-export function ClusterOverview({ clusterId, refreshTick = 0 }: { clusterId: string; refreshTick?: number }) {
+export function ClusterOverview({ clusterId, refreshTick = 0, onOpenResource }: {
+  clusterId: string
+  refreshTick?: number
+  /** Open a resource from the problems list (switches the explorer to its kind). */
+  onOpenResource?: (kind: K8sResourceKind, item: ResourceListItem) => void
+}) {
   const t = useTranslations('kubernetes.explorer')
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -59,19 +67,32 @@ export function ClusterOverview({ clusterId, refreshTick = 0 }: { clusterId: str
   const [events, setEvents] = useState<EventItem[]>([])
   const [eventsError, setEventsError] = useState<string | undefined>(undefined)
   const [metrics, setMetrics] = useState<{ value: NodeMetricsResult | null; errorCode?: string }>({ value: null })
+  const [issues, setIssues] = useState<Issue[]>([])
+  const [issuesLoading, setIssuesLoading] = useState(true)
 
   useEffect(() => {
     const ac = new AbortController()
     void (async () => {
-      const [n, ns, dep, pod, ev, m] = await Promise.all([
+      // The problems list reuses node, deployment and pod; it adds four lists,
+      // read once per open or refresh like the rest (never polled).
+      const [n, ns, dep, pod, ev, m, sts, ds, job, pvc] = await Promise.all([
         fetchList(clusterId, 'node', ac.signal),
         fetchList(clusterId, 'namespace', ac.signal),
         fetchList(clusterId, 'deployment', ac.signal),
         fetchList(clusterId, 'pod', ac.signal),
         fetchEvents(clusterId, ac.signal),
         fetchMetrics(clusterId, ac.signal),
+        fetchList(clusterId, 'statefulset', ac.signal),
+        fetchList(clusterId, 'daemonset', ac.signal),
+        fetchList(clusterId, 'job', ac.signal),
+        fetchList(clusterId, 'pvc', ac.signal),
       ])
       if (ac.signal.aborted) return
+      setIssues(detectIssues({
+        nodes: n?.items, pods: pod?.items, deployments: dep?.items, statefulsets: sts?.items,
+        daemonsets: ds?.items, jobs: job?.items, pvcs: pvc?.items,
+      }))
+      setIssuesLoading(false)
       setLists({ node: n, namespace: ns, deployment: dep, pod })
       setPods(pod?.items ?? [])
       setPodsTruncated(pod?.truncated ?? false)
@@ -107,6 +128,8 @@ export function ClusterOverview({ clusterId, refreshTick = 0 }: { clusterId: str
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
+      <IssuesPanel issues={issues} loading={issuesLoading} onOpen={onOpenResource} />
+
       {/* KPI donut row */}
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 2, width: '100%' }}>
         {OVERVIEW_KINDS.map(k => {

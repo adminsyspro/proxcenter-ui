@@ -16760,7 +16760,8 @@
       },
       "topology": {
         "title": "拓扑"
-      }
+      },
+      "compareWith": "与...比较"
     },
     "topology": {
       "title": "拓扑",
@@ -16881,6 +16882,75 @@
         "conflict": "该修订版本已是当前版本。",
         "generic": "操作失败。"
       }
+    },
+    "issues": {
+      "title": "问题",
+      "counts": "{critical} 个严重，{warning} 个警告",
+      "empty": "未检测到问题。",
+      "loading": "检查中...",
+      "severity": {
+        "critical": "严重",
+        "warning": "警告"
+      },
+      "reason": {
+        "nodeNotReady": "节点未就绪",
+        "nodePressure": "资源压力：{detail}",
+        "nodeCordoned": "已封锁，不会调度新 Pod 到此节点",
+        "crashLoop": "循环崩溃（CrashLoopBackOff）",
+        "imagePull": "无法拉取镜像",
+        "oomKilled": "因内存不足被终止（OOMKilled）",
+        "configError": "容器无法启动（配置错误）",
+        "podFailed": "Pod 失败 {detail}",
+        "evicted": "已被驱逐出节点",
+        "unschedulable": "没有节点可以运行它（Unschedulable）",
+        "pending": "等待中",
+        "restarting": "已重启 {detail} 次",
+        "workloadDown": "没有就绪副本（{detail}）",
+        "workloadDegraded": "部分副本未就绪（{detail}）",
+        "jobFailed": "Job 失败",
+        "pvcPending": "存储卷声明未绑定"
+      }
+    },
+    "compare": {
+      "title": "比较 {name}",
+      "with": "比较对象",
+      "onlyChanges": "仅显示差异",
+      "noOther": "没有其他同类资源可比较。",
+      "error": "无法读取其中一个资源。",
+      "identical": "没有差异（已忽略 Kubernetes 管理的字段）。",
+      "changes": "{count} 行不同（已忽略 Kubernetes 管理的字段）。",
+      "truncated": "只比较前 2000 行。",
+      "close": "关闭"
+    },
+    "history": {
+      "title": "历史",
+      "filter": {
+        "all": "全部",
+        "event": "事件",
+        "rollout": "发布",
+        "action": "操作"
+      },
+      "warningsOnly": "仅显示警告",
+      "retention": "Kubernetes 只保留约一小时的事件；发布记录和 ProxCenter 操作会保留。",
+      "empty": "历史中没有内容。",
+      "partial": "部分历史无法读取（导入的 kubeconfig 缺少相应的 RBAC 权限）。",
+      "error": "无法读取历史。",
+      "rollout": "修订版本 {revision}：{from} 变为 {to}",
+      "failed": "（失败）",
+      "by": "操作人 {user}",
+      "action": {
+        "create": "已导入 ProxCenter",
+        "update": "连接设置已更改",
+        "delete": "已删除",
+        "cordon": "已封锁",
+        "uncordon": "已解除封锁",
+        "drain": "已驱逐",
+        "restart": "已重启",
+        "scale": "已扩缩容至 {count} 个副本",
+        "rollback": "已回滚到修订版本 {revision}"
+      },
+      "rolloutRestart": "修订版本 {revision}：已重启 Pod",
+      "rolloutConfig": "修订版本 {revision}：Pod 设置已更改，镜像相同"
     }
   }
 }

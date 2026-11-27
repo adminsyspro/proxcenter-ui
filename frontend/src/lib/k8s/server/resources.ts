@@ -53,10 +53,36 @@ function projectPod(p: any): ResourceListItem {
   it.summary['restarts'] = String(restarts)
   it.summary['node'] = p.spec?.nodeName ?? ''
   it.summary['podIP'] = p.status?.podIP ?? ''
+  const reason = podReason(p)
+  if (reason) it.summary['reason'] = reason
   return it
 }
 
+/**
+ * Why a pod is unhealthy, in kubectl's words: the waiting or terminated
+ * reason of its first failing container (OOMKilled from the last run of a
+ * restarting one), else the pod's own reason (Evicted), else Unschedulable
+ * for a pod the scheduler could not place. Empty for a healthy pod.
+ */
+export function podReason(p: any): string {
+  for (const cs of [...(p.status?.initContainerStatuses ?? []), ...(p.status?.containerStatuses ?? [])]) {
+    if (cs.ready) continue
+    const waiting = cs.state?.waiting?.reason
+    if (waiting && waiting !== 'ContainerCreating' && waiting !== 'PodInitializing') {
+      return cs.lastState?.terminated?.reason === 'OOMKilled' ? 'OOMKilled' : waiting
+    }
+    const terminated = cs.state?.terminated?.reason
+    if (terminated && terminated !== 'Completed') return terminated
+  }
+  if (p.status?.reason) return p.status.reason
+  const scheduled = (p.status?.conditions ?? []).find((c: any) => c.type === 'PodScheduled')
+  if (scheduled?.status === 'False' && scheduled.reason) return scheduled.reason
+  return ''
+}
+
 // Exported for tests.
+const NODE_PRESSURE_CONDITIONS = new Set(['MemoryPressure', 'DiskPressure', 'PIDPressure', 'NetworkUnavailable'])
+
 export function projectNode(n: any): ResourceListItem {
   const it = base('node', n)
   let ready = 'False'
@@ -83,6 +109,10 @@ export function projectNode(n: any): ResourceListItem {
   const providerID: string = n.spec?.providerID ?? ''
   if (providerID) it.summary['providerID'] = providerID
   it.summary['unschedulable'] = n.spec?.unschedulable === true ? 'true' : 'false'
+  const pressure = (n.status?.conditions ?? [])
+    .filter((c: any) => NODE_PRESSURE_CONDITIONS.has(c.type) && c.status === 'True')
+    .map((c: any) => c.type)
+  if (pressure.length) it.summary['pressure'] = pressure.join(',')
   return it
 }
 

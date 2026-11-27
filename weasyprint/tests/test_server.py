@@ -67,6 +67,18 @@ class RenderTest(unittest.TestCase):
         res = self.client.post("/render", data="")
         self.assertEqual(res.status_code, 400)
 
+    def test_rendering_failure_keeps_the_exception_text_in(self):
+        secret = "/app/secret/path.py line 42 <b>tenant</b>"
+        with mock.patch.object(server.HTML, "write_pdf", side_effect=RuntimeError(secret)), \
+                self.assertLogs("weasyprint-sidecar", level="ERROR") as logs:
+            res = self.client.post("/render", data="<p>x</p>", content_type="text/html")
+
+        self.assertEqual(res.status_code, 500)
+        self.assertEqual(res.get_json(), {"error": "PDF rendering failed, see the reporting sidecar log"})
+        self.assertNotIn(secret, res.get_data(as_text=True))
+        # The operator still gets the cause, in the sidecar log.
+        self.assertIn(secret, "\n".join(logs.output))
+
     def test_renders_inline_content(self):
         html = f'<html><body><h1>Report</h1><img src="data:image/png;base64,{PIXEL}"></body></html>'
         res = self.client.post("/render", data=html, content_type="text/html")

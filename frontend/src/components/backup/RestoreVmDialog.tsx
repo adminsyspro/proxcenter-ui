@@ -135,6 +135,11 @@ export default function RestoreVmDialog({
   // A tenant without vm.delete can only restore as a new VM.
   const restoreAsNew = restoreAsNewChoice || (isVdcTenant && !canOverwrite)
   const [awaitingConfirm, setAwaitingConfirm] = useState(false)
+  // PVE 9.3 guest identity: the route said the backup belongs to another
+  // guest than the one it would overwrite; overwriting then needs an
+  // explicit opt-in, and the guest keeps its own identity.
+  const [otherGuestBackup, setOtherGuestBackup] = useState(false)
+  const [allowOtherGuest, setAllowOtherGuest] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -155,6 +160,8 @@ export default function RestoreVmDialog({
     setError(null)
     setRestoreAsNewChoice(false)
     setAwaitingConfirm(false)
+    setOtherGuestBackup(false)
+    setAllowOtherGuest(false)
     if (!callerLocksConn) setPickedConnectionId('')
     if (!callerLocksNode) setPickedNode('')
   }, [open, sourceVmid, callerLocksConn, callerLocksNode, isVdcTenant])
@@ -162,7 +169,11 @@ export default function RestoreVmDialog({
   // Reset the destructive-confirm guard whenever the tenant flips the
   // mode toggle so a "yes, overwrite" intent can't carry over to a
   // "create new" submission.
-  useEffect(() => { setAwaitingConfirm(false) }, [restoreAsNew])
+  useEffect(() => {
+    setAwaitingConfirm(false)
+    setOtherGuestBackup(false)
+    setAllowOtherGuest(false)
+  }, [restoreAsNew])
 
   const applyVdc = (v: any) => {
     setPickedVdcId(v.id)
@@ -297,6 +308,8 @@ export default function RestoreVmDialog({
     if (isCloneVmid(next) !== isCloneVmid(vmid)) setUnique(isCloneVmid(next))
     setVmid(next)
     setAwaitingConfirm(false)
+    setOtherGuestBackup(false)
+    setAllowOtherGuest(false)
   }
 
   // PVE refuses a restore onto a VMID that already exists unless `force=1`
@@ -320,7 +333,7 @@ export default function RestoreVmDialog({
   // Tenant: vmid is derived (sourceVmid for overwrite, /cluster/nextid
   // for new VM) so we don't gate on `vmid` being typed in. Provider:
   // unchanged, the field is required.
-  const canSubmit = !submitting && !!connectionId && !!node && !overwriteBlocked && (
+  const canSubmit = !submitting && !!connectionId && !!node && !overwriteBlocked && (!otherGuestBackup || allowOtherGuest) && (
     isVdcTenant ? true : (!!vmid && vmidValid)
   )
 
@@ -376,6 +389,7 @@ export default function RestoreVmDialog({
       // VMID. New-VM branch never sets it (the VMID is fresh).
       if (overwriting) {
         body.force = true
+        if (allowOtherGuest) body.allowIdentityMismatch = true
       }
       // Tenant + new VM → ensure unique MACs to avoid an L2 collision
       // with the still-running source.
@@ -422,6 +436,10 @@ export default function RestoreVmDialog({
       )
       const j = await r.json().catch(() => ({}))
       if (!r.ok) {
+        if (r.status === 409 && j?.code === 'BACKUP_OF_ANOTHER_GUEST') {
+          setOtherGuestBackup(true)
+          return
+        }
         setError(gpuContingentMessage(t, j) || j?.error || `HTTP ${r.status}`)
         return
       }
@@ -620,6 +638,17 @@ export default function RestoreVmDialog({
           {overwriting && awaitingConfirm && (
             <Alert severity="warning" icon={<i className="ri-alert-line" style={{ fontSize: 18 }} />}>
               {t('inventory.pbsRestoreOverwriteConfirm', { vmid: overwriteVmid })}
+            </Alert>
+          )}
+
+          {overwriting && otherGuestBackup && (
+            <Alert severity="warning" icon={<i className="ri-fingerprint-line" style={{ fontSize: 18 }} />}>
+              {t('inventory.pbsRestoreOtherGuest', { vmid: overwriteVmid })}
+              <FormControlLabel
+                sx={{ display: 'flex', mt: 0.5 }}
+                control={<Switch size="small" checked={allowOtherGuest} onChange={(_, v) => setAllowOtherGuest(v)} />}
+                label={<Typography variant="body2">{t('inventory.pbsRestoreAllowOtherGuest')}</Typography>}
+              />
             </Alert>
           )}
 

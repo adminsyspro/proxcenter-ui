@@ -706,6 +706,51 @@ describe("POST restore -- backup.restore and the guest that force overwrites", (
     expect(res.status).toBe(200)
     expect(restorePosts()).toHaveLength(1)
     expect(postedParams(restorePosts()[0]).get("force")).toBe("1")
+    expect(postedParams(restorePosts()[0]).has("allow-identity-mismatch")).toBe(false)
+  })
+
+  // Proxmox VE 9.3 guest identity (lab 26/11: backup of VM 9930 over VM 9931).
+  describe("a backup of another guest (Proxmox VE 9.3)", () => {
+    const EXTRACT = `/nodes/node1/vzdump/extractconfig?volume=${encodeURIComponent(VZDUMP_QEMU_VOLID)}`
+    function wireIdentities(backupUid: string | null, guestUid: string | null) {
+      pveFetchMock.mockImplementation(async (_conn: unknown, path: string) => {
+        if (path === "/cluster/resources?type=vm") return [{ vmid: 111, node: "node2", type: "qemu" }]
+        if (path === "/nodes/node2/qemu/111/config") return guestUid ? { meta: `creation-qemu=11.1.3,uid=${guestUid}` } : { name: "x" }
+        if (path === EXTRACT) return `${backupUid ? `meta: creation-qemu=11.1.3,uid=${backupUid}\n` : ""}memory: 128\n`
+        return RESTORE_UPID
+      })
+    }
+
+    it("409 BACKUP_OF_ANOTHER_GUEST before any restore task", async () => {
+      grantOnly("vm.backup", "backup.restore", "vm.delete")
+      wireIdentities("p4l2rclc4u4xzaq2vh5t", "ya4v66n3dt7o3nss4aku")
+
+      const res = await restore({ force: true })
+
+      expect(res.status).toBe(409)
+      expect(await readJson(res)).toMatchObject({ code: "BACKUP_OF_ANOTHER_GUEST", context: { backupUid: "p4l2rclc4u4xzaq2vh5t", guestUid: "ya4v66n3dt7o3nss4aku" } })
+      expect(restorePosts()).toHaveLength(0)
+    })
+
+    it("restores with allow-identity-mismatch=1 once the caller allows it", async () => {
+      grantOnly("vm.backup", "backup.restore", "vm.delete")
+      wireIdentities("p4l2rclc4u4xzaq2vh5t", "ya4v66n3dt7o3nss4aku")
+
+      const res = await restore({ force: true, allowIdentityMismatch: true })
+
+      expect(res.status).toBe(200)
+      expect(postedParams(restorePosts()[0]).get("allow-identity-mismatch")).toBe("1")
+    })
+
+    it("a backup of the same guest needs nothing more", async () => {
+      grantOnly("vm.backup", "backup.restore", "vm.delete")
+      wireIdentities("ya4v66n3dt7o3nss4aku", "ya4v66n3dt7o3nss4aku")
+
+      const res = await restore({ force: true, allowIdentityMismatch: true })
+
+      expect(res.status).toBe(200)
+      expect(postedParams(restorePosts()[0]).has("allow-identity-mismatch")).toBe(false)
+    })
   })
 
   it("force on a free vmid: nothing to overwrite, vm.delete is not required", async () => {

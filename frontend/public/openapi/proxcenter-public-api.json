@@ -456,6 +456,22 @@
               "minLength": 1
             },
             "description": "Snapshot names; irreversible"
+          },
+          "target": {
+            "type": "object",
+            "required": [
+              "connectionId",
+              "node"
+            ],
+            "description": "The migration target. When given, nothing is cleared (409 TARGET_TUNNEL_TOO_OLD) if the source runs Proxmox VE 9.3 and the target an older version, which Proxmox VE refuses.",
+            "properties": {
+              "connectionId": {
+                "type": "string"
+              },
+              "node": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -939,6 +955,10 @@
           "force": {
             "type": "boolean",
             "description": "Overwrite the guest holding vmid (needs vm.delete on it)"
+          },
+          "allowIdentityMismatch": {
+            "type": "boolean",
+            "description": "With force, on Proxmox VE 9.3 and later: overwrite the guest even when the backup belongs to another guest (409 BACKUP_OF_ANOTHER_GUEST otherwise). The guest keeps its own identity."
           },
           "restoreTags": {
             "type": "boolean",
@@ -14198,7 +14218,7 @@
       "post": {
         "operationId": "vm-remote-migrate",
         "summary": "Migrate a VM to another cluster",
-        "description": "Cross-cluster migration (Proxmox remote_migrate) of a QEMU VM. `targetConnectionId` must also be inside the token perimeter. Reserved to the provider and to the MSP tenant that owns both connections.\n\nRequired scope: `vms:migrate`",
+        "description": "Cross-cluster migration (Proxmox remote_migrate) of a QEMU VM. `targetConnectionId` must also be inside the token perimeter. Refused with 409 `TARGET_TUNNEL_TOO_OLD` when the source runs Proxmox VE 9.3 and the target node an older version. Reserved to the provider and to the MSP tenant that owns both connections.\n\nRequired scope: `vms:migrate`",
         "tags": [
           "VMs"
         ],
@@ -14552,7 +14572,7 @@
       "post": {
         "operationId": "vm-remote-migrate-check",
         "summary": "Preflight a cross-cluster migration",
-        "description": "Validates a cross-cluster migration before launching it: blocking errors and warnings (HA, replication, snapshots, CPU, storage, bridge, VMID collision). Changes nothing. `targetConnectionId` must also be inside the token perimeter.\n\nRequired scope: `vms:migrate`",
+        "description": "Validates a cross-cluster migration before launching it: blocking errors and warnings (HA, replication, snapshots, CPU, storage, bridge, VMID collision, a Proxmox VE 9.3 source with an older target). Changes nothing. `targetConnectionId` must also be inside the token perimeter.\n\nRequired scope: `vms:migrate`",
         "tags": [
           "VMs"
         ],
@@ -15115,6 +15135,22 @@
                       "minLength": 1
                     },
                     "description": "Snapshot names; irreversible"
+                  },
+                  "target": {
+                    "type": "object",
+                    "required": [
+                      "connectionId",
+                      "node"
+                    ],
+                    "description": "The migration target. When given, nothing is cleared (409 TARGET_TUNNEL_TOO_OLD) if the source runs Proxmox VE 9.3 and the target an older version, which Proxmox VE refuses.",
+                    "properties": {
+                      "connectionId": {
+                        "type": "string"
+                      },
+                      "node": {
+                        "type": "string"
+                      }
+                    }
                   }
                 }
               }
@@ -18676,7 +18712,7 @@
       "post": {
         "operationId": "vm-restore",
         "summary": "Restore a guest from a backup",
-        "description": "Restores `archive` (a Proxmox volume id) or `pbsBackup` (PBS coordinates, mapped to the PVE storage of {node} that targets them) as guest `vmid` on {node}. `pbsBackup.pbsId` must also be inside the token perimeter. `force` overwrites the guest holding `vmid`, which also needs vm.delete on it (scope vms:delete). A vDC tenant restores on its own nodes, from and to its own storages.\n\nRequired scope: `backups:restore`",
+        "description": "Restores `archive` (a Proxmox volume id) or `pbsBackup` (PBS coordinates, mapped to the PVE storage of {node} that targets them) as guest `vmid` on {node}. `pbsBackup.pbsId` must also be inside the token perimeter. `force` overwrites the guest holding `vmid`, which also needs vm.delete on it (scope vms:delete); on Proxmox VE 9.3 a backup of another guest is refused with 409 `BACKUP_OF_ANOTHER_GUEST` unless `allowIdentityMismatch` is true. A vDC tenant restores on its own nodes, from and to its own storages.\n\nRequired scope: `backups:restore`",
         "tags": [
           "Backups"
         ],
@@ -18782,6 +18818,10 @@
                   "force": {
                     "type": "boolean",
                     "description": "Overwrite the guest holding vmid (needs vm.delete on it)"
+                  },
+                  "allowIdentityMismatch": {
+                    "type": "boolean",
+                    "description": "With force, on Proxmox VE 9.3 and later: overwrite the guest even when the backup belongs to another guest (409 BACKUP_OF_ANOTHER_GUEST otherwise). The guest keeps its own identity."
                   },
                   "restoreTags": {
                     "type": "boolean",

@@ -1142,6 +1142,8 @@
     "pbsRestoreIpamNote": "IP allocation is reconciled automatically after the restore completes.",
     "pbsRestoreAsNew": "Restore as a new VM (auto-allocates a fresh VMID + unique MACs)",
     "pbsRestoreOverwriteConfirm": "This will replace VM {vmid} with the backup contents. Click again to confirm.",
+    "pbsRestoreOtherGuest": "This backup belongs to another guest than VM {vmid}: Proxmox VE refuses to overwrite a guest with the backup of another one.",
+    "pbsRestoreAllowOtherGuest": "Overwrite anyway (the guest keeps its own identity)",
     "pbsRestoreOverwriteConfirmButton": "Confirm overwrite",
     "pbsNoBackups": "No backups found in this PBS storage",
     "pbsSearchBackups": "Search backups...",
@@ -2622,6 +2624,9 @@
     "ruleName": "Rule name",
     "uniqueRuleId": "Unique rule identifier",
     "restrictToSelectedNodes": "Restrict to selected nodes only",
+    "neverOnSelectedNodes": "Never run on the selected nodes",
+    "runOnSelectedNodes": "Run on the selected nodes",
+    "keepOffSelectedNodes": "Keep off the selected nodes",
     "addHaResourcesFirst": "Add HA resources first",
     "optionalRuleDescription": "Optional rule description",
     "cloneVmTemplate": "Clone VM Template",
@@ -8558,7 +8563,8 @@
           "allClear": "Prerequisites",
           "actionFailed": "Action failed",
           "inGroup": "(group {group})",
-          "siteRecovery": "Site Recovery"
+          "siteRecovery": "Site Recovery",
+          "pveVersion": "Proxmox VE version"
         },
         "siteRecoveryShared": "Covered by replication job \"{name}\", which also covers {count} other guest(s)",
         "siteRecoveryOnly": "Covered by replication job \"{name}\"",
@@ -8586,7 +8592,8 @@
           "mtuMismatch": "{iface} MTU {vmMtu}, target bridge {targetMtu}",
           "vmidExists": "{vmid} already used on {node}",
           "insufficientCpu": "{needed} vCPUs needed, target has {available}",
-          "insufficientMemory": "{needed} MB RAM needed, {available} MB free"
+          "insufficientMemory": "{needed} MB RAM needed, {available} MB free",
+          "tunnelTooOld": "target {pkg} {target}, needs {required}+ (Proxmox VE 9.3)"
         }
       },
       "storage": "Storage",
@@ -10995,6 +11002,7 @@
     "autoHaSyncNow": "Sync Now",
     "autoHaSyncSuccess": "{added} added, {skipped} already configured",
     "nodeAffinityInfo": "Node affinity rules constrain HA-managed VMs to run on specific nodes. When a VM needs to be relocated, only the selected nodes will be considered as targets.",
+    "nodeAffinityNegativeInfo": "A negative node affinity rule keeps HA-managed VMs off the selected nodes: they are never placed there when strict, and only as a last resort otherwise.",
     "resourceAffinityInfo": "Resource affinity rules define whether HA-managed VMs should be kept together on the same node (positive) or separated across different nodes (negative) for redundancy.",
     "noNodeAffinityRules": "No node affinity rules configured. Use the + button to constrain VMs to specific nodes.",
     "noResourceAffinityRules": "No resource affinity rules configured. Use the + button to keep VMs together or separate.",
@@ -16516,7 +16524,8 @@
       "VMID_TAKEN_ON_TARGET": "VMID {vmid} is already used on the target cluster.",
       "NO_TARGET_NODE": "No host of the target vDC has room for this VM right now.",
       "QUOTA_EXCEEDED": "The target vDC quota would be exceeded:",
-      "TARGET_QEMU_TOO_OLD": "The target vDC runs an older QEMU than this VM: move it offline (switch Mode off)."
+      "TARGET_QEMU_TOO_OLD": "The target vDC runs an older QEMU than this VM: move it offline (switch Mode off).",
+      "TARGET_TUNNEL_TOO_OLD": "The target vDC's cluster is not on Proxmox VE 9.3 yet: this VM can move there once it is upgraded."
     },
     "settings": {
       "title": "Moves between vDCs",

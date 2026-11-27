@@ -96,6 +96,7 @@ import CreateVmDialog from '../CreateVmDialog'
 import CreateLxcDialog from '../CreateLxcDialog'
 import HaGroupDialog from '../HaGroupDialog'
 import HaRuleDialog from '../HaRuleDialog'
+import { isAtLeast, parsePveVersion } from '@/lib/connections/check/versionGates'
 
 import type { InventorySelection, DetailsPayload } from '../types'
 import { parseNodeId, parseVmId, HOTPLUG_DEVICES, LXC_FEATURES, canEditLxcFeature, parseLxcFeatures, toggleLxcFeature } from '../helpers'
@@ -269,6 +270,8 @@ export interface InventoryDialogsProps {
   haRuleType: 'node-affinity' | 'resource-affinity'
   clusterHaResources: any[]
   clusterPveMajorVersion: number
+  /** Exact PVE version of the cluster (`9.3.1`), '' while unknown. */
+  clusterPveVersion?: string
   loadClusterHa: (connId: string) => void
 
   // Confirm action dialog
@@ -588,7 +591,7 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
     haGroupDialogOpen, setHaGroupDialogOpen, editingHaGroup, setEditingHaGroup,
     deleteHaGroupDialog, setDeleteHaGroupDialog, haRuleDialogOpen, setHaRuleDialogOpen,
     editingHaRule, setEditingHaRule, deleteHaRuleDialog, setDeleteHaRuleDialog,
-    haRuleType, clusterHaResources, clusterPveMajorVersion, loadClusterHa,
+    haRuleType, clusterHaResources, clusterPveMajorVersion, clusterPveVersion, loadClusterHa,
     confirmAction, setConfirmAction, confirmActionLoading,
     createBackupDialogOpen, setCreateBackupDialogOpen, backupStorage, setBackupStorage,
     backupMode, setBackupMode, backupCompress, setBackupCompress, backupNote, setBackupNote,
@@ -628,6 +631,9 @@ export default function InventoryDialogs(props: InventoryDialogsProps) {
 
   const t = useTranslations()
   const { canEditVlan } = useNicIdentityPermissions()
+  // Proxmox VE 9.3: node-affinity rules can keep their resources off their nodes.
+  const clusterVersion = parsePveVersion(clusterPveVersion)
+  const nodeAffinityDirection = !!clusterVersion && isAtLeast(clusterVersion, [9, 3])
   const theme = useTheme()
   const toast = useToast()
   const { addTask: addPCTask, registerOnRestore } = useProxCenterTasks()
@@ -3314,6 +3320,7 @@ return
           availableNodes={data?.nodesData || []}
           availableResources={clusterHaResources}
           allVms={allVms}
+          nodeAffinityDirection={nodeAffinityDirection}
           onSaved={() => {
             setHaRuleDialogOpen(false)
             setEditingHaRule(null)

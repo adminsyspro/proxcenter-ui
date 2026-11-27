@@ -1142,6 +1142,8 @@
     "pbsRestoreIpamNote": "IP 할당은 복원 완료 후 자동으로 재조정됩니다.",
     "pbsRestoreAsNew": "새 VM으로 복원 (새 VMID + 고유 MAC 자동 할당)",
     "pbsRestoreOverwriteConfirm": "VM {vmid}이(가) 백업 내용으로 대체됩니다. 확인하려면 다시 클릭하세요.",
+    "pbsRestoreOtherGuest": "이 백업은 VM {vmid}이(가) 아닌 다른 게스트의 백업입니다. Proxmox VE는 다른 게스트의 백업으로 게스트를 덮어쓰지 않습니다.",
+    "pbsRestoreAllowOtherGuest": "그래도 덮어쓰기(게스트는 자체 ID 유지)",
     "pbsRestoreOverwriteConfirmButton": "덮어쓰기 확인",
     "pbsNoBackups": "이 PBS 스토리지에서 백업을 찾을 수 없습니다",
     "pbsSearchBackups": "백업 검색...",
@@ -2622,6 +2624,9 @@
     "ruleName": "규칙 이름",
     "uniqueRuleId": "고유 규칙 식별자",
     "restrictToSelectedNodes": "선택한 노드로만 제한",
+    "neverOnSelectedNodes": "선택한 노드에서 절대 실행 안 함",
+    "runOnSelectedNodes": "선택한 노드에서 실행",
+    "keepOffSelectedNodes": "선택한 노드에서 제외",
     "addHaResourcesFirst": "먼저 HA 리소스를 추가하세요",
     "optionalRuleDescription": "선택적 규칙 설명",
     "cloneVmTemplate": "VM 템플릿 복제",
@@ -8545,7 +8550,8 @@
           "allClear": "사전 요구 사항",
           "actionFailed": "작업 실패",
           "inGroup": "(그룹 {group})",
-          "siteRecovery": "Site Recovery"
+          "siteRecovery": "Site Recovery",
+          "pveVersion": "Proxmox VE 버전"
         },
         "siteRecoveryShared": "복제 작업 \"{name}\"에 포함되며, 다른 게스트 {count}개도 포함합니다",
         "siteRecoveryOnly": "복제 작업 \"{name}\"에 포함됩니다",
@@ -8573,7 +8579,8 @@
           "mtuMismatch": "{iface} MTU {vmMtu}, 대상 Bridge {targetMtu}",
           "vmidExists": "{vmid}은(는) 이미 {node}에서 사용 중입니다",
           "insufficientCpu": "vCPU {needed}개가 필요하지만 대상에는 {available}개가 있습니다",
-          "insufficientMemory": "RAM {needed}MB가 필요하며 여유 공간은 {available}MB입니다"
+          "insufficientMemory": "RAM {needed}MB가 필요하며 여유 공간은 {available}MB입니다",
+          "tunnelTooOld": "대상 {pkg} {target}, {required}+ 필요 (Proxmox VE 9.3)"
         }
       },
       "storage": "스토리지",
@@ -10982,6 +10989,7 @@
     "autoHaSyncNow": "지금 동기화",
     "autoHaSyncSuccess": "{added}개 추가됨, {skipped}개 이미 구성됨",
     "nodeAffinityInfo": "노드 어피니티 규칙은 HA로 관리되는 VM이 특정 노드에서만 실행되도록 제한합니다. VM을 재배치해야 할 때 선택된 노드만 대상으로 고려됩니다.",
+    "nodeAffinityNegativeInfo": "음수 노드 선호도 규칙은 HA 관리 VM을 선택한 노드에서 배제합니다. 엄격 모드에서는 절대 배치되지 않고, 그 외에는 최후의 수단으로만 배치됩니다.",
     "resourceAffinityInfo": "리소스 어피니티 규칙은 HA로 관리되는 VM들을 같은 노드에 함께 유지할지(포지티브), 이중화를 위해 서로 다른 노드로 분리할지(네거티브)를 정의합니다.",
     "noNodeAffinityRules": "구성된 노드 어피니티 규칙이 없습니다. + 버튼을 사용하여 VM을 특정 노드로 제한하세요.",
     "noResourceAffinityRules": "구성된 리소스 어피니티 규칙이 없습니다. + 버튼을 사용하여 VM을 함께 유지하거나 분리하세요.",
@@ -16503,7 +16511,8 @@
       "VMID_TAKEN_ON_TARGET": "VMID {vmid}는 대상 클러스터에서 이미 사용 중입니다.",
       "NO_TARGET_NODE": "지금은 대상 vDC의 어떤 호스트에도 이 VM을 위한 공간이 없습니다.",
       "QUOTA_EXCEEDED": "대상 vDC 할당량을 초과합니다:",
-      "TARGET_QEMU_TOO_OLD": "대상 vDC의 QEMU 버전이 이 VM보다 오래되었습니다. 오프라인으로 이동하세요(라이브 모드 끄기)."
+      "TARGET_QEMU_TOO_OLD": "대상 vDC의 QEMU 버전이 이 VM보다 오래되었습니다. 오프라인으로 이동하세요(라이브 모드 끄기).",
+      "TARGET_TUNNEL_TOO_OLD": "대상 vDC의 클러스터가 아직 Proxmox VE 9.3이 아닙니다. 업그레이드 후 이 VM을 이동할 수 있습니다."
     },
     "settings": {
       "title": "vDC 간 이동",

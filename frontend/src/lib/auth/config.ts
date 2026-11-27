@@ -889,6 +889,21 @@ export const authOptions: NextAuthOptions = {
         throw new Error(`Session not valid: ${reason}`)
       }
 
+      // A 2FA requirement that appeared during this session (per-user flag,
+      // super_admin policy switched on or super_admin role granted, TOTP
+      // cleared by an admin) ends it (roadmap#280). Route handlers cannot
+      // re-issue the cookie, so the proxy would keep reading the old value
+      // and the routes that do not check it themselves would keep answering.
+      // The next sign-in sends the user to enrollment.
+      if (ctx.mustEnroll2fa && !token.mustEnroll2fa) {
+        try {
+          await revokeSession(sid, token.id as string)
+        } catch (e: any) {
+          console.warn('[auth-session] revoke on 2FA requirement failed:', e?.message ?? e)
+        }
+        throw new Error('Session not valid: 2FA enrollment required')
+      }
+
       token.tenantId = ctx.tenantId
       token.mustEnroll2fa = ctx.mustEnroll2fa
       if (!token.authAt && ctx.session) token.authAt = ctx.session.createdAt.getTime()

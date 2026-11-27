@@ -16,7 +16,7 @@ export async function GET() {
 
   const u = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { totpEnabled: true, totpEnrolledAt: true },
+    select: { totpEnabled: true, totpEnrolledAt: true, password: true },
   })
 
   const remaining = u?.totpEnabled ? await countRemainingRecoveryCodes(session.user.id) : 0
@@ -26,6 +26,9 @@ export async function GET() {
       enabled: !!u?.totpEnabled,
       enrolledAt: u?.totpEnrolledAt?.toISOString() ?? null,
       recoveryCodesRemaining: remaining,
+      // Whether the re-authentication dialog asks for a password next to the
+      // code (an SSO account has none). Never the hash itself.
+      passwordRequired: !!u?.password,
     },
   })
 }

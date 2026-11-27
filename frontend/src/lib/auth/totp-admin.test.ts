@@ -11,9 +11,10 @@ vi.mock("@/lib/db/prisma", () => ({
   },
 }))
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }))
-vi.mock("./recovery", () => ({ hashRecoveryCode: vi.fn() }))
+vi.mock("./recovery", () => ({ hashRecoveryCode: vi.fn(), findUnusedRecoveryCode: vi.fn(), markRecoveryCodeConsumed: vi.fn(), RECOVERY_CODE_PATTERN: /^[A-Z2-9]{5}-[A-Z2-9]{5}$/ }))
 vi.mock("./password", () => ({ verifyPassword: vi.fn() }))
 vi.mock("./totp", () => ({ verifyTotp: vi.fn() }))
+vi.mock("./sessions", () => ({ revokeAllSessions: vi.fn() }))
 // Pass-through by default: the floor itself is proven in totpThrottle.db.test.ts.
 vi.mock("./totpThrottle", () => ({
   withTotpThrottle: vi.fn(async (_userId: string, _context: string, verify: () => Promise<boolean>) =>
@@ -25,10 +26,11 @@ vi.mock("./totpThrottle", () => ({
 import { getServerSession } from "next-auth"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { hashRecoveryCode } from "./recovery"
+import { findUnusedRecoveryCode, hashRecoveryCode, markRecoveryCodeConsumed } from "./recovery"
 import { verifyPassword } from "./password"
 import { verifyTotp } from "./totp"
 import { withTotpThrottle } from "./totpThrottle"
+import { revokeAllSessions } from "./sessions"
 
 import {
   requireSuperAdminCaller,
@@ -149,52 +151,89 @@ describe("replaceRecoveryCodes", () => {
 
 // ─── verifyReauthCredentials ───────────────────────────────────────────────
 
-describe("verifyReauthCredentials", () => {
+describe("verifyReauthCredentials (roadmap#280: password AND second factor)", () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it("returns true when password is valid", async () => {
-    ;(verifyPassword as any).mockResolvedValue(true)
-    ;(verifyTotp as any).mockResolvedValue(false)
-    const ok = await verifyReauthCredentials("u1", "hashedpw", { password: "correctpw" })
-    expect(ok).toBe(true)
-    expect(verifyPassword).toHaveBeenCalledWith("correctpw", "hashedpw")
-  })
+  const answers = (password: boolean, totp: boolean, recovery = false) => {
+    ;(verifyPassword as any).mockResolvedValue(password)
+    ;(verifyTotp as any).mockResolvedValue(totp)
+    ;(findUnusedRecoveryCode as any).mockResolvedValue(recovery ? "code-1" : null)
+    ;(markRecoveryCodeConsumed as any).mockResolvedValue(true)
+  }
 
-  it("returns true when totp code is valid", async () => {
-    ;(verifyPassword as any).mockResolvedValue(false)
-    ;(verifyTotp as any).mockResolvedValue(true)
-    const ok = await verifyReauthCredentials("u1", "hashedpw", { totpCode: "123456" })
-    expect(ok).toBe(true)
+  it("accepts the password together with a current TOTP code", async () => {
+    answers(true, true)
+    expect(await verifyReauthCredentials("u1", "hashedpw", { password: "correctpw", totpCode: "123456" })).toBe(true)
+    expect(verifyPassword).toHaveBeenCalledWith("correctpw", "hashedpw")
     expect(verifyTotp).toHaveBeenCalledWith("u1", "123456")
   })
 
-  it("returns false when both password and totp are invalid", async () => {
-    ;(verifyPassword as any).mockResolvedValue(false)
-    ;(verifyTotp as any).mockResolvedValue(false)
-    const ok = await verifyReauthCredentials("u1", "hashedpw", { password: "wrong", totpCode: "000000" })
-    expect(ok).toBe(false)
+  it("refuses the password alone", async () => {
+    answers(true, false)
+    expect(await verifyReauthCredentials("u1", "hashedpw", { password: "correctpw" })).toBe(false)
   })
 
-  it("returns false without crashing when passwordHash is null and totp code is invalid", async () => {
-    ;(verifyTotp as any).mockResolvedValue(false)
-    const ok = await verifyReauthCredentials("u1", null, { totpCode: "badcode" })
-    expect(ok).toBe(false)
-    // verifyPassword should NOT be called when hash is null
+  it("refuses a TOTP code alone when the account has a password", async () => {
+    answers(false, true)
+    expect(await verifyReauthCredentials("u1", "hashedpw", { totpCode: "123456" })).toBe(false)
+  })
+
+  it("refuses a wrong password and a wrong code", async () => {
+    answers(false, false)
+    expect(await verifyReauthCredentials("u1", "hashedpw", { password: "wrong", totpCode: "000000" })).toBe(false)
+  })
+
+  it("accepts the password with an unused recovery code, typed in any case", async () => {
+    answers(true, false, true)
+    expect(await verifyReauthCredentials("u1", "hashedpw", { password: "correctpw", totpCode: " y4gqt-8tt5q " })).toBe(true)
+    expect(findUnusedRecoveryCode).toHaveBeenCalledWith("u1", "Y4GQT-8TT5Q")
+    expect(markRecoveryCodeConsumed).toHaveBeenCalledWith("code-1", null)
+    expect(verifyTotp).not.toHaveBeenCalled()
+  })
+
+  it("never spends a recovery code when the password is wrong, but still hashes it (no timing tell)", async () => {
+    answers(false, false, true)
+    expect(await verifyReauthCredentials("u1", "hashedpw", { password: "wrong", totpCode: "Y4GQT-8TT5Q" })).toBe(false)
+    expect(findUnusedRecoveryCode).toHaveBeenCalledWith("u1", "Y4GQT-8TT5Q")
+    expect(markRecoveryCodeConsumed).not.toHaveBeenCalled()
+  })
+
+  it("never burns the authenticator code when the password is wrong", async () => {
+    answers(false, true)
+    expect(await verifyReauthCredentials("u1", "hashedpw", { password: "wrong", totpCode: "123456" })).toBe(false)
+    expect(verifyTotp).not.toHaveBeenCalled()
+  })
+
+  it("refuses a recovery code another request spent first", async () => {
+    answers(true, false, true)
+    ;(markRecoveryCodeConsumed as any).mockResolvedValue(false)
+    expect(await verifyReauthCredentials("u1", "hashedpw", { password: "correctpw", totpCode: "Y4GQT-8TT5Q" })).toBe(false)
+  })
+
+  it("an account without a local password (SSO) proves itself with the code alone", async () => {
+    answers(false, true)
+    expect(await verifyReauthCredentials("u1", null, { totpCode: "123456" })).toBe(true)
     expect(verifyPassword).not.toHaveBeenCalled()
   })
 
+  it("an account without a local password still needs a valid code", async () => {
+    answers(false, false)
+    expect(await verifyReauthCredentials("u1", null, { totpCode: "badcode" })).toBe(false)
+    expect(await verifyReauthCredentials("u1", null, {})).toBe(false)
+  })
+
   it("runs under the always-on floor in the re-auth context", async () => {
-    ;(verifyPassword as any).mockResolvedValue(true)
-    ;(verifyTotp as any).mockResolvedValue(false)
-    expect(await verifyReauthCredentials("u1", "hashedpw", { password: "correctpw" })).toBe(true)
+    answers(true, true)
+    expect(await verifyReauthCredentials("u1", "hashedpw", { password: "correctpw", totpCode: "123456" })).toBe(true)
     expect(withTotpThrottle).toHaveBeenCalledWith("u1", "reauth", expect.any(Function))
   })
 
-  it("throttled: refuses even a correct password without consulting either verifier", async () => {
+  it("throttled: refuses even correct credentials without consulting any verifier", async () => {
     ;(withTotpThrottle as any).mockResolvedValueOnce("throttled")
     expect(await verifyReauthCredentials("u1", "hashedpw", { password: "correctpw", totpCode: "123456" })).toBe(false)
     expect(verifyPassword).not.toHaveBeenCalled()
     expect(verifyTotp).not.toHaveBeenCalled()
+    expect(findUnusedRecoveryCode).not.toHaveBeenCalled()
   })
 })
 
@@ -252,5 +291,29 @@ describe("setUserRequire2faFlag", () => {
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({ action: "2fa_requirement_cleared" }),
     )
+    expect(revokeAllSessions).not.toHaveBeenCalled()
+  })
+
+  it("roadmap#280: requiring 2FA ends every open session of a user without TOTP", async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ email: "target@example.com", totpEnabled: false })
+    ;(prisma.user.update as any).mockResolvedValue({})
+    ;(revokeAllSessions as any).mockResolvedValue(2)
+
+    const res = await setUserRequire2faFlag("target-id", true, { id: "actor-1" })
+
+    expect(res.status).toBe(200)
+    expect(revokeAllSessions).toHaveBeenCalledWith("target-id")
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "2fa_required_for_user", details: { revokedSessions: 2 } }),
+    )
+  })
+
+  it("roadmap#280: a user already enrolled keeps their sessions", async () => {
+    ;(prisma.user.findUnique as any).mockResolvedValue({ email: "target@example.com", totpEnabled: true })
+    ;(prisma.user.update as any).mockResolvedValue({})
+
+    await setUserRequire2faFlag("target-id", true, { id: "actor-1" })
+
+    expect(revokeAllSessions).not.toHaveBeenCalled()
   })
 })

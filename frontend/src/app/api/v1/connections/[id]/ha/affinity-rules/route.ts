@@ -102,6 +102,12 @@ async function postHandler(
       if (body.strict !== undefined) {
         params.append('strict', body.strict ? '1' : '0')
       }
+
+      // Proxmox VE 9.3: 'negative' keeps the resources off the given nodes.
+      // Sent only when asked: an older PVE has no such property for this type.
+      if (body.affinity === 'positive' || body.affinity === 'negative') {
+        params.append('affinity', body.affinity)
+      }
     }
     
     // Paramètres spécifiques à resource-affinity

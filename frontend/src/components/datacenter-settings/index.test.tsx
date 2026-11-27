@@ -95,3 +95,32 @@ describe('DatacenterSettingsTab save (#1207)', () => {
     expect(screen.queryByLabelText('Allowed Tags')).not.toBeInTheDocument()
   })
 })
+
+// consent-text is base64 of UTF-8 in datacenter.cfg; Proxmox VE 9.3 refuses
+// anything else (lab 26/11: "value does not match the regex pattern").
+describe('DatacenterSettingsTab consent text (Proxmox VE 9.3)', () => {
+  it('shows the decoded text and saves what is typed base64-encoded', async () => {
+    const puts: Array<Record<string, string>> = []
+    server.use(
+      http.get('*/api/v1/connections/conn-1/cluster/options', () =>
+        HttpResponse.json({ data: { 'consent-text': 'VXNhZ2UgYXV0b3Jpc8OpIHVuaXF1ZW1lbnQuIExhYiBQcm94Q2VudGVyLg==' } }),
+      ),
+      http.get('*/api/v1/connections/conn-1/nodes', () => HttpResponse.json({ data: [] })),
+      http.put('*/api/v1/connections/conn-1/cluster/options', async ({ request }) => {
+        puts.push(await request.json() as Record<string, string>)
+        return HttpResponse.json({ data: { success: true } })
+      }),
+    )
+    const user = userEvent.setup()
+
+    renderWithProviders(<DatacenterSettingsTab connectionId="conn-1" />)
+
+    const field = await screen.findByDisplayValue('Usage autorisé uniquement. Lab ProxCenter.')
+    await user.clear(field)
+    await user.type(field, 'Accès réservé')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]['consent-text']).toBe(Buffer.from('Accès réservé').toString('base64'))
+  })
+})

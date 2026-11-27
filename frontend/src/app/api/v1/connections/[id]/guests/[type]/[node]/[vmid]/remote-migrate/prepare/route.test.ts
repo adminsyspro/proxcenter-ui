@@ -286,6 +286,65 @@ describe("POST .../remote-migrate/prepare", () => {
   })
 })
 
+// Proxmox VE 9.3 migration tunnel (lab 26/11: PVE-DR 9.3.1 to PVE-PROD 9.2).
+describe("POST .../remote-migrate/prepare with the migration target", () => {
+  const TARGET_CONN = { id: "conn-tgt", baseUrl: "https://target:8006", apiToken: "token" }
+  const withTarget = { removeSnapshots: ["snap1"], target: { connectionId: "conn-tgt", node: "pve2" } }
+
+  function wireVersions(target: string) {
+    const base = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation(async (conn: any, path: string, init?: any) => {
+      if (path.endsWith("/apt/versions")) {
+        return [{ Package: "qemu-server", Version: "9.2.24", OldVersion: conn === TARGET_CONN ? target : "9.2.24" }]
+      }
+      return base(conn, path, init)
+    })
+  }
+
+  beforeEach(async () => {
+    const { clearTunnelVersionCache } = await import("@/lib/migration/tunnelVersion")
+    clearTunnelVersionCache()
+    getConnectionByIdMock.mockImplementation(async (id: string) => (id === "conn-tgt" ? TARGET_CONN : CONN))
+  })
+
+  it("409 and nothing deleted when a 9.3 source meets an older target", async () => {
+    wireVersions("9.2.15")
+
+    const res = await prepare(withTarget)
+
+    expect(res.status).toBe(409)
+    expect((await res.json()).code).toBe("TARGET_TUNNEL_TOO_OLD")
+    expect(deletes()).toHaveLength(0)
+    expect(checkPermissionMock).toHaveBeenCalledWith("vm.migrate", "connection", "conn-tgt")
+  })
+
+  it("clears as before once the target is on the new tunnel", async () => {
+    wireVersions("9.2.24")
+
+    const res = await prepare(withTarget)
+
+    expect(res.status).toBe(200)
+    expect(deletes().map(([, path]) => path)).toEqual([expect.stringContaining("/snapshot/snap1")])
+  })
+
+  it("403 when the target is outside the tenant's migration scope", async () => {
+    canMigrateConnectionsMock.mockImplementation((_infra: any, _id: string, target?: string) => target === undefined)
+
+    const res = await prepare(withTarget)
+
+    expect(res.status).toBe(403)
+    expect(deletes()).toHaveLength(0)
+  })
+
+  it.each([{ target: "conn-tgt" }, { target: { connectionId: "conn-tgt" } }, { target: { connectionId: "conn-tgt", node: "pve2;rm" } }])(
+    "400 for a malformed target: %j", async body => {
+      const res = await prepare({ removeSnapshots: ["snap1"], ...body })
+
+      expect(res.status).toBe(400)
+      expect(deletes()).toHaveLength(0)
+    })
+})
+
 describe("GET .../remote-migrate/prepare tenant guards", () => {
   const get = async (params = PARAMS) => callRoute(GET, { method: "GET", params })
 

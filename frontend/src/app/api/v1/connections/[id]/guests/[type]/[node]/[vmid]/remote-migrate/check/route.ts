@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { checkMigrationTunnel, tunnelTooOldMessage } from "@/lib/migration/tunnelVersion"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
@@ -139,6 +140,25 @@ async function handler(
 
     const scopeDenied = await guardSessionGuest({ connectionId: id, conn: sourceConn, type, node: safeNode, vmid: safeVmid })
     if (scopeDenied) return scopeDenied
+
+    // 0. Proxmox VE 9.3 migration tunnel: a 9.3 source refuses a target that
+    // is not on it yet, but only once the task runs, after the prerequisites
+    // (snapshots included) were cleared for nothing.
+    // Containers were turned away above (LXC_NOT_SUPPORTED).
+    const tunnel = await checkMigrationTunnel(
+      'qemu',
+      { conn: sourceConn, node: safeNode },
+      { conn: targetConn, node: safeTargetNode },
+    )
+    if (tunnel) {
+      issues.push({
+        type: 'error',
+        code: 'TARGET_TUNNEL_TOO_OLD',
+        message: 'The target cluster must be upgraded to Proxmox VE 9.3 first',
+        details: tunnelTooOldMessage(tunnel),
+        context: { pkg: tunnel.pkg, source: tunnel.sourceVersion, target: tunnel.targetVersion, required: tunnel.required },
+      })
+    }
 
     // ========== VÉRIFICATIONS SOURCE ==========
     

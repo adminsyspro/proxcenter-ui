@@ -192,7 +192,7 @@ export const VM_ENTRIES: AllowlistEntry[] = [
     secondaryConnections: TARGET_CONNECTION,
     summary: "Migrate a VM to another cluster",
     description:
-      "Cross-cluster migration (Proxmox remote_migrate) of a QEMU VM. `targetConnectionId` must also be inside the token perimeter. Reserved to the provider and to the MSP tenant that owns both connections.",
+      "Cross-cluster migration (Proxmox remote_migrate) of a QEMU VM. `targetConnectionId` must also be inside the token perimeter. Refused with 409 `TARGET_TUNNEL_TOO_OLD` when the source runs Proxmox VE 9.3 and the target node an older version. Reserved to the provider and to the MSP tenant that owns both connections.",
     requestSchemaRef: "VmRemoteMigrateRequest",
     responseSchemaRef: "VmRemoteMigrateResponse",
   }),
@@ -205,7 +205,7 @@ export const VM_ENTRIES: AllowlistEntry[] = [
     secondaryConnections: TARGET_CONNECTION,
     summary: "Preflight a cross-cluster migration",
     description:
-      "Validates a cross-cluster migration before launching it: blocking errors and warnings (HA, replication, snapshots, CPU, storage, bridge, VMID collision). Changes nothing. `targetConnectionId` must also be inside the token perimeter.",
+      "Validates a cross-cluster migration before launching it: blocking errors and warnings (HA, replication, snapshots, CPU, storage, bridge, VMID collision, a Proxmox VE 9.3 source with an older target). Changes nothing. `targetConnectionId` must also be inside the token perimeter.",
     requestSchemaRef: "VmRemoteMigrateCheckRequest",
     responseSchemaRef: "VmRemoteMigrateCheckResponse",
   }),

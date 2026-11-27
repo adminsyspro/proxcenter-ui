@@ -7,6 +7,7 @@ vi.mock("@/lib/api-tokens/routeGuard", () => ({
 }))
 
 import { callRoute } from "../../../../../../../../../../__tests__/setup/route-test"
+import { clearTunnelVersionCache } from "@/lib/migration/tunnelVersion"
 
 // Hoist mocks so they are available in vi.mock factories
 const { getInfraMock, checkPermissionMock, getConnectionByIdMock, pveFetchMock, getNodeIpMock, watchMigrationMock, TARGET_FP, tlsState } = vi.hoisted(() => ({
@@ -109,6 +110,7 @@ beforeEach(() => {
   watchMigrationMock.mockReset().mockResolvedValue(undefined)
   getInfraMock.mockReset()
   tlsState.fingerprint = TARGET_FP
+  clearTunnelVersionCache()
 })
 
 describe("POST .../remote-migrate — MSP ownership gate", () => {
@@ -483,9 +485,29 @@ describe("POST .../remote-migrate — target node and fingerprint", () => {
     const res = await post(VALID_BODY)
 
     expect(res.status).toBe(200)
-    expect(targetCalls()).toEqual(["/nodes", "/nodes/pve2/certificates/info"])
+    expect(targetCalls()).toEqual(["/nodes", "/nodes/pve2/apt/versions", "/nodes/pve2/certificates/info"])
     expect(sentTargetEndpoint()).toContain(`fingerprint=${TARGET_FP}`)
     expect(sentTargetEndpoint()).toContain("host=10.0.0.2")
+  })
+
+  it("409 before any PVE migration call when a Proxmox VE 9.3 source meets an older target (lab 26/11)", async () => {
+    pveFetchMock.mockImplementation((conn: any, path: string) => {
+      if (path.endsWith("/apt/versions")) {
+        return Promise.resolve(conn === STUB_SOURCE_CONN
+          ? [{ Package: "qemu-server", Version: "9.2.24", OldVersion: "9.2.24" }]
+          : [{ Package: "qemu-server", Version: "9.2.24", OldVersion: "9.2.15" }])
+      }
+      return Promise.resolve(path.includes("remote_migrate") ? "UPID:pve1:0000A:qmigrate:100:root@pam:" : targetClusterAnswers(path))
+    })
+
+    const res = await post(VALID_BODY)
+
+    expect(res.status).toBe(409)
+    const body = await res.json()
+    expect(body.code).toBe("TARGET_TUNNEL_TOO_OLD")
+    expect(body.error).toMatch(/qemu-server 9\.2\.15/)
+    expect(pveFetchMock.mock.calls.some(([, path]: any[]) => path.includes("remote_migrate"))).toBe(false)
+    expect(watchMigrationMock).not.toHaveBeenCalled()
   })
 
   it("refuses when the resolved host presents another certificate than the one the cluster reports", async () => {

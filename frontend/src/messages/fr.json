@@ -1142,6 +1142,8 @@
     "pbsRestoreIpamNote": "L'allocation IP est réconciliée automatiquement à la fin de la restauration.",
     "pbsRestoreAsNew": "Restaurer en tant que nouvelle VM (alloue un VMID + des MAC uniques)",
     "pbsRestoreOverwriteConfirm": "Cette opération va remplacer la VM {vmid} par le contenu du backup. Cliquez à nouveau pour confirmer.",
+    "pbsRestoreOtherGuest": "Cette sauvegarde appartient à un autre invité que la VM {vmid} : Proxmox VE refuse d'écraser un invité avec la sauvegarde d'un autre.",
+    "pbsRestoreAllowOtherGuest": "Écraser quand même (l'invité garde sa propre identité)",
     "pbsRestoreOverwriteConfirmButton": "Confirmer l'écrasement",
     "pbsNoBackups": "Aucune sauvegarde trouvée dans ce stockage PBS",
     "pbsSearchBackups": "Rechercher des sauvegardes...",
@@ -2622,6 +2624,9 @@
     "ruleName": "Nom de la règle",
     "uniqueRuleId": "Identifiant unique de la règle",
     "restrictToSelectedNodes": "Restreindre aux nœuds sélectionnés uniquement",
+    "neverOnSelectedNodes": "Ne jamais tourner sur les nœuds sélectionnés",
+    "runOnSelectedNodes": "Tourner sur les nœuds sélectionnés",
+    "keepOffSelectedNodes": "Tenir à l'écart des nœuds sélectionnés",
     "addHaResourcesFirst": "Ajoutez d'abord des ressources à HA",
     "optionalRuleDescription": "Description optionnelle de la règle",
     "cloneVmTemplate": "Cloner le template VM",
@@ -8558,7 +8563,8 @@
           "allClear": "Prérequis",
           "actionFailed": "Échec de l’action",
           "inGroup": "(groupe {group})",
-          "siteRecovery": "Site Recovery"
+          "siteRecovery": "Site Recovery",
+          "pveVersion": "Version de Proxmox VE"
         },
         "siteRecoveryShared": "Couverte par le job de réplication « {name} », qui couvre aussi {count} autre(s) invité(s)",
         "siteRecoveryOnly": "Couverte par le job de réplication « {name} »",
@@ -8586,7 +8592,8 @@
           "mtuMismatch": "{iface} MTU {vmMtu}, bridge cible {targetMtu}",
           "vmidExists": "{vmid} déjà utilisé sur {node}",
           "insufficientCpu": "{needed} vCPU nécessaires, la cible en a {available}",
-          "insufficientMemory": "{needed} Mo de RAM nécessaires, {available} Mo libres"
+          "insufficientMemory": "{needed} Mo de RAM nécessaires, {available} Mo libres",
+          "tunnelTooOld": "cible {pkg} {target}, {required}+ requis (Proxmox VE 9.3)"
         }
       },
       "storage": "Stockage",
@@ -10996,6 +11003,7 @@
     "autoHaSyncNow": "Synchroniser",
     "autoHaSyncSuccess": "{added} ajoutee(s), {skipped} deja configuree(s)",
     "nodeAffinityInfo": "Les regles d'affinite de noeud contraignent les VMs gerees par la HA a s'executer sur des noeuds specifiques. Lors d'une relocalisation, seuls les noeuds selectionnes seront consideres.",
+    "nodeAffinityNegativeInfo": "Une règle d'affinité de nœud négative tient les VMs gérées par la HA à l'écart des nœuds sélectionnés : jamais placées là en mode strict, seulement en dernier recours sinon.",
     "resourceAffinityInfo": "Les regles d'affinite de ressource definissent si les VMs gerees par la HA doivent rester ensemble sur le meme noeud (positif) ou etre separees sur differents noeuds (negatif) pour la redondance.",
     "noNodeAffinityRules": "Aucune regle d'affinite de noeud configuree. Utilisez le bouton + pour contraindre les VMs a des noeuds specifiques.",
     "noResourceAffinityRules": "Aucune regle d'affinite de ressource configuree. Utilisez le bouton + pour garder les VMs ensemble ou separees.",
@@ -16517,7 +16525,8 @@
       "VMID_TAKEN_ON_TARGET": "Le VMID {vmid} est déjà utilisé sur le cluster cible.",
       "NO_TARGET_NODE": "Aucun hôte du vDC cible n'a la place pour cette VM en ce moment.",
       "QUOTA_EXCEEDED": "Le quota du vDC cible serait dépassé :",
-      "TARGET_QEMU_TOO_OLD": "Le vDC cible a une version de QEMU plus ancienne que cette VM : déplacez-la à froid (désactivez le mode à chaud)."
+      "TARGET_QEMU_TOO_OLD": "Le vDC cible a une version de QEMU plus ancienne que cette VM : déplacez-la à froid (désactivez le mode à chaud).",
+      "TARGET_TUNNEL_TOO_OLD": "Le cluster du vDC cible n'est pas encore en Proxmox VE 9.3 : cette VM pourra y aller une fois la mise à jour faite."
     },
     "settings": {
       "title": "Déplacements entre vDC",

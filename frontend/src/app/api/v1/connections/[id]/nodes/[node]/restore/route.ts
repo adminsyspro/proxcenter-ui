@@ -1,6 +1,7 @@
 import { NextResponse, after } from "next/server"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { findIdentityMismatch } from "@/lib/proxmox/guestIdentity"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { refreshCachedGuests } from "@/lib/cache/guestSetRefresh"
 import { checkPermission, checkPermissions, buildNodeResourceId, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
@@ -62,6 +63,7 @@ async function handler(
       sockets,
       pbsBackup,
       force,
+      allowIdentityMismatch,
       restoreTags,
     } = body
 
@@ -135,6 +137,7 @@ async function handler(
     // `force` overwrites the guest already holding this vmid, which destroys
     // it: the caller must be allowed to delete that guest, judged on the node
     // it actually lives on. Fail closed when its existence cannot be checked.
+    let overwritten: { node: string; type: string } | null = null
     if (force) {
       let guests: unknown
       try {
@@ -158,6 +161,7 @@ async function handler(
         // the provider and MSP tenants.
         const scopeDenied = await checkTenantGuestScope(tenantId, conn, id, existingType, existingNode, String(vmid))
         if (scopeDenied) return scopeDenied
+        overwritten = { node: existingNode, type: existingType }
       }
     }
 
@@ -305,6 +309,23 @@ async function handler(
       )
     }
 
+    // PVE 9.3 refuses, inside the task, a backup of another guest over an
+    // existing one. Said here, before any task, so the caller can choose to
+    // overwrite anyway (the guest then keeps its own identity).
+    const identityMismatch = overwritten
+      ? await findIdentityMismatch(conn, node, archive, { ...overwritten, vmid })
+      : null
+    if (identityMismatch && allowIdentityMismatch !== true) {
+      return NextResponse.json(
+        {
+          error: `The backup belongs to another guest: VM ${vmid} has its own identity. Allow restoring a backup of another guest to overwrite it anyway.`,
+          code: 'BACKUP_OF_ANOTHER_GUEST',
+          context: identityMismatch,
+        },
+        { status: 409 },
+      )
+    }
+
     // Resolve the tenant's vDC pool eagerly (cookies are gone after the
     // response is sent and `after()` runs). qmrestore/vzrestore land VMs
     // outside any pool, and without this placement the restored VM is invisible
@@ -375,6 +396,9 @@ async function handler(
     // tenant chooses "Restore on top of source VM". Without it PVE
     // refuses with "VM/CT <id> already exists".
     if (force) params.force = '1'
+    // Only sent where PVE found the guest identities to differ: a PVE before
+    // 9.3 does not know the parameter.
+    if (identityMismatch) params['allow-identity-mismatch'] = '1'
     // "Restore tags" off (#965): an empty `tags` override. PVE merges it into
     // the backed-up config it writes once the disks are restored, and that is
     // BEFORE it starts the guest (`start`) or boots it for a live restore, so

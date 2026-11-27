@@ -1132,6 +1132,8 @@
     "pbsRestoreIpamNote": "IP allocation is reconciled automatically after the restore completes.",
     "pbsRestoreAsNew": "Restore as a new VM (auto-allocates a fresh VMID + unique MACs)",
     "pbsRestoreOverwriteConfirm": "This will replace VM {vmid} with the backup contents. Click again to confirm.",
+    "pbsRestoreOtherGuest": "Diese Sicherung gehört zu einem anderen Gast als VM {vmid}: Proxmox VE überschreibt einen Gast nicht mit der Sicherung eines anderen.",
+    "pbsRestoreAllowOtherGuest": "Trotzdem überschreiben (der Gast behält seine eigene Identität)",
     "pbsRestoreOverwriteConfirmButton": "Confirm overwrite",
     "pbsNoBackups": "Keine Backups in diesem PBS-Storage gefunden",
     "pbsSearchBackups": "suchen backups...",
@@ -2611,6 +2613,9 @@
     "ruleName": "Regelname",
     "uniqueRuleId": "Eindeutige Regelkennung",
     "restrictToSelectedNodes": "Restrict to ausgewählt Nodes only",
+    "neverOnSelectedNodes": "Nie auf den gewählten Knoten laufen",
+    "runOnSelectedNodes": "Auf den gewählten Knoten laufen",
+    "keepOffSelectedNodes": "Von den gewählten Knoten fernhalten",
     "addHaResourcesFirst": "hinzufügen HA Ressourcen first",
     "optionalRuleDescription": "optional rule Beschreibung",
     "cloneVmTemplate": "VM-Vorlage klonen",
@@ -8539,7 +8544,8 @@
           "allClear": "Voraussetzungen",
           "actionFailed": "Aktion fehlgeschlagen",
           "inGroup": "(Gruppe {group})",
-          "siteRecovery": "Site Recovery"
+          "siteRecovery": "Site Recovery",
+          "pveVersion": "Proxmox-VE-Version"
         },
         "siteRecoveryShared": "Durch den Replikationsjob „{name}“ abgedeckt, der auch {count} weitere Gäste umfasst",
         "siteRecoveryOnly": "Durch den Replikationsjob „{name}“ abgedeckt",
@@ -8567,7 +8573,8 @@
           "mtuMismatch": "{iface} MTU {vmMtu}, Ziel-Bridge {targetMtu}",
           "vmidExists": "{vmid} wird bereits auf {node} verwendet",
           "insufficientCpu": "{needed} vCPUs benötigt, Ziel hat {available}",
-          "insufficientMemory": "{needed} MB RAM benötigt, {available} MB frei"
+          "insufficientMemory": "{needed} MB RAM benötigt, {available} MB frei",
+          "tunnelTooOld": "Ziel {pkg} {target}, {required}+ nötig (Proxmox VE 9.3)"
         }
       },
       "storage": "Speicher",
@@ -10942,6 +10949,7 @@
     "autoHaSyncNow": "Jetzt synchronisieren",
     "autoHaSyncSuccess": "{added} hinzugefuegt, {skipped} bereits konfiguriert",
     "nodeAffinityInfo": "Node-Affinitaetsregeln beschraenken HA-verwaltete VMs auf bestimmte Nodes. Bei einer Verlagerung werden nur die ausgewaehlten Nodes als Ziele betrachtet.",
+    "nodeAffinityNegativeInfo": "Eine negative Knotenaffinitätsregel hält HA-verwaltete VMs von den gewählten Knoten fern: im strikten Modus nie dort, sonst nur als letzter Ausweg.",
     "resourceAffinityInfo": "Ressourcen-Affinitaetsregeln legen fest, ob HA-verwaltete VMs auf demselben Node zusammengehalten (positiv) oder auf verschiedene Nodes verteilt (negativ) werden sollen.",
     "noNodeAffinityRules": "Keine Node-Affinitaetsregeln konfiguriert. Verwenden Sie die +-Schaltflaeche, um VMs auf bestimmte Nodes zu beschraenken.",
     "noResourceAffinityRules": "Keine Ressourcen-Affinitaetsregeln konfiguriert. Verwenden Sie die +-Schaltflaeche, um VMs zusammen oder getrennt zu halten.",
@@ -16087,7 +16095,8 @@
       "VMID_TAKEN_ON_TARGET": "VMID {vmid} wird auf dem Zielcluster bereits verwendet.",
       "NO_TARGET_NODE": "Kein Host des Ziel-vDC hat gerade Platz für diese VM.",
       "QUOTA_EXCEEDED": "Das Kontingent des Ziel-vDC würde überschritten:",
-      "TARGET_QEMU_TOO_OLD": "Das Ziel-vDC hat eine ältere QEMU-Version als diese VM: verschieben Sie sie offline (Modus ausschalten)."
+      "TARGET_QEMU_TOO_OLD": "Das Ziel-vDC hat eine ältere QEMU-Version als diese VM: verschieben Sie sie offline (Modus ausschalten).",
+      "TARGET_TUNNEL_TOO_OLD": "Der Cluster des Ziel-vDC läuft noch nicht mit Proxmox VE 9.3: diese VM kann nach dem Update dorthin verschoben werden."
     },
     "settings": {
       "title": "Verschiebungen zwischen vDCs",

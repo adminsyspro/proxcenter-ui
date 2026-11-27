@@ -386,3 +386,45 @@ describe("POST .../remote-migrate/check tenant guards", () => {
     expect(pveFetchMock).not.toHaveBeenCalled()
   })
 })
+
+// Proxmox VE 9.3 migration tunnel (lab 26/11: PVE-DR 9.3.1 to PVE-PROD 9.2).
+describe("POST .../remote-migrate/check — Proxmox VE 9.3 migration tunnel", () => {
+  function wireVersions(source: string, target: string) {
+    wirePveFetch([], { ha: [] })
+    const base = pveFetchMock.getMockImplementation()!
+    pveFetchMock.mockImplementation((conn: any, path: string) => {
+      if (path === `/nodes/${PARAMS.node}/apt/versions`) return Promise.resolve([{ Package: "qemu-server", Version: source, OldVersion: source }])
+      if (path === `/nodes/${BODY.targetNode}/apt/versions`) return Promise.resolve([{ Package: "qemu-server", Version: "9.2.24", OldVersion: target }])
+      return base(conn, path)
+    })
+  }
+
+  beforeEach(async () => {
+    const { clearTunnelVersionCache } = await import("@/lib/migration/tunnelVersion")
+    clearTunnelVersionCache()
+  })
+
+  it("blocks a 9.3 source with an older target, with the versions behind it", async () => {
+    wireVersions("9.2.24", "9.2.15")
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    const json = await (await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })).json()
+
+    expect(json.valid).toBe(false)
+    expect(json.issues.find((i: any) => i.code === "TARGET_TUNNEL_TOO_OLD")).toMatchObject({
+      type: "error",
+      context: { pkg: "qemu-server", source: "9.2.24", target: "9.2.15", required: "9.2.21" },
+      details: expect.stringContaining("Upgrade the target cluster to Proxmox VE 9.3 first"),
+    })
+  })
+
+  it("says nothing once the target is upgraded, or while the source is still older", async () => {
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+    for (const [source, target] of [["9.2.24", "9.2.24"], ["9.2.15", "9.2.10"]]) {
+      const { clearTunnelVersionCache } = await import("@/lib/migration/tunnelVersion")
+      clearTunnelVersionCache()
+      wireVersions(source, target)
+      const json = await (await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })).json()
+      expect(json.issues.some((i: any) => i.code === "TARGET_TUNNEL_TOO_OLD")).toBe(false)
+    }
+  })
+})

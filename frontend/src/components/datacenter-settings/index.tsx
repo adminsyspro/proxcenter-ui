@@ -12,6 +12,7 @@ import SecuritySection from './SecuritySection'
 import BandwidthSection from './BandwidthSection'
 import AdvancedSection from './AdvancedSection'
 import { mergeKV, parseKV, tagListValue } from './optionStrings'
+import { decodeConsentText, encodeConsentText } from '@/lib/proxmox/consentText'
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -287,7 +288,8 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
       setUserTagAllowList(tagListValue(uta['user-allow-list']))
       // PVE returns the registered tags as an array: shown and sent as `a;b` (#1207)
       setRegisteredTags(tagListValue(data['registered-tags']))
-      setConsentText(data['consent-text'] || '')
+      // Stored base64-encoded (UTF-8), as the Proxmox VE GUI writes it.
+      setConsentText(decodeConsentText(data['consent-text']))
 
       setDirty(false)
     } catch (e: any) {
@@ -322,7 +324,7 @@ export default function DatacenterSettingsTab({ connectionId }: Props) {
         { key: 'mac_prefix', value: macPrefix },
         { key: 'max_workers', value: maxWorkers },
         { key: 'registered-tags', value: tagListValue(registeredTags) },
-        { key: 'consent-text', value: consentText },
+        { key: 'consent-text', value: encodeConsentText(consentText) },
       ]
 
       // Property strings: the form's fields are laid over what PVE returned,

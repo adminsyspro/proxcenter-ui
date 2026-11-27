@@ -604,6 +604,65 @@ describe('RestoreVmDialog - restore error', () => {
   })
 })
 
+// Proxmox VE 9.3 guest identity (lab 26/11: backup of VM 9930 over VM 9931).
+describe('RestoreVmDialog - backup of another guest (Proxmox VE 9.3)', () => {
+  beforeEach(() => {
+    seedBaseHandlers()
+  })
+
+  it('explains the refusal and overwrites only once the user allows it', async () => {
+    const onClose = vi.fn()
+    const bodies: Record<string, any>[] = []
+    server.use(
+      http.post(`*/api/v1/connections/${CONN_ID}/nodes/${NODE_NAME}/restore`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, any>
+        bodies.push(body)
+        return body.allowIdentityMismatch
+          ? HttpResponse.json({ data: UPID })
+          : HttpResponse.json({ error: 'The backup belongs to another guest', code: 'BACKUP_OF_ANOTHER_GUEST' }, { status: 409 })
+      }),
+    )
+    renderWithProviders(<RestoreVmDialog {...makeProps({ onClose })} />)
+    await waitForDataLoad()
+    await screen.findByText(`VM ${SOURCE_VMID} exists and will be overwritten`)
+
+    fireEvent.click(screen.getAllByRole('button').find((b) => b.textContent?.trim() === 'Restore VM')!)
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm overwrite' }))
+
+    await screen.findByText(new RegExp(`belongs to another guest than VM ${SOURCE_VMID}`))
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0].allowIdentityMismatch).toBeUndefined()
+    expect(onClose).not.toHaveBeenCalled()
+    const confirm = screen.getByRole('button', { name: 'Confirm overwrite' })
+    expect(confirm).toBeDisabled()
+
+    fireEvent.click(screen.getByLabelText('Overwrite anyway (the guest keeps its own identity)'))
+    expect(confirm).not.toBeDisabled()
+    fireEvent.click(confirm)
+
+    await waitFor(() => expect(bodies).toHaveLength(2))
+    expect(bodies[1]).toMatchObject({ force: true, allowIdentityMismatch: true })
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+  })
+
+  it('forgets the choice when the target VMID changes', async () => {
+    server.use(
+      http.post(`*/api/v1/connections/${CONN_ID}/nodes/${NODE_NAME}/restore`, async () =>
+        HttpResponse.json({ error: 'x', code: 'BACKUP_OF_ANOTHER_GUEST' }, { status: 409 })),
+    )
+    renderWithProviders(<RestoreVmDialog {...makeProps()} />)
+    await waitForDataLoad()
+    await screen.findByText(`VM ${SOURCE_VMID} exists and will be overwritten`)
+    fireEvent.click(screen.getAllByRole('button').find((b) => b.textContent?.trim() === 'Restore VM')!)
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm overwrite' }))
+    await screen.findByLabelText('Overwrite anyway (the guest keeps its own identity)')
+
+    fireEvent.change(screen.getByLabelText('VMID'), { target: { value: '4321' } })
+
+    expect(screen.queryByLabelText('Overwrite anyway (the guest keeps its own identity)')).not.toBeInTheDocument()
+  })
+})
+
 describe('RestoreVmDialog - GPU contingent refusal (#672)', () => {
   beforeEach(() => {
     seedBaseHandlers()

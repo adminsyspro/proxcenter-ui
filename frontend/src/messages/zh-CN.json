@@ -1146,6 +1146,8 @@
     "pbsRestoreIpamNote": "IP allocation is reconciled automatically after the restore completes.",
     "pbsRestoreAsNew": "Restore as a new VM (auto-allocates a fresh VMID + unique MACs)",
     "pbsRestoreOverwriteConfirm": "This will replace VM {vmid} with the backup contents. Click again to confirm.",
+    "pbsRestoreOtherGuest": "此备份属于虚拟机 {vmid} 以外的另一个客户机：Proxmox VE 拒绝用另一个客户机的备份覆盖客户机。",
+    "pbsRestoreAllowOtherGuest": "仍然覆盖（客户机保留其自身标识）",
     "pbsRestoreOverwriteConfirmButton": "Confirm overwrite",
     "pbsNoBackups": "此 PBS 存储中未找到备份",
     "pbsSearchBackups": "搜索备份...",
@@ -2626,6 +2628,9 @@
     "ruleName": "规则名称",
     "uniqueRuleId": "唯一规则标识符",
     "restrictToSelectedNodes": "仅限选中的节点",
+    "neverOnSelectedNodes": "绝不在所选节点上运行",
+    "runOnSelectedNodes": "在所选节点上运行",
+    "keepOffSelectedNodes": "远离所选节点",
     "addHaResourcesFirst": "请先添加高可用资源",
     "optionalRuleDescription": "可选的规则描述",
     "cloneVmTemplate": "克隆虚拟机模板",
@@ -8545,7 +8550,8 @@
           "allClear": "前置条件",
           "actionFailed": "操作失败",
           "inGroup": "(组 {group})",
-          "siteRecovery": "Site Recovery"
+          "siteRecovery": "Site Recovery",
+          "pveVersion": "Proxmox VE 版本"
         },
         "siteRecoveryShared": "由复制任务“{name}”覆盖，该任务还覆盖其他 {count} 个客户机",
         "siteRecoveryOnly": "由复制任务“{name}”覆盖",
@@ -8573,7 +8579,8 @@
           "mtuMismatch": "{iface} MTU 为 {vmMtu}，目标 Bridge 为 {targetMtu}",
           "vmidExists": "{vmid} 已在 {node} 上使用",
           "insufficientCpu": "需要 {needed} 个 vCPU，目标有 {available} 个",
-          "insufficientMemory": "需要 {needed} MB RAM，可用 {available} MB"
+          "insufficientMemory": "需要 {needed} MB RAM，可用 {available} MB",
+          "tunnelTooOld": "目标 {pkg} {target}，需要 {required}+（Proxmox VE 9.3）"
         }
       },
       "storage": "存储",
@@ -10982,6 +10989,7 @@
     "autoHaSyncNow": "立即同步",
     "autoHaSyncSuccess": "已添加 {added} 个，{skipped} 个已配置",
     "nodeAffinityInfo": "节点亲和性规则将HA管理的虚拟机限制在特定节点上运行。当虚拟机需要迁移时，只有选定的节点会被考虑作为目标。",
+    "nodeAffinityNegativeInfo": "负向节点亲和性规则让 HA 管理的虚拟机远离所选节点：严格模式下绝不放置在这些节点上，否则仅作为最后手段。",
     "resourceAffinityInfo": "资源亲和性规则定义HA管理的虚拟机是否应保持在同一节点上（正向）或分布在不同节点上（负向）以实现冗余。",
     "noNodeAffinityRules": "未配置节点亲和性规则。使用 + 按钮将虚拟机限制到特定节点。",
     "noResourceAffinityRules": "未配置资源亲和性规则。使用 + 按钮将虚拟机保持在一起或分开。",
@@ -16503,7 +16511,8 @@
       "VMID_TAKEN_ON_TARGET": "VMID {vmid} 已在目标集群上使用。",
       "NO_TARGET_NODE": "目标 vDC 当前没有主机有空间容纳此虚拟机。",
       "QUOTA_EXCEEDED": "将超出目标 vDC 的配额：",
-      "TARGET_QEMU_TOO_OLD": "目标 vDC 的 QEMU 版本比此虚拟机旧：请离线移动（关闭在线模式）。"
+      "TARGET_QEMU_TOO_OLD": "目标 vDC 的 QEMU 版本比此虚拟机旧：请离线移动（关闭在线模式）。",
+      "TARGET_TUNNEL_TOO_OLD": "目标 vDC 的集群尚未升级到 Proxmox VE 9.3：升级后即可将此虚拟机移动过去。"
     },
     "settings": {
       "title": "vDC 之间的移动",

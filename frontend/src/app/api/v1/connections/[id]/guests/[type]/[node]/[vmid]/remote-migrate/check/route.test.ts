@@ -35,6 +35,11 @@ vi.mock("@/lib/tenant/infraScope", async (orig) => ({
   getTenantInfrastructureScope: (...a: any[]) => getInfraMock(...a),
 }))
 vi.mock("@/lib/vdc/guestGuard", () => ({ guardSessionGuest: (...a: any[]) => guardSessionGuestMock(...a) }))
+const { sshReadyMock } = vi.hoisted(() => ({ sshReadyMock: vi.fn() }))
+vi.mock("@/lib/migration/sharedHandover/server", async (orig) => ({
+  ...(await orig<typeof import("@/lib/migration/sharedHandover/server")>()),
+  sshReady: (...a: any[]) => sshReadyMock(...a),
+}))
 
 const PARAMS = { id: "conn-src", type: "qemu", node: "pve1", vmid: "100" }
 const BODY = { targetConnectionId: "conn-tgt", targetNode: "pve2", targetStorage: "local-lvm", targetBridge: "vmbr0" }
@@ -426,5 +431,164 @@ describe("POST .../remote-migrate/check — Proxmox VE 9.3 migration tunnel", ()
       const json = await (await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })).json()
       expect(json.issues.some((i: any) => i.code === "TARGET_TUNNEL_TOO_OLD")).toBe(false)
     }
+  })
+})
+
+// ui#1460: the move without copy reuses the preflight with its own rules.
+describe("POST .../remote-migrate/check — move without copy (handover)", () => {
+  const HANDOVER = { targetConnectionId: "conn-tgt", targetNode: "pve2", targetBridge: "vmbr0", handover: true }
+
+  function wireHandover(opts: { status?: string; config?: Record<string, unknown>; targetVms?: any[]; pool?: string; snapshots?: any[] } = {}) {
+    pveFetchMock.mockImplementation((_conn: any, path: string) => {
+      if (path.endsWith("/status/current")) return Promise.resolve({ status: opts.status ?? "stopped" })
+      if (path.endsWith("/status")) return Promise.resolve({ cpuinfo: { cpus: 8 }, memory: { free: 8 * 1024 ** 3 } })
+      if (path.endsWith("/config")) return Promise.resolve(opts.config ?? { memory: 512, scsi0: "CephStoragePool:vm-100-disk-0,size=8G", net0: "virtio=AA:BB:CC:DD:EE:FF,bridge=vmbr0" })
+      if (path.includes("/snapshot")) return Promise.resolve(opts.snapshots ?? [{ name: "current" }])
+      if (path === "/nodes") return Promise.resolve([{ node: "pve2", status: "online" }])
+      if (path.endsWith("/network")) return Promise.resolve([{ iface: "vmbr0", type: "bridge" }])
+      if (path === "/cluster/resources?type=vm") {
+        return Promise.resolve(_conn === "tgt" ? (opts.targetVms ?? []) : [{ vmid: 100, pool: opts.pool }])
+      }
+      return Promise.resolve([])
+    })
+  }
+
+  async function check(body: any = HANDOVER, params: any = PARAMS) {
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+
+    return (await callRoute(POST, { method: "POST", params, body })).json()
+  }
+
+  beforeEach(() => {
+    sshReadyMock.mockReset().mockResolvedValue(true)
+    getConnectionByIdMock.mockReset().mockImplementation(async (id: string) => (id === "conn-tgt" ? "tgt" : "src"))
+  })
+
+  it("passes a stopped guest without asking for a target storage", async () => {
+    wireHandover()
+
+    const json = await check()
+
+    expect(json.valid).toBe(true)
+    expect(json.issues).toEqual([])
+  })
+
+  it("blocks a running guest and offers to shut it down", async () => {
+    wireHandover({ status: "running" })
+
+    const json = await check()
+
+    expect(json.issues.find((i: any) => i.code === "GUEST_RUNNING")).toMatchObject({ type: "error", remediation: { kind: "shutdown" } })
+  })
+
+  it("makes a VMID taken on the target a blocker: the guest keeps its VMID", async () => {
+    wireHandover({ targetVms: [{ vmid: 100, node: "pve3", name: "other" }] })
+
+    const json = await check({ ...HANDOVER, targetVmid: 555 })
+
+    expect(json.issues.find((i: any) => i.code === "VMID_EXISTS_ON_TARGET")).toMatchObject({ type: "error", context: { vmid: "100" } })
+  })
+
+  it("carries snapshots instead of blocking on them", async () => {
+    wireHandover({ snapshots: [{ name: "current" }, { name: "before" }] })
+
+    const json = await check()
+
+    expect(json.issues.some((i: any) => i.code === "SNAPSHOTS_PRESENT")).toBe(false)
+  })
+
+  it.each([
+    [false, true, "source"],
+    [true, false, "target"],
+  ])("blocks without SSH (source %s, target %s)", async (src, tgt, side) => {
+    wireHandover()
+    sshReadyMock.mockImplementation(async (id: string) => (id === "conn-src" ? src : tgt))
+
+    const json = await check()
+
+    expect(json.issues.find((i: any) => i.code === "SSH_REQUIRED")).toMatchObject({ type: "error", context: { side } })
+  })
+
+  it("blocks a guest bound to a device of its node", async () => {
+    wireHandover({ config: { memory: 512, hostpci0: "0000:01:00.0", scsi0: "A:vm-100-disk-0" } })
+
+    const json = await check()
+
+    expect(json.issues.find((i: any) => i.code === "NOT_PORTABLE")).toMatchObject({ type: "error", context: { keys: "hostpci0" } })
+  })
+
+  it("warns about an ISO it will detach and a pool the guest leaves", async () => {
+    wireHandover({ config: { memory: 512, ide2: "local:iso/debian.iso,media=cdrom", scsi0: "A:vm-100-disk-0" }, pool: "web" })
+
+    const json = await check()
+
+    expect(json.valid).toBe(true)
+    expect(json.issues.find((i: any) => i.code === "ISO_DETACHED")).toMatchObject({ type: "warning", context: { isos: "local:iso/debian.iso" } })
+    expect(json.issues.find((i: any) => i.code === "POOL_NOT_CARRIED")).toMatchObject({ type: "warning", context: { pool: "web" } })
+  })
+
+  it("accepts a container", async () => {
+    wireHandover({ config: { hostname: "ct", rootfs: "A:vm-101-disk-0,size=8G", net0: "name=eth0,bridge=vmbr0" } })
+
+    const json = await check(HANDOVER, { ...PARAMS, type: "lxc", vmid: "101" })
+
+    expect(json.valid).toBe(true)
+    expect(pveFetchMock.mock.calls.some(([, path]: any[]) => path === "/nodes/pve1/lxc/101/config")).toBe(true)
+  })
+
+  it("still turns a container away from the migration with copy", async () => {
+    const json = await check(BODY, { ...PARAMS, type: "lxc" })
+
+    expect(json.issues[0].code).toBe("LXC_NOT_SUPPORTED")
+  })
+})
+
+// Lab 27/11: a stopped VM on RBD sent to a ZFS pool was refused by Proxmox one
+// second into the task. The preflight says it first.
+describe("POST .../remote-migrate/check — offline copy between storage types", () => {
+  function wireCopy(opts: { status: string; targetType: string }) {
+    pveFetchMock.mockImplementation((conn: any, path: string) => {
+      if (path.endsWith("/status/current")) return Promise.resolve({ status: opts.status })
+      if (path.endsWith("/config")) return Promise.resolve({ scsi0: "CephStoragePool:vm-100-disk-0,size=8G", efidisk0: "CephStoragePool:vm-100-disk-1,size=1M" })
+      if (path === "/storage") return Promise.resolve([{ storage: "CephStoragePool", type: "rbd" }])
+      if (path === "/nodes") return Promise.resolve([{ node: BODY.targetNode, status: "online" }])
+      if (path.endsWith("/storage")) return Promise.resolve([{ storage: BODY.targetStorage, type: opts.targetType, content: "images,rootdir" }])
+      if (path.endsWith("/network")) return Promise.resolve([{ iface: BODY.targetBridge, type: "bridge" }])
+      return Promise.resolve([])
+    })
+  }
+
+  async function check() {
+    const POST = (await import("./route")).POST as Parameters<typeof callRoute>[0]
+
+    return (await callRoute(POST, { method: "POST", params: PARAMS, body: BODY })).json()
+  }
+
+  it("blocks a stopped VM whose disks Proxmox cannot copy to the target storage type", async () => {
+    wireCopy({ status: "stopped", targetType: "zfspool" })
+
+    const json = await check()
+
+    expect(json.valid).toBe(false)
+    expect(json.issues.find((i: any) => i.code === "STORAGE_FORMAT_MISMATCH")).toMatchObject({
+      type: "error",
+      context: { storage: BODY.targetStorage, sourceType: "rbd", targetType: "zfspool" },
+    })
+  })
+
+  it("lets a running VM through: a live migration mirrors its disks instead", async () => {
+    wireCopy({ status: "running", targetType: "zfspool" })
+
+    const json = await check()
+
+    expect(json.issues.some((i: any) => i.code === "STORAGE_FORMAT_MISMATCH")).toBe(false)
+  })
+
+  it("lets a stopped VM through to a storage of a compatible type", async () => {
+    wireCopy({ status: "stopped", targetType: "lvmthin" })
+
+    const json = await check()
+
+    expect(json.issues.some((i: any) => i.code === "STORAGE_FORMAT_MISMATCH")).toBe(false)
   })
 })

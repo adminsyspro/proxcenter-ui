@@ -8564,7 +8564,12 @@
           "actionFailed": "Action failed",
           "inGroup": "(group {group})",
           "siteRecovery": "Site Recovery",
-          "pveVersion": "Proxmox VE version"
+          "pveVersion": "Proxmox VE version",
+          "guestState": "Guest state",
+          "ssh": "SSH",
+          "portability": "Portability",
+          "cdrom": "CD-ROM",
+          "pool": "Pool"
         },
         "siteRecoveryShared": "Covered by replication job \"{name}\", which also covers {count} other guest(s)",
         "siteRecoveryOnly": "Covered by replication job \"{name}\"",
@@ -8593,7 +8598,14 @@
           "vmidExists": "{vmid} already used on {node}",
           "insufficientCpu": "{needed} vCPUs needed, target has {available}",
           "insufficientMemory": "{needed} MB RAM needed, {available} MB free",
-          "tunnelTooOld": "target {pkg} {target}, needs {required}+ (Proxmox VE 9.3)"
+          "tunnelTooOld": "target {pkg} {target}, needs {required}+ (Proxmox VE 9.3)",
+          "guestRunning": "must be stopped first",
+          "sshSource": "not enabled on the source connection",
+          "sshTarget": "not enabled on the target connection",
+          "notPortable": "bound to its node: {keys}",
+          "isoDetached": "{isos} will be ejected",
+          "poolNotCarried": "leaves pool {pool}, joins none on the target",
+          "storageFormat": "{sourceType} disks cannot be copied offline to {targetType} ({storage})"
         }
       },
       "storage": "Storage",
@@ -8637,7 +8649,20 @@
       "disksPlural": "{count} disks ({size} GiB)",
       "sshNotEnabled": "SSH not enabled on source connection",
       "sshNotEnabledDesc": "The source VM will stay locked (lock: migrate) after migration. You will need to unlock it manually:",
-      "sshUnlockCommand": "qm unlock {vmid}"
+      "sshUnlockCommand": "qm unlock {vmid}",
+      "handover": {
+        "label": "Without copy (shared storage)",
+        "reasonSshSource": "SSH must be enabled on the source connection",
+        "reasonSshTarget": "SSH must be enabled on the target connection",
+        "reasonNotPortable": "Bound to its node: {keys}",
+        "reasonStorage": "Storage not proven shared with the target: {storages}",
+        "start": "Start on the target",
+        "startDesc": "The guest starts once its configuration is on the target",
+        "stayStopped": "The guest stays stopped on the target",
+        "submit": "Move without copy",
+        "shutdown": "Shut down",
+        "startFailed": "Moved without copy, but it did not start on the target: {error}"
+      }
     },
     "confirmRemoveHardwareTitle": "Remove hardware",
     "confirmDeleteHardware": "Are you sure you want to remove hardware {id}? This cannot be undone.",

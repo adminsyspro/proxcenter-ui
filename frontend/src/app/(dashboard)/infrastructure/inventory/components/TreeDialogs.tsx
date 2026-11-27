@@ -906,8 +906,9 @@ export default function TreeDialogs(props: TreeDialogsProps) {
           }}
           onCrossClusterMigrate={async (params: CrossClusterMigrateParams) => {
             const { connId, node, type, vmid } = migrateTarget
-            const { upid } = await crossClusterMigrate({ connId, node, type, vmid }, params)
-            openTaskViewer({ upid, connectionId: connId, description: `${migrateTarget.name || `VM ${vmid}`}: ${t('vmActions.migrate')} (cross-cluster)` })
+            const { upid, taskConnectionId, startError } = await crossClusterMigrate({ connId, node, type, vmid }, params)
+            if (startError) toast.warning(t('hardware.crossCluster.handover.startFailed', { error: startError }))
+            openTaskViewer({ upid, connectionId: taskConnectionId, description: `${migrateTarget.name || `VM ${vmid}`}: ${t('vmActions.migrate')} (cross-cluster)` })
             setMigrateDialogOpen(false)
             setMigrateTarget(null)
             setReloadTick(x => x + 1)

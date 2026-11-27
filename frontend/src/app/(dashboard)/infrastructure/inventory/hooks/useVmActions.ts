@@ -263,13 +263,14 @@ export function useVmActions({
 
     const { connId, node, type, vmid } = parseVmId(selection.id)
 
-    const { upid } = await crossClusterMigrate({ connId, node, type, vmid }, params)
+    // A move without copy (ui#1460) runs its start task on the target cluster.
+    const { upid, taskConnectionId, taskNode, startError } = await crossClusterMigrate({ connId, node, type, vmid }, params)
 
     if (upid) {
       trackTask({
         upid,
-        connId,
-        node,
+        connId: taskConnectionId,
+        node: taskNode,
         description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)`,
         onSuccess: () => { void onRefresh?.() },
         onError: () => { void onRefresh?.() },
@@ -281,7 +282,9 @@ export function useVmActions({
     }
 
     toast.success(t('vmActions.migrateSuccess'))
-    openTaskViewer({ upid, connectionId: connId, description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)` })
+    // ui#1460: moved without copy, but the start on the target was refused.
+    if (startError) toast.warning(t('hardware.crossCluster.handover.startFailed', { error: startError }))
+    openTaskViewer({ upid, connectionId: taskConnectionId, description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)` })
 
     if (onSelect) {
       onSelect({ type: 'cluster', id: connId })
@@ -373,13 +376,13 @@ export function useVmActions({
 
     const { connId, node, type, vmid } = tableMigrateVm
 
-    const { upid } = await crossClusterMigrate({ connId, node, type, vmid }, params)
+    const { upid, taskConnectionId, taskNode, startError } = await crossClusterMigrate({ connId, node, type, vmid }, params)
 
     if (upid) {
       trackTask({
         upid,
-        connId,
-        node,
+        connId: taskConnectionId,
+        node: taskNode,
         description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)`,
         onSuccess: () => { void onRefresh?.(); setTableMigrateVm(null) },
         onError: () => { void onRefresh?.(); setTableMigrateVm(null) },
@@ -391,7 +394,9 @@ export function useVmActions({
     }
 
     toast.success(t('vmActions.migrateSuccess'))
-    openTaskViewer({ upid, connectionId: connId, description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)` })
+    // ui#1460: moved without copy, but the start on the target was refused.
+    if (startError) toast.warning(t('hardware.crossCluster.handover.startFailed', { error: startError }))
+    openTaskViewer({ upid, connectionId: taskConnectionId, description: `VM ${vmid}: ${t('vmActions.migrate')} (cross-cluster)` })
     setTableMigrateVm(null)
   }, [tableMigrateVm, onRefresh, toast, t, trackTask])
 

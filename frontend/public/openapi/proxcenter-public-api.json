@@ -419,7 +419,6 @@
         "required": [
           "targetConnectionId",
           "targetNode",
-          "targetStorage",
           "targetBridge"
         ],
         "properties": {
@@ -431,10 +430,58 @@
             "type": "string"
           },
           "targetStorage": {
-            "type": "string"
+            "type": "string",
+            "description": "Required unless `handover` is true"
           },
           "targetBridge": {
             "type": "string"
+          },
+          "handover": {
+            "type": "boolean",
+            "default": false,
+            "description": "Preflight of the move without copy (remote-migrate/handover): containers accepted, no target storage, the VMID is kept"
+          }
+        }
+      },
+      "VmRemoteMigrateSharedStorageRequest": {
+        "type": "object",
+        "required": [
+          "targetConnectionId",
+          "targetNode"
+        ],
+        "properties": {
+          "targetConnectionId": {
+            "type": "string",
+            "description": "Target connection id; must be inside the token perimeter"
+          },
+          "targetNode": {
+            "type": "string"
+          }
+        }
+      },
+      "VmRemoteMigrateHandoverRequest": {
+        "type": "object",
+        "required": [
+          "targetConnectionId",
+          "targetNode",
+          "targetBridge"
+        ],
+        "properties": {
+          "targetConnectionId": {
+            "type": "string",
+            "description": "Target connection id; must be inside the token perimeter"
+          },
+          "targetNode": {
+            "type": "string"
+          },
+          "targetBridge": {
+            "type": "string",
+            "description": "Every NIC of the guest lands on this bridge"
+          },
+          "start": {
+            "type": "boolean",
+            "default": false,
+            "description": "Start the guest on the target once it is there"
           }
         }
       },
@@ -4743,6 +4790,140 @@
               },
               "warnings": {
                 "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "VmRemoteMigrateSharedStorageResponse": {
+        "type": "object",
+        "properties": {
+          "eligible": {
+            "type": "boolean",
+            "description": "The move without copy can run now"
+          },
+          "relevant": {
+            "type": "boolean",
+            "description": "The guest sits on a storage another cluster could reach"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "SSH_SOURCE",
+                "SSH_TARGET",
+                "NOT_PORTABLE",
+                "STORAGE_NOT_SHARED"
+              ]
+            }
+          },
+          "storages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "storage": {
+                  "type": "string"
+                },
+                "ok": {
+                  "type": "boolean"
+                },
+                "target": {
+                  "type": "string",
+                  "description": "The target storage that holds the same volumes"
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "local-type",
+                    "no-candidate",
+                    "probe-failed",
+                    "not-visible",
+                    "volumes-missing"
+                  ]
+                },
+                "detail": {
+                  "type": "string"
+                },
+                "missing": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Configuration keys that bind the guest to its node"
+          },
+          "isos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "CD-ROM images the move ejects"
+          }
+        }
+      },
+      "VmRemoteMigrateHandoverResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "UPID of the start task on the target cluster, null when the guest stays stopped"
+          },
+          "task": {
+            "type": "object",
+            "properties": {
+              "connectionId": {
+                "type": "string"
+              },
+              "node": {
+                "type": "string"
+              }
+            },
+            "description": "Where to follow `data`"
+          },
+          "handover": {
+            "type": "object",
+            "properties": {
+              "storages": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Source storage to target storage"
+              },
+              "detachedIsos": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "firewall": {
+                "type": "boolean"
+              },
+              "archive": {
+                "type": "string",
+                "description": "Prefix of the source files archived on the source node (.conf, .fw)"
+              },
+              "sourcePool": {
+                "type": "string"
+              },
+              "startError": {
+                "type": "string"
               }
             }
           }
@@ -14626,7 +14807,6 @@
                 "required": [
                   "targetConnectionId",
                   "targetNode",
-                  "targetStorage",
                   "targetBridge"
                 ],
                 "properties": {
@@ -14638,10 +14818,16 @@
                     "type": "string"
                   },
                   "targetStorage": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Required unless `handover` is true"
                   },
                   "targetBridge": {
                     "type": "string"
+                  },
+                  "handover": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Preflight of the move without copy (remote-migrate/handover): containers accepted, no target storage, the VMID is kept"
                   }
                 }
               }
@@ -15328,6 +15514,504 @@
                     "value": {
                       "error": "Route not available to API tokens",
                       "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate/prepare"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate/shared-storage": {
+      "post": {
+        "operationId": "vm-remote-migrate-shared-storage",
+        "summary": "Prove a storage shared with another cluster",
+        "description": "Tells whether a guest can move to another cluster without copying its disks: for each storage of the guest, a 4 MiB probe volume is allocated on the source, looked for on the target storages of the same type, then removed. A storage name proves nothing. `targetConnectionId` must also be inside the token perimeter.\n\nRequired scope: `vms:migrate`",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:migrate"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "targetConnectionId",
+                  "targetNode"
+                ],
+                "properties": {
+                  "targetConnectionId": {
+                    "type": "string",
+                    "description": "Target connection id; must be inside the token perimeter"
+                  },
+                  "targetNode": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "eligible": {
+                      "type": "boolean",
+                      "description": "The move without copy can run now"
+                    },
+                    "relevant": {
+                      "type": "boolean",
+                      "description": "The guest sits on a storage another cluster could reach"
+                    },
+                    "reasons": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "SSH_SOURCE",
+                          "SSH_TARGET",
+                          "NOT_PORTABLE",
+                          "STORAGE_NOT_SHARED"
+                        ]
+                      }
+                    },
+                    "storages": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "storage": {
+                            "type": "string"
+                          },
+                          "ok": {
+                            "type": "boolean"
+                          },
+                          "target": {
+                            "type": "string",
+                            "description": "The target storage that holds the same volumes"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "local-type",
+                              "no-candidate",
+                              "probe-failed",
+                              "not-visible",
+                              "volumes-missing"
+                            ]
+                          },
+                          "detail": {
+                            "type": "string"
+                          },
+                          "missing": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "blockers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Configuration keys that bind the guest to its node"
+                    },
+                    "isos": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "CD-ROM images the move ejects"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate/shared-storage"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "guestScope": {
+                    "value": {
+                      "error": "Guest outside your vDC scope"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "vDC tenant token: the guest does not exist, or belongs to another tenant (both answer alike)",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Guest not found"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate/handover": {
+      "post": {
+        "operationId": "vm-remote-migrate-handover",
+        "summary": "Move a stopped guest to another cluster without copying its disks",
+        "description": "For a stopped QEMU VM or container whose every disk sits on a storage the target cluster is proven to reach: the configuration file and firewall rules move over SSH (enabled on both connections), the source file is archived on its node before the target one is written, and the guest keeps its VMID. Refused with 409 before anything changes (GUEST_RUNNING, VMID_TAKEN, STORAGE_NOT_SHARED, SSH_REQUIRED...); a failure after the detach puts the source back. Reserved to the provider and to the MSP tenant that owns both connections.\n\nRequired scope: `vms:migrate`",
+        "tags": [
+          "VMs"
+        ],
+        "x-required-scopes": [
+          "vms:migrate"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          },
+          {
+            "name": "vmid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "targetConnectionId",
+                  "targetNode",
+                  "targetBridge"
+                ],
+                "properties": {
+                  "targetConnectionId": {
+                    "type": "string",
+                    "description": "Target connection id; must be inside the token perimeter"
+                  },
+                  "targetNode": {
+                    "type": "string"
+                  },
+                  "targetBridge": {
+                    "type": "string",
+                    "description": "Every NIC of the guest lands on this bridge"
+                  },
+                  "start": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Start the guest on the target once it is there"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "UPID of the start task on the target cluster, null when the guest stays stopped"
+                    },
+                    "task": {
+                      "type": "object",
+                      "properties": {
+                        "connectionId": {
+                          "type": "string"
+                        },
+                        "node": {
+                          "type": "string"
+                        }
+                      },
+                      "description": "Where to follow `data`"
+                    },
+                    "handover": {
+                      "type": "object",
+                      "properties": {
+                        "storages": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          },
+                          "description": "Source storage to target storage"
+                        },
+                        "detachedIsos": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "firewall": {
+                          "type": "boolean"
+                        },
+                        "archive": {
+                          "type": "string",
+                          "description": "Prefix of the source files archived on the source node (.conf, .fw)"
+                        },
+                        "sourcePool": {
+                          "type": "string"
+                        },
+                        "startError": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/guests/{type}/{node}/{vmid}/remote-migrate/handover"
                     }
                   },
                   "perimeter": {

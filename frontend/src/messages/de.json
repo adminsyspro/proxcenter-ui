@@ -8545,7 +8545,12 @@
           "actionFailed": "Aktion fehlgeschlagen",
           "inGroup": "(Gruppe {group})",
           "siteRecovery": "Site Recovery",
-          "pveVersion": "Proxmox-VE-Version"
+          "pveVersion": "Proxmox-VE-Version",
+          "guestState": "Gaststatus",
+          "ssh": "SSH",
+          "portability": "Portabilität",
+          "cdrom": "CD-ROM",
+          "pool": "Pool"
         },
         "siteRecoveryShared": "Durch den Replikationsjob „{name}“ abgedeckt, der auch {count} weitere Gäste umfasst",
         "siteRecoveryOnly": "Durch den Replikationsjob „{name}“ abgedeckt",
@@ -8574,7 +8579,14 @@
           "vmidExists": "{vmid} wird bereits auf {node} verwendet",
           "insufficientCpu": "{needed} vCPUs benötigt, Ziel hat {available}",
           "insufficientMemory": "{needed} MB RAM benötigt, {available} MB frei",
-          "tunnelTooOld": "Ziel {pkg} {target}, {required}+ nötig (Proxmox VE 9.3)"
+          "tunnelTooOld": "Ziel {pkg} {target}, {required}+ nötig (Proxmox VE 9.3)",
+          "guestRunning": "muss zuerst gestoppt werden",
+          "sshSource": "auf der Quellverbindung nicht aktiviert",
+          "sshTarget": "auf der Zielverbindung nicht aktiviert",
+          "notPortable": "an seinen Knoten gebunden: {keys}",
+          "isoDetached": "{isos} wird ausgeworfen",
+          "poolNotCarried": "verlässt Pool {pool}, keiner auf dem Ziel",
+          "storageFormat": "{sourceType}-Datenträger können nicht offline nach {targetType} kopiert werden ({storage})"
         }
       },
       "storage": "Speicher",
@@ -8618,7 +8630,20 @@
       "disksPlural": "{count} Festplatten ({size} GiB)",
       "sshNotEnabled": "SSH auf der Quellverbindung nicht aktiviert",
       "sshNotEnabledDesc": "Die Quell-VM bleibt nach der Migration gesperrt (lock: migrate). Sie müssen sie manuell entsperren:",
-      "sshUnlockCommand": "qm unlock {vmid}"
+      "sshUnlockCommand": "qm unlock {vmid}",
+      "handover": {
+        "label": "Ohne Kopie (gemeinsamer Speicher)",
+        "reasonSshSource": "SSH muss auf der Quellverbindung aktiviert sein",
+        "reasonSshTarget": "SSH muss auf der Zielverbindung aktiviert sein",
+        "reasonNotPortable": "An seinen Knoten gebunden: {keys}",
+        "reasonStorage": "Speicher nicht nachweislich mit dem Ziel geteilt: {storages}",
+        "start": "Auf dem Ziel starten",
+        "startDesc": "Der Gast startet, sobald seine Konfiguration auf dem Ziel liegt",
+        "stayStopped": "Der Gast bleibt auf dem Ziel gestoppt",
+        "submit": "Ohne Kopie verschieben",
+        "shutdown": "Herunterfahren",
+        "startFailed": "Ohne Kopie verschoben, aber der Start auf dem Ziel ist fehlgeschlagen: {error}"
+      }
     },
     "confirmRemoveHardwareTitle": "Hardware entfernen",
     "confirmDeleteHardware": "Möchten Sie die Hardware {id} wirklich entfernen? Dies kann nicht rückgängig gemacht werden.",

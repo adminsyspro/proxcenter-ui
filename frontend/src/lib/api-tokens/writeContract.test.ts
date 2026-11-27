@@ -29,7 +29,8 @@ const EXPECTED_WRITE_IDS: Record<string, string[]> = {
   vms: [
     'vm-create', 'vm-config-update', 'vm-power', 'vm-clone', 'vm-template',
     'vm-disk-resize', 'vm-disk-move', 'vm-unlock', 'vm-migrate', 'vm-remote-migrate',
-    'vm-remote-migrate-check', 'vm-remote-migrate-prepare', 'vm-delete', 'vm-notes-update',
+    'vm-remote-migrate-check', 'vm-remote-migrate-prepare', 'vm-remote-migrate-shared-storage',
+    'vm-remote-migrate-handover', 'vm-delete', 'vm-notes-update',
     'vm-snapshot-create', 'vm-snapshot-delete', 'vm-snapshot-rollback', 'vm-snapshot-update',
   ],
   templates: ['template-deploy'],

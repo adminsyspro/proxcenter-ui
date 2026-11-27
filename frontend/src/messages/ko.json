@@ -8551,7 +8551,12 @@
           "actionFailed": "작업 실패",
           "inGroup": "(그룹 {group})",
           "siteRecovery": "Site Recovery",
-          "pveVersion": "Proxmox VE 버전"
+          "pveVersion": "Proxmox VE 버전",
+          "guestState": "게스트 상태",
+          "ssh": "SSH",
+          "portability": "이식성",
+          "cdrom": "CD-ROM",
+          "pool": "풀"
         },
         "siteRecoveryShared": "복제 작업 \"{name}\"에 포함되며, 다른 게스트 {count}개도 포함합니다",
         "siteRecoveryOnly": "복제 작업 \"{name}\"에 포함됩니다",
@@ -8580,7 +8585,14 @@
           "vmidExists": "{vmid}은(는) 이미 {node}에서 사용 중입니다",
           "insufficientCpu": "vCPU {needed}개가 필요하지만 대상에는 {available}개가 있습니다",
           "insufficientMemory": "RAM {needed}MB가 필요하며 여유 공간은 {available}MB입니다",
-          "tunnelTooOld": "대상 {pkg} {target}, {required}+ 필요 (Proxmox VE 9.3)"
+          "tunnelTooOld": "대상 {pkg} {target}, {required}+ 필요 (Proxmox VE 9.3)",
+          "guestRunning": "먼저 중지해야 합니다",
+          "sshSource": "소스 연결에서 활성화되지 않음",
+          "sshTarget": "대상 연결에서 활성화되지 않음",
+          "notPortable": "노드에 종속됨: {keys}",
+          "isoDetached": "{isos} 이(가) 꺼내집니다",
+          "poolNotCarried": "{pool} 풀을 떠나며 대상에서는 풀이 없습니다",
+          "storageFormat": "{sourceType} 디스크는 {targetType}({storage})(으)로 오프라인 복사할 수 없습니다"
         }
       },
       "storage": "스토리지",
@@ -8624,7 +8636,20 @@
       "disksPlural": "디스크 {count}개 ({size} GiB)",
       "sshNotEnabled": "원본 연결에 SSH가 활성화되어 있지 않습니다",
       "sshNotEnabledDesc": "마이그레이션 후 원본 VM이 잠긴 상태(lock: migrate)로 유지됩니다. 수동으로 잠금을 해제해야 합니다:",
-      "sshUnlockCommand": "qm unlock {vmid}"
+      "sshUnlockCommand": "qm unlock {vmid}",
+      "handover": {
+        "label": "복사 없이 (공유 스토리지)",
+        "reasonSshSource": "소스 연결에서 SSH를 활성화해야 합니다",
+        "reasonSshTarget": "대상 연결에서 SSH를 활성화해야 합니다",
+        "reasonNotPortable": "노드에 종속됨: {keys}",
+        "reasonStorage": "대상과 공유됨이 확인되지 않은 스토리지: {storages}",
+        "start": "대상에서 시작",
+        "startDesc": "구성이 대상에 옮겨지면 게스트가 시작됩니다",
+        "stayStopped": "게스트는 대상에서 중지된 상태로 남습니다",
+        "submit": "복사 없이 이동",
+        "shutdown": "종료",
+        "startFailed": "복사 없이 이동했지만 대상에서 시작하지 못했습니다: {error}"
+      }
     },
     "confirmRemoveHardwareTitle": "하드웨어 제거",
     "confirmDeleteHardware": "하드웨어 {id}을(를) 제거하시겠습니까? 이 작업은 되돌릴 수 없습니다.",

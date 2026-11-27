@@ -233,6 +233,32 @@ export const VM_ENTRIES: AllowlistEntry[] = [
     responseSchemaRef: "VmRemoteMigratePrepareResponse",
   }),
   guestEntry({
+    id: "vm-remote-migrate-shared-storage",
+    method: "POST",
+    file: "/remote-migrate/shared-storage",
+    pattern: `${GUEST}/remote-migrate/shared-storage`,
+    requiredScopes: ["vms:migrate"],
+    secondaryConnections: TARGET_CONNECTION,
+    summary: "Prove a storage shared with another cluster",
+    description:
+      "Tells whether a guest can move to another cluster without copying its disks: for each storage of the guest, a 4 MiB probe volume is allocated on the source, looked for on the target storages of the same type, then removed. A storage name proves nothing. `targetConnectionId` must also be inside the token perimeter.",
+    requestSchemaRef: "VmRemoteMigrateSharedStorageRequest",
+    responseSchemaRef: "VmRemoteMigrateSharedStorageResponse",
+  }),
+  guestEntry({
+    id: "vm-remote-migrate-handover",
+    method: "POST",
+    file: "/remote-migrate/handover",
+    pattern: `${GUEST}/remote-migrate/handover`,
+    requiredScopes: ["vms:migrate"],
+    secondaryConnections: TARGET_CONNECTION,
+    summary: "Move a stopped guest to another cluster without copying its disks",
+    description:
+      "For a stopped QEMU VM or container whose every disk sits on a storage the target cluster is proven to reach: the configuration file and firewall rules move over SSH (enabled on both connections), the source file is archived on its node before the target one is written, and the guest keeps its VMID. Refused with 409 before anything changes (GUEST_RUNNING, VMID_TAKEN, STORAGE_NOT_SHARED, SSH_REQUIRED...); a failure after the detach puts the source back. Reserved to the provider and to the MSP tenant that owns both connections.",
+    requestSchemaRef: "VmRemoteMigrateHandoverRequest",
+    responseSchemaRef: "VmRemoteMigrateHandoverResponse",
+  }),
+  guestEntry({
     id: "vm-delete",
     method: "DELETE",
     file: "",

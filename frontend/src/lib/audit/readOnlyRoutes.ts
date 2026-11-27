@@ -25,6 +25,7 @@ export const READ_ONLY_MUTATION_ROUTES: Readonly<Record<string, string>> = {
   'v1/connections/[id]/log-collection/check': 'Compares the log forwarder of each node with what was installed, changes nothing on the nodes',
   'v1/connections/[id]/nodes/[node]/storage-scan': 'Storage target scan before adding a storage, read-only (its body may carry a CIFS password)',
   'v1/connections/[id]/guests/[type]/[node]/[vmid]/remote-migrate/check': 'Remote migration preflight, read-only',
+  'v1/connections/[id]/guests/[type]/[node]/[vmid]/remote-migrate/shared-storage': 'Shared storage proof of a cross-cluster move without copy: the 4 MiB probe volume it allocates is removed before it answers, nothing is left changed',
   'v1/connections/[id]/guests/trends': 'Metrics query (POST for a large body)',
   'v1/connections/[id]/nodes/trends': 'Metrics query (POST for a large body)',
   'v1/connections/[id]/rrd/batch': 'Metrics query (POST for a large body)',

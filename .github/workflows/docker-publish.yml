@@ -880,7 +880,9 @@ jobs:
           name: sbom-frontend
           path: sbom
 
-      - name: Create GitHub Release
+      # Kept over `gh release`: pinned by SHA, it creates or updates the
+      # release of a re-pushed tag in one step.
+      - name: Create GitHub Release # zizmor: ignore[superfluous-actions]
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ github.ref_name }}

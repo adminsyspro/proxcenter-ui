@@ -6200,7 +6200,8 @@
       "cluster": "클러스터",
       "automation": "자동화",
       "replication": "복제",
-      "alerts": "알림"
+      "alerts": "알림",
+      "kubernetes": "Kubernetes"
     },
     "actions": {
       "login": "로그인",
@@ -6253,7 +6254,13 @@
       "replicationSync": "복제 동기화",
       "replicationFix": "복제본 수정",
       "drillRun": "복원 훈련",
-      "aiAction": "어시스턴트 작업"
+      "aiAction": "어시스턴트 작업",
+      "health": "상태 확인",
+      "logs": "로그 조회",
+      "cordon": "코든",
+      "drain": "드레인",
+      "scale": "스케일",
+      "rollback": "롤백"
     }
   },
   "security": {
@@ -16574,5 +16581,306 @@
     "perHostInfo": "이 소스의 한 호스트에서 읽는 웜 복사에 대한 제한으로, 배치와 관계없이 해당 복사들이 공유합니다.",
     "perHost": "소스 호스트별 복사 속도 제한 (MB/s)",
     "perHostCaption": "비워 두면 제한이 없습니다. 배치나 마이그레이션은 더 낮은 자체 제한을 설정할 수 있으며, 각 복사는 둘 중 낮은 값을 따릅니다."
+  },
+  "kubernetes": {
+    "sectionTitle": "Kubernetes",
+    "addCluster": "클러스터 추가",
+    "kpi": {
+      "clusters": "클러스터",
+      "nodes": "노드",
+      "pods": "파드",
+      "cpu": "CPU",
+      "ram": "RAM",
+      "status": "상태"
+    },
+    "importCluster": "기존 클러스터 가져오기",
+    "empty": "아직 Kubernetes 클러스터가 없습니다. 더하기 버튼으로 클러스터를 가져오세요.",
+    "health": {
+      "healthy": "정상",
+      "degraded": "성능 저하",
+      "unreachable": "연결 불가",
+      "auth_failed": "인증 실패",
+      "stale": "오래됨",
+      "unknown": "아직 확인하지 않음",
+      "integrating": "통합 중...",
+      "checking": "확인 중...",
+      "recheck": "상태 다시 확인",
+      "lastChecked": "{ago} 전에 확인"
+    },
+    "importDialog": {
+      "title": "Kubernetes 클러스터 가져오기",
+      "pasteLabel": "kubeconfig 붙여넣기 또는 업로드",
+      "contextLabel": "컨텍스트",
+      "nameLabel": "클러스터 이름",
+      "leastPrivilegeHint": "최소 권한 컨텍스트를 사용하세요. 토큰과 클라이언트 인증서는 암호화되어 저장됩니다."
+    },
+    "delete": {
+      "confirm": "ProxCenter에서 이 클러스터를 제거할까요? 클러스터 자체는 변경되지 않습니다."
+    },
+    "explore": "클러스터 탐색",
+    "explorer": {
+      "overview": {
+        "title": "개요",
+        "node": "노드",
+        "namespace": "네임스페이스",
+        "deployment": "디플로이먼트",
+        "pod": "파드"
+      },
+      "group": {
+        "cluster": "클러스터",
+        "workloads": "워크로드",
+        "network": "네트워크",
+        "config": "구성",
+        "storage": "스토리지",
+        "events": "이벤트"
+      },
+      "kind": {
+        "node": "노드",
+        "namespace": "네임스페이스",
+        "pod": "파드",
+        "deployment": "디플로이먼트",
+        "statefulset": "스테이트풀셋",
+        "daemonset": "데몬셋",
+        "job": "잡",
+        "cronjob": "크론잡",
+        "service": "서비스",
+        "ingress": "인그레스",
+        "configmap": "컨피그맵",
+        "pvc": "퍼시스턴트 볼륨 클레임",
+        "pv": "퍼시스턴트 볼륨",
+        "event": "이벤트"
+      },
+      "col": {
+        "name": "이름",
+        "namespace": "네임스페이스",
+        "age": "경과 시간",
+        "ready": "준비",
+        "roles": "역할",
+        "version": "버전",
+        "internalIP": "내부 IP",
+        "cpu": "CPU",
+        "memory": "메모리",
+        "podIP": "파드 IP",
+        "phase": "단계",
+        "restarts": "재시작",
+        "node": "노드",
+        "upToDate": "최신",
+        "available": "사용 가능",
+        "completions": "완료",
+        "status": "상태",
+        "schedule": "일정",
+        "suspend": "일시 중지됨",
+        "lastSchedule": "마지막 실행",
+        "type": "유형",
+        "clusterIP": "클러스터 IP",
+        "ports": "포트",
+        "hosts": "호스트",
+        "keys": "키",
+        "capacity": "용량",
+        "storageClass": "스토리지 클래스",
+        "reason": "사유",
+        "object": "오브젝트",
+        "message": "메시지",
+        "count": "횟수",
+        "pods": "파드",
+        "actions": "작업",
+        "lastSeen": "마지막 발생"
+      },
+      "tab": {
+        "summary": "요약",
+        "yaml": "YAML",
+        "events": "이벤트",
+        "logs": "로그"
+      },
+      "section": {
+        "labels": "레이블",
+        "annotations": "어노테이션",
+        "owners": "소유자",
+        "containers": "컨테이너",
+        "conditions": "조건"
+      },
+      "logs": {
+        "previous": "이전(중단된) 컨테이너",
+        "live": "실시간",
+        "copy": "로그 복사",
+        "download": "다운로드"
+      },
+      "msg": {
+        "forbidden": "접근이 거부되었습니다(가져온 kubeconfig에 이 작업에 대한 RBAC 권한이 없습니다).",
+        "notFound": "리소스를 찾을 수 없습니다(삭제되었을 수 있습니다).",
+        "authFailed": "인증에 실패했습니다. 클러스터 자격 증명을 다시 가져오세요.",
+        "unreachable": "클러스터에 연결할 수 없습니다.",
+        "truncated": "처음 500개만 표시됩니다(결과가 불완전함)."
+      },
+      "events": {
+        "empty": "이벤트가 없습니다."
+      },
+      "search": "이름으로 필터",
+      "refresh": "새로 고침",
+      "loading": "불러오는 중...",
+      "empty": "리소스가 없습니다.",
+      "allNamespaces": "모든 네임스페이스",
+      "charts": {
+        "phaseTitle": "파드 단계",
+        "perNodeTitle": "노드별 파드",
+        "unscheduled": "미배치",
+        "moreNodes": "+{count}개 더",
+        "restartsTitle": "재시작 상위",
+        "noRestarts": "파드 재시작 없음",
+        "warningsTitle": "현재 경고 이벤트",
+        "noWarnings": "경고 이벤트 없음",
+        "forbidden": "접근이 거부되었습니다(가져온 kubeconfig에 이벤트에 대한 RBAC 권한이 없습니다).",
+        "incomplete": "불완전한 데이터(처음 500개 파드).",
+        "noPods": "파드 없음",
+        "utilizationTitle": "리소스 사용률",
+        "clusterCpu": "클러스터 CPU",
+        "clusterMemory": "클러스터 메모리",
+        "perNode": "노드별",
+        "metricsUnavailable": "메트릭 API를 사용할 수 없거나 이 클러스터에 metrics-server가 설치되지 않았거나 준비되지 않았습니다.",
+        "metricsForbidden": "접근이 거부되었습니다(가져온 kubeconfig에 메트릭 API에 대한 RBAC 권한이 없습니다).",
+        "metricsError": "메트릭을 사용할 수 없습니다.",
+        "nodesReporting": "노드 {total}개 중 {reporting}개 보고 중"
+      },
+      "detail": {
+        "truncated": "처음 100개 표시",
+        "issues": "감지된 문제",
+        "section": {
+          "info": "정보",
+          "capacity": "용량",
+          "conditions": "조건",
+          "taints": "테인트",
+          "resources": "리소스",
+          "volumes": "볼륨",
+          "selector": "셀렉터",
+          "ports": "포트",
+          "rules": "규칙",
+          "tls": "TLS",
+          "dataKeys": "데이터 키"
+        }
+      },
+      "topology": {
+        "title": "토폴로지"
+      }
+    },
+    "topology": {
+      "title": "토폴로지",
+      "toolbar": {
+        "namespace": "네임스페이스",
+        "noResults": "선택한 필터와 일치하는 리소스가 없습니다"
+      },
+      "bridge": {
+        "disabled": "인프라 오버레이를 사용할 수 없습니다(이 사용자는 Proxmox를 볼 수 없습니다)"
+      },
+      "meta": {
+        "truncated": "클러스터 규모 때문에 일부 리소스가 잘렸습니다",
+        "capped": "일부 리소스 유형은 상한이 적용되었습니다",
+        "ambiguous": "일부 K8s 노드를 연결할 수 없습니다(모호함)"
+      },
+      "node": {
+        "unmapped": "연결 안 됨",
+        "unverified": "확인 안 됨",
+        "vm": "VM",
+        "badge": "노드"
+      },
+      "status": {
+        "loading": "토폴로지를 불러오는 중...",
+        "forbidden": "접근 거부",
+        "unreachable": "클러스터에 연결할 수 없습니다"
+      },
+      "group": {
+        "shared": "공유"
+      },
+      "card": {
+        "ready": "준비"
+      },
+      "kindPodGroup": "파드 그룹",
+      "kindReplicaset": "레플리카셋",
+      "apps": {
+        "title": "애플리케이션",
+        "empty": "애플리케이션 없음",
+        "pods": "파드 {healthy}/{total}",
+        "external": "Proxmox 외부",
+        "backToApps": "애플리케이션으로 돌아가기",
+        "tab": "애플리케이션",
+        "health": {
+          "healthy": "정상",
+          "degraded": "성능 저하",
+          "error": "오류"
+        }
+      },
+      "nodes": {
+        "title": "노드",
+        "tab": "노드"
+      }
+    },
+    "node": {
+      "ops": {
+        "cordon": "코든",
+        "uncordon": "코든 해제",
+        "drain": "드레인",
+        "enterMaintenance": "유지 관리 시작",
+        "exitMaintenance": "유지 관리 종료",
+        "scheduling": {
+          "ready": "스케줄 가능",
+          "disabled": "코든됨"
+        },
+        "confirmDrainTitle": "노드 {node}을(를) 드레인할까요?",
+        "confirmMaintenanceTitle": "노드 {node}을(를) 유지 관리 모드로 전환할까요?",
+        "confirmCordonTitle": "노드 {node}을(를) 코든할까요?",
+        "confirmUncordonTitle": "노드 {node}의 코든을 해제할까요?",
+        "willEvict": "파드 {count}개를 축출합니다",
+        "willSkip": "파드 {count}개를 건너뜁니다(데몬셋, 미러 또는 완료됨)",
+        "willRefuse": "파드 {count}개를 거부합니다(emptyDir 데이터 또는 관리되지 않음)",
+        "forceLabel": "강제: emptyDir 데이터가 있는 파드와 관리되지 않는 파드도 축출",
+        "draining": "드레인 중, 파드 {count}개 남음",
+        "drained": "노드가 드레인되었습니다. 축출 가능한 파드가 모두 이동했습니다.",
+        "blockedByPdb": "PodDisruptionBudget에 의해 차단됨: {pods}",
+        "evictionFailed": "축출 실패: {pods}",
+        "refusedHint": "일부 파드가 거부되었습니다. 강제 옵션으로 다시 실행하여 축출하세요.",
+        "controlPlaneWarning": "컨트롤 플레인 노드입니다. 드레인하면 클러스터 컨트롤 플레인 성능이 저하될 수 있습니다.",
+        "lastNodeWarning": "마지막으로 남은 준비된 스케줄 가능 노드입니다. 드레인하면 파드를 다시 배치할 노드가 없습니다.",
+        "cancel": "취소",
+        "confirm": "드레인"
+      }
+    },
+    "downloadKubeconfig": "kubeconfig 다운로드",
+    "workload": {
+      "action": {
+        "restart": "재시작",
+        "scale": "스케일",
+        "rollback": "롤백",
+        "delete": "삭제"
+      },
+      "title": {
+        "restart": "{name}을(를) 재시작할까요?",
+        "scale": "{name} 스케일 조정",
+        "rollback": "{name} 롤백",
+        "delete": "파드 {name}을(를) 삭제할까요?"
+      },
+      "body": {
+        "restart": "kubectl rollout restart와 같이 파드가 하나씩 교체됩니다.",
+        "delete": "컨트롤러가 이 파드를 관리하는 경우 대체 파드를 생성합니다."
+      },
+      "replicas": "레플리카",
+      "currentReplicas": "현재 {count}",
+      "revision": "리비전 {revision}",
+      "current": "현재",
+      "noRevision": "롤백할 이전 리비전이 없습니다.",
+      "cancel": "취소",
+      "done": {
+        "restart": "{name} 재시작을 요청했습니다.",
+        "scale": "{name}의 레플리카를 {count}개로 조정했습니다.",
+        "rollback": "{name}을(를) 리비전 {revision}(으)로 롤백했습니다.",
+        "delete": "파드 {name}을(를) 삭제했습니다."
+      },
+      "error": {
+        "forbidden": "접근이 거부되었습니다(가져온 kubeconfig에 이 작업에 대한 RBAC 권한이 없습니다).",
+        "not_found": "찾을 수 없습니다(삭제되었을 수 있습니다).",
+        "auth_failed": "인증에 실패했습니다. 클러스터 자격 증명을 다시 가져오세요.",
+        "unreachable": "클러스터에 연결할 수 없습니다.",
+        "conflict": "이 리비전은 이미 현재 리비전입니다.",
+        "generic": "작업에 실패했습니다."
+      }
+    }
   }
 }

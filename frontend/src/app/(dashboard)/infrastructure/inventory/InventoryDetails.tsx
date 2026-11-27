@@ -126,6 +126,8 @@ import MigrationDashboard from './MigrationDashboard'
 import { ViewMode, AllVmItem, HostItem, PoolItem, PoolActions, TagItem, NodeIcon, ClusterIcon, StatusIcon } from './InventoryTree'
 import { isVdcPool } from './components/poolMembers'
 import CancelMigrationDialog from './components/CancelMigrationDialog'
+import KubernetesDashboard from './KubernetesDashboard'
+import { ClusterExplorer } from './k8s/[id]/ClusterExplorer'
 import NetworkDetailPanel from './components/NetworkDetailPanel'
 import TenantVnetDetailPanel from './TenantVnetDetailPanel'
 import TagManager from './components/TagManager'
@@ -3054,6 +3056,18 @@ return vm?.isCluster ?? false
           <MigrationDashboard
             externalHypervisors={externalHypervisors}
             onHostClick={(sel) => onSelect?.(sel)}
+          />
+        </Box>
+      ) : selection?.type === 'kubernetes-root' ? (
+        <Box sx={{ p: 2.5, height: '100%', overflow: 'auto' }}>
+          <KubernetesDashboard onClusterClick={(sel) => onSelect?.(sel)} onClustersChanged={onRefresh} />
+        </Box>
+      ) : selection?.type === 'kubernetes-cluster' ? (
+        <Box sx={{ height: '100%', overflow: 'hidden' }}>
+          <ClusterExplorer
+            clusterId={selection.id}
+            initialView={selection.view}
+            onBack={() => onSelect?.({ type: 'kubernetes-root', id: 'kubernetes-root' })}
           />
         </Box>
       ) :

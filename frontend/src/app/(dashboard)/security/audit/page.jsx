@@ -50,6 +50,7 @@ const CATEGORIES = {
   cluster: { labelKey: 'audit.categories.cluster', icon: 'ri-stack-line', color: 'primary' },
   automation: { labelKey: 'audit.categories.automation', icon: 'ri-robot-line', color: 'secondary' },
   replication: { labelKey: 'audit.categories.replication', icon: 'ri-file-copy-2-line', color: 'info' },
+  k8s: { labelKey: 'audit.categories.kubernetes', icon: 'ri-ship-2-line', color: 'primary' },
   alerts: { labelKey: 'audit.categories.alerts', icon: 'ri-alarm-warning-line', color: 'warning' },
 }
 
@@ -115,6 +116,14 @@ const ACTION_KEYS = {
   'replication.sync': 'audit.actions.replicationSync',
   'replication.fix': 'audit.actions.replicationFix',
   'drill.run': 'audit.actions.drillRun',
+
+  // Kubernetes
+  health: 'audit.actions.health',
+  logs: 'audit.actions.logs',
+  cordon: 'audit.actions.cordon',
+  drain: 'audit.actions.drain',
+  scale: 'audit.actions.scale',
+  rollback: 'audit.actions.rollback',
 
   // Approved assistant actions (roadmap#188)
   'ai.action': 'audit.actions.aiAction',

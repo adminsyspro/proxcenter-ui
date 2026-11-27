@@ -6200,7 +6200,8 @@
       "cluster": "集群",
       "automation": "自动化",
       "replication": "复制",
-      "alerts": "告警"
+      "alerts": "告警",
+      "kubernetes": "Kubernetes"
     },
     "actions": {
       "login": "登录",
@@ -6253,7 +6254,13 @@
       "replicationSync": "复制同步",
       "replicationFix": "副本修复",
       "drillRun": "恢复演练",
-      "aiAction": "助手操作"
+      "aiAction": "助手操作",
+      "health": "健康检查",
+      "logs": "读取日志",
+      "cordon": "封锁节点",
+      "drain": "驱逐节点",
+      "scale": "扩缩容",
+      "rollback": "回滚"
     }
   },
   "security": {
@@ -16574,5 +16581,306 @@
     "perHostInfo": "对从此源的同一台主机读取的热迁移复制设置上限，无论属于哪个批次，这些复制共享该上限。",
     "perHost": "每台源主机的复制速率上限 (MB/s)",
     "perHostCaption": "留空表示不限。批次或迁移可以设置更低的自有上限：每个复制取两者中较低的值。"
+  },
+  "kubernetes": {
+    "sectionTitle": "Kubernetes",
+    "addCluster": "添加集群",
+    "kpi": {
+      "clusters": "集群",
+      "nodes": "节点",
+      "pods": "Pod",
+      "cpu": "CPU",
+      "ram": "RAM",
+      "status": "状态"
+    },
+    "importCluster": "导入现有集群",
+    "empty": "暂无 Kubernetes 集群。请使用加号按钮导入一个集群。",
+    "health": {
+      "healthy": "健康",
+      "degraded": "降级",
+      "unreachable": "无法访问",
+      "auth_failed": "认证失败",
+      "stale": "数据过期",
+      "unknown": "尚未检查",
+      "integrating": "集成中...",
+      "checking": "检查中...",
+      "recheck": "重新检查健康状态",
+      "lastChecked": "检查于 {ago}"
+    },
+    "importDialog": {
+      "title": "导入 Kubernetes 集群",
+      "pasteLabel": "粘贴或上传 kubeconfig",
+      "contextLabel": "上下文",
+      "nameLabel": "集群名称",
+      "leastPrivilegeHint": "请使用最小权限上下文。Token 和客户端证书将被加密存储。"
+    },
+    "delete": {
+      "confirm": "从 ProxCenter 移除此集群？集群本身不受影响。"
+    },
+    "explore": "探索集群",
+    "explorer": {
+      "overview": {
+        "title": "概览",
+        "node": "节点",
+        "namespace": "命名空间",
+        "deployment": "Deployments",
+        "pod": "Pods"
+      },
+      "group": {
+        "cluster": "集群",
+        "workloads": "工作负载",
+        "network": "网络",
+        "config": "配置",
+        "storage": "存储",
+        "events": "事件"
+      },
+      "kind": {
+        "node": "节点",
+        "namespace": "命名空间",
+        "pod": "Pods",
+        "deployment": "Deployments",
+        "statefulset": "StatefulSets",
+        "daemonset": "DaemonSets",
+        "job": "Jobs",
+        "cronjob": "CronJobs",
+        "service": "Services",
+        "ingress": "Ingresses",
+        "configmap": "ConfigMaps",
+        "pvc": "持久卷声明",
+        "pv": "持久卷",
+        "event": "事件"
+      },
+      "col": {
+        "name": "名称",
+        "namespace": "命名空间",
+        "age": "存活时间",
+        "ready": "就绪",
+        "roles": "角色",
+        "version": "版本",
+        "internalIP": "内部 IP",
+        "cpu": "CPU",
+        "memory": "内存",
+        "podIP": "Pod IP",
+        "phase": "阶段",
+        "restarts": "重启次数",
+        "node": "节点",
+        "upToDate": "已更新",
+        "available": "可用",
+        "completions": "完成数",
+        "status": "状态",
+        "schedule": "调度计划",
+        "suspend": "已暂停",
+        "lastSchedule": "上次执行",
+        "type": "类型",
+        "clusterIP": "集群 IP",
+        "ports": "端口",
+        "hosts": "主机",
+        "keys": "键数量",
+        "capacity": "容量",
+        "storageClass": "存储类",
+        "reason": "原因",
+        "object": "对象",
+        "message": "消息",
+        "count": "数量",
+        "pods": "Pods",
+        "actions": "操作",
+        "lastSeen": "最近出现"
+      },
+      "tab": {
+        "summary": "概要",
+        "yaml": "YAML",
+        "events": "事件",
+        "logs": "日志"
+      },
+      "section": {
+        "labels": "标签",
+        "annotations": "注解",
+        "owners": "所有者",
+        "containers": "容器",
+        "conditions": "状态条件"
+      },
+      "logs": {
+        "previous": "上一个（崩溃的）容器",
+        "live": "实时",
+        "copy": "复制日志",
+        "download": "下载"
+      },
+      "msg": {
+        "forbidden": "访问被拒绝（导入的 kubeconfig 缺少相应的 RBAC 权限）。",
+        "notFound": "资源未找到（可能已被删除）。",
+        "authFailed": "认证失败，请重新导入集群凭据。",
+        "unreachable": "集群不可访问。",
+        "truncated": "仅显示前 500 条（结果不完整）。"
+      },
+      "events": {
+        "empty": "暂无事件。"
+      },
+      "search": "按名称筛选",
+      "refresh": "刷新",
+      "loading": "加载中...",
+      "empty": "暂无资源。",
+      "allNamespaces": "所有命名空间",
+      "charts": {
+        "phaseTitle": "Pod 阶段",
+        "perNodeTitle": "每节点 Pod 数",
+        "unscheduled": "未调度",
+        "moreNodes": "其余 +{count}",
+        "restartsTitle": "重启最多",
+        "noRestarts": "无 Pod 重启",
+        "warningsTitle": "当前告警事件",
+        "noWarnings": "无告警事件",
+        "forbidden": "访问被拒绝（导入的 kubeconfig 缺少事件的 RBAC 权限）。",
+        "incomplete": "数据不完整（前 500 个 Pod）。",
+        "noPods": "无 Pod",
+        "utilizationTitle": "资源使用率",
+        "clusterCpu": "集群 CPU",
+        "clusterMemory": "集群内存",
+        "perNode": "按节点",
+        "metricsUnavailable": "Metrics API 不可用，或此集群未安装或未就绪 metrics-server。",
+        "metricsForbidden": "拒绝访问（导入的 kubeconfig 缺少 metrics API 的 RBAC 权限）。",
+        "metricsError": "指标不可用。",
+        "nodesReporting": "{total} 个节点中有 {reporting} 个在上报指标"
+      },
+      "detail": {
+        "truncated": "显示前 100 条",
+        "issues": "检测到问题",
+        "section": {
+          "info": "信息",
+          "capacity": "容量",
+          "conditions": "状况",
+          "taints": "污点",
+          "resources": "资源",
+          "volumes": "卷",
+          "selector": "选择器",
+          "ports": "端口",
+          "rules": "规则",
+          "tls": "TLS",
+          "dataKeys": "数据键"
+        }
+      },
+      "topology": {
+        "title": "拓扑"
+      }
+    },
+    "topology": {
+      "title": "拓扑",
+      "toolbar": {
+        "namespace": "命名空间",
+        "noResults": "没有资源符合所选筛选条件"
+      },
+      "bridge": {
+        "disabled": "基础设施叠加层不可用（该用户无 Proxmox 可见性）"
+      },
+      "meta": {
+        "truncated": "由于集群规模，部分资源已被截断",
+        "capped": "部分资源类型已达上限",
+        "ambiguous": "部分 K8s 节点无法匹配（存在歧义）"
+      },
+      "node": {
+        "unmapped": "未映射",
+        "unverified": "未验证",
+        "vm": "VM",
+        "badge": "节点"
+      },
+      "status": {
+        "loading": "正在加载拓扑...",
+        "forbidden": "访问被拒绝",
+        "unreachable": "无法访问集群"
+      },
+      "group": {
+        "shared": "共享"
+      },
+      "card": {
+        "ready": "就绪"
+      },
+      "kindPodGroup": "Pod 组",
+      "kindReplicaset": "ReplicaSet",
+      "apps": {
+        "title": "应用程序",
+        "empty": "暂无应用程序",
+        "pods": "{healthy}/{total} 个 Pod",
+        "external": "Proxmox 外部",
+        "backToApps": "返回应用列表",
+        "tab": "应用",
+        "health": {
+          "healthy": "健康",
+          "degraded": "降级",
+          "error": "错误"
+        }
+      },
+      "nodes": {
+        "title": "节点",
+        "tab": "节点"
+      }
+    },
+    "node": {
+      "ops": {
+        "cordon": "封锁",
+        "uncordon": "解除封锁",
+        "drain": "排空",
+        "enterMaintenance": "进入维护模式",
+        "exitMaintenance": "退出维护模式",
+        "scheduling": {
+          "ready": "可调度",
+          "disabled": "已封锁"
+        },
+        "confirmDrainTitle": "排空节点 {node}？",
+        "confirmMaintenanceTitle": "将节点 {node} 置于维护模式？",
+        "confirmCordonTitle": "封锁节点 {node}？",
+        "confirmUncordonTitle": "解除封锁节点 {node}？",
+        "willEvict": "将驱逐 {count} 个 Pod",
+        "willSkip": "将跳过 {count} 个 Pod（DaemonSet、镜像 Pod 或已完成）",
+        "willRefuse": "将拒绝 {count} 个 Pod（含 emptyDir 数据或不受管理）",
+        "forceLabel": "强制：同时驱逐含 emptyDir 数据的 Pod 和不受管理的 Pod",
+        "draining": "排空中，剩余 {count} 个 Pod",
+        "drained": "节点已排空。所有可驱逐的 Pod 均已移除。",
+        "blockedByPdb": "被 PodDisruptionBudget 阻止：{pods}",
+        "evictionFailed": "驱逐失败：{pods}",
+        "refusedHint": "部分 Pod 被拒绝。请勾选强制后重新执行以驱逐它们。",
+        "controlPlaneWarning": "这是控制平面节点。排空可能影响集群控制平面。",
+        "lastNodeWarning": "这是最后一个可调度的 Ready 节点。排空后将没有节点可重新调度 Pod。",
+        "cancel": "取消",
+        "confirm": "排空"
+      }
+    },
+    "downloadKubeconfig": "下载 kubeconfig",
+    "workload": {
+      "action": {
+        "restart": "重启",
+        "scale": "扩缩容",
+        "rollback": "回滚",
+        "delete": "删除"
+      },
+      "title": {
+        "restart": "重启 {name}？",
+        "scale": "扩缩容 {name}",
+        "rollback": "回滚 {name}",
+        "delete": "删除 Pod {name}？"
+      },
+      "body": {
+        "restart": "Pod 会逐个替换，与 kubectl rollout restart 相同。",
+        "delete": "如果此 Pod 由控制器管理，控制器会创建一个替代 Pod。"
+      },
+      "replicas": "副本数",
+      "currentReplicas": "当前 {count}",
+      "revision": "修订版本 {revision}",
+      "current": "当前",
+      "noRevision": "没有可回滚到的更早修订版本。",
+      "cancel": "取消",
+      "done": {
+        "restart": "已请求重启 {name}。",
+        "scale": "{name} 已扩缩容至 {count} 个副本。",
+        "rollback": "{name} 已回滚到修订版本 {revision}。",
+        "delete": "Pod {name} 已删除。"
+      },
+      "error": {
+        "forbidden": "访问被拒绝（导入的 kubeconfig 没有执行此操作的 RBAC 权限）。",
+        "not_found": "未找到（可能已被删除）。",
+        "auth_failed": "身份验证失败。请重新导入集群凭据。",
+        "unreachable": "集群不可达。",
+        "conflict": "该修订版本已是当前版本。",
+        "generic": "操作失败。"
+      }
+    }
   }
 }

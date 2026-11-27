@@ -101,6 +101,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   { id: "admin.apitokens.view", name: "admin.apitokens.view", category: "admin", description: "View API tokens and service accounts, never their secrets (implied by admin.apitokens)" },
   { id: "admin.settings.identity", name: "admin.settings.identity", category: "admin", description: "Manage the identity provider connection of customer tenants (implied by admin.settings)", isDangerous: true },
 
+  // Kubernetes
+  { id: "k8s.view", name: "k8s.view", category: "k8s", description: "View Kubernetes clusters" },
+  { id: "k8s.manage", name: "k8s.manage", category: "k8s", description: "Manage Kubernetes clusters", isDangerous: true },
+
   // SDN / VNet
   { id: "sdn.vnet.view", name: "sdn.vnet.view", category: "sdn", description: "List and view VNets in own vDCs" },
   { id: "sdn.vnet.create", name: "sdn.vnet.create", category: "sdn", description: "Create new VNets in own vDCs" },
@@ -147,6 +151,7 @@ export const ROLES: RoleSeed[] = [
       // backup.view before their own keys were enforced.
       "backup.restore", "backup.delete",
       "events.view", "tasks.view", "alerts.view", "automation.view", "reports.view",
+      "k8s.view",
     ],
   },
   {
@@ -164,6 +169,7 @@ export const ROLES: RoleSeed[] = [
       "backup.view", "backup.restore", "backup.delete",
       "events.view", "tasks.view", "storage.admin",
       "alerts.view", "alerts.manage", "automation.view", "automation.manage", "reports.view",
+      "k8s.view", "k8s.manage",
     ],
   },
   {
@@ -174,6 +180,7 @@ export const ROLES: RoleSeed[] = [
     permissions: [
       "vm.view", "node.view", "connection.view", "storage.view", "storage.content", "backup.view",
       "events.view", "alerts.view", "automation.view", "reports.view", "tasks.view",
+      "k8s.view",
     ],
   },
   {
@@ -253,5 +260,19 @@ export const ROLES: RoleSeed[] = [
       "reports.view",
       "sdn.vnet.view",
     ],
+  },
+  {
+    id: "role_k8s_viewer",
+    name: "Kubernetes Viewer",
+    description: "View Kubernetes clusters",
+    color: "#3b82f6",
+    permissions: ["k8s.view"],
+  },
+  {
+    id: "role_k8s_operator",
+    name: "Kubernetes Operator",
+    description: "Manage Kubernetes clusters",
+    color: "#f59e0b",
+    permissions: ["k8s.view", "k8s.manage"],
   },
 ]

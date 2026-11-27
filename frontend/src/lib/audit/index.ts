@@ -39,6 +39,7 @@ export type AuditCategory =
   | "automation"     // DRS, rolling updates, host drains
   | "replication"    // Replication jobs and site recovery
   | "alerts"         // Alerts, notifications, reports
+  | "k8s"            // Kubernetes cluster actions
 
 export type AuditAction =
 
@@ -78,8 +79,14 @@ export type AuditAction =
   | "export"
   | "import"
   | "test"
+  | "health"
+  | "logs"
   | "enable"
   | "disable"
+  | "cordon"
+  | "drain"
+  | "scale"
+  | "rollback"
 
   // RBAC
   | "rbac_role_created"

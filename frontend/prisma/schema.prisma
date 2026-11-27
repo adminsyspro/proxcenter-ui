@@ -2127,3 +2127,81 @@ model GpuUsageHour {
   @@index([tenantId, hour])
   @@map("gpu_usage_hours")
 }
+
+// ============================================
+// Kubernetes cluster registry
+// ============================================
+
+enum K8sDistro {
+  k3s
+  kubeadm
+  generic
+  talos
+  rke2
+}
+
+enum K8sSource {
+  imported
+  deployed
+}
+
+enum K8sCredentialType {
+  token
+  client_cert
+}
+
+enum K8sHealthState {
+  healthy
+  degraded
+  unreachable
+  auth_failed
+  stale
+  unknown
+}
+
+model KubernetesCluster {
+  id                    String   @id @default(cuid())
+  tenantId              String   @map("tenant_id")
+  name                  String
+  clusterUid            String?  @map("cluster_uid")
+  contextName           String?  @map("context_name")
+  distro                K8sDistro @default(generic)
+  source                K8sSource @default(imported)
+  apiServerUrl          String   @map("api_server_url")
+  caDataPem             String?  @map("ca_data_pem")
+  tlsServerName         String?  @map("tls_server_name")
+  insecureSkipTlsVerify Boolean  @default(false) @map("insecure_skip_tls_verify")
+  credentialEnc         String   @map("credential_enc")
+  credentialType        K8sCredentialType @map("credential_type")
+  credentialVersion     Int      @default(1) @map("credential_version")
+  credentialUpdatedAt   DateTime @default(now()) @map("credential_updated_at")
+  proxmoxConnectionId   String?  @map("proxmox_connection_id")
+  version               String?
+  healthState           K8sHealthState @default(unknown) @map("health_state")
+  healthDetail          Json?    @map("health_detail")
+  lastHealthAt          DateTime? @map("last_health_at")
+  lastSuccessAt         DateTime? @map("last_success_at")
+  lastFailureAt         DateTime? @map("last_failure_at")
+  lastErrorCode         String?  @map("last_error_code")
+  lastErrorMessage      String?  @map("last_error_message")
+  createdBy             String?  @map("created_by")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([tenantId, apiServerUrl])
+  @@map("kubernetes_clusters")
+}
+
+model KubernetesClusterNode {
+  id           String   @id @default(cuid())
+  clusterId    String   @map("cluster_id")
+  nodeName     String   @map("node_name")
+  connectionId String   @map("connection_id")
+  vmid         Int
+  createdAt    DateTime @default(now())
+
+  @@unique([clusterId, nodeName])
+  @@map("kubernetes_cluster_nodes")
+}

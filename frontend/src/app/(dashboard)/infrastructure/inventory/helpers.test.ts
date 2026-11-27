@@ -851,6 +851,7 @@ describe('fetchDetails — section selections return null (no generic CPU/RAM pa
   // types it must NOT fall through to the generic 'UNKNOWN' details payload.
   it.each([
     'root', 'storage-root', 'network-root', 'backup-root', 'migration-root',
+    'kubernetes-root', 'kubernetes-cluster',
     'net-conn', 'net-node', 'net-vlan', 'net-bridge', 'tvnet',
     'storage-cluster', 'storage-node',
   ])('returns null for %s', async (type) => {

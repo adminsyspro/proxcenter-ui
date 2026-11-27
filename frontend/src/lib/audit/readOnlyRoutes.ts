@@ -20,6 +20,7 @@ export const READ_ONLY_MUTATION_ROUTES: Readonly<Record<string, string>> = {
   'v1/admin/tenant-networks/[id]/reachability': 'Ping test between transport peers',
   'v1/backups/restore-drills/preflight': 'Preflight checks, read-only',
   'v1/connections/[id]/check': 'Connection health check, read-only',
+  'v1/k8s/clusters/validate': 'Parses a kubeconfig and tests the connection to the cluster, stores nothing',
   'v1/connections/[id]/test-ssh': 'SSH connectivity test',
   'v1/connections/[id]/log-collection/preflight': 'Log forwarder preflight of each node, read-only',
   'v1/connections/[id]/log-collection/check': 'Compares the log forwarder of each node with what was installed, changes nothing on the nodes',

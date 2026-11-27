@@ -26,6 +26,7 @@ export const AUTHZ_GUARDS: readonly string[] = [
   'loadGuestVisibilityCheck',
   'filterVmsByPermission',
   'drillTargetDenied',
+  'requireK8sPermission',
 ]
 
 const PUBLIC_SIGN_IN = 'Public: read by the sign-in page before any session exists'

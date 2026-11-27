@@ -594,6 +594,10 @@ export const PERMISSIONS = {
   // Storage Admin
   STORAGE_ADMIN: "storage.admin",
 
+  // Kubernetes
+  K8S_VIEW: "k8s.view",
+  K8S_MANAGE: "k8s.manage",
+
   // Admin
   ADMIN_USERS: "admin.users",
   ADMIN_RBAC: "admin.rbac",

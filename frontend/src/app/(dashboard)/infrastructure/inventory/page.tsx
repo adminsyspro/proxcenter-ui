@@ -202,6 +202,14 @@ export default function InventoryPage() {
       return
     }
 
+    if (selectType === 'kubernetes-cluster' && selectId) {
+      deepLinkHandled.current = true
+      setSelection({ type: 'kubernetes-cluster', id: selectId })
+      setViewMode('tree')
+
+      return
+    }
+
     // VM deep-link — needs rawVms loaded
     if (rawVms.length === 0) return
 

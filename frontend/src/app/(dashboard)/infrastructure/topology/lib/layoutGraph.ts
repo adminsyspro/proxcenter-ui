@@ -1,11 +1,15 @@
 import dagre from '@dagrejs/dagre'
 import type { Node, Edge } from '@xyflow/react'
 
-export function layoutGraph(nodes: Node[], edges: Edge[]): { nodes: Node[]; edges: Edge[] } {
+export function layoutGraph(
+  nodes: Node[],
+  edges: Edge[],
+  opts: { rankdir?: 'TB' | 'LR'; nodesep?: number; ranksep?: number } = {},
+): { nodes: Node[]; edges: Edge[] } {
   const g = new dagre.graphlib.Graph()
 
   g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 120 })
+  g.setGraph({ rankdir: opts.rankdir ?? 'TB', nodesep: opts.nodesep ?? 80, ranksep: opts.ranksep ?? 120 })
 
   nodes.forEach((node) => {
     const width = (node.data as any).width ?? 200

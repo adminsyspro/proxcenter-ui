@@ -11,6 +11,7 @@ import { GuestSelectionBar, hasPowerRight, useGuestPowerRights, usePickedGuestSe
 import { useTreeGuestPick } from './hooks/useTreeGuestPick'
 import { bridgeLabel } from '@/lib/proxmox/hostVlanMap'
 import { sdnSegmentLabel, type SdnVnet } from '@/lib/proxmox/sdnVnetMap'
+import { isIntegrating } from '@/lib/k8s/clusterHealthStatus'
 
 import { SimpleTreeView, TreeItem } from '@mui/x-tree-view'
 import { 
@@ -64,6 +65,7 @@ import { useExpectedVmStatuses } from './hooks/useExpectedVmStatuses'
 import { networkConnKey } from './networkConnKey'
 import { useRBAC } from '@/contexts/RBACContext'
 import { showsClusterLevel } from '@/lib/rbac/scopeKinds'
+import { useLicense } from '@/contexts/LicenseContext'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
@@ -81,6 +83,15 @@ import PoolDialog, { type PoolDialogState, type PoolOwner } from './components/P
 import PoolMembersDialog, { type PoolMembersState } from './components/PoolMembersDialog'
 import { isVdcPool } from './components/poolMembers'
 import { InventoryLoadedContext } from './inventoryLoadedContext'
+import type { K8sClusterRow } from './k8s/ClusterCard'
+import { podPhaseColor } from '@/lib/k8s/overviewCharts'
+import { distroLogo } from '@/lib/k8s/distros'
+import type { ListResourcesResult, ResourceListItem } from '@/lib/k8s/types'
+
+// Node readiness → status-dot colour for the node rows.
+function nodeDotColor(ready?: string): string {
+  return ready === 'True' ? '#4caf50' : ready === 'False' ? '#f44336' : '#9e9e9e'
+}
 
 // Re-export for external consumers (e.g. InventoryDetails.tsx)
 export { StatusIcon, NodeIcon, ClusterIcon, getVmIcon } from './components/TreeIcons'
@@ -112,6 +123,10 @@ export type InventorySelection =
   | { type: 'tvnet'; id: string }
   | { type: 'backup-root'; id: 'backup-root' }
   | { type: 'migration-root'; id: 'migration-root' }
+  | { type: 'kubernetes-root'; id: 'kubernetes-root' }
+  // id = KubernetesCluster.id; optional `view` = resource apiKind to deep-link
+  // the cluster detail pane to (e.g. 'node' | 'pod'), omitted for overview.
+  | { type: 'kubernetes-cluster'; id: string; view?: string }
 
 export type ViewMode = 'tree' | 'vms' | 'hosts' | 'pools' | 'tags' | 'templates' | 'favorites'
 
@@ -487,6 +502,11 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onPool
   const [poolDialog, setPoolDialog] = useState<PoolDialogState>(null)
   const [poolMembersDialog, setPoolMembersDialog] = useState<PoolMembersState>(null)
   const [poolMenu, setPoolMenu] = useState<{ anchor?: HTMLElement; mouseX?: number; mouseY?: number; path: string; count?: number } | null>(null)
+  // Kubernetes is an Enterprise-only feature; the section is hidden entirely
+  // on Community editions (the API also enforces this with a 403).
+  const { isEnterprise } = useLicense()
+  // K8s is visible to super-admins on any edition, or Enterprise users with k8s.view.
+  const canSeeK8s = isAdmin || (isEnterprise && hasPermission('k8s.view'))
   // Tenants other than the provider get the cloud-style abstraction —
   // shared storages on a multi-tenant cluster would leak other tenants'
   // VMID metadata, so we hide the STORAGES section from them entirely
@@ -556,6 +576,21 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onPool
   const [pbsServers, setPbsServers] = useState<TreePbsServer[]>([])
   const [externalHypervisors, setExternalHypervisors] = useState<{ id: string; name: string; type: string; vms?: { vmid: string; name: string; status: string; cpu?: number; memory_size_MiB?: number; guest_OS?: string; vcenterDatacenter?: string; vcenterCluster?: string; vcenterHost?: string; vcenterHostStatus?: 'ok' | 'warn' | 'crit' | 'unknown'; vcenterHostConnectionState?: string; vcenterHostPowerState?: string }[]; vmsLoading?: boolean; vmsLoadError?: string }[]>([])
   const [clusterStorages, setClusterStorages] = useState<TreeClusterStorage[]>([])
+  // Kubernetes clusters for the (Enterprise-only) Kubernetes tree section.
+  // Fetched separately from the PVE inventory stream (own REST endpoint),
+  // re-fetched on tree refresh via the reloadTick dependency below.
+  const [k8sClusters, setK8sClusters] = useState<K8sClusterRow[]>([])
+  // Per-cluster tree expansion: which clusters show their kind list, and which
+  // of those have the Nodes group expanded to individual node rows.
+  const [k8sExpanded, setK8sExpanded] = useState<Set<string>>(new Set())
+  // Lazily-fetched node rows per cluster (populated when the cluster expands).
+  const [k8sNodes, setK8sNodes] = useState<Record<string, { items: ResourceListItem[]; loading: boolean; error: boolean }>>({})
+  const k8sNodesFetched = useRef<Set<string>>(new Set())
+  // Individual nodes expanded to their pods, keyed `${clusterId}/${nodeName}`.
+  const [k8sNodeExpanded, setK8sNodeExpanded] = useState<Set<string>>(new Set())
+  // Cluster pods fetched once and grouped by scheduling node (summary.node).
+  const [k8sPods, setK8sPods] = useState<Record<string, { byNode: Record<string, ResourceListItem[]>; loading: boolean; error: boolean; truncated: boolean }>>({})
+  const k8sPodsFetched = useRef<Set<string>>(new Set())
   const [reloadTick, setReloadTick] = useState(0)
   // A forced refresh keeps the current tree until the stream ends, which can
   // take as long as the slowest server: show that it is still running.
@@ -638,7 +673,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   const [isHydrated, setIsHydrated] = useState(false)
 
   // Sections collapsed (pour les modes hosts, pools, tags)
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set(['storage', 'pbs', 'migrate-ext']))
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set(['storage', 'pbs', 'migrate-ext', 'k8s']))
 
   // Task 16 — per-vDC collapse state for the guest list's vDC group nodes
   // (`showVdcNodes`). Expanded by default; persisted per tenant like the
@@ -671,7 +706,7 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   const [migrationExpandedItems, setMigrationExpandedItems] = useState<string[]>([])
 
   // Sections principales (accordéon : une seule ouverte à la fois)
-  const mainSections = ['pve', 'storage', 'pbs', 'migrate-ext']
+  const mainSections = ['pve', 'storage', 'pbs', 'migrate-ext', 'k8s']
 
   const toggleSection = (key: string) => {
     setCollapsedSections(prev => {
@@ -840,6 +875,116 @@ return migratingVmIds.has(`${connId}:${vmid}`)
   // Optimistic status after a power action, from the tree menu or the details
   // panel, held against the live stream until Proxmox reports it.
   const { show: showExpectedVmStatus, hold: holdExpectedStatuses } = useExpectedVmStatuses(setClusters)
+  // Kubernetes clusters fetch (Enterprise-only). Mirrors how the dashboard
+  // loads them, but keeps the tree's own copy so the section can list clusters
+  // as children. Depends on reloadTick so the tree's refresh button re-fetches.
+  useEffect(() => {
+    if (!canSeeK8s) {
+      setK8sClusters([])
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/v1/k8s/clusters', { cache: 'no-store' })
+        if (!res.ok) return
+        const data = await res.json()
+        if (!cancelled) {
+          setK8sClusters(Array.isArray(data?.clusters) ? data.clusters : [])
+        }
+      } catch {
+        /* network error: leave the existing list untouched */
+      }
+    })()
+    return () => { cancelled = true }
+  }, [canSeeK8s, reloadTick])
+
+  // Lazily fetch a cluster's node rows the first time its Nodes group is
+  // expanded. Cached via k8sNodesFetched; on failure the guard is cleared so a
+  // later expand retries. Mirrors the Network section's fetch-on-expand pattern.
+  const fetchK8sNodes = useCallback((clusterId: string) => {
+    if (k8sNodesFetched.current.has(clusterId)) return
+    k8sNodesFetched.current.add(clusterId)
+    setK8sNodes(prev => ({ ...prev, [clusterId]: { items: prev[clusterId]?.items ?? [], loading: true, error: false } }))
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/v1/k8s/clusters/${clusterId}/resources?kind=node`, { cache: 'no-store' })
+        if (!res.ok) throw new Error('http')
+        const data = (await res.json()) as ListResourcesResult
+        if (data.errorCode) throw new Error(data.errorCode)
+        setK8sNodes(prev => ({ ...prev, [clusterId]: { items: data.items ?? [], loading: false, error: false } }))
+      } catch {
+        k8sNodesFetched.current.delete(clusterId)
+        setK8sNodes(prev => ({ ...prev, [clusterId]: { items: prev[clusterId]?.items ?? [], loading: false, error: true } }))
+      }
+    })()
+  }, [])
+
+  // Expanding a cluster reveals (and lazily loads) its nodes directly.
+  const toggleK8sCluster = useCallback((clusterId: string) => {
+    setK8sExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(clusterId)) next.delete(clusterId)
+      else { next.add(clusterId); fetchK8sNodes(clusterId) }
+      return next
+    })
+  }, [fetchK8sNodes])
+
+  // Fetch a cluster's pods once and bucket them by scheduling node, so each
+  // node row can list the pods running on it. Same cache/retry contract as
+  // fetchK8sNodes; the whole list is fetched once, not per node.
+  const fetchK8sPods = useCallback((clusterId: string) => {
+    if (k8sPodsFetched.current.has(clusterId)) return
+    k8sPodsFetched.current.add(clusterId)
+    setK8sPods(prev => ({ ...prev, [clusterId]: { byNode: prev[clusterId]?.byNode ?? {}, loading: true, error: false, truncated: false } }))
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/v1/k8s/clusters/${clusterId}/resources?kind=pod`, { cache: 'no-store' })
+        if (!res.ok) throw new Error('http')
+        const data = (await res.json()) as ListResourcesResult
+        if (data.errorCode) throw new Error(data.errorCode)
+        const byNode: Record<string, ResourceListItem[]> = {}
+        for (const p of data.items ?? []) {
+          const node = p.summary?.node
+          if (!node) continue // unscheduled pods aren't tied to a node
+          if (!byNode[node]) byNode[node] = []
+          byNode[node].push(p)
+        }
+        setK8sPods(prev => ({ ...prev, [clusterId]: { byNode, loading: false, error: false, truncated: !!data.truncated } }))
+      } catch {
+        k8sPodsFetched.current.delete(clusterId)
+        setK8sPods(prev => ({ ...prev, [clusterId]: { byNode: prev[clusterId]?.byNode ?? {}, loading: false, error: true, truncated: false } }))
+      }
+    })()
+  }, [])
+
+  const toggleK8sNode = useCallback((clusterId: string, nodeName: string) => {
+    const key = `${clusterId}/${nodeName}`
+    setK8sNodeExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else { next.add(key); fetchK8sPods(clusterId) }
+      return next
+    })
+  }, [fetchK8sPods])
+
+  // An inventory refresh (reloadTick) invalidates the lazily-loaded K8s child
+  // caches: node/pod branches loaded once are otherwise short-circuited by
+  // their fetch guards and stay stale after nodes/pods are added or removed.
+  // Clear the guards and re-fetch whatever is currently expanded so the tree
+  // reflects the refresh live. Skips the initial mount.
+  const k8sRefreshMounted = useRef(false)
+  useEffect(() => {
+    if (!k8sRefreshMounted.current) { k8sRefreshMounted.current = true; return }
+    k8sNodesFetched.current.clear()
+    k8sPodsFetched.current.clear()
+    for (const cid of k8sExpanded) fetchK8sNodes(cid)
+    const podClusters = new Set<string>()
+    for (const key of k8sNodeExpanded) podClusters.add(key.slice(0, key.indexOf('/')))
+    for (const cid of podClusters) fetchK8sPods(cid)
+    // Re-fetch is scoped to reloadTick only; expanded sets are read live.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadTick])
 
   useEffect(() => {
     if (onOptimisticVmStatusRef) {
@@ -5002,6 +5147,210 @@ return (
           </>
         )
       })()}
+
+      {/* ── Kubernetes Section ── Enterprise-only. Clicking the header opens the
+          Kubernetes dashboard (cluster cards + import). The section is expandable
+          (caret on the left, mirroring MIGRATIONS) and lists imported clusters as
+          child rows; each child opens its cluster detail. */}
+      {viewMode === 'tree' && canSeeK8s && (
+        <>
+          <Box
+            onClick={() => onSelect({ type: 'kubernetes-root', id: 'kubernetes-root' })}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75,
+              bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+              borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider',
+              cursor: 'pointer', '&:hover': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)' },
+            }}
+          >
+            <Box
+              onClick={(e) => { e.stopPropagation(); toggleSection('k8s') }}
+              sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', p: 0.25, mr: -0.25 }}
+            >
+              <i className={collapsedSections.has('k8s') ? 'ri-add-line' : 'ri-subtract-line'} style={{ fontSize: 14, opacity: 0.7 }} />
+            </Box>
+            <img src="/images/kubernetes-logo.svg" alt="" width={14} height={14} style={{ opacity: 0.85 }} />
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>{t('kubernetes.sectionTitle').toUpperCase()}</Typography>
+            {k8sClusters.length > 0 && (
+              <Typography variant="caption" sx={{ opacity: 0.5 }}>
+                ({k8sClusters.length})
+              </Typography>
+            )}
+          </Box>
+          <Collapse in={!collapsedSections.has('k8s')}>
+            {k8sClusters.map(cluster => {
+              const isDark = theme.palette.mode === 'dark'
+              const selBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'
+              const hoverBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
+              // Health dot colour keyed to the cluster's last health probe.
+              // green = healthy, orange = degraded/stale, red = unreachable/auth
+              // failure, grey = unknown. Mirrors the host/VM status pastilles used
+              // elsewhere in this tree. A never-checked cluster (integrating)
+              // shows a tiny spinner instead of the dot.
+              const dotColor =
+                cluster.healthState === 'healthy' ? '#4caf50' :
+                cluster.healthState === 'degraded' || cluster.healthState === 'stale' ? '#ff9800' :
+                cluster.healthState === 'unreachable' || cluster.healthState === 'auth_failed' ? '#f44336' :
+                '#9e9e9e'
+              // Cluster overview is selected only when no resource view is set.
+              const clusterSelected = selected?.type === 'kubernetes-cluster' && selected.id === cluster.id && !selected.view
+              const expanded = k8sExpanded.has(cluster.id)
+              const nodeState = k8sNodes[cluster.id]
+              return (
+                <Box key={cluster.id}>
+                  {/* Cluster row: caret + logo/pastille + name (click → overview) */}
+                  <Box
+                    onClick={() => onSelect({ type: 'kubernetes-cluster', id: cluster.id })}
+                    sx={{
+                      display: 'flex', alignItems: 'center', gap: 0.75,
+                      pl: 3, pr: 1.5, py: 0.5, cursor: 'pointer',
+                      bgcolor: clusterSelected ? selBg : 'transparent',
+                      '&:hover': { bgcolor: hoverBg },
+                    }}
+                  >
+                    <Box
+                      onClick={(e) => { e.stopPropagation(); toggleK8sCluster(cluster.id) }}
+                      sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', p: 0.25, mr: -0.25 }}
+                    >
+                      <i className={expanded ? 'ri-subtract-line' : 'ri-add-line'} style={{ fontSize: 13, opacity: 0.7 }} />
+                    </Box>
+                    <Box sx={{ position: 'relative', width: 14, height: 14, flexShrink: 0 }}>
+                      <img src="/images/kubernetes-logo.svg" alt="" width={14} height={14} style={{ opacity: 0.9, display: 'block' }} />
+                      {isIntegrating(cluster) ? (
+                        <Tooltip
+                          title={t('kubernetes.health.integrating')}
+                          enterDelay={1000} enterNextDelay={1000} placement="right" slotProps={tooltipSlotProps}
+                        >
+                          <CircularProgress
+                            size={10}
+                            thickness={5}
+                            sx={{ position: 'absolute', bottom: -2, right: -2, bgcolor: 'background.paper', borderRadius: '50%' }}
+                          />
+                        </Tooltip>
+                      ) : (
+                        <Box sx={{
+                          position: 'absolute', bottom: -1, right: -1, width: 6, height: 6,
+                          borderRadius: '50%', bgcolor: dotColor, border: '1.5px solid', borderColor: 'background.paper',
+                        }} />
+                      )}
+                    </Box>
+                    <span style={{ fontSize: 13 }}>{cluster.name}</span>
+                  </Box>
+
+                  {/* Nodes shown directly under the cluster (like Proxmox
+                      cluster → host); each node expands to the pods scheduled on
+                      it. Fetched lazily when the cluster is expanded. */}
+                  <Collapse in={expanded} unmountOnExit>
+                    {nodeState?.loading && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', pl: 5.5, py: 0.4 }}>
+                        <CircularProgress size={12} thickness={5} />
+                      </Box>
+                    )}
+                    {nodeState?.error && (
+                      <Box
+                        onClick={(e) => { e.stopPropagation(); k8sNodesFetched.current.delete(cluster.id); fetchK8sNodes(cluster.id) }}
+                        sx={{ pl: 5.5, py: 0.4, cursor: 'pointer', '&:hover': { bgcolor: hoverBg } }}
+                      >
+                        <Typography variant="caption" color="error">{t('common.error')}</Typography>
+                      </Box>
+                    )}
+                    {nodeState?.items?.map(n => {
+                      const nodeKey = `${cluster.id}/${n.name}`
+                      const nExpanded = k8sNodeExpanded.has(nodeKey)
+                      const podState = k8sPods[cluster.id]
+                      const podsHere = podState?.byNode?.[n.name] ?? []
+                      return (
+                        <Box key={n.uid}>
+                          {/* Node row: caret + server icon (ready pastille) + name */}
+                          <Box
+                            onClick={() => onSelect({ type: 'kubernetes-cluster', id: cluster.id, view: 'node' })}
+                            sx={{
+                              display: 'flex', alignItems: 'center', gap: 0.75,
+                              pl: 5.5, pr: 1.5, py: 0.4, cursor: 'pointer',
+                              '&:hover': { bgcolor: hoverBg },
+                            }}
+                          >
+                            <Box
+                              onClick={(e) => { e.stopPropagation(); toggleK8sNode(cluster.id, n.name) }}
+                              sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', p: 0.25, m: -0.25 }}
+                            >
+                              <i className={nExpanded ? 'ri-subtract-line' : 'ri-add-line'} style={{ fontSize: 12, opacity: 0.6 }} />
+                            </Box>
+                            <Box sx={{ position: 'relative', width: 15, height: 15, flexShrink: 0 }}>
+                              {/* Node icon = the cluster's distro logo (k3s/Talos/RKE2, else Kubernetes) */}
+                              <img
+                                src={distroLogo(cluster.distro)}
+                                alt=""
+                                width={15}
+                                height={15}
+                                style={{ display: 'block', objectFit: 'contain', borderRadius: 2 }}
+                              />
+                              <Box sx={{
+                                position: 'absolute', bottom: -2, right: -2, width: 7, height: 7, borderRadius: '50%',
+                                bgcolor: nodeDotColor(n.summary?.ready), border: '1.5px solid', borderColor: 'background.paper',
+                              }} />
+                            </Box>
+                            <span style={{ fontSize: 12.5 }}>{n.name}</span>
+                          </Box>
+
+                          {/* Pods scheduled on this node: pod icon + phase pastille + name + namespace */}
+                          <Collapse in={nExpanded} unmountOnExit>
+                            {podState?.loading && (
+                              <Box sx={{ display: 'flex', alignItems: 'center', pl: 11, py: 0.35 }}>
+                                <CircularProgress size={11} thickness={5} />
+                              </Box>
+                            )}
+                            {podState?.error && (
+                              <Box
+                                onClick={(e) => { e.stopPropagation(); k8sPodsFetched.current.delete(cluster.id); fetchK8sPods(cluster.id) }}
+                                sx={{ pl: 11, py: 0.35, cursor: 'pointer', '&:hover': { bgcolor: hoverBg } }}
+                              >
+                                <Typography variant="caption" color="error">{t('common.error')}</Typography>
+                              </Box>
+                            )}
+                            {podsHere.map(p => (
+                              <Box
+                                key={p.uid}
+                                onClick={() => onSelect({ type: 'kubernetes-cluster', id: cluster.id, view: 'pod' })}
+                                sx={{
+                                  display: 'flex', alignItems: 'center', gap: 0.75,
+                                  pl: 11, pr: 1.5, py: 0.3, cursor: 'pointer', minWidth: 0,
+                                  '&:hover': { bgcolor: hoverBg },
+                                }}
+                              >
+                                <Box sx={{ position: 'relative', width: 13, height: 13, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <i className="ri-box-3-line" style={{ fontSize: 13, opacity: 0.7 }} />
+                                  <Box sx={{
+                                    position: 'absolute', bottom: -2, right: -2, width: 6, height: 6, borderRadius: '50%',
+                                    bgcolor: podPhaseColor(p.summary?.phase), border: '1.5px solid', borderColor: 'background.paper',
+                                  }} />
+                                </Box>
+                                <span style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>{p.name}</span>
+                              </Box>
+                            ))}
+                            {podState && !podState.loading && !podState.error && !podState.truncated && podsHere.length === 0 && (
+                              <Box sx={{ pl: 11, py: 0.35 }}>
+                                <Typography variant="caption" sx={{ opacity: 0.5 }}>{t('kubernetes.explorer.charts.noPods')}</Typography>
+                              </Box>
+                            )}
+                            {/* When the pod list is capped, this node's slice may be incomplete
+                                (or empty only because it was cut off) — never show "no pods". */}
+                            {podState?.truncated && (
+                              <Box sx={{ pl: 11, py: 0.2 }}>
+                                <Typography variant="caption" sx={{ opacity: 0.45 }}>{t('kubernetes.explorer.charts.incomplete')}</Typography>
+                              </Box>
+                            )}
+                          </Collapse>
+                        </Box>
+                      )
+                    })}
+                  </Collapse>
+                </Box>
+              )
+            })}
+          </Collapse>
+        </>
+      )}
 
       </Box>
       <TreeDialogs

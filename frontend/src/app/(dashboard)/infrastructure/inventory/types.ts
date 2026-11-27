@@ -26,6 +26,10 @@ export type InventorySelection =
   | { type: 'tvnet'; id: string }
   | { type: 'backup-root'; id: 'backup-root' }
   | { type: 'migration-root'; id: 'migration-root' }
+  | { type: 'kubernetes-root'; id: 'kubernetes-root' }
+  /** id = KubernetesCluster.id. Optional `view` deep-links the cluster detail
+   *  pane to a resource kind (apiKind, e.g. 'node' | 'pod'); omit for overview. */
+  | { type: 'kubernetes-cluster'; id: string; view?: string }
 
 export type Kpi = { label: string; value: string; hint?: string }
 export type KV = { k: string; v: string }

@@ -6213,7 +6213,8 @@
       "cluster": "Cluster",
       "automation": "Automation",
       "replication": "Replication",
-      "alerts": "Alerts"
+      "alerts": "Alerts",
+      "kubernetes": "Kubernetes"
     },
     "actions": {
       "login": "Login",
@@ -6266,7 +6267,13 @@
       "replicationSync": "Replication sync",
       "replicationFix": "Replica fix",
       "drillRun": "Restore drill",
-      "aiAction": "Assistant action"
+      "aiAction": "Assistant action",
+      "health": "Health check",
+      "logs": "Logs read",
+      "cordon": "Cordon",
+      "drain": "Drain",
+      "scale": "Scale",
+      "rollback": "Roll back"
     }
   },
   "security": {
@@ -16587,5 +16594,306 @@
     "perHostInfo": "Cap on the warm copies reading from one host of this source, shared by those copies whatever their batch.",
     "perHost": "Copy rate cap per source host (MB/s)",
     "perHostCaption": "Empty means no cap. A batch or a migration can set a lower cap of its own: each copy takes the lower of the two."
+  },
+  "kubernetes": {
+    "sectionTitle": "Kubernetes",
+    "addCluster": "Add cluster",
+    "kpi": {
+      "clusters": "Clusters",
+      "nodes": "Nodes",
+      "pods": "Pods",
+      "cpu": "CPU",
+      "ram": "RAM",
+      "status": "Status"
+    },
+    "importCluster": "Import existing cluster",
+    "empty": "No Kubernetes clusters yet. Use the plus button to import one.",
+    "health": {
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "unreachable": "Unreachable",
+      "auth_failed": "Authentication failed",
+      "stale": "Stale",
+      "unknown": "Not checked yet",
+      "integrating": "Integrating...",
+      "checking": "Checking...",
+      "recheck": "Re-check health",
+      "lastChecked": "Checked {ago}"
+    },
+    "importDialog": {
+      "title": "Import Kubernetes cluster",
+      "pasteLabel": "Paste or upload kubeconfig",
+      "contextLabel": "Context",
+      "nameLabel": "Cluster name",
+      "leastPrivilegeHint": "Use a least-privilege context. Tokens or client certificates are stored encrypted."
+    },
+    "delete": {
+      "confirm": "Remove this cluster from ProxCenter? The cluster itself is not affected."
+    },
+    "explore": "Explore cluster",
+    "explorer": {
+      "overview": {
+        "title": "Overview",
+        "node": "Nodes",
+        "namespace": "Namespaces",
+        "deployment": "Deployments",
+        "pod": "Pods"
+      },
+      "group": {
+        "cluster": "Cluster",
+        "workloads": "Workloads",
+        "network": "Network",
+        "config": "Config",
+        "storage": "Storage",
+        "events": "Events"
+      },
+      "kind": {
+        "node": "Nodes",
+        "namespace": "Namespaces",
+        "pod": "Pods",
+        "deployment": "Deployments",
+        "statefulset": "StatefulSets",
+        "daemonset": "DaemonSets",
+        "job": "Jobs",
+        "cronjob": "CronJobs",
+        "service": "Services",
+        "ingress": "Ingresses",
+        "configmap": "ConfigMaps",
+        "pvc": "PersistentVolumeClaims",
+        "pv": "PersistentVolumes",
+        "event": "Events"
+      },
+      "col": {
+        "name": "Name",
+        "namespace": "Namespace",
+        "age": "Age",
+        "ready": "Ready",
+        "roles": "Roles",
+        "version": "Version",
+        "internalIP": "Internal IP",
+        "cpu": "CPU",
+        "memory": "Memory",
+        "podIP": "Pod IP",
+        "phase": "Phase",
+        "restarts": "Restarts",
+        "node": "Node",
+        "upToDate": "Up to date",
+        "available": "Available",
+        "completions": "Completions",
+        "status": "Status",
+        "schedule": "Schedule",
+        "suspend": "Suspended",
+        "lastSchedule": "Last schedule",
+        "type": "Type",
+        "clusterIP": "Cluster IP",
+        "ports": "Ports",
+        "hosts": "Hosts",
+        "keys": "Keys",
+        "capacity": "Capacity",
+        "storageClass": "Storage class",
+        "reason": "Reason",
+        "object": "Object",
+        "message": "Message",
+        "count": "Count",
+        "pods": "Pods",
+        "actions": "Actions",
+        "lastSeen": "Last seen"
+      },
+      "tab": {
+        "summary": "Summary",
+        "yaml": "YAML",
+        "events": "Events",
+        "logs": "Logs"
+      },
+      "section": {
+        "labels": "Labels",
+        "annotations": "Annotations",
+        "owners": "Owners",
+        "containers": "Containers",
+        "conditions": "Conditions"
+      },
+      "logs": {
+        "previous": "Previous (crashed) container",
+        "live": "Live",
+        "copy": "Copy logs",
+        "download": "Download"
+      },
+      "msg": {
+        "forbidden": "Access denied (the imported kubeconfig lacks RBAC for this).",
+        "notFound": "Resource not found (it may have been deleted).",
+        "authFailed": "Authentication failed. Re-import the cluster credential.",
+        "unreachable": "Cluster unreachable.",
+        "truncated": "First 500 shown (results incomplete)."
+      },
+      "events": {
+        "empty": "No events."
+      },
+      "search": "Filter by name",
+      "refresh": "Refresh",
+      "loading": "Loading...",
+      "empty": "No resources.",
+      "allNamespaces": "All namespaces",
+      "charts": {
+        "phaseTitle": "Pod phase",
+        "perNodeTitle": "Pods per node",
+        "unscheduled": "Unscheduled",
+        "moreNodes": "+{count} more",
+        "restartsTitle": "Top restarts",
+        "noRestarts": "No pod restarts",
+        "warningsTitle": "Current warning events",
+        "noWarnings": "No warning events",
+        "forbidden": "Access denied (the imported kubeconfig lacks RBAC for events).",
+        "incomplete": "Incomplete data (first 500 pods).",
+        "noPods": "No pods",
+        "utilizationTitle": "Resource utilization",
+        "clusterCpu": "Cluster CPU",
+        "clusterMemory": "Cluster memory",
+        "perNode": "Per node",
+        "metricsUnavailable": "Metrics API unavailable, or metrics-server is not installed or ready in this cluster.",
+        "metricsForbidden": "Access denied (the imported kubeconfig lacks RBAC for the metrics API).",
+        "metricsError": "Metrics unavailable.",
+        "nodesReporting": "{reporting} of {total} nodes reporting"
+      },
+      "detail": {
+        "truncated": "Showing first 100",
+        "issues": "Issues detected",
+        "section": {
+          "info": "Info",
+          "capacity": "Capacity",
+          "conditions": "Conditions",
+          "taints": "Taints",
+          "resources": "Resources",
+          "volumes": "Volumes",
+          "selector": "Selector",
+          "ports": "Ports",
+          "rules": "Rules",
+          "tls": "TLS",
+          "dataKeys": "Data keys"
+        }
+      },
+      "topology": {
+        "title": "Topology"
+      }
+    },
+    "topology": {
+      "title": "Topology",
+      "toolbar": {
+        "namespace": "Namespace",
+        "noResults": "No resources match the selected filters"
+      },
+      "bridge": {
+        "disabled": "Infrastructure overlay not available (no Proxmox visibility for this user)"
+      },
+      "meta": {
+        "truncated": "Some resources were truncated due to cluster size",
+        "capped": "Some resource kinds are capped",
+        "ambiguous": "Some K8s nodes could not be matched (ambiguous)"
+      },
+      "node": {
+        "unmapped": "unmapped",
+        "unverified": "unverified",
+        "vm": "VM",
+        "badge": "Node"
+      },
+      "status": {
+        "loading": "Loading topology...",
+        "forbidden": "Access denied",
+        "unreachable": "Could not reach cluster"
+      },
+      "group": {
+        "shared": "shared"
+      },
+      "card": {
+        "ready": "ready"
+      },
+      "kindPodGroup": "Pod Group",
+      "kindReplicaset": "ReplicaSet",
+      "apps": {
+        "title": "Applications",
+        "empty": "No applications",
+        "pods": "{healthy}/{total} pods",
+        "external": "External to Proxmox",
+        "backToApps": "Back to apps",
+        "tab": "Apps",
+        "health": {
+          "healthy": "Healthy",
+          "degraded": "Degraded",
+          "error": "Error"
+        }
+      },
+      "nodes": {
+        "title": "Nodes",
+        "tab": "Nodes"
+      }
+    },
+    "node": {
+      "ops": {
+        "cordon": "Cordon",
+        "uncordon": "Uncordon",
+        "drain": "Drain",
+        "enterMaintenance": "Enter maintenance",
+        "exitMaintenance": "Exit maintenance",
+        "scheduling": {
+          "ready": "Schedulable",
+          "disabled": "Cordoned"
+        },
+        "confirmDrainTitle": "Drain node {node}?",
+        "confirmMaintenanceTitle": "Enter maintenance on node {node}?",
+        "confirmCordonTitle": "Cordon node {node}?",
+        "confirmUncordonTitle": "Uncordon node {node}?",
+        "willEvict": "{count, plural, one {Will evict # pod} other {Will evict # pods}}",
+        "willSkip": "{count, plural, one {Will skip # pod (DaemonSet, mirror or completed)} other {Will skip # pods (DaemonSet, mirror or completed)}}",
+        "willRefuse": "{count, plural, one {Will refuse # pod (emptyDir data or unmanaged)} other {Will refuse # pods (emptyDir data or unmanaged)}}",
+        "forceLabel": "Force: also evict pods with emptyDir data and unmanaged pods",
+        "draining": "{count, plural, one {Draining, # pod remaining} other {Draining, # pods remaining}}",
+        "drained": "Node drained. All evictable pods are gone.",
+        "blockedByPdb": "Blocked by PodDisruptionBudget: {pods}",
+        "evictionFailed": "Eviction failed for: {pods}",
+        "refusedHint": "Some pods were refused. Re-run with Force to evict them.",
+        "controlPlaneWarning": "This is a control-plane node. Draining it can degrade the cluster control plane.",
+        "lastNodeWarning": "This is the last Ready schedulable node. Draining it leaves no node to reschedule pods onto.",
+        "cancel": "Cancel",
+        "confirm": "Drain"
+      }
+    },
+    "downloadKubeconfig": "Download kubeconfig",
+    "workload": {
+      "action": {
+        "restart": "Restart",
+        "scale": "Scale",
+        "rollback": "Roll back",
+        "delete": "Delete"
+      },
+      "title": {
+        "restart": "Restart {name}?",
+        "scale": "Scale {name}",
+        "rollback": "Roll back {name}",
+        "delete": "Delete pod {name}?"
+      },
+      "body": {
+        "restart": "Pods are replaced one at a time, as kubectl rollout restart does.",
+        "delete": "If a controller manages this pod, it creates a replacement."
+      },
+      "replicas": "Replicas",
+      "currentReplicas": "Currently {count}",
+      "revision": "Revision {revision}",
+      "current": "current",
+      "noRevision": "No earlier revision to roll back to.",
+      "cancel": "Cancel",
+      "done": {
+        "restart": "Restart requested for {name}.",
+        "scale": "{count, plural, one {{name} scaled to # replica.} other {{name} scaled to # replicas.}}",
+        "rollback": "{name} rolled back to revision {revision}.",
+        "delete": "Pod {name} deleted."
+      },
+      "error": {
+        "forbidden": "Access denied (the imported kubeconfig lacks RBAC for this action).",
+        "not_found": "Not found (it may have been deleted).",
+        "auth_failed": "Authentication failed. Re-import the cluster credential.",
+        "unreachable": "Cluster unreachable.",
+        "conflict": "This revision is already the current one.",
+        "generic": "The action failed."
+      }
+    }
   }
 }

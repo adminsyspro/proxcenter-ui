@@ -1,6 +1,10 @@
 FROM alpine:3.24.4
 
 # apk upgrade: the packages fixed in Alpine since the base image was built.
+# PACKAGES_REFRESH (the UTC day, passed by the CI) is only there to change
+# the cache key: a layer restored from the build cache would otherwise keep
+# the packages of the day it was first built, whatever Alpine fixed since.
+ARG PACKAGES_REFRESH
 RUN apk upgrade --no-cache && \
     apk add --no-cache keepalived wget gettext curl
 

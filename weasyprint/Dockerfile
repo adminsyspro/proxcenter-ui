@@ -20,6 +20,10 @@ FROM python:3.13-slim@sha256:7249d5587b78209a006dc4a3b5340678f84ea729239193aa559
 # /usr/share/fonts/.
 # The upgrade pulls the Debian security fixes published after the pinned base
 # was built (Trivy scans the result on every build).
+# PACKAGES_REFRESH (the UTC day, passed by the CI) is only there to change
+# the cache key: a layer restored from the build cache would otherwise keep
+# the packages of the day it was first built, whatever Debian fixed since.
+ARG PACKAGES_REFRESH
 RUN apt-get update && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends \
         libcairo2 \

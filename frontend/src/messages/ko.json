@@ -10704,6 +10704,7 @@
     "dateRange": "날짜 범위",
     "dateFrom": "시작",
     "dateTo": "종료",
+    "generatedBy": "생성자",
     "sections": "포함할 섹션",
     "allSections": "모든 섹션",
     "generating": "생성 중...",

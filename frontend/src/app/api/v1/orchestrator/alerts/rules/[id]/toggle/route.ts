@@ -22,8 +22,8 @@ async function handlePost(
   if (demo) return demo
 
   try {
-    // Relaxed from ALERTS_MANAGE; ownership is verified per-rule below.
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+    // A write needs alerts.manage (roadmap#278); ownership is verified per-rule below.
+    const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (denied) return denied
 
     const { id } = await params

@@ -10718,6 +10718,7 @@
     "dateRange": "Période",
     "dateFrom": "Du",
     "dateTo": "Au",
+    "generatedBy": "Créé par",
     "sections": "Sections à inclure",
     "allSections": "Toutes les sections",
     "generating": "Génération en cours...",

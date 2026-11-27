@@ -62,6 +62,8 @@ interface ScheduleManagerProps {
   onDelete: (id: string) => Promise<void>
   onRunNow: (id: string) => Promise<void>
   loading: boolean
+  /** reports.manage (roadmap#278): without it the list is read-only. */
+  canManage?: boolean
 }
 
 export default function ScheduleManager({
@@ -73,6 +75,7 @@ export default function ScheduleManager({
   onDelete,
   onRunNow,
   loading,
+  canManage = true,
 }: ScheduleManagerProps) {
   const t = useTranslations()
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -156,6 +159,7 @@ export default function ScheduleManager({
         <Switch
           size="small"
           checked={params.value}
+          disabled={!canManage}
           onChange={() => handleToggleEnabled(params.row)}
         />
       ),
@@ -221,7 +225,7 @@ export default function ScheduleManager({
         </Typography>
       ),
     },
-    {
+    ...(canManage ? [{
       field: 'actions',
       headerName: t('common.actions'),
       width: 150,
@@ -245,35 +249,39 @@ export default function ScheduleManager({
           </Tooltip>
         </Box>
       ),
-    },
+    } as GridColDef] : []),
   ]
 
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, p: 2 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6">{t('reports.schedules')}</Typography>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<i className="ri-add-line" />}
-          onClick={handleCreate}
-        >
-          {t('reports.newSchedule')}
-        </Button>
+        {canManage && (
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<i className="ri-add-line" />}
+            onClick={handleCreate}
+          >
+            {t('reports.newSchedule')}
+          </Button>
+        )}
       </Box>
 
       {schedules.length === 0 ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, opacity: 0.6 }}>
           <i className="ri-calendar-schedule-line" style={{ fontSize: 48, marginBottom: 16 }} />
           <Typography>{t('reports.noSchedules')}</Typography>
-          <Button
-            variant="outlined"
-            sx={{ mt: 2 }}
-            startIcon={<i className="ri-add-line" />}
-            onClick={handleCreate}
-          >
-            {t('reports.newSchedule')}
-          </Button>
+          {canManage && (
+            <Button
+              variant="outlined"
+              sx={{ mt: 2 }}
+              startIcon={<i className="ri-add-line" />}
+              onClick={handleCreate}
+            >
+              {t('reports.newSchedule')}
+            </Button>
+          )}
         </Box>
       ) : (
         <Box sx={{ flex: 1, minHeight: 0 }}>

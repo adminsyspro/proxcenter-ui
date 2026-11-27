@@ -31,7 +31,7 @@ export async function GET() {
 // POST /api/v1/orchestrator/reports/schedules - Create a new schedule
 async function handlePost(request: NextRequest) {
   try {
-    const denied = await checkPermission(PERMISSIONS.REPORTS_VIEW)
+    const denied = await checkPermission(PERMISSIONS.REPORTS_MANAGE)
     if (denied) return denied
 
     const body = await request.json()

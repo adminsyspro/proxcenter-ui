@@ -62,10 +62,10 @@ async function handlePut(
   if (demo) return demo
 
   try {
-    // Relaxed from ALERTS_MANAGE; ownership of the rule is enforced via
-    // verifyRuleBelongsToTenant below, which also blocks vDC tenants from
-    // touching provider-level (no connection_id) rules.
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+    // A write needs alerts.manage (roadmap#278). Ownership of the rule is
+    // enforced via verifyRuleBelongsToTenant below, which also blocks vDC
+    // tenants from touching provider-level (no connection_id) rules.
+    const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (denied) return denied
 
     const { id } = await params
@@ -117,10 +117,8 @@ async function handleDelete(
   if (demo) return demo
 
   try {
-    // Relaxed from ALERTS_MANAGE; ownership of the rule is enforced via
-    // verifyRuleBelongsToTenant below, which also blocks vDC tenants from
-    // touching provider-level (no connection_id) rules.
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+    // A write needs alerts.manage (roadmap#278), ownership as in PUT.
+    const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (denied) return denied
 
     const { id } = await params

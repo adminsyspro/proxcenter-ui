@@ -48,13 +48,15 @@ interface ReportHistoryProps {
   onDelete: (id: string) => Promise<void>
   onRefresh: () => void
   loading: boolean
+  /** reports.manage (roadmap#278): without it reports can be downloaded, not deleted. */
+  canManage?: boolean
 }
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleString()
 }
 
-export default function ReportHistory({ reports, reportTypes, onDelete, onRefresh, loading }: ReportHistoryProps) {
+export default function ReportHistory({ reports, reportTypes, onDelete, onRefresh, loading, canManage = true }: ReportHistoryProps) {
   const t = useTranslations()
 
   const handleDownload = (reportId: string, format: 'pdf' | 'csv' = 'pdf') => {
@@ -117,7 +119,7 @@ export default function ReportHistory({ reports, reportTypes, onDelete, onRefres
     },
     {
       field: 'generated_by',
-      headerName: t('common.create') + 'd by',
+      headerName: t('reports.generatedBy'),
       width: 120,
     },
     {
@@ -147,11 +149,13 @@ export default function ReportHistory({ reports, reportTypes, onDelete, onRefres
               </IconButton>
             </Tooltip>
           )}
-          <Tooltip title={t('common.delete')}>
-            <IconButton size="small" color="error" onClick={() => onDelete(params.row.id)}>
-              <i className="ri-delete-bin-line" />
-            </IconButton>
-          </Tooltip>
+          {canManage && (
+            <Tooltip title={t('common.delete')}>
+              <IconButton size="small" color="error" onClick={() => onDelete(params.row.id)}>
+                <i className="ri-delete-bin-line" />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
       ),
     },

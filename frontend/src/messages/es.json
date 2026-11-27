@@ -10704,6 +10704,7 @@
     "dateRange": "Rango de fechas",
     "dateFrom": "Desde",
     "dateTo": "Hasta",
+    "generatedBy": "Creado por",
     "sections": "Secciones que incluir",
     "allSections": "Todas las secciones",
     "generating": "Generando...",

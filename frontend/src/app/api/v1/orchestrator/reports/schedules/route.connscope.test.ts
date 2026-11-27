@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   applyReportRequestScope: vi.fn(),
   orchestratorFetch: vi.fn(async () => ({ id: 'sched-1' })),
 }))
-vi.mock('@/lib/rbac', () => ({ checkPermission: mocks.checkPermission, PERMISSIONS: { REPORTS_VIEW: 'reports.view' } }))
+vi.mock('@/lib/rbac', () => ({ checkPermission: mocks.checkPermission, PERMISSIONS: { REPORTS_VIEW: 'reports.view', REPORTS_MANAGE: 'reports.manage' } }))
 vi.mock('@/lib/reports/connectionScope', () => ({ applyReportRequestScope: mocks.applyReportRequestScope }))
 vi.mock('@/lib/orchestrator', () => ({ orchestratorFetch: mocks.orchestratorFetch }))
 

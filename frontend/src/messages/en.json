@@ -10717,6 +10717,7 @@
     "dateRange": "Date range",
     "dateFrom": "From",
     "dateTo": "To",
+    "generatedBy": "Created by",
     "sections": "Sections to include",
     "allSections": "All sections",
     "generating": "Generating...",

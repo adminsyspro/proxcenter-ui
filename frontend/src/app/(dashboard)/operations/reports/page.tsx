@@ -23,6 +23,7 @@ import ReportCustomization from './components/ReportCustomization'
 import ReportGenerator from './components/ReportGenerator'
 import ReportHistory from './components/ReportHistory'
 import ScheduleManager from './components/ScheduleManager'
+import { visibleReportsTab, type ReportsTab } from './reportsTabs'
 
 interface ReportType {
   type: string
@@ -77,7 +78,7 @@ export default function ReportsPage() {
   const { hasFeature, isLicensed, isEnterprise } = useLicense()
   const { hasPermission } = useRBAC()
   const [mounted, setMounted] = useState(false)
-  const [tab, setTab] = useState(0)
+  const [selectedTab, setTab] = useState<ReportsTab>('generate')
   const { showToast } = useToast()
 
   // Data
@@ -91,6 +92,11 @@ export default function ReportsPage() {
   // The layout template is a tenant-wide setting, same permission as the
   // white label it builds on.
   const canCustomize = hasPermission('admin.settings')
+
+  // Generating, deleting and scheduling need reports.manage (roadmap#278):
+  // a read-only caller lands on the history and only reads and downloads.
+  const canManage = hasPermission('reports.manage')
+  const tab = visibleReportsTab(selectedTab, { canManage, canCustomize })
 
   useEffect(() => {
     setMounted(true)
@@ -115,7 +121,7 @@ export default function ReportsPage() {
       if (res.ok) {
         showToast(t('reports.reportStarted'), 'success')
         void mutateReports()
-        setTab(1) // Switch to history tab
+        setTab('history')
       } else {
         const error = await res.json()
 
@@ -221,7 +227,7 @@ export default function ReportsPage() {
       if (res.ok) {
         showToast(t('reports.scheduleRunStarted'), 'success')
         void mutateReports()
-        setTab(1) // Switch to history tab
+        setTab('history')
       } else {
         const error = await res.json()
 
@@ -248,14 +254,14 @@ export default function ReportsPage() {
         <Card variant="outlined" sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
             <Tabs value={tab} onChange={(_, v) => setTab(v)}>
-              <Tab label={t('reports.generate')} />
-              <Tab label={`${t('reports.history')} (${reports.length})`} />
-              <Tab label={`${t('reports.schedules')} (${schedules.length})`} />
-              {canCustomize && <Tab label={t('reports.customization.tab')} />}
+              {canManage && <Tab value="generate" label={t('reports.generate')} />}
+              <Tab value="history" label={`${t('reports.history')} (${reports.length})`} />
+              <Tab value="schedules" label={`${t('reports.schedules')} (${schedules.length})`} />
+              {canCustomize && <Tab value="customization" label={t('reports.customization.tab')} />}
             </Tabs>
           </Box>
 
-        {tab === 0 && (
+        {tab === 'generate' && (
           <ReportGenerator
             reportTypes={reportTypes}
             languages={languages}
@@ -264,17 +270,18 @@ export default function ReportsPage() {
           />
         )}
 
-        {tab === 1 && (
+        {tab === 'history' && (
           <ReportHistory
             reports={reports}
             reportTypes={reportTypes}
             onDelete={handleDeleteReport}
             onRefresh={() => mutateReports()}
             loading={loading}
+            canManage={canManage}
           />
         )}
 
-        {tab === 2 && (
+        {tab === 'schedules' && (
           <ScheduleManager
             schedules={schedules}
             reportTypes={reportTypes}
@@ -284,10 +291,11 @@ export default function ReportsPage() {
             onDelete={handleDeleteSchedule}
             onRunNow={handleRunScheduleNow}
             loading={loading}
+            canManage={canManage}
           />
         )}
 
-        {tab === 3 && canCustomize && <ReportCustomization languages={languages} />}
+        {tab === 'customization' && <ReportCustomization languages={languages} />}
       </Card>
 
       </Box>

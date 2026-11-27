@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   mutate: vi.fn(),
   alerts: [] as Array<Record<string, unknown>>,
   rules: [] as Array<Record<string, unknown>>,
+  permissions: [] as string[],
 }))
 
 vi.mock('@/contexts/PageTitleContext', () => ({ usePageTitle: () => ({ setPageInfo: vi.fn() }) }))
@@ -21,6 +22,7 @@ vi.mock('@/contexts/TenantContext', () => ({ useTenant: () => ({ currentTenant: 
 vi.mock('@/components/guards/EnterpriseGuard', () => ({ default: ({ children }: { children: ReactNode }) => children }))
 vi.mock('@/contexts/LicenseContext', () => ({ Features: { ALERTS: 'alerts' }, useLicense: () => ({ isEnterprise: true, hasFeature: () => false }) }))
 vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ showToast: state.showToast }) }))
+vi.mock('@/contexts/RBACContext', () => ({ useRBAC: () => ({ hasPermission: (p: string) => state.permissions.includes(p) }) }))
 vi.mock('@/hooks/useConnections', () => ({ useConnections: () => ({ data: { data: [] } }) }))
 vi.mock('@/hooks/useAlerts', () => ({
   useOrchestratorAlerts: () => ({ data: { data: state.alerts }, error: undefined, isLoading: false, mutate: state.mutate }),
@@ -70,6 +72,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   state.alerts = [alert('a1'), alert('a2')]
   state.rules = [RULE]
+  state.permissions = ['alerts.manage']
   answer = () => accepted
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const a = answer(init?.method || 'GET', url)
@@ -209,5 +212,28 @@ describe('event rules', () => {
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Confirm' }))
 
     await waitFor(() => expect(lastToast()).toEqual(['Error: rule delete refused', 'error']))
+  })
+})
+
+describe('event rules without alerts.manage (roadmap#278)', () => {
+  it('lists the rules read-only: no add, no edit or delete, the switch is disabled', async () => {
+    state.permissions = ['alerts.view']
+    renderWithProviders(<AlertsPage />)
+    await openRulesTab()
+
+    expect(row('rule-1').getByText('Backups failing')).toBeInTheDocument()
+    expect(row('rule-1').getByRole('switch')).toBeDisabled()
+    expect(row('rule-1').queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(row('rule-1').queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument()
+  })
+
+  it('offers add, edit and delete with alerts.manage', async () => {
+    renderWithProviders(<AlertsPage />)
+    await openRulesTab()
+
+    expect(row('rule-1').getByRole('switch')).toBeEnabled()
+    expect(row('rule-1').getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument()
   })
 })

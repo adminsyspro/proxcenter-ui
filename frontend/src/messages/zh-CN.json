@@ -10704,6 +10704,7 @@
     "dateRange": "日期范围",
     "dateFrom": "起始日期",
     "dateTo": "截止日期",
+    "generatedBy": "创建者",
     "sections": "包含的章节",
     "allSections": "所有章节",
     "generating": "正在生成...",

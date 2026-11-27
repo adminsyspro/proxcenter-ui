@@ -56,7 +56,7 @@ function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleString()
 }
 
-export default function ReportHistory({ reports, reportTypes, onDelete, onRefresh, loading, canManage = true }: ReportHistoryProps) {
+export default function ReportHistory({ reports, reportTypes, onDelete, onRefresh, loading, canManage = true }: Readonly<ReportHistoryProps>) {
   const t = useTranslations()
 
   const handleDownload = (reportId: string, format: 'pdf' | 'csv' = 'pdf') => {

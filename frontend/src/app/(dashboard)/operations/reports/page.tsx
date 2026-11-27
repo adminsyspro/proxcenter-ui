@@ -78,7 +78,7 @@ export default function ReportsPage() {
   const { hasFeature, isLicensed, isEnterprise } = useLicense()
   const { hasPermission } = useRBAC()
   const [mounted, setMounted] = useState(false)
-  const [selectedTab, setTab] = useState<ReportsTab>('generate')
+  const [selectedTab, setSelectedTab] = useState<ReportsTab>('generate')
   const { showToast } = useToast()
 
   // Data
@@ -121,7 +121,7 @@ export default function ReportsPage() {
       if (res.ok) {
         showToast(t('reports.reportStarted'), 'success')
         void mutateReports()
-        setTab('history')
+        setSelectedTab('history')
       } else {
         const error = await res.json()
 
@@ -227,7 +227,7 @@ export default function ReportsPage() {
       if (res.ok) {
         showToast(t('reports.scheduleRunStarted'), 'success')
         void mutateReports()
-        setTab('history')
+        setSelectedTab('history')
       } else {
         const error = await res.json()
 
@@ -253,7 +253,7 @@ export default function ReportsPage() {
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}>
         <Card variant="outlined" sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+            <Tabs value={tab} onChange={(_, v) => setSelectedTab(v)}>
               {canManage && <Tab value="generate" label={t('reports.generate')} />}
               <Tab value="history" label={`${t('reports.history')} (${reports.length})`} />
               <Tab value="schedules" label={`${t('reports.schedules')} (${schedules.length})`} />

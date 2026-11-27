@@ -12,6 +12,7 @@ import { assertVmid, assertNodeName } from "@/lib/ssh/validate"
 import { buildRemoteMigrateEndpoint } from "@/lib/migration/remoteMigrateEndpoint"
 
 import { captureReplicationJobs, type CcmRestorePlan } from '@/lib/migration/ccm-prereqs'
+import { checkMigrationTunnel, tunnelTooOldMessage } from "@/lib/migration/tunnelVersion"
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -206,6 +207,16 @@ async function handler(
       return NextResponse.json(
         { error: `targetNode "${safeTargetNode}" is not a node of the target cluster` },
         { status: 400 },
+      )
+    }
+
+    // A Proxmox VE 9.3 source refuses an older target inside the task: said
+    // here, before PVE locks the guest and opens the tunnel.
+    const tunnel = await checkMigrationTunnel('qemu', { conn: sourceConn, node: safeNode }, { conn: targetConn, node: safeTargetNode })
+    if (tunnel) {
+      return NextResponse.json(
+        { error: tunnelTooOldMessage(tunnel), code: 'TARGET_TUNNEL_TOO_OLD', context: tunnel },
+        { status: 409 },
       )
     }
 

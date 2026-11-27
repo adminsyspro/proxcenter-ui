@@ -156,6 +156,12 @@ export const VM_REQUEST_SCHEMAS: Record<string, Record<string, unknown>> = {
       removeHa: { type: "boolean", default: false },
       removeReplication: { type: "boolean", default: false },
       removeSnapshots: { type: "array", items: { type: "string", minLength: 1 }, description: "Snapshot names; irreversible" },
+      target: {
+        type: "object",
+        required: ["connectionId", "node"],
+        description: "The migration target. When given, nothing is cleared (409 TARGET_TUNNEL_TOO_OLD) if the source runs Proxmox VE 9.3 and the target an older version, which Proxmox VE refuses.",
+        properties: { connectionId: { type: "string" }, node: { type: "string" } },
+      },
     },
   },
   VmNotesUpdateRequest: {

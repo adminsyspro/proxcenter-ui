@@ -1142,6 +1142,8 @@
     "pbsRestoreIpamNote": "La asignación IP se reconcilia automáticamente cuando finaliza la restauración.",
     "pbsRestoreAsNew": "Restaurar como una VM nueva (asigna automáticamente un VMID libre y MACs únicas)",
     "pbsRestoreOverwriteConfirm": "Esto reemplazará la VM {vmid} con el contenido del backup. Haz clic de nuevo para confirmar.",
+    "pbsRestoreOtherGuest": "Esta copia pertenece a otro invitado distinto de la VM {vmid}: Proxmox VE se niega a sobrescribir un invitado con la copia de otro.",
+    "pbsRestoreAllowOtherGuest": "Sobrescribir de todos modos (el invitado conserva su propia identidad)",
     "pbsRestoreOverwriteConfirmButton": "Confirmar sobrescritura",
     "pbsNoBackups": "No se encontraron backups en este almacenamiento PBS",
     "pbsSearchBackups": "Buscar backups...",
@@ -2622,6 +2624,9 @@
     "ruleName": "Nombre de la regla",
     "uniqueRuleId": "Identificador único de la regla",
     "restrictToSelectedNodes": "Restringir solo a los nodos seleccionados",
+    "neverOnSelectedNodes": "No ejecutar nunca en los nodos seleccionados",
+    "runOnSelectedNodes": "Ejecutar en los nodos seleccionados",
+    "keepOffSelectedNodes": "Mantener fuera de los nodos seleccionados",
     "addHaResourcesFirst": "Añade primero recursos HA",
     "optionalRuleDescription": "Opcional regla descripción",
     "cloneVmTemplate": "Clonar plantilla de VM",
@@ -8545,7 +8550,8 @@
           "allClear": "Requisitos previos",
           "actionFailed": "Acción fallida",
           "inGroup": "(grupo {group})",
-          "siteRecovery": "Site Recovery"
+          "siteRecovery": "Site Recovery",
+          "pveVersion": "Versión de Proxmox VE"
         },
         "siteRecoveryShared": "Cubierto por la tarea de replicación \"{name}\", que también incluye {count} huésped(es) más",
         "siteRecoveryOnly": "Cubierto por la tarea de replicación \"{name}\"",
@@ -8573,7 +8579,8 @@
           "mtuMismatch": "MTU de {iface}: {vmMtu}; bridge de destino: {targetMtu}",
           "vmidExists": "{vmid} ya está en uso en {node}",
           "insufficientCpu": "Se necesitan {needed} vCPU; el destino tiene {available}",
-          "insufficientMemory": "Se necesitan {needed} MB de RAM; {available} MB libres"
+          "insufficientMemory": "Se necesitan {needed} MB de RAM; {available} MB libres",
+          "tunnelTooOld": "destino {pkg} {target}, se necesita {required}+ (Proxmox VE 9.3)"
         }
       },
       "storage": "Almacenamiento",
@@ -10982,6 +10989,7 @@
     "autoHaSyncNow": "Sincronizar ahora",
     "autoHaSyncSuccess": "{added} añadidas, {skipped} ya configuradas",
     "nodeAffinityInfo": "Las reglas de afinidad de nodo limitan las VMs gestionadas por HA para que se ejecuten en nodos específicos. Cuando una VM necesita reubicarse, solo se considerarán como destino los nodos seleccionados.",
+    "nodeAffinityNegativeInfo": "Una regla de afinidad de nodo negativa mantiene las VMs gestionadas por HA fuera de los nodos seleccionados: nunca se colocan allí en modo estricto y, si no, solo como último recurso.",
     "resourceAffinityInfo": "Las reglas de afinidad de recursos definen si las VMs gestionadas por HA deben mantenerse juntas en el mismo nodo (positiva) o separadas entre distintos nodos (negativa) por redundancia.",
     "noNodeAffinityRules": "No hay reglas de afinidad de nodo configuradas. Usa el botón + para limitar las VMs a nodos específicos.",
     "noResourceAffinityRules": "No hay reglas de afinidad de recursos configuradas. Usa el botón + para mantener las VMs juntas o separadas.",
@@ -16503,7 +16511,8 @@
       "VMID_TAKEN_ON_TARGET": "El VMID {vmid} ya se usa en el clúster de destino.",
       "NO_TARGET_NODE": "Ningún host del vDC de destino tiene sitio para esta VM ahora mismo.",
       "QUOTA_EXCEEDED": "Se superaría la cuota del vDC de destino:",
-      "TARGET_QEMU_TOO_OLD": "El vDC de destino tiene una versión de QEMU más antigua que esta VM: muévala en frío (desactive el modo en caliente)."
+      "TARGET_QEMU_TOO_OLD": "El vDC de destino tiene una versión de QEMU más antigua que esta VM: muévala en frío (desactive el modo en caliente).",
+      "TARGET_TUNNEL_TOO_OLD": "El clúster del vDC de destino aún no está en Proxmox VE 9.3: esta VM podrá moverse allí cuando se actualice."
     },
     "settings": {
       "title": "Movimientos entre vDC",

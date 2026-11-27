@@ -14,6 +14,7 @@ import { prisma } from '@/lib/db/prisma'
 import { pveFetch } from '@/lib/proxmox/client'
 import { captureReplicationJobs, findSiteRecoveryJobsForGuest } from '@/lib/migration/ccm-prereqs'
 import { buildRemoteMigrateEndpoint } from '@/lib/migration/remoteMigrateEndpoint'
+import { checkMigrationTunnel } from '@/lib/migration/tunnelVersion'
 import { resolveInstanceId } from '@/lib/migration/orphan-sweep'
 import { PVE_DEFAULT_CPU_MODEL, validateCpuAgainstPolicy } from '@/lib/vdc/computePolicy'
 import { checkVdcQuota, getVdcStorageUsedMb } from '@/lib/vdc/quota'
@@ -59,6 +60,7 @@ export type MoveBlockerCode =
   | 'NO_TARGET_NODE'
   | 'QUOTA_EXCEEDED'
   | 'TARGET_QEMU_TOO_OLD'
+  | 'TARGET_TUNNEL_TOO_OLD'
 
 export interface MoveBlocker {
   code: MoveBlockerCode
@@ -349,6 +351,12 @@ async function targetBlockers(source: MoveSource, target: MoveVdc, mapping: Move
       pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(targetNode)}/capabilities/qemu/machines`).catch(() => null),
     ])
     if (!targetRunsMachine(status?.['running-machine'], machines)) blockers.push({ code: 'TARGET_QEMU_TOO_OLD' })
+  }
+
+  // A Proxmox VE 9.3 source refuses a target that is not on 9.3 yet.
+  if (targetNode) {
+    const tunnel = await checkMigrationTunnel('qemu', { conn: source.conn, node: source.node }, { conn, node: targetNode })
+    if (tunnel) blockers.push({ code: 'TARGET_TUNNEL_TOO_OLD', context: { target: tunnel.targetVersion, required: tunnel.required } })
   }
 
   let capabilities: unknown

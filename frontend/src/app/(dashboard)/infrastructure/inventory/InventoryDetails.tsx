@@ -4992,6 +4992,7 @@ return vm?.isCluster ?? false
         haRuleType={haRuleType}
         clusterHaResources={clusterHaResources}
         clusterPveMajorVersion={clusterPveMajorVersion}
+        clusterPveVersion={clusterPveVersion}
         loadClusterHa={loadClusterHa}
         confirmAction={confirmAction}
         setConfirmAction={setConfirmAction}

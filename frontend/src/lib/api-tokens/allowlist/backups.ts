@@ -195,7 +195,7 @@ export const BACKUP_ENTRIES: AllowlistEntry[] = [
     secondaryPermissions: ["vm.delete"],
     summary: "Restore a guest from a backup",
     description:
-      "Restores `archive` (a Proxmox volume id) or `pbsBackup` (PBS coordinates, mapped to the PVE storage of {node} that targets them) as guest `vmid` on {node}. `pbsBackup.pbsId` must also be inside the token perimeter. `force` overwrites the guest holding `vmid`, which also needs vm.delete on it (scope vms:delete). A vDC tenant restores on its own nodes, from and to its own storages.",
+      "Restores `archive` (a Proxmox volume id) or `pbsBackup` (PBS coordinates, mapped to the PVE storage of {node} that targets them) as guest `vmid` on {node}. `pbsBackup.pbsId` must also be inside the token perimeter. `force` overwrites the guest holding `vmid`, which also needs vm.delete on it (scope vms:delete); on Proxmox VE 9.3 a backup of another guest is refused with 409 `BACKUP_OF_ANOTHER_GUEST` unless `allowIdentityMismatch` is true. A vDC tenant restores on its own nodes, from and to its own storages.",
     requestSchemaRef: "VmRestoreRequest",
     responseSchemaRef: "VmSuccessTaskResponse",
   }),

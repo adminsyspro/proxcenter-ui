@@ -184,6 +184,7 @@ export const BACKUP_REQUEST_SCHEMAS: Record<string, Record<string, unknown>> = {
       start: { type: "boolean", description: "Start the guest once restored" },
       live: { type: "boolean", description: "QEMU only: live restore" },
       force: { type: "boolean", description: "Overwrite the guest holding vmid (needs vm.delete on it)" },
+      allowIdentityMismatch: { type: "boolean", description: "With force, on Proxmox VE 9.3 and later: overwrite the guest even when the backup belongs to another guest (409 BACKUP_OF_ANOTHER_GUEST otherwise). The guest keeps its own identity." },
       restoreTags: { type: "boolean", default: true, description: "false restores the guest without its backed-up tags" },
       name: { type: "string" },
       memory: INT_OR_STRING,

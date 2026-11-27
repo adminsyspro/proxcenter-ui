@@ -215,6 +215,11 @@ jobs:
             type=raw,value=${{ steps.resolve.outputs.version }},enable=${{ steps.resolve.outputs.version != 'dev' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !inputs.staging }}
 
+      # Rebuilds the package upgrade layer once a day (PACKAGES_REFRESH).
+      - name: Package refresh key
+        id: refresh
+        run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push Frontend
         id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -227,6 +232,7 @@ jobs:
           build-args: |
             GIT_SHA=${{ steps.src.outputs.sha }}
             APP_VERSION=${{ steps.resolve.outputs.version }}
+            PACKAGES_REFRESH=${{ steps.refresh.outputs.day }}
           # One cache scope per image. With the default scope shared by every
           # build, each export replaced the index of the others, and the
           # orchestrator and WeasyPrint builds started cold on every run.
@@ -310,6 +316,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Rebuilds the package upgrade layer once a day (PACKAGES_REFRESH).
+      - name: Package refresh key
+        id: refresh
+        run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push Demo
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -322,6 +333,7 @@ jobs:
             GIT_SHA=${{ github.sha }}
             APP_VERSION=demo
             DEMO_MODE=true
+            PACKAGES_REFRESH=${{ steps.refresh.outputs.day }}
           cache-from: |
             type=gha,scope=frontend-demo
             type=gha,scope=frontend
@@ -393,6 +405,11 @@ jobs:
             type=raw,value=${{ steps.resolve.outputs.version }},enable=${{ steps.resolve.outputs.version != 'dev' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !inputs.staging }}
 
+      # Rebuilds the package upgrade layer once a day (PACKAGES_REFRESH).
+      - name: Package refresh key
+        id: refresh
+        run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push WeasyPrint
         id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -402,6 +419,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            PACKAGES_REFRESH=${{ steps.refresh.outputs.day }}
           cache-from: type=gha,scope=weasyprint
           cache-to: type=gha,mode=max,scope=weasyprint
           platforms: linux/amd64
@@ -494,6 +513,11 @@ jobs:
             type=raw,value=${{ steps.resolve.outputs.version }},enable=${{ steps.resolve.outputs.version != 'dev' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
+      # Rebuilds the package upgrade layer once a day (PACKAGES_REFRESH).
+      - name: Package refresh key
+        id: refresh
+        run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push ${{ matrix.image }}
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -502,6 +526,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            PACKAGES_REFRESH=${{ steps.refresh.outputs.day }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           platforms: linux/amd64
@@ -784,6 +810,11 @@ jobs:
             type=raw,value=${{ steps.resolve.outputs.version }},enable=${{ steps.resolve.outputs.version != 'dev' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !inputs.staging }}
 
+      # Rebuilds the package upgrade layer once a day (PACKAGES_REFRESH).
+      - name: Package refresh key
+        id: refresh
+        run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push Orchestrator
         id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -793,6 +824,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           build-args: |
             VERSION=${{ steps.resolve.outputs.version }}
+            PACKAGES_REFRESH=${{ steps.refresh.outputs.day }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=orchestrator

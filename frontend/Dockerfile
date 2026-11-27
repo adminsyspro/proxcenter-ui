@@ -99,6 +99,10 @@ WORKDIR /app
 # image clean regardless of the base image's rebuild cadence. Same for
 # zlib (CVE-2026-85091 heap overflow, fixed in 1.3.2-r1). Runs as root,
 # before the USER switch further down.
+# PACKAGES_REFRESH (the UTC day, passed by the CI) is only there to change
+# the cache key: a layer restored from the build cache would otherwise keep
+# the packages of the day it was first built, whatever Alpine fixed since.
+ARG PACKAGES_REFRESH
 RUN apk upgrade --no-cache libssl3 libcrypto3 zlib
 
 # Remove npm/npx from the runtime image. The app never invokes them at

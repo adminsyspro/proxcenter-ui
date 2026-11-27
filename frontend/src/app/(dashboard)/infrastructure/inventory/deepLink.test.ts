@@ -23,6 +23,10 @@ describe('hasDeepLinkSelection', () => {
     expect(hasDeepLinkSelection(params('selectType=ext&selectId=vc1&openBatch=b1'))).toBe(true)
   })
 
+  it('sees a Kubernetes cluster deep-link ("Open cluster" at the end of a deployment)', () => {
+    expect(hasDeepLinkSelection(params('selectType=kubernetes-cluster&selectId=cmwz1'))).toBe(true)
+  })
+
   it('sees nothing on a plain inventory URL', () => {
     expect(hasDeepLinkSelection(params(''))).toBe(false)
   })

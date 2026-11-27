@@ -15,7 +15,7 @@ vi.mock('@/lib/connections/getConnection', () => ({ getConnectionById: (...a: an
 vi.mock('@/lib/k8s/repository', () => ({ getNodeMapping: (...a: any[]) => getNodeMappingMock(...a) }))
 vi.mock('@/lib/vdc/ipam', () => ({ releaseAllocationsForVm: (...a: any[]) => releaseMock(...a) }))
 
-import { destroyClusterNodes } from './destroyClusterNodes'
+import { destroyClusterNodes, checkNodeVms } from './destroyClusterNodes'
 
 const conn = { id: 'conn-a' }
 const config = (name: string) => ({ name, tags: 'proxcenter;dev', cicustom: 'user=local:snippets/dev.yaml' })
@@ -71,5 +71,25 @@ describe('destroyClusterNodes against the Proxmox API', () => {
     const out = await destroyClusterNodes('t1', 'c1', 'dev')
     expect(out.allOk).toBe(false)
     expect(out.results[0].error).toBe('connection not found')
+  })
+})
+
+describe('checkNodeVms', () => {
+  it('names the VMs that are no longer the deployed node, without touching any', async () => {
+    locateMock.mockImplementation(async (_c: any, vmid: number) => (vmid === 9003 ? null : { node: 'pve1', status: 'running' }))
+    pveFetchMock.mockImplementation(async (_c: any, path: string) => (path.endsWith('/9001/config') ? config('dev-worker-1') : config('web-01')))
+    const out = await checkNodeVms('t1', [
+      { nodeName: 'dev-worker-1', connectionId: 'conn-a', vmid: 9001 },
+      { nodeName: 'dev-worker-2', connectionId: 'conn-a', vmid: 9002 },
+      { nodeName: 'dev-worker-3', connectionId: 'conn-a', vmid: 9003 },
+    ], 'dev')
+    expect(out.map(r => r.refusal === null)).toEqual([true, false, true])
+    expect(pveFetchMock.mock.calls.every(c => !c[2]?.method)).toBe(true)
+    expect(getConnectionMock).toHaveBeenCalledTimes(1)
+  })
+  it('a connection that cannot be read refuses', async () => {
+    getConnectionMock.mockRejectedValue(new Error('connection not found'))
+    const out = await checkNodeVms('t1', [{ nodeName: 'dev-worker-1', connectionId: 'conn-a', vmid: 9001 }], 'dev')
+    expect(out[0].refusal).toBe('connection not found')
   })
 })

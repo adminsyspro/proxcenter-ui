@@ -187,3 +187,25 @@ export async function getNodeMapping(
   const rows = await prisma.kubernetesClusterNode.findMany({ where: { clusterId } })
   return rows.map(r => ({ nodeName: r.nodeName, connectionId: r.connectionId, vmid: r.vmid }))
 }
+
+/**
+ * Makes the node mapping of a cluster match its deployed nodes: rows of nodes
+ * that are gone are removed, the others written. One transaction. Returns the
+ * names of the nodes that were removed.
+ */
+export async function syncNodeMapping(
+  clusterId: string,
+  nodes: { name: string; vmid: number; connectionId: string }[],
+): Promise<string[]> {
+  const names = nodes.map(n => n.name)
+  const gone = await prisma.kubernetesClusterNode.findMany({ where: { clusterId, nodeName: { notIn: names } }, select: { nodeName: true } })
+  await prisma.$transaction([
+    prisma.kubernetesClusterNode.deleteMany({ where: { clusterId, nodeName: { notIn: names } } }),
+    ...nodes.map(node => prisma.kubernetesClusterNode.upsert({
+      where: { clusterId_nodeName: { clusterId, nodeName: node.name } },
+      create: { clusterId, nodeName: node.name, vmid: node.vmid, connectionId: node.connectionId },
+      update: { vmid: node.vmid, connectionId: node.connectionId },
+    })),
+  ])
+  return gone.map(g => g.nodeName)
+}

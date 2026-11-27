@@ -7,6 +7,7 @@ import es from '@/messages/es.json'
 import ko from '@/messages/ko.json'
 
 const required = [
+  'kubernetes.workers.add', 'kubernetes.workers.addButton', 'kubernetes.workers.addHelp', 'kubernetes.workers.addTitle', 'kubernetes.workers.cancel', 'kubernetes.workers.changing', 'kubernetes.workers.count', 'kubernetes.workers.draining', 'kubernetes.workers.error.connection_busy', 'kubernetes.workers.error.drain', 'kubernetes.workers.error.generic', 'kubernetes.workers.error.invalid', 'kubernetes.workers.error.invalid_request', 'kubernetes.workers.error.not_a_worker', 'kubernetes.workers.error.not_cordoned', 'kubernetes.workers.error.not_deployed', 'kubernetes.workers.error.nothing_to_change', 'kubernetes.workers.error.run_not_changeable', 'kubernetes.workers.error.too_many', 'kubernetes.workers.error.unavailable', 'kubernetes.workers.error.vm_not_node', 'kubernetes.workers.error.workers_not_changeable', 'kubernetes.workers.failed', 'kubernetes.workers.ip', 'kubernetes.workers.remove', 'kubernetes.workers.removeAction', 'kubernetes.workers.removeText', 'kubernetes.workers.removeTitle', 'kubernetes.workers.removeWarning', 'kubernetes.workers.removing', 'kubernetes.workers.sizing', 'kubernetes.workers.vmid',
   'kubernetes.provision.progress.integrated',
   'kubernetes.delete.destroyRefused',
   'kubernetes.provision.error.cluster_name_taken', 'kubernetes.provision.progress.nameTaken',

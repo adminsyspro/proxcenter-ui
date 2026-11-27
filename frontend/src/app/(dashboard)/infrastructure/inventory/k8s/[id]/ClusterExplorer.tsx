@@ -24,6 +24,7 @@ import { ResourceDrawer } from './ResourceDrawer'
 import { ClusterOverview } from './ClusterOverview'
 import { K8sTopologyView } from './K8sTopologyView'
 import { HistoryView } from './HistoryView'
+import { AddWorkersDialog, RemoveWorkerDialog, WorkerChangeBanner, useWorkerChange } from './WorkerChange'
 
 export function ClusterExplorer({
   clusterId,
@@ -42,9 +43,13 @@ export function ClusterExplorer({
   const tc = useTranslations('common')
   const tNodeOps = useTranslations('kubernetes.node.ops')
   const tHistory = useTranslations('kubernetes.history')
+  const tWorkers = useTranslations('kubernetes.workers')
   const { hasPermission } = useRBAC()
   // Cosmetic gate for the node day-2 actions; the API routes re-check k8s.manage.
   const canManage = hasPermission('k8s.manage')
+  // Adding or removing workers creates and destroys VMs: k8s.provision (and
+  // the VM rights on the connection, checked by the route).
+  const canProvision = hasPermission('k8s.provision')
 
   const [view, setView] = useState<string>(initialView ?? 'overview') // 'overview' | apiKind
   const [namespace, setNamespace] = useState('')
@@ -253,6 +258,23 @@ export function ClusterExplorer({
   const total = liveHealth?.nodesTotal ?? cluster?.healthDetail?.nodesTotal
   const displayName = cluster?.name ?? clusterName
 
+  // A cluster ProxCenter deployed: its workers can be added and removed.
+  const workerChange = useWorkerChange(clusterId, () => { void loadMeta(true); refreshRef.current(); setOverviewTick(n => n + 1) })
+  const layout = workerChange.state?.layout ?? null
+  const canChangeWorkers = canProvision && !!layout?.changeable && workerChange.state?.status === 'completed'
+  const workerNames = new Set((layout?.workers ?? []).map(w => w.name))
+  const [addWorkersOpen, setAddWorkersOpen] = useState(false)
+  const [removeWorker, setRemoveWorker] = useState<string | null>(null)
+  const [workerErrorHidden, setWorkerErrorHidden] = useState<string | null>(null)
+  const workerState = workerChange.state && workerChange.state.error === workerErrorHidden
+    ? { ...workerChange.state, error: null }
+    : workerChange.state
+  const startedWorkerChange = () => {
+    setAddWorkersOpen(false)
+    setRemoveWorker(null)
+    void workerChange.reload()
+  }
+
   const handleRefresh = () => {
     loadMeta(true)
     refresh()
@@ -293,20 +315,21 @@ export function ClusterExplorer({
   // (table row + drawer). There is no Cancel button, so the loop must self-stop:
   // fast when a real blocker (PDB / rejected eviction) has stalled it, and after
   // a generous unconditional cap otherwise (e.g. a pod stuck Terminating).
-  const startDrain = useCallback(async (nodeName: string, force: boolean) => {
-    if (drainingRef.current.has(nodeName)) return // already draining this node
+  const startDrain = useCallback(async (nodeName: string, force: boolean): Promise<DrainRowState['phase']> => {
+    if (drainingRef.current.has(nodeName)) return 'draining' // already draining this node
     drainingRef.current.add(nodeName)
+    let final: DrainRowState['phase'] = 'error'
     setDrainStates((s) => ({ ...s, [nodeName]: { phase: 'draining' } }))
     let prevRemaining = Infinity
     let noProgress = 0
     try {
       for (;;) {
         const result = (await postNodeOp(clusterId, nodeName, 'drain', { force })) as DrainResult
-        if (!drainAliveRef.current) return
+        if (!drainAliveRef.current) return final
         setDrainStates((s) => ({ ...s, [nodeName]: { phase: 'draining', result } }))
         refreshRef.current() // latest view's refresh (never the one captured at confirm)
         setOverviewTick((n) => n + 1) // refresh pod counts + metrics as pods leave
-        if (result.done) { setDrainStates((s) => ({ ...s, [nodeName]: { phase: 'done', result } })); break }
+        if (result.done) { final = 'done'; setDrainStates((s) => ({ ...s, [nodeName]: { phase: 'done', result } })); break }
         const rem = result.remaining.length
         noProgress = rem < prevRemaining ? 0 : noProgress + 1
         prevRemaining = rem
@@ -315,10 +338,10 @@ export function ClusterExplorer({
         // (remaining shrinking) reset the counter and keep the loop going.
         const blocked = result.blockedByPdb.length > 0 || result.evictionFailures.length > 0
         if (!shouldContinueDrain(result) || (blocked && noProgress >= 3) || noProgress >= 60) {
-          setDrainStates((s) => ({ ...s, [nodeName]: { phase: 'stopped', result } })); break
+          final = 'stopped'; setDrainStates((s) => ({ ...s, [nodeName]: { phase: 'stopped', result } })); break
         }
         await new Promise((r) => setTimeout(r, DRAIN_BACKOFF_MS))
-        if (!drainAliveRef.current) return
+        if (!drainAliveRef.current) return final
       }
     } catch (err) {
       if (drainAliveRef.current) {
@@ -327,6 +350,7 @@ export function ClusterExplorer({
     } finally {
       drainingRef.current.delete(nodeName)
     }
+    return final
   }, [clusterId])
 
   // Normal row click / drawer close.
@@ -396,6 +420,12 @@ export function ClusterExplorer({
               <MenuItem key={ns} value={ns}>{ns}</MenuItem>
             ))}
           </Select>
+        )}
+
+        {view === 'node' && canChangeWorkers && (
+          <Button size="small" variant="outlined" startIcon={<i className="ri-add-line" />} onClick={() => setAddWorkersOpen(true)}>
+            {tWorkers('addButton')}
+          </Button>
         )}
 
         <IconButton onClick={handleRefresh} aria-label={t('refresh')} size="small">
@@ -541,6 +571,10 @@ export function ClusterExplorer({
                 <Alert severity="success" sx={{ mb: 1 }} onClose={() => setWorkloadNotice(null)}>{workloadNotice}</Alert>
               )}
 
+              {view === 'node' && (
+                <WorkerChangeBanner state={workerState} onDismissError={() => setWorkerErrorHidden(workerChange.state?.error ?? null)} />
+              )}
+
               {status === 'ok' && items.length > 0 && (
                 <ResourceTable
                   key={kind.apiKind}
@@ -551,7 +585,28 @@ export function ClusterExplorer({
                   drainStates={drainStates}
                   onCordonToggle={handleNodeCordonToggle}
                   onDrain={handleNodeDrain}
+                  removableNodes={canChangeWorkers ? workerNames : undefined}
+                  onRemoveNode={item => setRemoveWorker(item.name)}
                   onWorkloadAction={(action, item) => { setWorkloadNotice(null); setWorkloadDialog({ action, item }) }}
+                />
+              )}
+
+              {addWorkersOpen && layout && (
+                <AddWorkersDialog
+                  clusterId={clusterId}
+                  clusterName={displayName ?? ''}
+                  layout={layout}
+                  onClose={() => setAddWorkersOpen(false)}
+                  onStarted={startedWorkerChange}
+                />
+              )}
+              {removeWorker && (
+                <RemoveWorkerDialog
+                  clusterId={clusterId}
+                  nodeName={removeWorker}
+                  drain={name => startDrain(name, false)}
+                  onClose={() => setRemoveWorker(null)}
+                  onStarted={startedWorkerChange}
                 />
               )}
 
@@ -592,7 +647,7 @@ export function ClusterExplorer({
                     const readySched = items.filter((n) => n.summary?.['ready'] === 'True' && n.summary?.['unschedulable'] !== 'true')
                     return readySched.length === 1 && readySched[0].name === drainDialog.item.name
                   })()}
-                  onConfirm={(force) => { startDrain(drainDialog.item.name, force); setDrainDialog(null) }}
+                  onConfirm={(force) => { void startDrain(drainDialog.item.name, force); setDrainDialog(null) }}
                   onClose={() => setDrainDialog(null)}
                 />
               )}

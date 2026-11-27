@@ -152,18 +152,45 @@ function realDeps(conn: PveConn): DestroyDeps {
   }
 }
 
-export async function destroyClusterNodes(tenantId: string, clusterId: string, clusterName: string): Promise<{ results: NodeDestroyResult[]; allOk: boolean }> {
-  const nodes = await getNodeMapping(tenantId, clusterId)
-  // The promise is cached: the checks run side by side and must share one lookup.
+/**
+ * One connection lookup per connection id. The promise is cached: the checks
+ * run side by side and must share it.
+ */
+function connectionLoader(tenantId: string): (connectionId: string) => Promise<PveConn> {
   const cache = new Map<string, Promise<PveConn>>()
-  const connection = (connectionId: string): Promise<PveConn> => {
+  return connectionId => {
     let conn = cache.get(connectionId)
     if (!conn) { conn = getConnectionById(connectionId, tenantId); cache.set(connectionId, conn) }
     return conn
   }
+}
+
+export async function destroyClusterNodes(tenantId: string, clusterId: string, clusterName: string): Promise<{ results: NodeDestroyResult[]; allOk: boolean }> {
+  const nodes = await getNodeMapping(tenantId, clusterId)
+  const connection = connectionLoader(tenantId)
   return destroyClusterNodesWith(
     nodes,
     async (connectionId, vmid, nodeName) => destroyOneNode(realDeps(await connection(connectionId)), vmid, nodeName, clusterName),
     async (connectionId, vmid, nodeName) => checkOneNode(realDeps(await connection(connectionId)), vmid, nodeName, clusterName),
   )
+}
+
+/**
+ * Why each of these node VMs must not be destroyed (null when it is still the
+ * deployed node, or already gone): the check a deletion runs, for the workers
+ * a change removes through OpenTofu, which destroys by VMID.
+ */
+export async function checkNodeVms(
+  tenantId: string,
+  nodes: { nodeName: string; connectionId: string; vmid: number }[],
+  clusterName: string,
+): Promise<{ vmid: number; nodeName: string; refusal: string | null }[]> {
+  const connection = connectionLoader(tenantId)
+  return Promise.all(nodes.map(async n => ({
+    vmid: n.vmid,
+    nodeName: n.nodeName,
+    refusal: await connection(n.connectionId)
+      .then(conn => checkOneNode(realDeps(conn), n.vmid, n.nodeName, clusterName))
+      .catch((err: any) => String(err?.message ?? err)),
+  })))
 }

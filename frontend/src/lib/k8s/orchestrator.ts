@@ -13,7 +13,7 @@ import {
   type RestartableKind, type ScalableKind, type DeploymentRevision,
 } from './server/workloadOps'
 import { readClusterHistory, type TimelineEntry } from './server/timeline'
-import { setNodeCordon as _setNodeCordon, drainNode as _drainNode } from './server/nodeOps'
+import { setNodeCordon as _setNodeCordon, drainNode as _drainNode, readNodeCordon as _readNodeCordon, deleteNodeObject as _deleteNodeObject } from './server/nodeOps'
 import type { DrainResult } from './nodeDrain'
 
 // ── Health / connectivity (served locally by the TS k8s client) ─────────────
@@ -124,6 +124,18 @@ export async function drainNode(a: Base & { nodeName: string; force?: boolean; d
   const r = await _drainNode(credToInput(a), a.nodeName, { force: !!a.force, dryRun: !!a.dryRun })
   if (!r.ok) return { ok: false, error: r.errorCode ?? 'drain failed' }
   return { ok: true, value: r.value }
+}
+
+export async function nodeCordonState(a: Base & { nodeName: string }): Promise<{ ok: boolean; error?: string; value?: { exists: boolean; cordoned: boolean } }> {
+  const r = await _readNodeCordon(credToInput(a), a.nodeName)
+  if (!r.ok) return { ok: false, error: r.errorCode ?? 'node read failed' }
+  return { ok: true, value: r.value }
+}
+
+/** Removes the node object of a worker whose VM was destroyed. */
+export async function removeNodeObject(a: Base & { nodeName: string }): Promise<{ ok: boolean; error?: string }> {
+  const r = await _deleteNodeObject(credToInput(a), a.nodeName)
+  return r.ok ? { ok: true } : { ok: false, error: r.errorCode ?? 'node removal failed' }
 }
 
 // ── Workload day-2 operations (restart / scale / rollback / pod delete) ──────

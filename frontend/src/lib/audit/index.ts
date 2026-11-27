@@ -88,6 +88,7 @@ export type AuditAction =
   | "drain"
   | "scale"
   | "rollback"
+  | "workers"
 
   // RBAC
   | "rbac_role_created"

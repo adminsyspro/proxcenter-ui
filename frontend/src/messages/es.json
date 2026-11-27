@@ -6260,7 +6260,8 @@
       "cordon": "Acordonar",
       "drain": "Drenar",
       "scale": "Escalar",
-      "rollback": "Revertir"
+      "rollback": "Revertir",
+      "workers": "Workers modificados"
     }
   },
   "security": {
@@ -17127,6 +17128,42 @@
         "serviceCidrInvalid": "La red de servicios debe ser un rango IPv4 válido (por ejemplo 10.96.0.0/16)",
         "podCidrOverlapNodes": "La red de pods {cidr} se solapa con la red de los nodos {nodes}",
         "serviceCidrOverlapNodes": "La red de servicios {cidr} se solapa con la red de los nodos {nodes}"
+      }
+    },
+    "workers": {
+      "addButton": "Añadir workers",
+      "addTitle": "Añadir workers a {cluster}",
+      "count": "Workers que añadir",
+      "sizing": "{cores} vCPU, {memory} GB, {disk} GB cada uno",
+      "ip": "Dirección IP",
+      "vmid": "ID de VM",
+      "addHelp": "Las direcciones y los ID de VM siguen al último nodo; cámbielos si hace falta. Los nuevos workers toman el dimensionamiento de los existentes.",
+      "add": "{count, plural, one {Añadir # worker} other {Añadir # workers}}",
+      "cancel": "Cancelar",
+      "removeAction": "Quitar del clúster",
+      "removeTitle": "Quitar {node}",
+      "removeText": "El nodo se drena (sus pods pasan a los otros nodos) y luego su VM se destruye en Proxmox.",
+      "removeWarning": "Se eliminan la VM y sus discos. No se puede deshacer.",
+      "remove": "Quitar",
+      "draining": "Drenando el nodo...",
+      "removing": "Quitando el nodo...",
+      "changing": "Cambiando los workers del clúster",
+      "failed": "El cambio de workers falló: {message}",
+      "error": {
+        "generic": "El cambio no pudo empezar.",
+        "invalid": "Rechazado: {message}",
+        "drain": "No se pudo drenar el nodo: algunos pods no pudieron moverse. No se quitó nada.",
+        "not_cordoned": "El nodo aún acepta pods: drénelo primero.",
+        "vm_not_node": "Su VM ya no es el nodo con el que se desplegó el clúster (renombrada o ID de VM reutilizado): no se quitó nada.",
+        "run_not_changeable": "Hay otra operación en curso en este clúster: vuelva a intentarlo cuando termine.",
+        "workers_not_changeable": "Este clúster se desplegó antes de que se admitieran los cambios de workers: sus workers no pueden cambiar desde ProxCenter.",
+        "connection_busy": "Hay otro despliegue de Kubernetes en curso en esta conexión de Proxmox.",
+        "not_deployed": "Solo un clúster desplegado por ProxCenter puede cambiar sus workers.",
+        "nothing_to_change": "Nada que cambiar.",
+        "too_many": "Demasiados workers a la vez.",
+        "not_a_worker": "Solo se puede quitar un worker.",
+        "invalid_request": "Rechazado: compruebe las direcciones y los ID de VM.",
+        "unavailable": "No se puede contactar con el orquestador."
       }
     }
   }

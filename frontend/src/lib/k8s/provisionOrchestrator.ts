@@ -72,6 +72,22 @@ export interface RunStatus {
   clusterName?: string
   connectionId?: string
   error?: string
+  // The deployed topology (no secret), once the run has completed.
+  layout?: WorkerLayout
+}
+
+/** The nodes of a deployed cluster and what a new worker gets. */
+export interface WorkerLayout {
+  controlPlane: ProvisionNodeSpec[]
+  workers: ProvisionNodeSpec[]
+  gateway: string
+  subnetPrefix: number
+  controlPlaneVip?: string
+  workerCores: number
+  workerMemory: number
+  workerDisk: number
+  /** False for a cluster deployed before its join tokens were kept. */
+  changeable: boolean
 }
 
 export interface ProvisionRunNode {
@@ -141,6 +157,26 @@ export async function destroyProvisionRun(
   try {
     const value = await orchestratorFetch<{ status: string }>(orchestratorPath`/k8s/provision/${runId}/destroy`, {
       method: 'POST',
+    })
+    return { ok: true, value }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'provisioning request failed' }
+  }
+}
+
+/**
+ * Replaces the worker list of a completed deployment; the orchestrator
+ * creates the added workers and destroys the removed ones in the background
+ * (status "scaling", back to "completed" when done).
+ */
+export async function changeWorkers(
+  runId: string,
+  workers: ProvisionNodeSpec[]
+): Promise<{ ok: boolean; error?: string; value?: { runId: string; status: string } }> {
+  try {
+    const value = await orchestratorFetch<{ runId: string; status: string }>(orchestratorPath`/k8s/provision/${runId}/workers`, {
+      method: 'POST',
+      body: { workers },
     })
     return { ok: true, value }
   } catch (e: any) {

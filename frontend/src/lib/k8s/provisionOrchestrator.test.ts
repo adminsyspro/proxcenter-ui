@@ -11,6 +11,7 @@ import {
   getProvisionRun,
   getProvisionLogs,
   destroyProvisionRun,
+  changeWorkers,
   type ProvisionRequest,
 } from './provisionOrchestrator'
 
@@ -153,5 +154,20 @@ describe('destroyProvisionRun', () => {
 
     expect(r.ok).toBe(false)
     expect(r.error).toBe('Orchestrator 409: not destroyable')
+  })
+})
+
+describe('changeWorkers', () => {
+  it('posts the worker list as an object (orchestratorFetch encodes it)', async () => {
+    orchestratorFetchMock.mockResolvedValueOnce({ runId: 'run-1', status: 'scaling' })
+    const workers = [{ name: 'dev-worker-2', ip: '10.0.0.21', vmid: 201 }]
+    const r = await changeWorkers('run-1', workers)
+    expect(r).toEqual({ ok: true, value: { runId: 'run-1', status: 'scaling' } })
+    const [, init] = orchestratorFetchMock.mock.calls.at(-1)!
+    expect(init).toEqual({ method: 'POST', body: { workers } })
+  })
+  it('returns the error of a refused change', async () => {
+    orchestratorFetchMock.mockRejectedValueOnce(new Error('Orchestrator 409: busy'))
+    expect(await changeWorkers('run-1', [])).toEqual({ ok: false, error: 'Orchestrator 409: busy' })
   })
 })

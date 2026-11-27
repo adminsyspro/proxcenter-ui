@@ -6273,7 +6273,8 @@
       "cordon": "Cordon",
       "drain": "Drain",
       "scale": "Scale",
-      "rollback": "Roll back"
+      "rollback": "Roll back",
+      "workers": "Workers changed"
     }
   },
   "security": {
@@ -17140,6 +17141,42 @@
         "serviceCidrInvalid": "Service network CIDR must be a valid IPv4 CIDR (e.g. 10.244.0.0/16)",
         "podCidrOverlapNodes": "Pod network {cidr} overlaps the node network {nodes}",
         "serviceCidrOverlapNodes": "Service network {cidr} overlaps the node network {nodes}"
+      }
+    },
+    "workers": {
+      "addButton": "Add workers",
+      "addTitle": "Add workers to {cluster}",
+      "count": "Workers to add",
+      "sizing": "{cores} vCPU, {memory} GB, {disk} GB each",
+      "ip": "IP address",
+      "vmid": "VM ID",
+      "addHelp": "Addresses and VM IDs follow the last node; change them if needed. The new workers get the sizing of the existing ones.",
+      "add": "{count, plural, one {Add # worker} other {Add # workers}}",
+      "cancel": "Cancel",
+      "removeAction": "Remove from the cluster",
+      "removeTitle": "Remove {node}",
+      "removeText": "The node is drained (its pods move to the other nodes), then its VM is destroyed on Proxmox.",
+      "removeWarning": "The VM and its disks are deleted. This cannot be undone.",
+      "remove": "Remove",
+      "draining": "Draining the node...",
+      "removing": "Removing the node...",
+      "changing": "Changing the workers of the cluster",
+      "failed": "The worker change failed: {message}",
+      "error": {
+        "generic": "The change could not start.",
+        "invalid": "Refused: {message}",
+        "drain": "The node could not be drained: some pods could not move. Nothing was removed.",
+        "not_cordoned": "The node still accepts pods: drain it first.",
+        "vm_not_node": "Its VM is no longer the node this cluster was deployed with (renamed or reused VM ID): nothing was removed.",
+        "run_not_changeable": "Another operation is running on this cluster: try again once it ends.",
+        "workers_not_changeable": "This cluster was deployed before worker changes were supported: its workers cannot change from ProxCenter.",
+        "connection_busy": "Another Kubernetes deployment is running on this Proxmox connection.",
+        "not_deployed": "Only a cluster ProxCenter deployed can change its workers.",
+        "nothing_to_change": "Nothing to change.",
+        "too_many": "Too many workers at once.",
+        "not_a_worker": "Only a worker can be removed.",
+        "invalid_request": "Refused: check the addresses and VM IDs.",
+        "unavailable": "The orchestrator is not reachable."
       }
     }
   }

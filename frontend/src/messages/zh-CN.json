@@ -6260,7 +6260,8 @@
       "cordon": "封锁节点",
       "drain": "驱逐节点",
       "scale": "扩缩容",
-      "rollback": "回滚"
+      "rollback": "回滚",
+      "workers": "工作节点变更"
     }
   },
   "security": {
@@ -17127,6 +17128,42 @@
         "serviceCidrInvalid": "Service 网络必须是有效的 IPv4 范围（例如 10.96.0.0/16）",
         "podCidrOverlapNodes": "Pod 网络 {cidr} 与节点网络 {nodes} 重叠",
         "serviceCidrOverlapNodes": "Service 网络 {cidr} 与节点网络 {nodes} 重叠"
+      }
+    },
+    "workers": {
+      "addButton": "添加工作节点",
+      "addTitle": "向 {cluster} 添加工作节点",
+      "count": "要添加的工作节点",
+      "sizing": "每个 {cores} vCPU、{memory} GB、{disk} GB",
+      "ip": "IP 地址",
+      "vmid": "VM ID",
+      "addHelp": "地址和 VM ID 接在最后一个节点之后，可按需修改。新工作节点沿用现有工作节点的规格。",
+      "add": "{count, plural, other {添加 # 个工作节点}}",
+      "cancel": "取消",
+      "removeAction": "从集群移除",
+      "removeTitle": "移除 {node}",
+      "removeText": "先排空该节点（其 Pod 迁移到其他节点），然后在 Proxmox 上销毁其虚拟机。",
+      "removeWarning": "虚拟机及其磁盘将被删除，且无法撤销。",
+      "remove": "移除",
+      "draining": "正在排空节点...",
+      "removing": "正在移除节点...",
+      "changing": "正在更改集群的工作节点",
+      "failed": "工作节点更改失败：{message}",
+      "error": {
+        "generic": "无法启动更改。",
+        "invalid": "已拒绝：{message}",
+        "drain": "无法排空节点：部分 Pod 无法迁移。未移除任何内容。",
+        "not_cordoned": "该节点仍接受 Pod：请先排空。",
+        "vm_not_node": "其虚拟机已不再是部署此集群时的节点（已重命名或 VM ID 被重用）：未移除任何内容。",
+        "run_not_changeable": "此集群上正在进行其他操作：请在其结束后重试。",
+        "workers_not_changeable": "此集群部署于支持工作节点变更之前：无法在 ProxCenter 中更改其工作节点。",
+        "connection_busy": "此 Proxmox 连接上正在进行另一个 Kubernetes 部署。",
+        "not_deployed": "只有 ProxCenter 部署的集群才能更改工作节点。",
+        "nothing_to_change": "没有需要更改的内容。",
+        "too_many": "一次添加的工作节点过多。",
+        "not_a_worker": "只能移除工作节点。",
+        "invalid_request": "已拒绝：请检查地址和 VM ID。",
+        "unavailable": "无法连接编排器。"
       }
     }
   }

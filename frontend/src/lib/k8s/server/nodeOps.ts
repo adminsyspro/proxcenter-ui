@@ -180,3 +180,41 @@ export async function drainNode(
     },
   }
 }
+
+/** Whether a node exists and is cordoned (no new pod scheduled on it). */
+export async function readNodeCordon(
+  input: BuildKubeClientInput,
+  nodeName: string,
+): Promise<{ ok: boolean; errorCode?: K8sErrorCode; value?: { exists: boolean; cordoned: boolean } }> {
+  const built = buildKubeClient(input)
+  if (!built.ok || !built.makeApiClient) return { ok: false, errorCode: 'config' }
+  const api = built.makeApiClient(CoreV1Api)
+  try {
+    const node = await withDeadline(api.readNode({ name: nodeName }), PER_CALL_TIMEOUT_MS)
+    return { ok: true, value: { exists: true, cordoned: node?.spec?.unschedulable === true } }
+  } catch (err) {
+    const code = classifyK8sError(err)
+    if (code === 'not_found') return { ok: true, value: { exists: false, cordoned: false } }
+    return { ok: false, errorCode: code }
+  }
+}
+
+/**
+ * Deletes the node object of a worker whose VM is gone, so it does not stay
+ * NotReady in the cluster. A node already gone is a success.
+ */
+export async function deleteNodeObject(
+  input: BuildKubeClientInput,
+  nodeName: string,
+): Promise<{ ok: boolean; errorCode?: K8sErrorCode }> {
+  const built = buildKubeClient(input)
+  if (!built.ok || !built.makeApiClient) return { ok: false, errorCode: 'config' }
+  const api = built.makeApiClient(CoreV1Api)
+  try {
+    await withDeadline(api.deleteNode({ name: nodeName }), PER_CALL_TIMEOUT_MS)
+    return { ok: true }
+  } catch (err) {
+    const code = classifyK8sError(err)
+    return code === 'not_found' ? { ok: true } : { ok: false, errorCode: code }
+  }
+}

@@ -52,6 +52,10 @@ interface ResourceTableProps {
   onCordonToggle?: (item: ResourceListItem) => void
   /** Open the drain confirm dialog for this node. */
   onDrain?: (item: ResourceListItem) => void
+  /** Workers that can be removed from the cluster (deployed by ProxCenter). */
+  removableNodes?: Set<string>
+  /** Open the removal dialog of a worker. */
+  onRemoveNode?: (item: ResourceListItem) => void
   /** Open the dialog of a workload action (restart, scale, rollback, pod delete). */
   onWorkloadAction?: (action: WorkloadAction, item: ResourceListItem) => void
 }
@@ -139,13 +143,16 @@ function NodeStatusIcons({ item, drainState }: { item: ResourceListItem; drainSt
 
 /** Per-row cordon/drain/maintenance icon buttons for the Nodes table. */
 function NodeActionsCell({
-  item, drainState, onCordonToggle, onDrain,
+  item, drainState, onCordonToggle, onDrain, onRemove,
 }: {
   item: ResourceListItem
   drainState?: DrainRowState
   onCordonToggle: (item: ResourceListItem) => void
   onDrain: (item: ResourceListItem) => void
+  /** Set for a worker that can be removed from the cluster. */
+  onRemove?: (item: ResourceListItem) => void
 }) {
+  const tWorkers = useTranslations('kubernetes.workers')
   const t = useTranslations('kubernetes.node.ops')
   const slotProps = useTooltipSlotProps()
   const cordoned = item.summary?.['unschedulable'] === 'true'
@@ -175,11 +182,26 @@ function NodeActionsCell({
             </IconButton>
           </span>
         </Tooltip>
+        {onRemove && (
+          <Tooltip title={tWorkers('removeAction')} arrow slotProps={slotProps}>
+            <span>
+              <IconButton
+                size="small"
+                color="error"
+                disabled={draining}
+                aria-label={tWorkers('removeAction')}
+                onClick={(e) => { e.stopPropagation(); onRemove(item) }}
+              >
+                <i className="ri-delete-bin-line" style={{ fontSize: 16 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
+        )}
     </Box>
   )
 }
 
-export function ResourceTable({ kind, items, onRowClick, canManage, drainStates, onCordonToggle, onDrain, onWorkloadAction }: ResourceTableProps) {
+export function ResourceTable({ kind, items, onRowClick, canManage, drainStates, onCordonToggle, onDrain, removableNodes, onRemoveNode, onWorkloadAction }: ResourceTableProps) {
   const t = useTranslations('kubernetes.explorer')
   const [sortCol, setSortCol] = useState<ColumnDef>(
     () => kind.columns.find(c => c.key === kind.defaultSort?.key) ?? kind.columns[0],
@@ -274,7 +296,7 @@ export function ResourceTable({ kind, items, onRowClick, canManage, drainStates,
               {showActions && (
                 <TableCell align="right" sx={{ py: 0 }}>
                   {showNodeActions
-                    ? <NodeActionsCell item={item} drainState={drainStates?.[item.name]} onCordonToggle={onCordonToggle!} onDrain={onDrain!} />
+                    ? <NodeActionsCell item={item} drainState={drainStates?.[item.name]} onCordonToggle={onCordonToggle!} onDrain={onDrain!} onRemove={removableNodes?.has(item.name) ? onRemoveNode : undefined} />
                     : <WorkloadActionsCell item={item} actions={workloadActions} onAction={onWorkloadAction!} />}
                 </TableCell>
               )}

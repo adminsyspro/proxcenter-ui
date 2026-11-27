@@ -6273,7 +6273,8 @@
       "cordon": "Cordon",
       "drain": "Drainage",
       "scale": "Mise à l'échelle",
-      "rollback": "Retour arrière"
+      "rollback": "Retour arrière",
+      "workers": "Workers modifiés"
     }
   },
   "security": {
@@ -17141,6 +17142,42 @@
         "serviceCidrInvalid": "Le réseau des services doit être une plage IPv4 valide (par exemple 10.96.0.0/16)",
         "podCidrOverlapNodes": "Le réseau des pods {cidr} chevauche le réseau des nœuds {nodes}",
         "serviceCidrOverlapNodes": "Le réseau des services {cidr} chevauche le réseau des nœuds {nodes}"
+      }
+    },
+    "workers": {
+      "addButton": "Ajouter des workers",
+      "addTitle": "Ajouter des workers à {cluster}",
+      "count": "Workers à ajouter",
+      "sizing": "{cores} vCPU, {memory} Go, {disk} Go chacun",
+      "ip": "Adresse IP",
+      "vmid": "VMID",
+      "addHelp": "Les adresses et les VMID suivent le dernier nœud ; modifiez-les au besoin. Les nouveaux workers reprennent le dimensionnement des existants.",
+      "add": "{count, plural, one {Ajouter # worker} other {Ajouter # workers}}",
+      "cancel": "Annuler",
+      "removeAction": "Retirer du cluster",
+      "removeTitle": "Retirer {node}",
+      "removeText": "Le nœud est drainé (ses pods partent sur les autres nœuds), puis sa VM est détruite sur Proxmox.",
+      "removeWarning": "La VM et ses disques sont supprimés. C'est irréversible.",
+      "remove": "Retirer",
+      "draining": "Drain du nœud...",
+      "removing": "Retrait du nœud...",
+      "changing": "Modification des workers du cluster",
+      "failed": "La modification des workers a échoué : {message}",
+      "error": {
+        "generic": "La modification n'a pas pu démarrer.",
+        "invalid": "Refusé : {message}",
+        "drain": "Le nœud n'a pas pu être drainé : certains pods n'ont pas pu partir. Rien n'a été retiré.",
+        "not_cordoned": "Le nœud accepte encore des pods : drainez-le d'abord.",
+        "vm_not_node": "Sa VM n'est plus le nœud avec lequel ce cluster a été déployé (renommée ou VMID réutilisé) : rien n'a été retiré.",
+        "run_not_changeable": "Une autre opération est en cours sur ce cluster : réessayez une fois terminée.",
+        "workers_not_changeable": "Ce cluster a été déployé avant la prise en charge des changements de workers : ses workers ne peuvent pas changer depuis ProxCenter.",
+        "connection_busy": "Un autre déploiement Kubernetes est en cours sur cette connexion Proxmox.",
+        "not_deployed": "Seul un cluster déployé par ProxCenter peut changer ses workers.",
+        "nothing_to_change": "Rien à changer.",
+        "too_many": "Trop de workers d'un coup.",
+        "not_a_worker": "Seul un worker peut être retiré.",
+        "invalid_request": "Refusé : vérifiez les adresses et les VMID.",
+        "unavailable": "L'orchestrateur est injoignable."
       }
     }
   }

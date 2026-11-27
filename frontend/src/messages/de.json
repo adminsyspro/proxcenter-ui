@@ -6262,7 +6262,8 @@
       "cordon": "Cordon",
       "drain": "Drain",
       "scale": "Skalieren",
-      "rollback": "Zurücksetzen"
+      "rollback": "Zurücksetzen",
+      "workers": "Worker geändert"
     }
   },
   "security": {
@@ -16711,6 +16712,42 @@
         "serviceCidrInvalid": "Das Service-Netzwerk muss ein gültiger IPv4-Bereich sein (z. B. 10.96.0.0/16)",
         "podCidrOverlapNodes": "Das Pod-Netzwerk {cidr} überschneidet sich mit dem Node-Netzwerk {nodes}",
         "serviceCidrOverlapNodes": "Das Service-Netzwerk {cidr} überschneidet sich mit dem Node-Netzwerk {nodes}"
+      }
+    },
+    "workers": {
+      "addButton": "Worker hinzufügen",
+      "addTitle": "Worker zu {cluster} hinzufügen",
+      "count": "Hinzuzufügende Worker",
+      "sizing": "je {cores} vCPU, {memory} GB, {disk} GB",
+      "ip": "IP-Adresse",
+      "vmid": "VM-ID",
+      "addHelp": "Adressen und VM-IDs folgen auf den letzten Node; passen Sie sie bei Bedarf an. Neue Worker erhalten die Größe der bestehenden.",
+      "add": "{count, plural, one {# Worker hinzufügen} other {# Worker hinzufügen}}",
+      "cancel": "Abbrechen",
+      "removeAction": "Aus dem Cluster entfernen",
+      "removeTitle": "{node} entfernen",
+      "removeText": "Der Node wird geleert (seine Pods ziehen auf die anderen Nodes um), dann wird seine VM auf Proxmox gelöscht.",
+      "removeWarning": "Die VM und ihre Festplatten werden gelöscht. Dies kann nicht rückgängig gemacht werden.",
+      "remove": "Entfernen",
+      "draining": "Node wird geleert...",
+      "removing": "Node wird entfernt...",
+      "changing": "Die Worker des Clusters werden geändert",
+      "failed": "Die Änderung der Worker ist fehlgeschlagen: {message}",
+      "error": {
+        "generic": "Die Änderung konnte nicht gestartet werden.",
+        "invalid": "Abgelehnt: {message}",
+        "drain": "Der Node konnte nicht geleert werden: Einige Pods konnten nicht umziehen. Nichts wurde entfernt.",
+        "not_cordoned": "Der Node nimmt noch Pods an: Leeren Sie ihn zuerst.",
+        "vm_not_node": "Seine VM ist nicht mehr der Node, mit dem der Cluster bereitgestellt wurde (umbenannt oder VM-ID wiederverwendet): Nichts wurde entfernt.",
+        "run_not_changeable": "Auf diesem Cluster läuft ein anderer Vorgang: Versuchen Sie es nach dessen Ende erneut.",
+        "workers_not_changeable": "Dieser Cluster wurde bereitgestellt, bevor Worker-Änderungen unterstützt wurden: Seine Worker können in ProxCenter nicht geändert werden.",
+        "connection_busy": "Auf dieser Proxmox-Verbindung läuft bereits eine andere Kubernetes-Bereitstellung.",
+        "not_deployed": "Nur ein von ProxCenter bereitgestellter Cluster kann seine Worker ändern.",
+        "nothing_to_change": "Nichts zu ändern.",
+        "too_many": "Zu viele Worker auf einmal.",
+        "not_a_worker": "Nur ein Worker kann entfernt werden.",
+        "invalid_request": "Abgelehnt: Prüfen Sie die Adressen und VM-IDs.",
+        "unavailable": "Der Orchestrator ist nicht erreichbar."
       }
     }
   }

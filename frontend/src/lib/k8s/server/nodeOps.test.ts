@@ -11,8 +11,9 @@ const patchNode = vi.fn()
 const readNode = vi.fn()
 const listPods = vi.fn()
 const evict = vi.fn()
+const deleteNode = vi.fn()
 const makeApiClient = vi.fn(() => ({
-  patchNode, readNode,
+  patchNode, readNode, deleteNode,
   listPodForAllNamespaces: listPods,
   createNamespacedPodEviction: evict,
 }))
@@ -21,7 +22,7 @@ vi.mock('./client', () => ({
 }))
 
 import { PatchStrategy, setHeaderOptions } from '@kubernetes/client-node'
-import { setNodeCordon, drainNode } from './nodeOps'
+import { setNodeCordon, drainNode, readNodeCordon, deleteNodeObject } from './nodeOps'
 
 const input: any = { clusterId: 'c1', credentialVersion: 1, server: 'https://k:6443', cred: { type: 'token', value: 't' } }
 const rs = (ns: string, n: string) => ({ metadata: { namespace: ns, name: n, ownerReferences: [{ kind: 'ReplicaSet', controller: true }] }, spec: {}, status: {} })
@@ -116,5 +117,33 @@ describe('drainNode', () => {
     expect(r.value!.remaining.map(p => p.name)).toEqual(['web-2'])
     expect(r.value!.blockedByPdb.map(p => p.name)).toEqual(['web-2'])
     expect(r.value!.done).toBe(false)
+  })
+})
+
+const notFound = Object.assign(new Error('HTTP-Code: 404'), { code: 404 })
+
+describe('readNodeCordon', () => {
+  it('reports a cordoned node, an uncordoned one and one that is gone', async () => {
+    expect(await readNodeCordon(input, 'w1')).toEqual({ ok: true, value: { exists: true, cordoned: true } })
+    readNode.mockResolvedValue({ spec: {} })
+    expect(await readNodeCordon(input, 'w1')).toEqual({ ok: true, value: { exists: true, cordoned: false } })
+    readNode.mockRejectedValue(notFound)
+    expect(await readNodeCordon(input, 'w1')).toEqual({ ok: true, value: { exists: false, cordoned: false } })
+  })
+  it('passes any other error on', async () => {
+    readNode.mockRejectedValue(new Error('ECONNREFUSED'))
+    expect((await readNodeCordon(input, 'w1')).ok).toBe(false)
+  })
+})
+
+describe('deleteNodeObject', () => {
+  it('deletes the node, and a node already gone is fine', async () => {
+    deleteNode.mockReset().mockResolvedValue({})
+    expect(await deleteNodeObject(input, 'w1')).toEqual({ ok: true })
+    expect(deleteNode).toHaveBeenCalledWith({ name: 'w1' })
+    deleteNode.mockRejectedValue(notFound)
+    expect(await deleteNodeObject(input, 'w1')).toEqual({ ok: true })
+    deleteNode.mockRejectedValue(new Error('ECONNREFUSED'))
+    expect((await deleteNodeObject(input, 'w1')).ok).toBe(false)
   })
 })

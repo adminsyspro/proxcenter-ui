@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest'
 import { prisma } from '@/lib/db/prisma'
-import { createCluster, listClusters, getClusterWithCredential, replaceCredential, persistHealth, toPublic, recordNodeMapping, getNodeMapping, deleteClusterNodes } from './repository'
+import { createCluster, listClusters, getClusterWithCredential, replaceCredential, persistHealth, toPublic, recordNodeMapping, getNodeMapping, deleteClusterNodes, syncNodeMapping } from './repository'
 
 const cred = {
   apiServerUrl: 'https://10.0.0.1:6443', caDataPem: 'CA', insecureSkipTlsVerify: false,
@@ -132,5 +132,20 @@ describe('repository', () => {
     const n = await deleteClusterNodes(clusterId)
     expect(n).toBe(2)
     expect(await getNodeMapping('t1', clusterId)).toEqual([])
+  })
+
+  it('syncNodeMapping drops the nodes that are gone, writes the others, and names the dropped ones', async () => {
+    const clusterId = await createCluster('t1', { name: 'sync', distro: 'k3s', source: 'deployed', cred, createdBy: 'u1' })
+    await recordNodeMapping(clusterId, [
+      { name: 'sync-cp-1', vmid: 101, connectionId: 'conn-1' },
+      { name: 'sync-worker-1', vmid: 102, connectionId: 'conn-1' },
+    ])
+    const gone = await syncNodeMapping(clusterId, [
+      { name: 'sync-cp-1', vmid: 101, connectionId: 'conn-1' },
+      { name: 'sync-worker-2', vmid: 103, connectionId: 'conn-1' },
+    ])
+    expect(gone).toEqual(['sync-worker-1'])
+    const rows = (await getNodeMapping('t1', clusterId)).map(r => r.nodeName).sort((a, b) => a.localeCompare(b))
+    expect(rows).toEqual(['sync-cp-1', 'sync-worker-2'])
   })
 })

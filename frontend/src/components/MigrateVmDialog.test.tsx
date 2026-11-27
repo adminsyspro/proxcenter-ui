@@ -610,6 +610,18 @@ describe('MigrateVmDialog - cross-cluster prerequisites', () => {
     expect(row.textContent).not.toMatch(/VMID\s+VMID/)
   })
 
+  it('says which storage types Proxmox cannot copy between, in the reader\'s language', async () => {
+    seedPrereqHandlers({ issues: [{
+      type: 'error', code: 'STORAGE_FORMAT_MISMATCH', message: 'Proxmox cannot copy a rbd disk to the zfspool storage "ZFS-Pool" offline',
+      context: { storage: 'ZFS-Pool', sourceType: 'rbd', targetType: 'zfspool' },
+    }] })
+    await renderPrereqs('Target storage')
+
+    const row = (await screen.findByText('Target storage')).closest('div') as HTMLElement
+    expect(within(row).getByText('rbd disks cannot be copied offline to zfspool (ZFS-Pool)')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start Cross-Cluster Migration' })).toBeDisabled()
+  })
+
   it('fills the next free target VMID from the row that reports the collision (#1392)', async () => {
     seedPrereqHandlers({ issues: [vmidCollision] })
     const checkBodies: any[] = []
@@ -902,5 +914,146 @@ describe('crossClusterMigrate restore payload', () => {
     expect(post).toHaveBeenCalledExactlyOnceWith({
       targetConnectionId: REMOTE_CONN_ID, targetNode: 'remote1', targetStorage: 'target-storage', targetBridge: 'vmbr0', online: true, delete: true, restore,
     })
+  })
+})
+
+// ui#1460: a move without copy when the target cluster reaches the same storage.
+describe('MigrateVmDialog - move without copy (shared storage)', () => {
+  const LXC_MIGRATE_URL = `*/api/v1/connections/${CONN_ID}/guests/lxc/${CURRENT_NODE}/${VMID}/remote-migrate`
+  const proven = {
+    eligible: true, relevant: true, reasons: [],
+    storages: [{ storage: 'CephStoragePool', ok: true, target: 'XC-ProdCeph' }], blockers: [], isos: [],
+  }
+
+  function seedShared(answer: any = proven, opts: { url?: string; issues?: () => any[] } = {}) {
+    const base = opts.url ?? REMOTE_MIGRATE_URL
+    seedPrereqHandlers({ issues: [] })
+    const checks: any[] = []
+    const shutdown = vi.fn()
+    server.use(
+      http.post(`${base}/shared-storage`, () => HttpResponse.json(answer)),
+      http.post(`${base}/check`, async ({ request }) => {
+        checks.push(await request.json())
+        return HttpResponse.json({ issues: opts.issues ? opts.issues() : [] })
+      }),
+      http.get(`${base}/prepare`, () => HttpResponse.json({ ha: null, replication: [], snapshots: [], siteRecoveryJobs: [] })),
+      http.post(`*/api/v1/connections/${CONN_ID}/guests/:type/${CURRENT_NODE}/${VMID}/shutdown`, () => {
+        shutdown()
+        return HttpResponse.json({ data: 'UPID:pve1:qmshutdown:100' })
+      }),
+    )
+    return { checks, shutdown }
+  }
+
+  async function open(props: Partial<Omit<ReturnType<typeof makeProps>, 'vmType'>> & { vmType?: 'qemu' | 'lxc' } = {}) {
+    useLicenseMock.mockReturnValue({ hasFeature: () => true, loading: false })
+    const all = { ...makeProps(), isCluster: false, onCrossClusterMigrate: vi.fn().mockResolvedValue(undefined), ...props }
+    renderWithProviders(<MigrateVmDialog {...all} />)
+    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument(), { timeout: 10_000 })
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    fireEvent.click(await screen.findByRole('option', { name: /Remote cluster/ }))
+    return all
+  }
+
+  const handoverSwitch = () => within(screen.getByTestId('migrate-handover')).getByRole('checkbox')
+
+  it('offers it with the storage it reads the disks through, and moves only the configuration', async () => {
+    const { checks } = seedShared()
+    const props = await open()
+
+    expect(await screen.findByText('CephStoragePool → XC-ProdCeph', {}, { timeout: 10_000 })).toBeInTheDocument()
+    fireEvent.click(handoverSwitch())
+
+    // No storage to pick, no live mode: the guest restarts on the target.
+    expect(screen.queryByText('Target Storage')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('migrate-online-cross')).not.toBeInTheDocument()
+    expect(screen.getByTestId('migrate-handover-start')).toBeInTheDocument()
+    await waitFor(() => expect(checks.at(-1)).toMatchObject({ handover: true, targetBridge: 'vmbr0' }), { timeout: 10_000 })
+
+    await waitFor(() => {
+      if (props.onCrossClusterMigrate.mock.calls.length === 0) fireEvent.click(screen.getByRole('button', { name: 'Move without copy' }))
+      expect(props.onCrossClusterMigrate).toHaveBeenCalled()
+    }, { timeout: 10_000 })
+    expect(props.onCrossClusterMigrate.mock.calls[0][0]).toMatchObject({
+      targetConnectionId: REMOTE_CONN_ID, targetNode: 'remote1', targetBridge: 'vmbr0', handover: true, start: true,
+    })
+  })
+
+  it('leaves a stopped guest stopped unless asked', async () => {
+    seedShared()
+    const props = await open({ vmStatus: 'stopped' })
+
+    fireEvent.click(await waitFor(() => handoverSwitch(), { timeout: 10_000 }))
+    await waitFor(() => {
+      if (props.onCrossClusterMigrate.mock.calls.length === 0) fireEvent.click(screen.getByRole('button', { name: 'Move without copy' }))
+      expect(props.onCrossClusterMigrate).toHaveBeenCalled()
+    }, { timeout: 10_000 })
+    expect(props.onCrossClusterMigrate.mock.calls[0][0]).toMatchObject({ handover: true, start: false })
+  })
+
+  it('keeps the start choice made when the move was chosen, whatever the inventory says next', async () => {
+    // Lab 27/11: the container shut down from its row turned "stopped" in the
+    // inventory a second before the click, and the guest landed stopped.
+    seedShared()
+    useLicenseMock.mockReturnValue({ hasFeature: () => true, loading: false })
+    const props = { ...makeProps(), isCluster: false, onCrossClusterMigrate: vi.fn().mockResolvedValue(undefined) }
+    const view = renderWithProviders(<MigrateVmDialog {...props} />)
+    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument(), { timeout: 10_000 })
+    fireEvent.mouseDown(screen.getByRole('combobox'))
+    fireEvent.click(await screen.findByRole('option', { name: /Remote cluster/ }))
+    fireEvent.click(await waitFor(() => handoverSwitch(), { timeout: 10_000 }))
+
+    view.rerender(<MigrateVmDialog {...props} vmStatus="stopped" />)
+
+    await waitFor(() => {
+      if (props.onCrossClusterMigrate.mock.calls.length === 0) fireEvent.click(screen.getByRole('button', { name: 'Move without copy' }))
+      expect(props.onCrossClusterMigrate).toHaveBeenCalled()
+    }, { timeout: 10_000 })
+    expect(props.onCrossClusterMigrate.mock.calls[0][0]).toMatchObject({ handover: true, start: true })
+  })
+
+  it('says why it is closed instead of hiding it', async () => {
+    seedShared({ ...proven, eligible: false, reasons: ['SSH_TARGET'] })
+    await open()
+
+    expect(await screen.findByText('SSH must be enabled on the target connection', {}, { timeout: 10_000 })).toBeInTheDocument()
+    expect(handoverSwitch()).toBeDisabled()
+  })
+
+  it('is not offered for a guest on storages no other cluster reaches', async () => {
+    seedShared({ eligible: false, relevant: false, reasons: ['STORAGE_NOT_SHARED'], storages: [{ storage: 'local-zfs', ok: false, reason: 'local-type' }], blockers: [], isos: [] })
+    await open()
+
+    await screen.findAllByText('Target Storage', {}, { timeout: 10_000 })
+    expect(screen.queryByTestId('migrate-handover')).not.toBeInTheDocument()
+  })
+
+  it('shuts the guest down from the row that blocks the move', async () => {
+    let running = true
+    const { shutdown } = seedShared(proven, {
+      issues: () => (running ? [{ type: 'error', code: 'GUEST_RUNNING', message: 'must be stopped', context: { status: 'running' }, remediation: { kind: 'shutdown', reversible: true } }] : []),
+    })
+    shutdown.mockImplementation(() => { running = false })
+    await open()
+
+    fireEvent.click(await waitFor(() => handoverSwitch(), { timeout: 10_000 }))
+    expect(await screen.findByText('must be stopped first', {}, { timeout: 10_000 })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Shut down' }))
+
+    await waitFor(() => expect(shutdown).toHaveBeenCalledTimes(1), { timeout: 10_000 })
+    await waitFor(() => expect(screen.queryByText('must be stopped first')).not.toBeInTheDocument(), { timeout: 15_000 })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Move without copy' })).toBeEnabled(), { timeout: 10_000 })
+  })
+
+  it('opens a container to the move without copy, the only cross-cluster move it has', async () => {
+    seedShared(proven, { url: LXC_MIGRATE_URL })
+    const props = await open({ vmType: 'lxc' })
+
+    fireEvent.click(await waitFor(() => handoverSwitch(), { timeout: 10_000 }))
+    expect(screen.queryByText('LXC containers are not supported')).not.toBeInTheDocument()
+    await waitFor(() => {
+      if (props.onCrossClusterMigrate.mock.calls.length === 0) fireEvent.click(screen.getByRole('button', { name: 'Move without copy' }))
+      expect(props.onCrossClusterMigrate).toHaveBeenCalled()
+    }, { timeout: 10_000 })
   })
 })

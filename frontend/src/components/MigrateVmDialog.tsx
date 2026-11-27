@@ -152,6 +152,14 @@ export type CrossClusterMigrateParams = {
   deleteSource: boolean
   bwlimit?: number
   restore?: (CcmRestorePlan & { rollbackOnFailure?: boolean })
+  /**
+   * Move without copy (ui#1460): the stopped guest keeps its disks on a
+   * storage both clusters reach and its VMID; only `targetConnectionId`,
+   * `targetNode`, `targetBridge` and `start` apply.
+   */
+  handover?: boolean
+  /** With `handover`: start the guest on the target once it is there. */
+  start?: boolean
 }
 
 export function mergeCapture(prev: CcmPrereqCapture | null, next: CcmPrereqCapture): CcmPrereqCapture {
@@ -201,6 +209,7 @@ const CHECK_DETAIL_KEY: Record<string, string> = {
   TARGET_STORAGE_NOT_FOUND: 'storageNotFound',
   TARGET_STORAGE_NO_IMAGES: 'storageNoImages',
   TARGET_STORAGE_LOW_SPACE: 'storageLowSpace',
+  STORAGE_FORMAT_MISMATCH: 'storageFormat',
   TARGET_STORAGE_CHECK_FAILED: 'checkFailed',
   TARGET_BRIDGE_NOT_FOUND: 'bridgeNotFound',
   TARGET_NOT_A_BRIDGE: 'notABridge',
@@ -210,6 +219,10 @@ const CHECK_DETAIL_KEY: Record<string, string> = {
   INSUFFICIENT_CPU: 'insufficientCpu',
   INSUFFICIENT_MEMORY: 'insufficientMemory',
   TARGET_TUNNEL_TOO_OLD: 'tunnelTooOld',
+  GUEST_RUNNING: 'guestRunning',
+  NOT_PORTABLE: 'notPortable',
+  ISO_DETACHED: 'isoDetached',
+  POOL_NOT_CARRIED: 'poolNotCarried',
 }
 
 const CHECK_LABEL_SLUG: Record<string, string> = {
@@ -235,6 +248,7 @@ const CHECK_LABEL_SLUG: Record<string, string> = {
   TARGET_STORAGE_NOT_FOUND: 'storage',
   TARGET_STORAGE_NO_IMAGES: 'storage',
   TARGET_STORAGE_LOW_SPACE: 'storage',
+  STORAGE_FORMAT_MISMATCH: 'storage',
   TARGET_STORAGE_CHECK_FAILED: 'storage',
   VMID_EXISTS_ON_TARGET: 'vmid',
   INSUFFICIENT_CPU: 'targetResources',
@@ -242,6 +256,11 @@ const CHECK_LABEL_SLUG: Record<string, string> = {
   TARGET_TUNNEL_TOO_OLD: 'pveVersion',
   LXC_NOT_SUPPORTED: 'guestType',
   SOURCE_VM_NOT_FOUND: 'sourceVm',
+  GUEST_RUNNING: 'guestState',
+  SSH_REQUIRED: 'ssh',
+  NOT_PORTABLE: 'portability',
+  ISO_DETACHED: 'cdrom',
+  POOL_NOT_CARRIED: 'pool',
 }
 
 const CHECK_ROW_GLYPH: Record<string, { icon: string; color: string }> = {
@@ -299,31 +318,29 @@ function CheckRow({
 }
 
 /**
- * The live/offline choice on one line (#1392): it decides whether the service
- * goes down, so it gets a framed row and a switch instead of a small checkbox
- * at the bottom of the form.
+ * One choice on one framed line: glyph, label, caption and its switch. The
+ * frame and the glyph take `tone` while the choice is on.
  */
-function OnlineMigrationRow({
+function SwitchRow({
   checked,
   onChange,
   disabled,
   label,
   caption,
   testId,
-  restart = false,
+  icon,
+  tone,
 }: {
-  /** A running container cannot move live: PVE stops it, moves it and starts it again. */
-  restart?: boolean
   checked: boolean
   onChange: (checked: boolean) => void
   disabled: boolean
   label: string
   caption: string
   testId: string
+  icon: string
+  tone: string
 }) {
-  const live = checked && !disabled
-  // Green only when the service really stays up; amber for a restart migration.
-  const tone = restart ? 'warning.main' : 'success.main'
+  const on = checked && !disabled
 
   return (
     <Box
@@ -336,11 +353,11 @@ function OnlineMigrationRow({
         pr: 0.5,
         minHeight: 40,
         border: 1,
-        borderColor: live ? tone : 'divider',
+        borderColor: on ? tone : 'divider',
         borderRadius: 1.5,
       }}
     >
-      <Box component="i" className={restart ? 'ri-restart-line' : 'ri-pulse-line'} sx={{ fontSize: 16, flexShrink: 0, color: live ? tone : 'text.disabled' }} />
+      <Box component="i" className={icon} sx={{ fontSize: 16, flexShrink: 0, color: on ? tone : 'text.disabled' }} />
       <Typography variant="body2" fontWeight={600} sx={{ flexShrink: 0 }}>
         {label}
       </Typography>
@@ -349,14 +366,54 @@ function OnlineMigrationRow({
       </Typography>
       <Switch
         size="small"
-        // A stopped guest migrates offline whatever was ticked: never show "on".
-        checked={live}
+        checked={on}
         onChange={e => onChange(e.target.checked)}
         disabled={disabled}
         slotProps={{ input: { 'aria-label': label } }}
       />
     </Box>
   )
+}
+
+/**
+ * The live/offline choice on one line (#1392): it decides whether the service
+ * goes down, so it gets a framed row and a switch instead of a small checkbox
+ * at the bottom of the form.
+ */
+function OnlineMigrationRow({
+  restart = false,
+  ...row
+}: {
+  /** A running container cannot move live: PVE stops it, moves it and starts it again. */
+  restart?: boolean
+  checked: boolean
+  onChange: (checked: boolean) => void
+  disabled: boolean
+  label: string
+  caption: string
+  testId: string
+}) {
+  // Green only when the service really stays up; amber for a restart
+  // migration. A stopped guest migrates offline whatever was ticked: the row
+  // never shows "on" then (SwitchRow turns a disabled choice off).
+  return <SwitchRow {...row} icon={restart ? 'ri-restart-line' : 'ri-pulse-line'} tone={restart ? 'warning.main' : 'success.main'} />
+}
+
+/** The caption of a closed move without copy, per reason the route gives. */
+const HANDOVER_REASON_KEY: Record<string, string> = {
+  SSH_SOURCE: 'reasonSshSource',
+  SSH_TARGET: 'reasonSshTarget',
+  NOT_PORTABLE: 'reasonNotPortable',
+  STORAGE_NOT_SHARED: 'reasonStorage',
+}
+
+/** What remote-migrate/shared-storage answers for one target node (ui#1460). */
+type SharedStorageAnswer = {
+  eligible: boolean
+  relevant: boolean
+  reasons: string[]
+  storages: { storage: string; ok: boolean; target?: string }[]
+  blockers: string[]
 }
 
 // Tab Panel component
@@ -435,6 +492,17 @@ export function MigrateVmDialog({
   const [deleteSourceAfter, setDeleteSourceAfter] = useState(false)
   const [bwLimit, setBwLimit] = useState<number | ''>('')
   const [showAdvanced, setShowAdvanced] = useState(false)
+
+  // ========== MOVE WITHOUT COPY (ui#1460) ==========
+  // The proof is stored with the target it was made for: a node switch reads
+  // as unknown until its own answer lands.
+  const [sharedStorage, setSharedStorage] = useState<{ key: string; answer: SharedStorageAnswer | null } | null>(null)
+  const [handoverMode, setHandoverMode] = useState(false)
+  // Frozen when the move without copy is chosen: a guest shut down from its
+  // row turns "stopped" in the inventory a second later, and following the
+  // live status then landed it stopped (lab 27/11).
+  const [startChoice, setStartChoice] = useState<boolean | null>(null)
+  const [shutdownBusy, setShutdownBusy] = useState(false)
   
   // ========== HA STATE ==========
   const [isHaManaged, setIsHaManaged] = useState(false)
@@ -449,6 +517,7 @@ export function MigrateVmDialog({
     | { kind: 'ha'; sid: string; state?: string; group?: string; reversible: true }
     | { kind: 'replication'; jobs: { id: string; target: string; schedule?: string }[]; reversible: true }
     | { kind: 'snapshots'; names: string[]; reversible: false }
+    | { kind: 'shutdown'; reversible: true }
 
   type ValidationIssue = {
     type: 'error' | 'warning'
@@ -523,6 +592,10 @@ export function MigrateVmDialog({
       setTargetVmid('')
       setDeleteSourceAfter(false)
       setBwLimit('')
+      setSharedStorage(null)
+      setHandoverMode(false)
+      setStartChoice(null)
+      setShutdownBusy(false)
       setIsHaManaged(false)
       setHaState('')
       setHaGroup('')
@@ -898,6 +971,53 @@ export function MigrateVmDialog({
     
     void loadRemoteResources()
   }, [open, selectedRemoteConn, selectedRemoteNode, activeTab])
+
+  // ========== CROSS-CLUSTER: move without copy (ui#1460) ==========
+  // Asked once per target node: the proof allocates a 4 MiB probe volume on
+  // each storage of the guest, so it never runs on a preflight refresh.
+  const sharedStorageKey = open && activeTab === 1 && crossClusterAvailable && selectedRemoteConn && selectedRemoteNode
+    ? `${selectedRemoteConn}|${selectedRemoteNode}`
+    : null
+
+  useEffect(() => {
+    if (!sharedStorageKey) return
+
+    let cancelled = false
+
+    void fetch(
+      `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vmType}/${encodeURIComponent(currentNode)}/${encodeURIComponent(vmid)}/remote-migrate/shared-storage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetConnectionId: selectedRemoteConn, targetNode: selectedRemoteNode }),
+      },
+    )
+      .then(async res => (res.ok ? ((await res.json()) as SharedStorageAnswer) : null))
+      .catch(() => null)
+      .then(answer => {
+        if (!cancelled) setSharedStorage({ key: sharedStorageKey, answer })
+      })
+
+    return () => { cancelled = true }
+  }, [sharedStorageKey, connId, vmType, currentNode, vmid, selectedRemoteConn, selectedRemoteNode])
+
+  const sharedAnswer = sharedStorage && sharedStorage.key === sharedStorageKey ? sharedStorage.answer : null
+  const startOnTarget = startChoice ?? (vmStatus === 'running')
+  const handoverEligible = !!sharedAnswer?.eligible
+  const handover = handoverMode && handoverEligible
+  const crossClusterSubmitIcon = handover ? 'ri-links-line' : 'ri-global-line'
+  const handoverMapping = (sharedAnswer?.storages || [])
+    .filter(p => p.ok && p.target)
+    .map(p => `${p.storage} \u2192 ${p.target}`)
+    .join(', ')
+  const handoverCaption = handoverEligible
+    ? handoverMapping
+    : (sharedAnswer?.reasons || [])
+        .map(code => t(`hardware.crossCluster.handover.${HANDOVER_REASON_KEY[code] || 'reasonStorage'}`, {
+          keys: (sharedAnswer?.blockers || []).join(', '),
+          storages: (sharedAnswer?.storages || []).filter(p => !p.ok).map(p => p.storage).join(', '),
+        }))
+        .join(' \u00b7 ')
   
   // Helper functions
   const getRecommendedNode = (nodeList: NodeInfo[]): NodeInfo => {
@@ -1002,7 +1122,7 @@ export function MigrateVmDialog({
   
   // Handle cross-cluster migration
   const handleCrossClusterMigrate = async () => {
-    if (!selectedRemoteConn || !selectedRemoteNode || !selectedRemoteStorage || !selectedRemoteBridge) {
+    if (!selectedRemoteConn || !selectedRemoteNode || (!handover && !selectedRemoteStorage) || !selectedRemoteBridge) {
       setError('Please fill all required fields')
       return
     }
@@ -1016,6 +1136,20 @@ export function MigrateVmDialog({
     setError(null)
     
     try {
+      if (handover) {
+        await onCrossClusterMigrate({
+          targetConnectionId: selectedRemoteConn,
+          targetNode: selectedRemoteNode,
+          targetStorage: '',
+          targetBridge: selectedRemoteBridge,
+          online: false,
+          deleteSource: false,
+          handover: true,
+          start: startOnTarget,
+        })
+        onClose()
+        return
+      }
       await onCrossClusterMigrate({
         targetConnectionId: selectedRemoteConn,
         targetNode: selectedRemoteNode,
@@ -1052,13 +1186,14 @@ export function MigrateVmDialog({
   }
   
   // Validate cross-cluster migration compatibility
-  const validateCrossClusterMigration = async () => {
-    if (!selectedRemoteConn || !selectedRemoteNode || !selectedRemoteStorage || !selectedRemoteBridge) {
-      return
+  const validateCrossClusterMigration = async (): Promise<ValidationIssue[] | null> => {
+    if (!selectedRemoteConn || !selectedRemoteNode || (!handover && !selectedRemoteStorage) || !selectedRemoteBridge) {
+      return null
     }
-    
+
     setValidationLoading(true)
     setValidationIssues([])
+    let issues: ValidationIssue[] | null = null
     
     try {
       const res = await fetch(
@@ -1066,18 +1201,21 @@ export function MigrateVmDialog({
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            targetConnectionId: selectedRemoteConn,
-            targetNode: selectedRemoteNode,
-            targetStorage: selectedRemoteStorage,
-            targetBridge: selectedRemoteBridge,
-            targetVmid: targetVmid || undefined,
-          })
+          body: JSON.stringify(handover
+            ? { targetConnectionId: selectedRemoteConn, targetNode: selectedRemoteNode, targetBridge: selectedRemoteBridge, handover: true }
+            : {
+                targetConnectionId: selectedRemoteConn,
+                targetNode: selectedRemoteNode,
+                targetStorage: selectedRemoteStorage,
+                targetBridge: selectedRemoteBridge,
+                targetVmid: targetVmid || undefined,
+              })
         }
       )
       
       if (res.ok) {
         const data = await res.json()
+        issues = data.issues || []
         setValidationIssues(data.issues || [])
         if (!(data.issues || []).some((issue: ValidationIssue) => issue.code === 'REPLICATION_CONFIGURED')) {
           setPrereqPendingJobs(prev => prev.length > 0 ? [] : prev)
@@ -1089,18 +1227,20 @@ export function MigrateVmDialog({
     } finally {
       setValidationLoading(false)
     }
+
+    return issues
   }
   
   // Auto-validate when all required fields are filled
   useEffect(() => {
-    if (activeTab === 1 && selectedRemoteConn && selectedRemoteNode && selectedRemoteStorage && selectedRemoteBridge) {
+    if (activeTab === 1 && selectedRemoteConn && selectedRemoteNode && (handover || selectedRemoteStorage) && selectedRemoteBridge) {
       setValidationDone(false)
       const timer = setTimeout(() => {
         void validateCrossClusterMigration()
       }, 500) // Debounce
       return () => clearTimeout(timer)
     }
-  }, [activeTab, selectedRemoteConn, selectedRemoteNode, selectedRemoteStorage, selectedRemoteBridge, targetVmid])
+  }, [activeTab, selectedRemoteConn, selectedRemoteNode, selectedRemoteStorage, selectedRemoteBridge, targetVmid, handover])
   
   const isVmRunning = vmStatus === 'running'
   // A running container cannot move live: PVE restarts it on the target.
@@ -1278,7 +1418,8 @@ export function MigrateVmDialog({
         },
       })
     }
-    if (sourcePrereqs.snapshots.length > 0) {
+    // Without copy the snapshots move along with the guest.
+    if (sourcePrereqs.snapshots.length > 0 && !handover) {
       rows.push({
         type: 'error',
         code: 'SNAPSHOTS_PRESENT',
@@ -1293,7 +1434,7 @@ export function MigrateVmDialog({
     }
 
     return rows
-  }, [sourcePrereqs])
+  }, [sourcePrereqs, handover])
 
   // Errors before warnings, order otherwise preserved (Array.sort is stable).
   const orderedIssues = useMemo(() => {
@@ -1366,6 +1507,10 @@ export function MigrateVmDialog({
       ].filter(Boolean).join(' ')
     }
 
+    if (issue.code === 'SSH_REQUIRED') {
+      return t(issue.context?.side === 'target' ? 'hardware.crossCluster.prereq.detail.sshTarget' : 'hardware.crossCluster.prereq.detail.sshSource')
+    }
+
     const key = CHECK_DETAIL_KEY[issue.code]
     if (key && issue.context) {
       // A route sent from an older build has the code but not the values: keep
@@ -1403,8 +1548,8 @@ export function MigrateVmDialog({
       variant="outlined"
       color={destructive ? 'error' : 'primary'}
       onClick={onClick}
-      disabled={prereqBusy || validationLoading}
-      startIcon={prereqBusy ? <CircularProgress size={12} /> : undefined}
+      disabled={prereqBusy || shutdownBusy || validationLoading}
+      startIcon={prereqBusy || shutdownBusy ? <CircularProgress size={12} /> : undefined}
       sx={{ height: 24, fontSize: '0.7rem', textTransform: 'none', whiteSpace: 'nowrap', minWidth: 'auto', px: 1.25, flexShrink: 0 }}
     >
       {label}
@@ -1434,8 +1579,41 @@ export function MigrateVmDialog({
     }
   }
 
+  // The move without copy needs a stopped guest: shut it down from its row,
+  // then re-run the preflight until Proxmox reports it stopped (3 min at most).
+  const handleShutdown = async () => {
+    setShutdownBusy(true)
+    setPrereqError(null)
+    try {
+      const res = await fetch(
+        `/api/v1/connections/${encodeURIComponent(connId)}/guests/${vmType}/${encodeURIComponent(currentNode)}/${encodeURIComponent(vmid)}/shutdown`,
+        { method: 'POST' },
+      )
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json?.error || `HTTP ${res.status}`)
+      }
+      const waitStopped = async (attemptsLeft: number): Promise<void> => {
+        const issues = await validateCrossClusterMigration()
+        if (attemptsLeft <= 1 || (issues && !issues.some(i => i.code === 'GUEST_RUNNING'))) return
+        await new Promise(resolve => setTimeout(resolve, 3_000))
+
+        return waitStopped(attemptsLeft - 1)
+      }
+      await waitStopped(60)
+    } catch (e: any) {
+      setPrereqError(e?.message || String(e))
+    } finally {
+      setShutdownBusy(false)
+    }
+  }
+
   const checkAction = (issue: ValidationIssue) => {
-    if (issue.code === 'VMID_EXISTS_ON_TARGET') {
+    if (issue.remediation?.kind === 'shutdown') {
+      return prereqButton(t('hardware.crossCluster.handover.shutdown'), handleShutdown, false)
+    }
+    // Without copy the guest keeps its VMID: no other ID to offer.
+    if (issue.code === 'VMID_EXISTS_ON_TARGET' && !handover) {
       return (
         <Button
           size="small"
@@ -1908,8 +2086,8 @@ export function MigrateVmDialog({
         {/* ========== TAB 1: CROSS-CLUSTER MIGRATION ========== */}
         <TabPanel value={activeTab} index={1}>
           <Stack spacing={2.5}>
-            {/* Warning for LXC containers */}
-            {vmType === 'lxc' && (
+            {/* Warning for LXC containers: only the move without copy takes them. */}
+            {vmType === 'lxc' && !handoverEligible && (
               <Alert severity="warning" icon={<i className="ri-alert-line" />}>
                 <Typography variant="body2" fontWeight={600}>
                   {t('hardware.crossCluster.lxcNotSupported')}
@@ -1921,7 +2099,7 @@ export function MigrateVmDialog({
             )}
 
             {/* Warning: SSH not enabled on source — VM will stay locked */}
-            {sourceSSHEnabled === false && (
+            {sourceSSHEnabled === false && !handover && (
               <Alert severity="info" icon={<i className="ri-information-line" />}>
                 <Typography variant="body2" fontWeight={500} sx={{ mb: 0.5 }}>
                   {t('hardware.crossCluster.sshNotEnabled')}
@@ -2092,38 +2270,41 @@ export function MigrateVmDialog({
               </Box>
             )}
             
-            {/* Target Storage and Bridge */}
+            {/* Target Storage and Bridge. Without copy the disks stay where
+                they are: no storage to pick. */}
             {selectedRemoteNode && (
-              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-                <Box>
-                  <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <i className="ri-hard-drive-2-line" style={{ fontSize: 16 }} />
-                    {t('hardware.crossCluster.targetStorage')}
-                  </Typography>
+              <Box sx={{ display: 'grid', gridTemplateColumns: handover ? '1fr' : '1fr 1fr', gap: 2 }}>
+                {!handover && (
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <i className="ri-hard-drive-2-line" style={{ fontSize: 16 }} />
+                      {t('hardware.crossCluster.targetStorage')}
+                    </Typography>
                   
-                  {remoteStoragesLoading ? (
-                    <CircularProgress size={16} />
-                  ) : (
-                    <FormControl fullWidth size="small">
-                      <InputLabel>{t('hardware.crossCluster.storage')}</InputLabel>
-                      <Select
-                        value={selectedRemoteStorage}
-                        onChange={(e) => setSelectedRemoteStorage(e.target.value)}
-                        label={t('hardware.crossCluster.storage')}
-                      >
-                        {remoteStorages.map((s) => (
-                          <MenuItem key={s.storage} value={s.storage}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                              <Typography variant="body2">{s.storage}</Typography>
-                              <Chip label={s.type} size="small" sx={{ height: 16, fontSize: '0.6rem' }} />
-                            </Box>
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  )}
-                </Box>
-                
+                    {remoteStoragesLoading ? (
+                      <CircularProgress size={16} />
+                    ) : (
+                      <FormControl fullWidth size="small">
+                        <InputLabel>{t('hardware.crossCluster.storage')}</InputLabel>
+                        <Select
+                          value={selectedRemoteStorage}
+                          onChange={(e) => setSelectedRemoteStorage(e.target.value)}
+                          label={t('hardware.crossCluster.storage')}
+                        >
+                          {remoteStorages.map((s) => (
+                            <MenuItem key={s.storage} value={s.storage}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                                <Typography variant="body2">{s.storage}</Typography>
+                                <Chip label={s.type} size="small" sx={{ height: 16, fontSize: '0.6rem' }} />
+                              </Box>
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    )}
+                  </Box>
+                )}
+
                 <Box>
                   <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
                     <i className="ri-git-branch-line" style={{ fontSize: 16 }} />
@@ -2152,8 +2333,40 @@ export function MigrateVmDialog({
               </Box>
             )}
             
+            {/* ui#1460: offered once a target storage is proven to hold the
+                disks. Closed with its reason when only SSH or the proof
+                is missing, absent when the guest sits on local storage. */}
+            {selectedRemoteNode && sharedAnswer?.relevant && (
+              <SwitchRow
+                testId="migrate-handover"
+                icon="ri-links-line"
+                tone="primary.main"
+                checked={handover}
+                onChange={checked => {
+                  setHandoverMode(checked)
+                  if (checked && startChoice === null) setStartChoice(vmStatus === 'running')
+                }}
+                disabled={!handoverEligible || migrating}
+                label={t('hardware.crossCluster.handover.label')}
+                caption={handoverCaption}
+              />
+            )}
+
+            {selectedRemoteNode && handover && (
+              <SwitchRow
+                testId="migrate-handover-start"
+                icon="ri-play-circle-line"
+                tone="success.main"
+                checked={startOnTarget}
+                onChange={setStartChoice}
+                disabled={migrating}
+                label={t('hardware.crossCluster.handover.start')}
+                caption={startOnTarget ? t('hardware.crossCluster.handover.startDesc') : t('hardware.crossCluster.handover.stayStopped')}
+              />
+            )}
+
             {/* Live or offline, right under the target it applies to. */}
-            {selectedRemoteNode && (
+            {selectedRemoteNode && !handover && (
               <OnlineMigrationRow
                 testId="migrate-online-cross"
                 checked={onlineMigration}
@@ -2202,7 +2415,7 @@ export function MigrateVmDialog({
                   )}
                 </Box>
 
-                {capturedSomething && selectedRemoteStorage && (
+                {capturedSomething && selectedRemoteStorage && !handover && (
                   <Box sx={{ mt: 1, p: 1.5, borderRadius: 1.5, border: 1, borderColor: 'divider' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
                       <FormControlLabel
@@ -2280,8 +2493,9 @@ export function MigrateVmDialog({
               </Box>
             )}
             
-            {/* Advanced Options */}
-            {selectedRemoteNode && (
+            {/* Advanced Options: VMID, bandwidth and source deletion mean
+                nothing without copy (same VMID, no transfer, source archived). */}
+            {selectedRemoteNode && !handover && (
               <>
                 <Box 
                   onClick={() => setShowAdvanced(!showAdvanced)}
@@ -2393,10 +2607,11 @@ export function MigrateVmDialog({
           <Button 
             variant="contained" 
             onClick={handleCrossClusterMigrate} 
-            disabled={migrating || !selectedRemoteConn || !selectedRemoteNode || !selectedRemoteStorage || !selectedRemoteBridge || vmType === 'lxc' || isHaManaged || hasValidationErrors || validationLoading || prereqBusy}
-            startIcon={migrating ? <CircularProgress size={16} /> : <i className="ri-global-line" />}
+            disabled={migrating || !selectedRemoteConn || !selectedRemoteNode || (!handover && !selectedRemoteStorage) || !selectedRemoteBridge || (vmType === 'lxc' && !handover) || isHaManaged || hasValidationErrors || validationLoading || prereqBusy || shutdownBusy}
+            startIcon={migrating ? <CircularProgress size={16} /> : <i className={crossClusterSubmitIcon} />}
           >
-            {migrating ? t('hardware.crossCluster.migrating') : t('hardware.crossCluster.startMigration')}
+            {migrating && t('hardware.crossCluster.migrating')}
+            {!migrating && (handover ? t('hardware.crossCluster.handover.submit') : t('hardware.crossCluster.startMigration'))}
           </Button>
         )}
       </DialogActions>

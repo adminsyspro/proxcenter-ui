@@ -8551,7 +8551,12 @@
           "actionFailed": "操作失败",
           "inGroup": "(组 {group})",
           "siteRecovery": "Site Recovery",
-          "pveVersion": "Proxmox VE 版本"
+          "pveVersion": "Proxmox VE 版本",
+          "guestState": "客户机状态",
+          "ssh": "SSH",
+          "portability": "可移植性",
+          "cdrom": "CD-ROM",
+          "pool": "池"
         },
         "siteRecoveryShared": "由复制任务“{name}”覆盖，该任务还覆盖其他 {count} 个客户机",
         "siteRecoveryOnly": "由复制任务“{name}”覆盖",
@@ -8580,7 +8585,14 @@
           "vmidExists": "{vmid} 已在 {node} 上使用",
           "insufficientCpu": "需要 {needed} 个 vCPU，目标有 {available} 个",
           "insufficientMemory": "需要 {needed} MB RAM，可用 {available} MB",
-          "tunnelTooOld": "目标 {pkg} {target}，需要 {required}+（Proxmox VE 9.3）"
+          "tunnelTooOld": "目标 {pkg} {target}，需要 {required}+（Proxmox VE 9.3）",
+          "guestRunning": "必须先停止",
+          "sshSource": "源连接未启用",
+          "sshTarget": "目标连接未启用",
+          "notPortable": "绑定到其节点：{keys}",
+          "isoDetached": "{isos} 将被弹出",
+          "poolNotCarried": "离开池 {pool}，在目标上不加入任何池",
+          "storageFormat": "{sourceType} 磁盘无法离线复制到 {targetType}（{storage}）"
         }
       },
       "storage": "存储",
@@ -8624,7 +8636,20 @@
       "disksPlural": "{count} 个磁盘（{size} GiB）",
       "sshNotEnabled": "源连接未启用 SSH",
       "sshNotEnabledDesc": "迁移后源 VM 将保持锁定（lock: migrate）。您需要手动将其解锁：",
-      "sshUnlockCommand": "qm unlock {vmid}"
+      "sshUnlockCommand": "qm unlock {vmid}",
+      "handover": {
+        "label": "无需复制（共享存储）",
+        "reasonSshSource": "必须在源连接上启用 SSH",
+        "reasonSshTarget": "必须在目标连接上启用 SSH",
+        "reasonNotPortable": "绑定到其节点：{keys}",
+        "reasonStorage": "未证实与目标共享的存储：{storages}",
+        "start": "在目标上启动",
+        "startDesc": "配置迁到目标后即启动客户机",
+        "stayStopped": "客户机在目标上保持停止",
+        "submit": "无需复制迁移",
+        "shutdown": "关机",
+        "startFailed": "已无需复制迁移，但在目标上启动失败：{error}"
+      }
     },
     "confirmRemoveHardwareTitle": "移除硬件",
     "confirmDeleteHardware": "确定要移除硬件 {id} 吗？此操作无法撤销。",

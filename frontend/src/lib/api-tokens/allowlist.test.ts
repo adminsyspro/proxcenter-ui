@@ -128,6 +128,8 @@ describe('shared canonical matcher', () => {
       'vm-remote-migrate-check': `${guest}/remote-migrate/check`,
       'vm-remote-migrate-prepare-get': `${guest}/remote-migrate/prepare`,
       'vm-remote-migrate-prepare': `${guest}/remote-migrate/prepare`,
+      'vm-remote-migrate-shared-storage': `${guest}/remote-migrate/shared-storage`,
+      'vm-remote-migrate-handover': `${guest}/remote-migrate/handover`,
       'vm-delete': guest,
       'vm-notes-get': `${vmKey}/notes`,
       'vm-notes-update': `${vmKey}/notes`,

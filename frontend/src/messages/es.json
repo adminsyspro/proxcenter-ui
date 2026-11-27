@@ -8551,7 +8551,12 @@
           "actionFailed": "Acción fallida",
           "inGroup": "(grupo {group})",
           "siteRecovery": "Site Recovery",
-          "pveVersion": "Versión de Proxmox VE"
+          "pveVersion": "Versión de Proxmox VE",
+          "guestState": "Estado del invitado",
+          "ssh": "SSH",
+          "portability": "Portabilidad",
+          "cdrom": "CD-ROM",
+          "pool": "Pool"
         },
         "siteRecoveryShared": "Cubierto por la tarea de replicación \"{name}\", que también incluye {count} huésped(es) más",
         "siteRecoveryOnly": "Cubierto por la tarea de replicación \"{name}\"",
@@ -8580,7 +8585,14 @@
           "vmidExists": "{vmid} ya está en uso en {node}",
           "insufficientCpu": "Se necesitan {needed} vCPU; el destino tiene {available}",
           "insufficientMemory": "Se necesitan {needed} MB de RAM; {available} MB libres",
-          "tunnelTooOld": "destino {pkg} {target}, se necesita {required}+ (Proxmox VE 9.3)"
+          "tunnelTooOld": "destino {pkg} {target}, se necesita {required}+ (Proxmox VE 9.3)",
+          "guestRunning": "debe detenerse primero",
+          "sshSource": "no activado en la conexión de origen",
+          "sshTarget": "no activado en la conexión de destino",
+          "notPortable": "ligado a su nodo: {keys}",
+          "isoDetached": "{isos} será expulsado",
+          "poolNotCarried": "sale del pool {pool}, ninguno en el destino",
+          "storageFormat": "los discos {sourceType} no se pueden copiar en frío a {targetType} ({storage})"
         }
       },
       "storage": "Almacenamiento",
@@ -8624,7 +8636,20 @@
       "disksPlural": "{count} discos ({size} GiB)",
       "sshNotEnabled": "SSH no habilitado en la conexión de origen",
       "sshNotEnabledDesc": "La VM de origen permanecerá bloqueada (lock: migrate) después de la migración. Tendrá que desbloquearla manualmente:",
-      "sshUnlockCommand": "qm unlock {vmid}"
+      "sshUnlockCommand": "qm unlock {vmid}",
+      "handover": {
+        "label": "Sin copia (almacenamiento compartido)",
+        "reasonSshSource": "SSH debe estar activado en la conexión de origen",
+        "reasonSshTarget": "SSH debe estar activado en la conexión de destino",
+        "reasonNotPortable": "Ligado a su nodo: {keys}",
+        "reasonStorage": "Almacenamiento no probado como compartido con el destino: {storages}",
+        "start": "Iniciar en el destino",
+        "startDesc": "El invitado se inicia en cuanto su configuración está en el destino",
+        "stayStopped": "El invitado queda detenido en el destino",
+        "submit": "Mover sin copia",
+        "shutdown": "Apagar",
+        "startFailed": "Movido sin copia, pero no se inició en el destino: {error}"
+      }
     },
     "confirmRemoveHardwareTitle": "Eliminar hardware",
     "confirmDeleteHardware": "¿Seguro que quiere eliminar el hardware {id}? Esta acción no se puede deshacer.",

@@ -8564,7 +8564,12 @@
           "actionFailed": "Échec de l’action",
           "inGroup": "(groupe {group})",
           "siteRecovery": "Site Recovery",
-          "pveVersion": "Version de Proxmox VE"
+          "pveVersion": "Version de Proxmox VE",
+          "guestState": "État de l’invité",
+          "ssh": "SSH",
+          "portability": "Portabilité",
+          "cdrom": "CD-ROM",
+          "pool": "Pool"
         },
         "siteRecoveryShared": "Couverte par le job de réplication « {name} », qui couvre aussi {count} autre(s) invité(s)",
         "siteRecoveryOnly": "Couverte par le job de réplication « {name} »",
@@ -8593,7 +8598,14 @@
           "vmidExists": "{vmid} déjà utilisé sur {node}",
           "insufficientCpu": "{needed} vCPU nécessaires, la cible en a {available}",
           "insufficientMemory": "{needed} Mo de RAM nécessaires, {available} Mo libres",
-          "tunnelTooOld": "cible {pkg} {target}, {required}+ requis (Proxmox VE 9.3)"
+          "tunnelTooOld": "cible {pkg} {target}, {required}+ requis (Proxmox VE 9.3)",
+          "guestRunning": "doit d’abord être arrêté",
+          "sshSource": "non activé sur la connexion source",
+          "sshTarget": "non activé sur la connexion cible",
+          "notPortable": "lié à son nœud : {keys}",
+          "isoDetached": "{isos} sera éjecté",
+          "poolNotCarried": "quitte le pool {pool}, aucun sur la cible",
+          "storageFormat": "disques {sourceType} non copiables à froid vers {targetType} ({storage})"
         }
       },
       "storage": "Stockage",
@@ -8637,7 +8649,20 @@
       "disksPlural": "{count} disques ({size} Gio)",
       "sshNotEnabled": "SSH non activé sur la connexion source",
       "sshNotEnabledDesc": "La VM source restera verrouillée (lock: migrate) après la migration. Vous devrez la déverrouiller manuellement :",
-      "sshUnlockCommand": "qm unlock {vmid}"
+      "sshUnlockCommand": "qm unlock {vmid}",
+      "handover": {
+        "label": "Sans copie (stockage partagé)",
+        "reasonSshSource": "SSH doit être activé sur la connexion source",
+        "reasonSshTarget": "SSH doit être activé sur la connexion cible",
+        "reasonNotPortable": "Lié à son nœud : {keys}",
+        "reasonStorage": "Stockage non prouvé partagé avec la cible : {storages}",
+        "start": "Démarrer sur la cible",
+        "startDesc": "L’invité démarre dès que sa configuration est sur la cible",
+        "stayStopped": "L’invité reste arrêté sur la cible",
+        "submit": "Déplacer sans copie",
+        "shutdown": "Arrêter",
+        "startFailed": "Déplacé sans copie, mais le démarrage sur la cible a échoué : {error}"
+      }
     },
     "confirmRemoveHardwareTitle": "Supprimer le matériel",
     "confirmDeleteHardware": "Voulez-vous vraiment supprimer le matériel {id} ? Cette action est irréversible.",

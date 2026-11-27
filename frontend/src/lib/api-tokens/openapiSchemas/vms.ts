@@ -142,12 +142,31 @@ export const VM_REQUEST_SCHEMAS: Record<string, Record<string, unknown>> = {
   },
   VmRemoteMigrateCheckRequest: {
     type: "object",
-    required: ["targetConnectionId", "targetNode", "targetStorage", "targetBridge"],
+    required: ["targetConnectionId", "targetNode", "targetBridge"],
     properties: {
       targetConnectionId: { type: "string", description: "Target connection id; must be inside the token perimeter" },
       targetNode: { type: "string" },
-      targetStorage: { type: "string" },
+      targetStorage: { type: "string", description: "Required unless `handover` is true" },
       targetBridge: { type: "string" },
+      handover: { type: "boolean", default: false, description: "Preflight of the move without copy (remote-migrate/handover): containers accepted, no target storage, the VMID is kept" },
+    },
+  },
+  VmRemoteMigrateSharedStorageRequest: {
+    type: "object",
+    required: ["targetConnectionId", "targetNode"],
+    properties: {
+      targetConnectionId: { type: "string", description: "Target connection id; must be inside the token perimeter" },
+      targetNode: { type: "string" },
+    },
+  },
+  VmRemoteMigrateHandoverRequest: {
+    type: "object",
+    required: ["targetConnectionId", "targetNode", "targetBridge"],
+    properties: {
+      targetConnectionId: { type: "string", description: "Target connection id; must be inside the token perimeter" },
+      targetNode: { type: "string" },
+      targetBridge: { type: "string", description: "Every NIC of the guest lands on this bridge" },
+      start: { type: "boolean", default: false, description: "Start the guest on the target once it is there" },
     },
   },
   VmRemoteMigratePrepareRequest: {
@@ -304,6 +323,49 @@ export const VM_RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
         },
       },
       summary: { type: "object", properties: { errors: { type: "integer" }, warnings: { type: "integer" } } },
+    },
+  },
+  VmRemoteMigrateSharedStorageResponse: {
+    type: "object",
+    properties: {
+      eligible: { type: "boolean", description: "The move without copy can run now" },
+      relevant: { type: "boolean", description: "The guest sits on a storage another cluster could reach" },
+      reasons: { type: "array", items: { type: "string", enum: ["SSH_SOURCE", "SSH_TARGET", "NOT_PORTABLE", "STORAGE_NOT_SHARED"] } },
+      storages: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            storage: { type: "string" },
+            ok: { type: "boolean" },
+            target: { type: "string", description: "The target storage that holds the same volumes" },
+            reason: { type: "string", enum: ["local-type", "no-candidate", "probe-failed", "not-visible", "volumes-missing"] },
+            detail: { type: "string" },
+            missing: { type: "array", items: { type: "string" } },
+          },
+        },
+      },
+      blockers: { type: "array", items: { type: "string" }, description: "Configuration keys that bind the guest to its node" },
+      isos: { type: "array", items: { type: "string" }, description: "CD-ROM images the move ejects" },
+    },
+  },
+  VmRemoteMigrateHandoverResponse: {
+    type: "object",
+    properties: {
+      success: { type: "boolean" },
+      data: { type: ["string", "null"], description: "UPID of the start task on the target cluster, null when the guest stays stopped" },
+      task: { type: "object", properties: { connectionId: { type: "string" }, node: { type: "string" } }, description: "Where to follow `data`" },
+      handover: {
+        type: "object",
+        properties: {
+          storages: { type: "object", additionalProperties: { type: "string" }, description: "Source storage to target storage" },
+          detachedIsos: { type: "array", items: { type: "string" } },
+          firewall: { type: "boolean" },
+          archive: { type: "string", description: "Prefix of the source files archived on the source node (.conf, .fw)" },
+          sourcePool: { type: "string" },
+          startError: { type: "string" },
+        },
+      },
     },
   },
   VmMigratePrerequisitesResponse: {

@@ -10,6 +10,10 @@ import { getTenantInfrastructureScope, canMigrateConnections } from "@/lib/tenan
 import { guardSessionGuest } from "@/lib/vdc/guestGuard"
 
 import { captureReplicationJobs, findHaRulesForSid, findSiteRecoveryJobsForGuest } from '@/lib/migration/ccm-prereqs'
+import { inspectGuestConf } from '@/lib/migration/sharedHandover/guestConf'
+import { handoverPreflightIssues } from '@/lib/migration/sharedHandover/preflightIssues'
+import { configToText } from '@/lib/migration/sharedHandover/server'
+import { offlineCopyFormatMismatch } from '@/lib/migration/storageCopyFormats'
 import type { SiteRecoveryJobRef } from '@/lib/migration/ccm-prereqs.types'
 import { withPublicApiGuard } from '@/lib/api-tokens/routeGuard'
 
@@ -23,6 +27,7 @@ type RemediationHint =
       reversible: true
     }
   | { kind: 'snapshots'; names: string[]; reversible: false }
+  | { kind: 'shutdown'; reversible: true }
 
 type ValidationIssue = {
   type: 'error' | 'warning'
@@ -50,8 +55,12 @@ type ValidationIssue = {
  * Body params:
  * - targetConnectionId: string - ID de la connexion cible
  * - targetNode: string - Nom du nœud cible
- * - targetStorage: string - Stockage cible
+ * - targetStorage: string - Stockage cible (absent du mode handover)
  * - targetBridge: string - Bridge réseau cible
+ * - handover?: boolean - Déplacement sans copie (ui#1460) : le guest arrêté
+ *   garde ses disques sur un stockage partagé et son VMID ; LXC accepté. Les
+ *   contrôles propres à la copie (tunnel 9.3, snapshots, cloud-init, CPU host
+ *   en live, stockage cible) sont sautés.
  */
 async function handler(
   req: Request,
@@ -60,9 +69,11 @@ async function handler(
   try {
     const { id, type, node, vmid } = await ctx.params
     const issues: ValidationIssue[] = []
+    const body = await req.json().catch(() => null)
+    const handover = !!body && typeof body === 'object' && !Array.isArray(body) && body.handover === true
 
-    // Vérifier que c'est bien une VM QEMU
-    if (type !== 'qemu') {
+    // remote_migrate ne prend que QEMU ; le déplacement sans copie prend aussi LXC.
+    if (type !== 'qemu' && !(handover && type === 'lxc')) {
       issues.push({
         type: 'error',
         code: 'LXC_NOT_SUPPORTED',
@@ -92,7 +103,6 @@ async function handler(
     const denied = await checkPermission(PERMISSIONS.VM_MIGRATE, "vm", resourceId)
     if (denied) return denied
 
-    const body = await req.json().catch(() => null)
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
     }
@@ -100,15 +110,16 @@ async function handler(
     // The ID the guest will take on the target, when the dialog overrides it.
     // Anything that is not a plain PVE VMID falls back to the source VMID.
     const requestedTargetVmid = Number(body.targetVmid)
-    const landingVmid = Number.isInteger(requestedTargetVmid) && requestedTargetVmid >= 100 && requestedTargetVmid <= 999999999
+    // Without copy the guest keeps its VMID, whatever the dialog holds.
+    const landingVmid = !handover && Number.isInteger(requestedTargetVmid) && requestedTargetVmid >= 100 && requestedTargetVmid <= 999999999
       ? requestedTargetVmid
       : Number.parseInt(vmid)
-    const vmSid = 'vm:' + safeVmid
+    const vmSid = (type === 'lxc' ? 'ct:' : 'vm:') + safeVmid
 
-    if (!targetConnectionId || !targetNode || !targetStorage || !targetBridge) {
+    if (!targetConnectionId || !targetNode || (!handover && !targetStorage) || !targetBridge) {
       return NextResponse.json({ error: "Missing required parameters" }, { status: 400 })
     }
-    if (typeof targetConnectionId !== 'string' || typeof targetStorage !== 'string' || typeof targetBridge !== 'string') {
+    if (typeof targetConnectionId !== 'string' || (!handover && typeof targetStorage !== 'string') || typeof targetBridge !== 'string') {
       return NextResponse.json({ error: "Invalid target parameters" }, { status: 400 })
     }
     let safeTargetNode: string
@@ -145,7 +156,8 @@ async function handler(
     // is not on it yet, but only once the task runs, after the prerequisites
     // (snapshots included) were cleared for nothing.
     // Containers were turned away above (LXC_NOT_SUPPORTED).
-    const tunnel = await checkMigrationTunnel(
+    // Without copy nothing goes through the tunnel.
+    const tunnel = handover ? null : await checkMigrationTunnel(
       'qemu',
       { conn: sourceConn, node: safeNode },
       { conn: targetConn, node: safeTargetNode },
@@ -165,7 +177,7 @@ async function handler(
     // 1. Récupérer la config de la VM source
     let vmConfig: any = {}
     try {
-      vmConfig = await pveFetch<any>(sourceConn, `/nodes/${encodeURIComponent(safeNode)}/qemu/${safeVmid}/config`)
+      vmConfig = await pveFetch<any>(sourceConn, `/nodes/${encodeURIComponent(safeNode)}/${type}/${safeVmid}/config`)
     } catch (e: any) {
       issues.push({
         type: 'error',
@@ -175,6 +187,20 @@ async function handler(
         details: e.message
       })
       return NextResponse.json({ valid: false, issues })
+    }
+
+    // 1b. Déplacement sans copie : guest arrêté, SSH des deux côtés, guest
+    // portable, image ISO éjectée, pool non reporté.
+    if (handover) {
+      issues.push(...await handoverPreflightIssues({
+        sourceConn,
+        sourceConnectionId: id,
+        targetConnectionId,
+        node: safeNode,
+        type,
+        vmid: safeVmid,
+        config: vmConfig,
+      }))
     }
 
     // 2. Vérifier HA
@@ -261,31 +287,34 @@ async function handler(
     }
 
     // 2b. Vérifier les snapshots — bloquant pour remote-migrate (qm remote-migrate
-    // ne supporte pas les VMs avec snapshots).
-    try {
-      const snaps = await pveFetch<any[]>(sourceConn, `/nodes/${encodeURIComponent(safeNode)}/qemu/${safeVmid}/snapshot`)
-      const realSnaps = (snaps || []).filter((s: any) => s?.name !== 'current')
-      if (realSnaps.length > 0) {
+    // ne supporte pas les VMs avec snapshots). Sans copie, ils suivent le guest :
+    // leurs sections restent dans le fichier et leurs données dans les volumes.
+    if (!handover) {
+      try {
+        const snaps = await pveFetch<any[]>(sourceConn, `/nodes/${encodeURIComponent(safeNode)}/qemu/${safeVmid}/snapshot`)
+        const realSnaps = (snaps || []).filter((s: any) => s?.name !== 'current')
+        if (realSnaps.length > 0) {
+          issues.push({
+            type: 'error',
+            code: 'SNAPSHOTS_PRESENT',
+            message: `VM has ${realSnaps.length} snapshot(s) that must be removed before cross-cluster migration`,
+            details: "Cross-cluster migration does not support VMs with snapshots. Delete them from the VM's Snapshots tab then retry the migration.",
+            remediation: {
+              kind: 'snapshots',
+              names: realSnaps.map((s: any) => String(s?.name)).filter(Boolean),
+              reversible: false,
+            },
+          })
+        }
+      } catch (e: any) {
         issues.push({
-          type: 'error',
-          code: 'SNAPSHOTS_PRESENT',
-          message: `VM has ${realSnaps.length} snapshot(s) that must be removed before cross-cluster migration`,
-          details: "Cross-cluster migration does not support VMs with snapshots. Delete them from the VM's Snapshots tab then retry the migration.",
-          remediation: {
-            kind: 'snapshots',
-            names: realSnaps.map((s: any) => String(s?.name)).filter(Boolean),
-            reversible: false,
-          },
+          type: 'warning',
+          code: 'SNAPSHOTS_CHECK_FAILED',
+          message: 'Could not verify snapshots on the source VM',
+          context: {},
+          details: e?.message || String(e),
         })
       }
-    } catch (e: any) {
-      issues.push({
-        type: 'warning',
-        code: 'SNAPSHOTS_CHECK_FAILED',
-        message: 'Could not verify snapshots on the source VM',
-        context: {},
-        details: e?.message || String(e),
-      })
     }
 
     // 3. Extraire les infos réseau de la VM source
@@ -304,16 +333,18 @@ async function handler(
       }
     }
 
-    // 4. Vérifier cloud-init (peut causer des problèmes)
-    for (const [key, value] of Object.entries(vmConfig)) {
-      if (typeof value === 'string' && value.includes('cloudinit')) {
-        issues.push({
-          type: 'warning',
-          code: 'CLOUD_INIT_DRIVE',
-          message: `Cloud-init drive detected on ${key}`,
-          context: { drive: key },
-          details: 'Cloud-init drives may cause "no export formats" errors. Consider removing before migration.'
-        })
+    // 4. Vérifier cloud-init (peut causer des problèmes à l'export)
+    if (!handover) {
+      for (const [key, value] of Object.entries(vmConfig)) {
+        if (typeof value === 'string' && value.includes('cloudinit')) {
+          issues.push({
+            type: 'warning',
+            code: 'CLOUD_INIT_DRIVE',
+            message: `Cloud-init drive detected on ${key}`,
+            context: { drive: key },
+            details: 'Cloud-init drives may cause "no export formats" errors. Consider removing before migration.'
+          })
+        }
       }
     }
 
@@ -324,7 +355,8 @@ async function handler(
     // sur la cible (même symptôme qu'un vMotion sans EVC). La seule vraie parade
     // est un cputype nommé portable (ex: x86-64-v3).
     const cpuTypeRaw = (vmConfig.cpu ? String(vmConfig.cpu).split(',')[0] : '').trim().toLowerCase()
-    if (cpuTypeRaw === 'host' || cpuTypeRaw === 'max') {
+    // Sans copie le guest redémarre à froid : aucun état CPU ne passe d'un hôte à l'autre.
+    if (!handover && (cpuTypeRaw === 'host' || cpuTypeRaw === 'max')) {
       let sourceCpuModel: string | undefined
       let targetCpuModel: string | undefined
       try {
@@ -426,48 +458,71 @@ async function handler(
       return NextResponse.json({ valid: false, issues })
     }
 
-    // 7. Vérifier le stockage cible
-    try {
-      const targetStorages = await pveFetch<any[]>(targetConn, `/nodes/${encodeURIComponent(safeTargetNode)}/storage`)
-      const storageInfo = targetStorages?.find((s: any) => s.storage === targetStorage)
-      if (!storageInfo) {
-        issues.push({
-          type: 'error',
-          code: 'TARGET_STORAGE_NOT_FOUND',
-          message: `Target storage "${targetStorage}" not found`,
-          context: { storage: targetStorage },
-          details: `Storage not available on node ${targetNode}`
-        })
-      } else {
-        // Vérifier si le stockage peut accueillir des images VM
-        if (storageInfo.content && !storageInfo.content.includes('images')) {
+    // 7. Vérifier le stockage cible (sans copie, la preuve de stockage partagé
+    // de remote-migrate/shared-storage en tient lieu)
+    if (!handover) {
+      try {
+        const targetStorages = await pveFetch<any[]>(targetConn, `/nodes/${encodeURIComponent(safeTargetNode)}/storage`)
+        const storageInfo = targetStorages?.find((s: any) => s.storage === targetStorage)
+        if (!storageInfo) {
           issues.push({
             type: 'error',
-            code: 'TARGET_STORAGE_NO_IMAGES',
-            message: `Target storage "${targetStorage}" cannot store VM images`,
+            code: 'TARGET_STORAGE_NOT_FOUND',
+            message: `Target storage "${targetStorage}" not found`,
             context: { storage: targetStorage },
-            details: `Content types: ${storageInfo.content}`
+            details: `Storage not available on node ${targetNode}`
           })
+        } else {
+          // Vérifier si le stockage peut accueillir des images VM
+          if (storageInfo.content && !storageInfo.content.includes('images')) {
+            issues.push({
+              type: 'error',
+              code: 'TARGET_STORAGE_NO_IMAGES',
+              message: `Target storage "${targetStorage}" cannot store VM images`,
+              context: { storage: targetStorage },
+              details: `Content types: ${storageInfo.content}`
+            })
+          }
+          // Copie à froid : Proxmox exporte chaque disque dans un format que le
+          // stockage cible doit importer (un pool ZFS ne parle que `zfs`). Une
+          // migration à chaud passe par NBD et n'est pas concernée.
+          const status = await pveFetch<any>(sourceConn, `/nodes/${encodeURIComponent(safeNode)}/qemu/${safeVmid}/status/current`).catch(() => null)
+          if (status?.status !== 'running') {
+            const sourceStorages = await pveFetch<any[]>(sourceConn, '/storage').catch(() => [])
+            const types = new Map((Array.isArray(sourceStorages) ? sourceStorages : []).map((s: any) => [String(s?.storage), String(s?.type)]))
+            const sourceType = inspectGuestConf(configToText(vmConfig), 'qemu').storages
+              .map(storage => types.get(storage))
+              .find(type => offlineCopyFormatMismatch(type, storageInfo.type))
+            if (sourceType) {
+              issues.push({
+                type: 'error',
+                code: 'STORAGE_FORMAT_MISMATCH',
+                message: `Proxmox cannot copy a ${sourceType} disk to the ${storageInfo.type} storage "${targetStorage}" offline`,
+                context: { storage: targetStorage, sourceType, targetType: String(storageInfo.type) },
+                details: 'A stopped VM is copied disk by disk in a format both storages support: pick a target storage of a compatible type, or migrate the VM live.',
+              })
+            }
+          }
+          // Vérifier l'espace disponible
+          if (storageInfo.avail !== undefined && storageInfo.avail < 1024 * 1024 * 1024) { // < 1GB
+            issues.push({
+              type: 'warning',
+              code: 'TARGET_STORAGE_LOW_SPACE',
+              message: `Target storage "${targetStorage}" has low available space`,
+              context: { storage: targetStorage, free: (storageInfo.avail / (1024 * 1024 * 1024)).toFixed(2) },
+              details: `Available: ${(storageInfo.avail / (1024 * 1024 * 1024)).toFixed(2)} GB`
+            })
+          }
         }
-        // Vérifier l'espace disponible
-        if (storageInfo.avail !== undefined && storageInfo.avail < 1024 * 1024 * 1024) { // < 1GB
-          issues.push({
-            type: 'warning',
-            code: 'TARGET_STORAGE_LOW_SPACE',
-            message: `Target storage "${targetStorage}" has low available space`,
-            context: { storage: targetStorage, free: (storageInfo.avail / (1024 * 1024 * 1024)).toFixed(2) },
-            details: `Available: ${(storageInfo.avail / (1024 * 1024 * 1024)).toFixed(2)} GB`
-          })
-        }
+      } catch (e: any) {
+        issues.push({
+          type: 'warning',
+          code: 'TARGET_STORAGE_CHECK_FAILED',
+          message: 'Could not verify target storage',
+          context: {},
+          details: e.message
+        })
       }
-    } catch (e: any) {
-      issues.push({
-        type: 'warning',
-        code: 'TARGET_STORAGE_CHECK_FAILED',
-        message: 'Could not verify target storage',
-        context: {},
-        details: e.message
-      })
     }
 
     // 8. Vérifier le bridge cible et son MTU
@@ -526,11 +581,14 @@ async function handler(
       const existingVm = targetVms?.find((v: any) => v.vmid === landingVmid)
       if (existingVm) {
         issues.push({
-          type: 'warning',
+          // Sans copie les disques s'appellent vm-<VMID>-… : le guest ne peut pas en changer.
+          type: handover ? 'error' : 'warning',
           code: 'VMID_EXISTS_ON_TARGET',
           message: `VMID ${landingVmid} already exists on target cluster`,
           context: { vmid: String(landingVmid), node: String(existingVm.node || '') },
-          details: `Existing VM: ${existingVm.name || 'unnamed'} on ${existingVm.node}. Use a different target VMID.`
+          details: handover
+            ? `Existing VM: ${existingVm.name || 'unnamed'} on ${existingVm.node}. Without copy the guest keeps its VMID, the one its disks are named after.`
+            : `Existing VM: ${existingVm.name || 'unnamed'} on ${existingVm.node}. Use a different target VMID.`
         })
       }
     } catch {

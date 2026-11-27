@@ -17081,7 +17081,8 @@
         "showLogs": "Afficher les logs",
         "hideLogs": "Masquer les logs",
         "waitingForLogs": "En attente des logs...",
-        "nameTaken": "Un cluster porte déjà ce nom : choisissez-en un autre."
+        "nameTaken": "Un cluster porte déjà ce nom : choisissez-en un autre.",
+        "integrated": "Tous les nœuds sont prêts"
       },
       "error": {
         "connection_busy": "Un autre déploiement Kubernetes est en cours sur ce cluster Proxmox. Attendez qu'il se termine.",

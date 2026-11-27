@@ -17067,7 +17067,8 @@
         "showLogs": "显示日志",
         "hideLogs": "隐藏日志",
         "waitingForLogs": "等待日志...",
-        "nameTaken": "已有同名集群注册，请换一个名称。"
+        "nameTaken": "已有同名集群注册，请换一个名称。",
+        "integrated": "所有节点已就绪"
       },
       "error": {
         "connection_busy": "此 Proxmox 集群上已有一个 Kubernetes 部署正在进行。请等待其完成。",

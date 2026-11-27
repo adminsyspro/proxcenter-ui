@@ -16651,7 +16651,8 @@
         "showLogs": "Logs anzeigen",
         "hideLogs": "Logs ausblenden",
         "waitingForLogs": "Warten auf Logs...",
-        "nameTaken": "Ein Cluster mit diesem Namen ist bereits registriert: Wählen Sie einen anderen Namen."
+        "nameTaken": "Ein Cluster mit diesem Namen ist bereits registriert: Wählen Sie einen anderen Namen.",
+        "integrated": "Alle Nodes sind bereit"
       },
       "error": {
         "connection_busy": "Auf diesem Proxmox-Cluster läuft bereits eine Kubernetes-Bereitstellung. Warten Sie, bis sie abgeschlossen ist.",

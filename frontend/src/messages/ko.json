@@ -17067,7 +17067,8 @@
         "showLogs": "로그 표시",
         "hideLogs": "로그 숨기기",
         "waitingForLogs": "로그를 기다리는 중...",
-        "nameTaken": "이 이름의 클러스터가 이미 등록되어 있습니다. 다른 이름을 선택하세요."
+        "nameTaken": "이 이름의 클러스터가 이미 등록되어 있습니다. 다른 이름을 선택하세요.",
+        "integrated": "모든 노드 준비 완료"
       },
       "error": {
         "connection_busy": "이 Proxmox 클러스터에서 다른 Kubernetes 배포가 진행 중입니다. 완료될 때까지 기다리세요.",

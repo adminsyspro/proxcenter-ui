@@ -17080,7 +17080,8 @@
         "showLogs": "Show logs",
         "hideLogs": "Hide logs",
         "waitingForLogs": "Waiting for logs...",
-        "nameTaken": "A cluster with this name is already registered: choose another name."
+        "nameTaken": "A cluster with this name is already registered: choose another name.",
+        "integrated": "All nodes ready"
       },
       "error": {
         "connection_busy": "Another Kubernetes deployment is in progress on this Proxmox cluster. Wait for it to finish.",

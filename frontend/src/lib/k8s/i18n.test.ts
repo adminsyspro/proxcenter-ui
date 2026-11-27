@@ -7,6 +7,7 @@ import es from '@/messages/es.json'
 import ko from '@/messages/ko.json'
 
 const required = [
+  'kubernetes.provision.progress.integrated',
   'kubernetes.delete.destroyRefused',
   'kubernetes.provision.error.cluster_name_taken', 'kubernetes.provision.progress.nameTaken',
   'kubernetes.provision.review.vms', 'kubernetes.provision.distro.rke2Cni',

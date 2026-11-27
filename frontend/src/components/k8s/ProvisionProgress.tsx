@@ -9,6 +9,7 @@ import {
   Button,
   CircularProgress,
   Collapse,
+  LinearProgress,
   Stack,
   Typography
 } from '@mui/material'
@@ -21,6 +22,8 @@ interface ProvisionProgressProps {
   clusterName: string
   connectionId: string
   onDone?: (clusterId: string) => void
+  /** The integration poll ended: the cluster's health is now stored. */
+  onIntegrated?: (clusterId: string) => void
   onClose?: () => void
 }
 
@@ -90,7 +93,7 @@ function StepMarker({ state }: { state: ProvisionStepState }) {
   return <Box component="i" className={cls} sx={{ fontSize: 16, color, lineHeight: 1 }} />
 }
 
-export default function ProvisionProgress({ runId, clusterName, connectionId, onDone, onClose }: ProvisionProgressProps) {
+export default function ProvisionProgress({ runId, clusterName, connectionId, onDone, onIntegrated, onClose }: ProvisionProgressProps) {
   const t = useTranslations('kubernetes.provision.progress')
   const tHealth = useTranslations('kubernetes.health')
   const router = useRouter()
@@ -262,6 +265,7 @@ export default function ProvisionProgress({ runId, clusterName, connectionId, on
     // Workers join after the run ends: up to ten minutes for all of them.
     pollClusterHealthUntilResolved(clusterId, { fetchState, timeoutMs: 600_000 }).finally(() => {
       if (mountedRef.current) setIntegrating(false)
+      onIntegrated?.(clusterId)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clusterId])
@@ -309,16 +313,17 @@ export default function ProvisionProgress({ runId, clusterName, connectionId, on
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, py: 1 }}>
-      {/* The Kubernetes logo spins as the primary "working" indicator; it stops
-          and tints green when the cluster is ready, dims on failure. */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75 }}>
+      {/* Header: the Kubernetes logo spins while the run works, stops and
+          tints green once the cluster is ready, dims on failure. */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         <Box
           component="img"
           src="/images/kubernetes-logo.svg"
           alt=""
           sx={{
-            width: 52,
-            height: 52,
+            width: 44,
+            height: 44,
+            flexShrink: 0,
             display: 'block',
             '@keyframes k8sSpin': { to: { transform: 'rotate(360deg)' } },
             animation: isTerminal ? 'none' : 'k8sSpin 2.4s linear infinite',
@@ -327,32 +332,46 @@ export default function ProvisionProgress({ runId, clusterName, connectionId, on
             transition: 'opacity .3s, filter .3s',
           }}
         />
-        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-          {t(`phase.${phaseKeyFor(status, phase)}`)}
-        </Typography>
-        {!isTerminal && (
-          <Typography variant="caption" color="text.secondary">
-            {Math.round(progressValue)}%
-          </Typography>
-        )}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>
+              {t(`phase.${phaseKeyFor(status, phase)}`)}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" noWrap>{clusterName}</Typography>
+            <Box sx={{ flex: 1 }} />
+            {!isTerminal && (
+              <Typography variant="body2" color="text.secondary">{Math.round(progressValue)}%</Typography>
+            )}
+          </Box>
+          <LinearProgress
+            variant="determinate"
+            value={progressValue}
+            color={status === 'failed' ? 'error' : 'primary'}
+            sx={{ mt: 0.75, height: 4, borderRadius: 2 }}
+          />
+        </Box>
       </Box>
 
-      {/* Discrete step checklist, alongside the raw logs below. */}
-      <Stack spacing={0.75} sx={{ px: 0.5 }}>
-        {steps.map(s => (
-          <Stack key={s.key} direction="row" spacing={1} alignItems="center">
-            <Box sx={{ width: 18, display: 'flex', justifyContent: 'center' }}>
+      {/* The phases, spread over the width: marker on the line, label under it. */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${steps.length}, 1fr)`, border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', py: 1.5 }}>
+        {steps.map((s, i) => (
+          <Box key={s.key} sx={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75, px: 0.5 }}>
+            {i > 0 && (
+              <Box sx={{ position: 'absolute', top: 8, right: 'calc(50% + 14px)', left: 'calc(-50% + 14px)', height: '2px', borderRadius: 1, bgcolor: s.state === 'pending' ? 'divider' : 'success.main' }} />
+            )}
+            <Box sx={{ height: 18, display: 'flex', alignItems: 'center' }}>
               <StepMarker state={s.state} />
             </Box>
             <Typography
-              variant="body2"
-              sx={{ color: s.state === 'pending' ? 'text.disabled' : 'text.primary', fontWeight: s.state === 'active' ? 600 : 400 }}
+              variant="caption"
+              align="center"
+              sx={{ color: s.state === 'pending' ? 'text.disabled' : 'text.primary', fontWeight: s.state === 'active' ? 600 : 400, lineHeight: 1.3 }}
             >
               {t(`steps.${s.key}`)}
             </Typography>
-          </Stack>
+          </Box>
         ))}
-      </Stack>
+      </Box>
 
       {status === 'failed' && (
         <Alert severity="error">
@@ -363,23 +382,32 @@ export default function ProvisionProgress({ runId, clusterName, connectionId, on
         </Alert>
       )}
 
-      {status === 'completed' && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          {registering && (
-            <Alert severity="info" icon={<CircularProgress size={16} />}>
-              {t('registering')}
-            </Alert>
-          )}
-          {registerError && <Alert severity="warning">{registerError}</Alert>}
-          {clusterId && <Alert severity="success">{t('registered')}</Alert>}
-          {integrating && (
-            <Alert severity="info" icon={<CircularProgress size={16} />}>
-              {tHealth('integrating')}
-            </Alert>
-          )}
+      {status === 'completed' && registerError && <Alert severity="warning">{registerError}</Alert>}
 
-          <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+      {/* Result: what happened on the left, what to do next on the right. */}
+      {status === 'completed' && !registerError && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper' }}>
+          <Box sx={{ width: 20, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+            {clusterId
+              ? <Box component="i" className="ri-checkbox-circle-fill" sx={{ fontSize: 20, color: 'success.main' }} />
+              : <CircularProgress size={16} />}
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 200 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {clusterId ? t('registered') : t('registering')}
+            </Typography>
+            {clusterId && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                {integrating && <CircularProgress size={11} thickness={6} />}
+                <Typography variant="caption" color="text.secondary">
+                  {integrating ? tHealth('integrating') : t('integrated')}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+          <Stack direction="row" spacing={1}>
             <Button
+              size="small"
               variant="outlined"
               startIcon={<i className="ri-download-line" style={{ fontSize: 16 }} />}
               onClick={handleDownloadKubeconfig}
@@ -389,6 +417,7 @@ export default function ProvisionProgress({ runId, clusterName, connectionId, on
             </Button>
             {clusterId && (
               <Button
+                size="small"
                 variant="contained"
                 startIcon={<i className="ri-external-link-line" style={{ fontSize: 16 }} />}
                 onClick={() => {

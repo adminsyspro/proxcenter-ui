@@ -53,6 +53,8 @@ interface KubernetesDeployWizardProps {
   open: boolean
   onClose: () => void
   onCreated?: (clusterId: string) => void
+  /** A deployed cluster finished integrating: its health is stored. */
+  onIntegrated?: (clusterId: string) => void
 }
 
 const STEP_TARGET = 0
@@ -339,7 +341,7 @@ function DistroCard({
   )
 }
 
-export default function KubernetesDeployWizard({ open, onClose, onCreated }: KubernetesDeployWizardProps) {
+export default function KubernetesDeployWizard({ open, onClose, onCreated, onIntegrated }: KubernetesDeployWizardProps) {
   const t = useTranslations()
   const theme = useTheme()
 
@@ -1329,6 +1331,7 @@ export default function KubernetesDeployWizard({ open, onClose, onCreated }: Kub
         clusterName={state.clusterName}
         connectionId={state.connectionId}
         onDone={id => onCreated?.(id)}
+        onIntegrated={id => onIntegrated?.(id)}
         onClose={onClose}
       />
     )

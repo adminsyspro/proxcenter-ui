@@ -17067,7 +17067,8 @@
         "showLogs": "Mostrar los registros",
         "hideLogs": "Ocultar los registros",
         "waitingForLogs": "Esperando los registros...",
-        "nameTaken": "Ya hay un clúster registrado con este nombre: elija otro."
+        "nameTaken": "Ya hay un clúster registrado con este nombre: elija otro.",
+        "integrated": "Todos los nodos están listos"
       },
       "error": {
         "connection_busy": "Ya hay otro despliegue de Kubernetes en curso en este clúster de Proxmox. Espere a que termine.",

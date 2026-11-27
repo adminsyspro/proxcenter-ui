@@ -377,6 +377,11 @@ export default function KubernetesDashboard({ onClusterClick, onClustersChanged 
             load()
             notifyChanged(onClustersChanged)
           }}
+          // Its health is stored by then: show it without waiting for a reload.
+          onIntegrated={() => {
+            load()
+            notifyChanged(onClustersChanged)
+          }}
         />
       )}
       {canManage && (

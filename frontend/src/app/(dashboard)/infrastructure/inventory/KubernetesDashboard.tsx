@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
-import { Box, Typography, Stack, Button, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, CircularProgress, Alert, Snackbar } from '@mui/material'
+import { Box, Typography, Stack, Button, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, CircularProgress, Checkbox, FormControlLabel, Alert, Snackbar } from '@mui/material'
 import { useTranslations } from 'next-intl'
 import { useRBAC } from '@/contexts/RBACContext'
+import { useLicense } from '@/contexts/LicenseContext'
 import { clusterUtilization, pct, type ClusterUtil } from '@/lib/k8s/metrics'
 import { isIntegrating } from '@/lib/k8s/clusterHealthStatus'
 import type { NodeMetricsResult, ListResourcesResult } from '@/lib/k8s/types'
@@ -11,8 +12,10 @@ import type { InventorySelection } from './types'
 import ClusterCard, { type K8sClusterRow } from './k8s/ClusterCard'
 import K8sSummaryPanel from './k8s/K8sSummaryPanel'
 import ImportClusterDialog from './k8s/ImportClusterDialog'
+import KubernetesDeployWizard from '@/components/k8s/KubernetesDeployWizard'
 
 const AddIcon = () => <i className="ri-add-line" style={{ fontSize: 18 }} />
+const RocketIcon = () => <i className="ri-rocket-2-line" style={{ fontSize: 18 }} />
 
 type Enrichment = { util: ClusterUtil | null; pods: { count: number; truncated: boolean } | null }
 
@@ -30,10 +33,15 @@ export default function KubernetesDashboard({ onClusterClick, onClustersChanged 
   const t = useTranslations()
   const { hasPermission } = useRBAC()
   const canManage = hasPermission('k8s.manage')
+  // Deploying a cluster creates VMs: Enterprise, with its own permission.
+  const { isEnterprise } = useLicense()
+  const canProvision = isEnterprise && hasPermission('k8s.provision')
   const [clusters, setClusters] = useState<K8sClusterRow[]>([])
   const [connectionNames, setConnectionNames] = useState<Record<string, string>>({})
   const [enrichment, setEnrichment] = useState<Record<string, Enrichment>>({})
   const [importOpen, setImportOpen] = useState(false)
+  const [deployOpen, setDeployOpen] = useState(false)
+  const [destroyNodes, setDestroyNodes] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -124,19 +132,31 @@ export default function KubernetesDashboard({ onClusterClick, onClustersChanged 
   // Clear any prior error whenever the delete target changes (dialog opened,
   // switched to another cluster, or closed) so nothing carries over.
   useEffect(() => {
+    setDestroyNodes(false)
     setDeleteError(null)
   }, [deleteId])
+
+  const deleteTarget = deleteId ? clusters.find(c => c.id === deleteId) : undefined
 
   const handleDelete = useCallback(async () => {
     if (!deleteId) return
     setDeleting(true)
     setDeleteError(null)
     try {
-      const res = await fetch(`/api/v1/k8s/clusters/${deleteId}`, { method: 'DELETE' })
+      const qs = destroyNodes ? '?destroyNodes=true' : ''
+      const res = await fetch(`/api/v1/k8s/clusters/${deleteId}${qs}`, { method: 'DELETE' })
       if (res.ok) {
         setDeleteId(null)
         load()
         void onClustersChanged?.()
+      } else if (res.status === 409) {
+        // Partial destruction: the server kept the cluster and its node
+        // mapping so the destroy can be retried; name the VMs that failed.
+        const body = await res.json().catch(() => null)
+        const failed: number[] = Array.isArray(body?.results)
+          ? body.results.filter((r: { status?: string }) => r?.status === 'error').map((r: { vmid: number }) => r.vmid)
+          : []
+        setDeleteError(t('kubernetes.delete.destroyFailed') + (failed.length > 0 ? ` (VMID: ${failed.join(', ')})` : ''))
       } else {
         setDeleteError(t('common.error'))
       }
@@ -145,7 +165,7 @@ export default function KubernetesDashboard({ onClusterClick, onClustersChanged 
     } finally {
       setDeleting(false)
     }
-  }, [deleteId, load, onClustersChanged, t])
+  }, [deleteId, destroyNodes, load, onClustersChanged, t])
 
   // Fetch the cluster's kubeconfig (rebuilt server-side from the stored
   // credential) and trigger a browser download. Available for any cluster the
@@ -269,6 +289,11 @@ export default function KubernetesDashboard({ onClusterClick, onClustersChanged 
                 {t('kubernetes.addCluster')}
               </Button>
             )}
+            {canProvision && (
+              <Button variant="outlined" startIcon={<RocketIcon />} onClick={() => setDeployOpen(true)}>
+                {t('kubernetes.provision.deployButton')}
+              </Button>
+            )}
           </Stack>
         </Box>
       ) : (
@@ -276,17 +301,30 @@ export default function KubernetesDashboard({ onClusterClick, onClustersChanged 
           {/* Aggregate summary across all clusters */}
           <K8sSummaryPanel summary={kpi} />
 
-          {canManage && (
+          {(canManage || canProvision) && (
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 1.5 }}>
-              <IconButton
-                size="small"
-                color="primary"
-                onClick={() => setImportOpen(true)}
-                title={t('kubernetes.addCluster')}
-                aria-label={t('kubernetes.addCluster')}
-              >
-                <AddIcon />
-              </IconButton>
+              {canManage && (
+                <IconButton
+                  size="small"
+                  color="primary"
+                  onClick={() => setImportOpen(true)}
+                  title={t('kubernetes.addCluster')}
+                  aria-label={t('kubernetes.addCluster')}
+                >
+                  <AddIcon />
+                </IconButton>
+              )}
+              {canProvision && (
+                <IconButton
+                  size="small"
+                  color="primary"
+                  onClick={() => setDeployOpen(true)}
+                  title={t('kubernetes.provision.deployButton')}
+                  aria-label={t('kubernetes.provision.deployButton')}
+                >
+                  <RocketIcon />
+                </IconButton>
+              )}
             </Box>
           )}
           <Stack spacing={1.5}>
@@ -322,11 +360,35 @@ export default function KubernetesDashboard({ onClusterClick, onClustersChanged 
           }}
         />
       )}
+      {canProvision && (
+        <KubernetesDeployWizard
+          open={deployOpen}
+          onClose={() => setDeployOpen(false)}
+          onCreated={() => {
+            // The dialog stays open on its "cluster ready" panel; the user
+            // closes it from there.
+            load()
+            void onClustersChanged?.()
+          }}
+        />
+      )}
       {canManage && (
         <Dialog open={!!deleteId} onClose={() => { if (!deleting) setDeleteId(null) }} maxWidth="xs" fullWidth>
           <DialogTitle>{t('common.delete')}</DialogTitle>
           <DialogContent>
             <DialogContentText>{t('kubernetes.delete.confirm')}</DialogContentText>
+            {deleteTarget?.source === 'deployed' && canProvision && (
+              <>
+                <FormControlLabel
+                  sx={{ mt: 1.5, mr: 0 }}
+                  control={<Checkbox checked={destroyNodes} onChange={e => setDestroyNodes(e.target.checked)} disabled={deleting} />}
+                  label={t('kubernetes.delete.destroyNodes', { count: 0 })}
+                />
+                {destroyNodes && (
+                  <Alert severity="warning" sx={{ mt: 1 }}>{t('kubernetes.delete.destroyNodesWarn')}</Alert>
+                )}
+              </>
+            )}
             {deleteError && (
               <Alert severity="error" sx={{ mt: 1.5 }}>
                 {deleteError}

@@ -16628,7 +16628,10 @@
       "leastPrivilegeHint": "Use a least-privilege context. Tokens or client certificates are stored encrypted."
     },
     "delete": {
-      "confirm": "Remove this cluster from ProxCenter? The cluster itself is not affected."
+      "confirm": "Remove this cluster from ProxCenter? The cluster itself is not affected.",
+      "destroyNodes": "{count, plural, =0 {Also destroy the node VMs on Proxmox} one {Also destroy the # node VM on Proxmox} other {Also destroy the # node VMs on Proxmox}}",
+      "destroyNodesWarn": "This permanently deletes the cluster VMs and their disks on Proxmox. This cannot be undone.",
+      "destroyFailed": "Some node VMs could not be destroyed; the cluster was kept. Check the nodes and retry."
     },
     "explore": "Explore cluster",
     "explorer": {
@@ -16964,6 +16967,129 @@
       },
       "rolloutRestart": "Revision {revision}: pods restarted",
       "rolloutConfig": "Revision {revision}: pod settings changed, same images"
+    },
+    "provision": {
+      "title": "Deploy Kubernetes cluster",
+      "deployButton": "Deploy cluster",
+      "steps": {
+        "target": "Target",
+        "distro": "Distribution",
+        "topology": "Topology",
+        "network": "Network",
+        "review": "Review",
+        "progress": "Progress"
+      },
+      "target": {
+        "clusterName": "Cluster name",
+        "clusterNameHelp": "Used as a prefix for VM names and hostnames",
+        "connection": "Connection",
+        "node": "Node",
+        "imageDatastore": "Image datastore",
+        "vmDatastore": "VM datastore",
+        "noImageDatastore": "No datastore supports image import on this node",
+        "noVmDatastore": "No datastore supports VM disks on this node",
+        "bridge": "Network bridge",
+        "noBridges": "No network bridges available on this node",
+        "vlan": "VLAN tag",
+        "vlanPlaceholder": "None"
+      },
+      "distro": {
+        "select": "Choose the Kubernetes distribution for this cluster",
+        "talos": "Talos Linux",
+        "talosDesc": "Immutable, API-managed Linux built for running Kubernetes",
+        "cni": "Flannel CNI",
+        "talosVersion": "Talos version",
+        "kubernetesVersion": "Kubernetes version",
+        "k3s": "k3s",
+        "k3sDesc": "Lightweight certified Kubernetes installed on Ubuntu LTS",
+        "k3sVersion": "k3s version",
+        "rke2": "RKE2",
+        "rke2Desc": "CNCF-certified, security-focused (CIS/FIPS). Enterprise and regulated environments.",
+        "rke2Version": "RKE2 version",
+        "osImageUrl": "Ubuntu image URL",
+        "osImageChecksum": "Image checksum (SHA-256)",
+        "snippetDatastore": "Snippet datastore",
+        "snippetDatastoreHelp": "Datastore with the Proxmox Snippets content type enabled, used to deliver the cloud-init configuration",
+        "noSnippetDatastore": "No datastore on this node has the Snippets content type enabled. Enable Snippets on a datastore (Datacenter > Storage) to deploy k3s.",
+        "k3sHaNote": "The generated kubeconfig and the node join address point at the first control-plane node. With 3 servers, etcd is highly available, but the API endpoint is not: if the first server is down, the downloaded kubeconfig stops working.",
+        "rke2HaNote": "The API endpoint is the first server node. Highly available etcd, single API endpoint in this version (a virtual IP is planned).",
+        "kubeadm": "Vanilla (kubeadm)",
+        "kubeadmDesc": "Upstream Kubernetes with no vendor layer. Highly available API endpoint via kube-vip and your choice of CNI.",
+        "kubeadmVersion": "Kubernetes version",
+        "kubeadmChip": "Calico / Cilium",
+        "cniSelect": "Container network (CNI)",
+        "podCidr": "Pod network CIDR",
+        "kubeadmHaNote": "kubeadm needs a dedicated free IP in the node subnet as the control-plane virtual IP (kube-vip, ARP mode). You will enter it on the Network step. With 3 or 5 control planes, both etcd and the API endpoint are highly available."
+      },
+      "topology": {
+        "cpCount": "Control plane nodes",
+        "cpSizing": "Control plane sizing",
+        "cores": "Cores",
+        "memory": "Memory",
+        "disk": "Disk",
+        "workerCount": "Worker nodes",
+        "workerSizing": "Worker sizing"
+      },
+      "network": {
+        "subnetPrefix": "Subnet prefix",
+        "gateway": "Gateway",
+        "dns": "DNS servers",
+        "dnsHelp": "Comma or space separated list of DNS server addresses",
+        "controlPlaneNodes": "Control plane nodes",
+        "workerNodes": "Worker nodes",
+        "ip": "IP address",
+        "vmid": "VM ID",
+        "vip": "Control-plane VIP",
+        "vipHelp": "A free, unused IP in the same subnet as the nodes. kube-vip advertises it (ARP) in front of all control planes; the kubeconfig targets this IP.",
+        "podCidr": "Pod network",
+        "serviceCidr": "Service network",
+        "cidrHelp": "Address ranges the cluster uses internally. They must not overlap each other or the network of the nodes."
+      },
+      "review": {
+        "summary": "Review the cluster configuration before deploying",
+        "deployNow": "Deploy now",
+        "deployFailed": "Deployment failed",
+        "nodes": "{cp, plural, one {# control plane node} other {# control plane nodes}}, {workers, plural, =0 {no worker} one {# worker} other {# workers}}"
+      },
+      "progress": {
+        "noRun": "No provisioning run to display",
+        "phase": {
+          "queued": "Queued",
+          "initializing": "Initializing infrastructure",
+          "applying": "Applying configuration",
+          "bootstrapping": "Bootstrapping the cluster",
+          "ready": "Cluster ready",
+          "failed": "Failed"
+        },
+        "steps": {
+          "init": "Initializing",
+          "apply": "Provisioning VMs",
+          "bootstrap": "Bootstrapping the cluster",
+          "register": "Registering",
+          "ready": "Ready"
+        },
+        "failedTitle": "Provisioning failed",
+        "registering": "Registering cluster...",
+        "registerFailed": "Failed to register the cluster",
+        "registered": "Cluster registered",
+        "downloadKubeconfig": "Download kubeconfig",
+        "openCluster": "Open cluster",
+        "showLogs": "Show logs",
+        "hideLogs": "Hide logs",
+        "waitingForLogs": "Waiting for logs..."
+      },
+      "error": {
+        "connection_busy": "Another Kubernetes deployment is in progress on this Proxmox cluster. Wait for it to finish.",
+        "cluster_name_active": "A deployment with this cluster name is already in progress.",
+        "ssh_access_required": "This distribution needs SSH access to the Proxmox nodes to upload its cloud-init files. Enable SSH on the connection, or choose Talos.",
+        "CONNECTION_LICENSE_EXCLUDED": "This Proxmox connection is outside the license: nothing can be created on it.",
+        "unavailable": "The orchestrator could not be reached.",
+        "invalid_request": "The request was refused: {message}",
+        "generic": "The deployment could not be started.",
+        "cidrInvalid": "{cidr} is not a valid range (expected form: 10.244.0.0/16).",
+        "cidrOverlapNodes": "The range {cidr} overlaps the network of the nodes ({nodes}). Choose another range.",
+        "cidrOverlapEach": "The pod and service ranges overlap."
+      }
     }
   }
 }

@@ -16615,7 +16615,10 @@
       "leastPrivilegeHint": "최소 권한 컨텍스트를 사용하세요. 토큰과 클라이언트 인증서는 암호화되어 저장됩니다."
     },
     "delete": {
-      "confirm": "ProxCenter에서 이 클러스터를 제거할까요? 클러스터 자체는 변경되지 않습니다."
+      "confirm": "ProxCenter에서 이 클러스터를 제거할까요? 클러스터 자체는 변경되지 않습니다.",
+      "destroyNodes": "{count, plural, =0 {Proxmox의 노드 VM도 삭제} other {Proxmox의 노드 VM #개도 삭제}}",
+      "destroyNodesWarn": "Proxmox에서 클러스터 VM과 디스크가 영구적으로 삭제됩니다. 되돌릴 수 없습니다.",
+      "destroyFailed": "일부 노드 VM을 삭제하지 못해 클러스터를 유지했습니다. 노드를 확인한 후 다시 시도하세요."
     },
     "explore": "클러스터 탐색",
     "explorer": {
@@ -16951,6 +16954,129 @@
       },
       "rolloutRestart": "리비전 {revision}: 파드 재시작됨",
       "rolloutConfig": "리비전 {revision}: 파드 설정 변경됨, 이미지 동일"
+    },
+    "provision": {
+      "title": "Kubernetes 클러스터 배포",
+      "deployButton": "클러스터 배포",
+      "steps": {
+        "target": "대상",
+        "distro": "배포판",
+        "topology": "토폴로지",
+        "network": "네트워크",
+        "review": "검토",
+        "progress": "진행 상황"
+      },
+      "target": {
+        "clusterName": "클러스터 이름",
+        "clusterNameHelp": "VM 이름과 호스트 이름의 접두사로 사용됩니다",
+        "connection": "연결",
+        "node": "노드",
+        "imageDatastore": "이미지 데이터스토어",
+        "vmDatastore": "VM 데이터스토어",
+        "noImageDatastore": "이 노드에는 이미지 가져오기를 지원하는 데이터스토어가 없습니다",
+        "noVmDatastore": "이 노드에는 VM 디스크를 지원하는 데이터스토어가 없습니다",
+        "bridge": "네트워크 브리지",
+        "noBridges": "이 노드에서 사용할 수 있는 네트워크 브리지가 없습니다",
+        "vlan": "VLAN 태그",
+        "vlanPlaceholder": "없음"
+      },
+      "distro": {
+        "select": "이 클러스터의 Kubernetes 배포판을 선택하세요",
+        "talos": "Talos Linux",
+        "talosDesc": "Kubernetes 실행을 위해 만들어진 불변형 API 관리 Linux",
+        "cni": "Flannel CNI",
+        "talosVersion": "Talos 버전",
+        "kubernetesVersion": "Kubernetes 버전",
+        "k3s": "k3s",
+        "k3sDesc": "Ubuntu LTS에 설치되는 경량 인증 Kubernetes",
+        "k3sVersion": "k3s 버전",
+        "rke2": "RKE2",
+        "rke2Desc": "CNCF 인증, 보안 중심(CIS/FIPS). 엔터프라이즈 및 규제 환경용.",
+        "rke2Version": "RKE2 버전",
+        "osImageUrl": "Ubuntu 이미지 URL",
+        "osImageChecksum": "이미지 체크섬(SHA-256)",
+        "snippetDatastore": "스니펫 데이터스토어",
+        "snippetDatastoreHelp": "Proxmox Snippets 콘텐츠 유형이 활성화된 데이터스토어로, cloud-init 구성을 전달하는 데 사용됩니다",
+        "noSnippetDatastore": "이 노드에는 Snippets 콘텐츠 유형이 활성화된 데이터스토어가 없습니다. k3s를 배포하려면 데이터스토어에서 Snippets를 활성화하세요(데이터센터 > 스토리지).",
+        "k3sHaNote": "생성된 kubeconfig와 노드 조인 주소는 첫 번째 컨트롤 플레인 노드를 가리킵니다. 서버가 3대이면 etcd는 고가용성이지만 API 엔드포인트는 그렇지 않습니다. 첫 번째 서버가 중단되면 다운로드한 kubeconfig가 작동하지 않습니다.",
+        "rke2HaNote": "API 엔드포인트는 첫 번째 서버 노드입니다. etcd는 고가용성이며, 이 버전에서는 API 엔드포인트가 하나입니다(가상 IP 예정).",
+        "kubeadm": "바닐라(kubeadm)",
+        "kubeadmDesc": "벤더 계층이 없는 업스트림 Kubernetes. kube-vip를 통한 고가용성 API 엔드포인트와 선택 가능한 CNI.",
+        "kubeadmVersion": "Kubernetes 버전",
+        "kubeadmChip": "Calico / Cilium",
+        "cniSelect": "컨테이너 네트워크(CNI)",
+        "podCidr": "파드 네트워크 CIDR",
+        "kubeadmHaNote": "kubeadm은 컨트롤 플레인 가상 IP(kube-vip, ARP 모드)로 사용할 노드 서브넷의 전용 여유 IP가 필요합니다. 네트워크 단계에서 입력합니다. 컨트롤 플레인이 3대 또는 5대이면 etcd와 API 엔드포인트 모두 고가용성입니다."
+      },
+      "topology": {
+        "cpCount": "컨트롤 플레인 노드",
+        "cpSizing": "컨트롤 플레인 크기",
+        "cores": "코어",
+        "memory": "메모리",
+        "disk": "디스크",
+        "workerCount": "워커 노드",
+        "workerSizing": "워커 크기"
+      },
+      "network": {
+        "subnetPrefix": "서브넷 접두사",
+        "gateway": "게이트웨이",
+        "dns": "DNS 서버",
+        "dnsHelp": "쉼표 또는 공백으로 구분한 DNS 서버 주소 목록",
+        "controlPlaneNodes": "컨트롤 플레인 노드",
+        "workerNodes": "워커 노드",
+        "ip": "IP 주소",
+        "vmid": "VM ID",
+        "vip": "컨트롤 플레인 VIP",
+        "vipHelp": "노드와 같은 서브넷에 있는 사용되지 않는 여유 IP. kube-vip가 모든 컨트롤 플레인 앞에서 이 IP를 ARP로 알리며, kubeconfig는 이 IP를 대상으로 합니다.",
+        "podCidr": "파드 네트워크",
+        "serviceCidr": "서비스 네트워크",
+        "cidrHelp": "클러스터가 내부적으로 사용하는 주소 범위입니다. 서로 겹치거나 노드 네트워크와 겹치면 안 됩니다."
+      },
+      "review": {
+        "summary": "배포하기 전에 클러스터 구성을 검토하세요",
+        "deployNow": "지금 배포",
+        "deployFailed": "배포 실패",
+        "nodes": "컨트롤 플레인 노드 {cp}개, 워커 {workers}개"
+      },
+      "progress": {
+        "noRun": "표시할 프로비저닝 실행이 없습니다",
+        "phase": {
+          "queued": "대기 중",
+          "initializing": "인프라 초기화 중",
+          "applying": "구성 적용 중",
+          "bootstrapping": "클러스터 부트스트랩 중",
+          "ready": "클러스터 준비 완료",
+          "failed": "실패"
+        },
+        "steps": {
+          "init": "초기화",
+          "apply": "VM 생성",
+          "bootstrap": "클러스터 부트스트랩",
+          "register": "등록",
+          "ready": "준비 완료"
+        },
+        "failedTitle": "프로비저닝 실패",
+        "registering": "클러스터 등록 중...",
+        "registerFailed": "클러스터를 등록하지 못했습니다",
+        "registered": "클러스터 등록됨",
+        "downloadKubeconfig": "kubeconfig 다운로드",
+        "openCluster": "클러스터 열기",
+        "showLogs": "로그 표시",
+        "hideLogs": "로그 숨기기",
+        "waitingForLogs": "로그를 기다리는 중..."
+      },
+      "error": {
+        "connection_busy": "이 Proxmox 클러스터에서 다른 Kubernetes 배포가 진행 중입니다. 완료될 때까지 기다리세요.",
+        "cluster_name_active": "이 클러스터 이름으로 이미 배포가 진행 중입니다.",
+        "ssh_access_required": "이 배포판은 cloud-init 파일을 업로드하기 위해 Proxmox 노드에 대한 SSH 접근이 필요합니다. 연결에서 SSH를 활성화하거나 Talos를 선택하세요.",
+        "CONNECTION_LICENSE_EXCLUDED": "이 Proxmox 연결은 라이선스 범위 밖에 있어 아무것도 생성할 수 없습니다.",
+        "unavailable": "오케스트레이터에 연결할 수 없습니다.",
+        "invalid_request": "요청이 거부되었습니다: {message}",
+        "generic": "배포를 시작할 수 없습니다.",
+        "cidrInvalid": "{cidr}은(는) 유효한 범위가 아닙니다(예: 10.244.0.0/16).",
+        "cidrOverlapNodes": "범위 {cidr}이(가) 노드 네트워크({nodes})와 겹칩니다. 다른 범위를 선택하세요.",
+        "cidrOverlapEach": "파드와 서비스 범위가 겹칩니다."
+      }
     }
   }
 }

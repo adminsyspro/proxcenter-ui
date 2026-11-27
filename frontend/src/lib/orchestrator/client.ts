@@ -22,10 +22,12 @@ const ORCHESTRATOR_API_KEY = process.env.ORCHESTRATOR_API_KEY || ''
 // segmentation (/microseg/*, whose engine and run state live on the leader)
 // and the firewall log forwarding that feeds it (/logfwd/*, whose receiver
 // and installation runs live on the leader) read or act on state that only
-// the leader holds. Everything else stays on the local orchestrator
-// (ORCHESTRATOR_URL).
+// the leader holds. Kubernetes provisioning (/k8s/*) goes there too: the
+// kubeconfig of a finished run is kept in the memory of the orchestrator that
+// ran it, so the start of a run and the reads that follow must reach the same
+// one. Everything else stays on the local orchestrator (ORCHESTRATOR_URL).
 function orchestratorBaseUrlForPath(path: string): string {
-  return /^\/(metrics|drs|availability|gpu|microseg|logfwd)(\/|$|\?)/.test(path) ? ORCHESTRATOR_LEADER_URL : ORCHESTRATOR_URL
+  return /^\/(metrics|drs|availability|gpu|microseg|logfwd|k8s)(\/|$|\?)/.test(path) ? ORCHESTRATOR_LEADER_URL : ORCHESTRATOR_URL
 }
 
 export interface OrchestratorRequestOptions {

@@ -16615,7 +16615,10 @@
       "leastPrivilegeHint": "请使用最小权限上下文。Token 和客户端证书将被加密存储。"
     },
     "delete": {
-      "confirm": "从 ProxCenter 移除此集群？集群本身不受影响。"
+      "confirm": "从 ProxCenter 移除此集群？集群本身不受影响。",
+      "destroyNodes": "{count, plural, =0 {同时销毁 Proxmox 上的节点 VM} other {同时销毁 Proxmox 上的 # 个节点 VM}}",
+      "destroyNodesWarn": "这将永久删除该集群在 Proxmox 上的虚拟机及其磁盘，无法撤销。",
+      "destroyFailed": "部分节点虚拟机无法销毁；集群已保留。请检查节点后重试。"
     },
     "explore": "探索集群",
     "explorer": {
@@ -16951,6 +16954,129 @@
       },
       "rolloutRestart": "修订版本 {revision}：已重启 Pod",
       "rolloutConfig": "修订版本 {revision}：Pod 设置已更改，镜像相同"
+    },
+    "provision": {
+      "title": "部署 Kubernetes 集群",
+      "deployButton": "部署集群",
+      "steps": {
+        "target": "目标",
+        "distro": "发行版",
+        "topology": "拓扑",
+        "network": "网络",
+        "review": "确认",
+        "progress": "进度"
+      },
+      "target": {
+        "clusterName": "集群名称",
+        "clusterNameHelp": "将用作虚拟机名称和主机名的前缀",
+        "connection": "连接",
+        "node": "节点",
+        "imageDatastore": "镜像数据存储",
+        "vmDatastore": "虚拟机数据存储",
+        "noImageDatastore": "该节点上没有支持镜像导入的数据存储",
+        "noVmDatastore": "该节点上没有支持虚拟机磁盘的数据存储",
+        "bridge": "网络桥接",
+        "noBridges": "该节点上没有可用的网络桥接",
+        "vlan": "VLAN 标签",
+        "vlanPlaceholder": "无"
+      },
+      "distro": {
+        "select": "选择此集群的 Kubernetes 发行版",
+        "talos": "Talos Linux",
+        "talosDesc": "为运行 Kubernetes 而构建的不可变、API 管理的 Linux 系统",
+        "cni": "Flannel CNI",
+        "talosVersion": "Talos 版本",
+        "kubernetesVersion": "Kubernetes 版本",
+        "k3s": "k3s",
+        "k3sDesc": "轻量级认证 Kubernetes 发行版，安装在 Ubuntu LTS 上",
+        "k3sVersion": "k3s 版本",
+        "rke2": "RKE2",
+        "rke2Desc": "CNCF 认证，注重安全（CIS/FIPS）。适用于企业和受监管环境。",
+        "rke2Version": "RKE2 版本",
+        "osImageUrl": "Ubuntu 镜像 URL",
+        "osImageChecksum": "镜像校验和 (SHA-256)",
+        "snippetDatastore": "Snippets 数据存储",
+        "snippetDatastoreHelp": "已启用 Proxmox Snippets 内容类型的数据存储，用于下发 cloud-init 配置",
+        "noSnippetDatastore": "此节点上没有启用 Snippets 内容类型的数据存储。请在 Proxmox（数据中心 > 存储）中为某个数据存储启用 Snippets 后再部署 k3s。",
+        "k3sHaNote": "生成的 kubeconfig 和节点加入地址都指向第一个控制平面节点。使用 3 台服务器时 etcd 具备高可用性，但 API 端点不具备：第一台服务器宕机后，下载的 kubeconfig 将无法使用。",
+        "rke2HaNote": "API 端点为第一个服务器节点。本版本中 etcd 高可用，但 API 端点唯一（虚拟 IP 支持已在计划中）。",
+        "kubeadm": "原生（kubeadm）",
+        "kubeadmDesc": "上游原生 Kubernetes，不含厂商定制层。通过 kube-vip 实现高可用 API 端点，CNI 可选。",
+        "kubeadmVersion": "Kubernetes 版本",
+        "kubeadmChip": "Calico / Cilium",
+        "cniSelect": "容器网络（CNI）",
+        "podCidr": "Pod 网络 CIDR",
+        "kubeadmHaNote": "kubeadm 需要在节点子网中预留一个专用空闲 IP，作为控制平面的虚拟 IP（kube-vip，ARP 模式），将在网络步骤中填写。使用 3 或 5 个控制平面时，etcd 和 API 端点均具备高可用性。"
+      },
+      "topology": {
+        "cpCount": "控制平面节点",
+        "cpSizing": "控制平面规格",
+        "cores": "核心数",
+        "memory": "内存",
+        "disk": "磁盘",
+        "workerCount": "工作节点数",
+        "workerSizing": "工作节点规格"
+      },
+      "network": {
+        "subnetPrefix": "子网前缀",
+        "gateway": "网关",
+        "dns": "DNS 服务器",
+        "dnsHelp": "以逗号或空格分隔的 DNS 服务器地址列表",
+        "controlPlaneNodes": "控制平面节点",
+        "workerNodes": "工作节点",
+        "ip": "IP 地址",
+        "vmid": "VM ID",
+        "vip": "控制平面 VIP",
+        "vipHelp": "与节点同处一个子网内的空闲未占用 IP。kube-vip 通过 ARP 在所有控制平面前公告该 IP；kubeconfig 指向此 IP。",
+        "podCidr": "Pod 网络",
+        "serviceCidr": "Service 网络",
+        "cidrHelp": "集群内部使用的地址范围。它们彼此之间以及与节点网络之间都不能重叠。"
+      },
+      "review": {
+        "summary": "部署前请检查集群配置",
+        "deployNow": "立即部署",
+        "deployFailed": "部署失败",
+        "nodes": "{cp} 个控制平面节点，{workers} 个工作节点"
+      },
+      "progress": {
+        "noRun": "没有可显示的部署任务",
+        "phase": {
+          "queued": "排队中",
+          "initializing": "正在初始化基础设施",
+          "applying": "正在应用配置",
+          "bootstrapping": "正在引导集群",
+          "ready": "集群就绪",
+          "failed": "失败"
+        },
+        "steps": {
+          "init": "初始化",
+          "apply": "配置虚拟机",
+          "bootstrap": "正在引导集群",
+          "register": "注册中",
+          "ready": "就绪"
+        },
+        "failedTitle": "部署失败",
+        "registering": "正在注册集群...",
+        "registerFailed": "集群注册失败",
+        "registered": "集群已注册",
+        "downloadKubeconfig": "下载 kubeconfig",
+        "openCluster": "打开集群",
+        "showLogs": "显示日志",
+        "hideLogs": "隐藏日志",
+        "waitingForLogs": "等待日志..."
+      },
+      "error": {
+        "connection_busy": "此 Proxmox 集群上已有一个 Kubernetes 部署正在进行。请等待其完成。",
+        "cluster_name_active": "已有使用此集群名称的部署正在进行。",
+        "ssh_access_required": "此发行版需要通过 SSH 访问 Proxmox 节点以上传 cloud-init 文件。请在连接上启用 SSH，或选择 Talos。",
+        "CONNECTION_LICENSE_EXCLUDED": "此 Proxmox 连接不在许可证范围内：无法在其上创建任何内容。",
+        "unavailable": "无法连接编排器。",
+        "invalid_request": "请求被拒绝：{message}",
+        "generic": "无法启动部署。",
+        "cidrInvalid": "{cidr} 不是有效的范围（应为 10.244.0.0/16 的形式）。",
+        "cidrOverlapNodes": "范围 {cidr} 与节点网络（{nodes}）重叠。请选择其他范围。",
+        "cidrOverlapEach": "Pod 和 Service 的范围重叠。"
+      }
     }
   }
 }

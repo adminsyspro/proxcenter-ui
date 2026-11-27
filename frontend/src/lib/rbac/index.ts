@@ -597,6 +597,7 @@ export const PERMISSIONS = {
   // Kubernetes
   K8S_VIEW: "k8s.view",
   K8S_MANAGE: "k8s.manage",
+  K8S_PROVISION: "k8s.provision",
 
   // Admin
   ADMIN_USERS: "admin.users",

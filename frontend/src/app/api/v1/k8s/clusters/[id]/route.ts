@@ -9,6 +9,8 @@ import {
   getClusterWithCredential, replaceCredential, updateMeta, persistHealth, deleteCluster, deleteClusterNodes,
 } from '@/lib/k8s/repository'
 import { fetchHealth, invalidateClient } from '@/lib/k8s/orchestrator'
+import { destroyClusterNodes } from '@/lib/k8s/server/destroyClusterNodes'
+import { requireK8sProvision } from '@/lib/k8s/requireK8sProvision'
 import { audit } from '@/lib/audit'
 import { withAudit } from '@/lib/audit/withAudit'
 
@@ -60,7 +62,7 @@ async function handlePatch(req: Request, ctx: Ctx) {
   return NextResponse.json({ ok: true }, { status: 200 })
 }
 
-async function handleDelete(_req: Request, ctx: Ctx) {
+async function handleDelete(req: Request, ctx: Ctx) {
   const denied = await requireK8sPermission(PERMISSIONS.K8S_MANAGE); if (denied) return denied
   const tenant = await resolveStrictTenant(); if (!tenant.ok) return tenant.response
   const { id } = await ctx.params
@@ -68,12 +70,27 @@ async function handleDelete(_req: Request, ctx: Ctx) {
   const existing = await getClusterWithCredential(tenant.tenantId, id)
   if (!existing) return NextResponse.json({ error: 'Cluster not found' }, { status: 404 })
 
+  // ?destroyNodes=true also destroys the Proxmox VMs of a cluster ProxCenter
+  // deployed, before removing the registry entry. It asks for the permission
+  // that created them; an imported cluster has no such VMs and ignores it.
+  const destroyNodes = new URL(req.url).searchParams.get('destroyNodes') === 'true'
+  const destroyingVms = destroyNodes && existing.row.source === 'deployed'
+  if (destroyingVms) {
+    const refused = await requireK8sProvision(); if (refused) return refused
+    const outcome = await destroyClusterNodes(tenant.tenantId, id)
+    if (!outcome.allOk) {
+      // The cluster row and its node mapping stay, so the destroy can be retried.
+      await audit({ action: 'delete', category: 'k8s', resourceType: 'kubernetesCluster', resourceId: id, resourceName: existing.row.name, status: 'failure', details: { error: 'node destruction failed', results: outcome.results } })
+      return NextResponse.json({ error: 'node destruction failed', results: outcome.results }, { status: 409 })
+    }
+  }
+
   // Always drop the node-mapping rows: kubernetes_cluster_nodes has no FK
   // cascade from the cluster row, so skipping this orphans them.
   await deleteClusterNodes(id)
   await deleteCluster(tenant.tenantId, id)
   await invalidateClient(id)
-  await audit({ action: 'delete', category: 'k8s', resourceType: 'kubernetesCluster', resourceId: id, resourceName: existing.row.name, status: 'success' })
+  await audit({ action: 'delete', category: 'k8s', resourceType: 'kubernetesCluster', resourceId: id, resourceName: existing.row.name, status: 'success', details: { destroyedNodes: destroyingVms } })
   return NextResponse.json({ ok: true }, { status: 200 })
 }
 

@@ -104,6 +104,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   // Kubernetes
   { id: "k8s.view", name: "k8s.view", category: "k8s", description: "View Kubernetes clusters" },
   { id: "k8s.manage", name: "k8s.manage", category: "k8s", description: "Manage Kubernetes clusters", isDangerous: true },
+  { id: "k8s.provision", name: "k8s.provision", category: "k8s", description: "Deploy Kubernetes clusters onto Proxmox and destroy their VMs", isDangerous: true },
 
   // SDN / VNet
   { id: "sdn.vnet.view", name: "sdn.vnet.view", category: "sdn", description: "List and view VNets in own vDCs" },
@@ -273,6 +274,6 @@ export const ROLES: RoleSeed[] = [
     name: "Kubernetes Operator",
     description: "Manage Kubernetes clusters",
     color: "#f59e0b",
-    permissions: ["k8s.view", "k8s.manage"],
+    permissions: ["k8s.view", "k8s.manage", "k8s.provision"],
   },
 ]

@@ -6,6 +6,6 @@ describe('roleCatalogue k8s roles', () => {
     const v = ROLES.find(r => r.id === 'role_k8s_viewer')
     const o = ROLES.find(r => r.id === 'role_k8s_operator')
     expect(v?.permissions).toEqual(['k8s.view'])
-    expect(o?.permissions).toEqual(['k8s.view', 'k8s.manage'])
+    expect(o?.permissions).toEqual(['k8s.view', 'k8s.manage', 'k8s.provision'])
   })
 })

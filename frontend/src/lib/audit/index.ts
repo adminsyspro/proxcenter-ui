@@ -83,6 +83,7 @@ export type AuditAction =
   | "logs"
   | "enable"
   | "disable"
+  | "provision"
   | "cordon"
   | "drain"
   | "scale"

@@ -16629,7 +16629,10 @@
       "leastPrivilegeHint": "Utilisez un contexte à privilèges minimaux. Les tokens et certificats clients sont stockés de manière chiffrée."
     },
     "delete": {
-      "confirm": "Retirer ce cluster de ProxCenter? Le cluster lui-même n'est pas affecté."
+      "confirm": "Retirer ce cluster de ProxCenter? Le cluster lui-même n'est pas affecté.",
+      "destroyNodes": "{count, plural, =0 {Détruire aussi les VM des nœuds sur Proxmox} one {Détruire aussi la VM du nœud sur Proxmox} other {Détruire aussi les # VM des nœuds sur Proxmox}}",
+      "destroyNodesWarn": "Ceci supprime définitivement les VM du cluster et leurs disques sur Proxmox. Action irréversible.",
+      "destroyFailed": "Certaines VM de nœuds n'ont pas pu être détruites ; le cluster a été conservé. Vérifiez les nœuds et réessayez."
     },
     "explore": "Explorer le cluster",
     "explorer": {
@@ -16965,6 +16968,129 @@
       },
       "rolloutRestart": "Révision {revision} : pods redémarrés",
       "rolloutConfig": "Révision {revision} : réglages des pods modifiés, mêmes images"
+    },
+    "provision": {
+      "title": "Déployer un cluster Kubernetes",
+      "deployButton": "Déployer un cluster",
+      "steps": {
+        "target": "Cible",
+        "distro": "Distribution",
+        "topology": "Topologie",
+        "network": "Réseau",
+        "review": "Vérification",
+        "progress": "Progression"
+      },
+      "target": {
+        "clusterName": "Nom du cluster",
+        "clusterNameHelp": "Utilisé comme préfixe pour les noms de VM et les noms d'hôte",
+        "connection": "Connexion",
+        "node": "Nœud",
+        "imageDatastore": "Datastore image",
+        "vmDatastore": "Datastore VM",
+        "noImageDatastore": "Aucun datastore ne prend en charge l'import d'image sur ce nœud",
+        "noVmDatastore": "Aucun datastore ne prend en charge les disques de VM sur ce nœud",
+        "bridge": "Bridge réseau",
+        "noBridges": "Aucun bridge réseau disponible sur ce nœud",
+        "vlan": "Tag VLAN",
+        "vlanPlaceholder": "Aucun"
+      },
+      "distro": {
+        "select": "Choisissez la distribution Kubernetes pour ce cluster",
+        "talos": "Talos Linux",
+        "talosDesc": "Linux immuable, géré par API, conçu pour exécuter Kubernetes",
+        "cni": "Flannel CNI",
+        "talosVersion": "Version de Talos",
+        "kubernetesVersion": "Version de Kubernetes",
+        "k3s": "k3s",
+        "k3sDesc": "Kubernetes certifié et léger, installé sur Ubuntu LTS",
+        "k3sVersion": "Version de k3s",
+        "rke2": "RKE2",
+        "rke2Desc": "Certifié CNCF, orienté sécurité (CIS/FIPS). Environnements d'entreprise et régulés.",
+        "rke2Version": "Version de RKE2",
+        "osImageUrl": "URL de l'image Ubuntu",
+        "osImageChecksum": "Somme de contrôle de l'image (SHA-256)",
+        "snippetDatastore": "Datastore de snippets",
+        "snippetDatastoreHelp": "Datastore avec le type de contenu Snippets de Proxmox activé, utilisé pour livrer la configuration cloud-init",
+        "noSnippetDatastore": "Aucun datastore de ce noeud n'a le type de contenu Snippets activé. Activez Snippets sur un datastore (Datacenter > Stockage) pour déployer k3s.",
+        "k3sHaNote": "Le kubeconfig généré et l'adresse de jonction des noeuds pointent vers le premier noeud du plan de contrôle. Avec 3 serveurs, etcd est hautement disponible, mais pas le point d'accès API : si le premier serveur tombe, le kubeconfig téléchargé cesse de fonctionner.",
+        "rke2HaNote": "Le point d'accès API est le premier noeud serveur. etcd est hautement disponible, mais le point d'accès API est unique dans cette version (une IP virtuelle est prévue).",
+        "kubeadm": "Vanilla (kubeadm)",
+        "kubeadmDesc": "Kubernetes en amont, sans surcouche éditeur. Point d'accès API hautement disponible via kube-vip, CNI au choix.",
+        "kubeadmVersion": "Version de Kubernetes",
+        "kubeadmChip": "Calico / Cilium",
+        "cniSelect": "Réseau de conteneurs (CNI)",
+        "podCidr": "CIDR du réseau de pods",
+        "kubeadmHaNote": "kubeadm nécessite une IP libre dédiée dans le sous-réseau des noeuds comme IP virtuelle du plan de contrôle (kube-vip, mode ARP). Elle est saisie à l'étape Réseau. Avec 3 ou 5 plans de contrôle, etcd et le point d'accès API sont hautement disponibles."
+      },
+      "topology": {
+        "cpCount": "Nœuds du plan de contrôle",
+        "cpSizing": "Dimensionnement du plan de contrôle",
+        "cores": "Cœurs",
+        "memory": "Mémoire",
+        "disk": "Disque",
+        "workerCount": "Nœuds worker",
+        "workerSizing": "Dimensionnement des workers"
+      },
+      "network": {
+        "subnetPrefix": "Préfixe du sous-réseau",
+        "gateway": "Passerelle",
+        "dns": "Serveurs DNS",
+        "dnsHelp": "Liste d'adresses de serveurs DNS séparées par des virgules ou des espaces",
+        "controlPlaneNodes": "Nœuds du plan de contrôle",
+        "workerNodes": "Nœuds worker",
+        "ip": "Adresse IP",
+        "vmid": "ID de la VM",
+        "vip": "VIP du plan de contrôle",
+        "vipHelp": "Une IP libre et inutilisée dans le même sous-réseau que les noeuds. kube-vip l'annonce (ARP) devant tous les plans de contrôle ; le kubeconfig cible cette IP.",
+        "podCidr": "Réseau des pods",
+        "serviceCidr": "Réseau des services",
+        "cidrHelp": "Plages d'adresses utilisées à l'intérieur du cluster. Elles ne doivent se chevaucher ni entre elles ni avec le réseau des nœuds."
+      },
+      "review": {
+        "summary": "Vérifiez la configuration du cluster avant de déployer",
+        "deployNow": "Déployer maintenant",
+        "deployFailed": "Le déploiement a échoué",
+        "nodes": "{cp, plural, one {# nœud de plan de contrôle} other {# nœuds de plan de contrôle}}, {workers, plural, =0 {aucun worker} one {# worker} other {# workers}}"
+      },
+      "progress": {
+        "noRun": "Aucun déploiement à afficher",
+        "phase": {
+          "queued": "En attente",
+          "initializing": "Initialisation de l'infrastructure",
+          "applying": "Application de la configuration",
+          "bootstrapping": "Démarrage du cluster",
+          "ready": "Cluster prêt",
+          "failed": "Échec"
+        },
+        "steps": {
+          "init": "Initialisation",
+          "apply": "Provisionnement des VMs",
+          "bootstrap": "Démarrage du cluster",
+          "register": "Enregistrement",
+          "ready": "Prêt"
+        },
+        "failedTitle": "Le déploiement a échoué",
+        "registering": "Enregistrement du cluster...",
+        "registerFailed": "Échec de l'enregistrement du cluster",
+        "registered": "Cluster enregistré",
+        "downloadKubeconfig": "Télécharger le kubeconfig",
+        "openCluster": "Ouvrir le cluster",
+        "showLogs": "Afficher les logs",
+        "hideLogs": "Masquer les logs",
+        "waitingForLogs": "En attente des logs..."
+      },
+      "error": {
+        "connection_busy": "Un autre déploiement Kubernetes est en cours sur ce cluster Proxmox. Attendez qu'il se termine.",
+        "cluster_name_active": "Un déploiement portant ce nom de cluster est déjà en cours.",
+        "ssh_access_required": "Cette distribution a besoin d'un accès SSH aux nœuds Proxmox pour y déposer ses fichiers cloud-init. Activez SSH sur la connexion, ou choisissez Talos.",
+        "CONNECTION_LICENSE_EXCLUDED": "Cette connexion Proxmox est hors licence : rien ne peut y être créé.",
+        "unavailable": "L'orchestrateur est injoignable.",
+        "invalid_request": "La demande a été refusée : {message}",
+        "generic": "Le déploiement n'a pas pu démarrer.",
+        "cidrInvalid": "{cidr} n'est pas une plage valide (forme attendue : 10.244.0.0/16).",
+        "cidrOverlapNodes": "La plage {cidr} chevauche le réseau des nœuds ({nodes}). Choisissez une autre plage.",
+        "cidrOverlapEach": "Les plages des pods et des services se chevauchent."
+      }
     }
   }
 }

@@ -16615,7 +16615,10 @@
       "leastPrivilegeHint": "Use un contexto con los mínimos privilegios. Los tokens y certificados de cliente se guardan cifrados."
     },
     "delete": {
-      "confirm": "¿Quitar este clúster de ProxCenter? El clúster en sí no se modifica."
+      "confirm": "¿Quitar este clúster de ProxCenter? El clúster en sí no se modifica.",
+      "destroyNodes": "{count, plural, =0 {Destruir también las VM de los nodos en Proxmox} one {Destruir también la VM del nodo en Proxmox} other {Destruir también las # VM de los nodos en Proxmox}}",
+      "destroyNodesWarn": "Esto elimina de forma permanente las VM del clúster y sus discos en Proxmox. No se puede deshacer.",
+      "destroyFailed": "No se han podido destruir algunas VM de nodos; el clúster se ha conservado. Compruebe los nodos y vuelva a intentarlo."
     },
     "explore": "Explorar el clúster",
     "explorer": {
@@ -16951,6 +16954,129 @@
       },
       "rolloutRestart": "Revisión {revision}: pods reiniciados",
       "rolloutConfig": "Revisión {revision}: ajustes de los pods modificados, mismas imágenes"
+    },
+    "provision": {
+      "title": "Desplegar un clúster de Kubernetes",
+      "deployButton": "Desplegar clúster",
+      "steps": {
+        "target": "Destino",
+        "distro": "Distribución",
+        "topology": "Topología",
+        "network": "Red",
+        "review": "Revisión",
+        "progress": "Progreso"
+      },
+      "target": {
+        "clusterName": "Nombre del clúster",
+        "clusterNameHelp": "Se usa como prefijo de los nombres de las VM y de los hosts",
+        "connection": "Conexión",
+        "node": "Nodo",
+        "imageDatastore": "Almacén de imágenes",
+        "vmDatastore": "Almacén de las VM",
+        "noImageDatastore": "Ningún almacén de este nodo admite la importación de imágenes",
+        "noVmDatastore": "Ningún almacén de este nodo admite discos de VM",
+        "bridge": "Puente de red",
+        "noBridges": "No hay puentes de red disponibles en este nodo",
+        "vlan": "Etiqueta VLAN",
+        "vlanPlaceholder": "Ninguna"
+      },
+      "distro": {
+        "select": "Elija la distribución de Kubernetes de este clúster",
+        "talos": "Talos Linux",
+        "talosDesc": "Linux inmutable, administrado por API, creado para ejecutar Kubernetes",
+        "cni": "CNI Flannel",
+        "talosVersion": "Versión de Talos",
+        "kubernetesVersion": "Versión de Kubernetes",
+        "k3s": "k3s",
+        "k3sDesc": "Kubernetes certificado y ligero instalado sobre Ubuntu LTS",
+        "k3sVersion": "Versión de k3s",
+        "rke2": "RKE2",
+        "rke2Desc": "Certificado por la CNCF y centrado en la seguridad (CIS/FIPS). Entornos empresariales y regulados.",
+        "rke2Version": "Versión de RKE2",
+        "osImageUrl": "URL de la imagen de Ubuntu",
+        "osImageChecksum": "Suma de comprobación de la imagen (SHA-256)",
+        "snippetDatastore": "Almacén de snippets",
+        "snippetDatastoreHelp": "Almacén con el tipo de contenido Snippets de Proxmox activado, usado para entregar la configuración de cloud-init",
+        "noSnippetDatastore": "Ningún almacén de este nodo tiene activado el tipo de contenido Snippets. Active Snippets en un almacén (Centro de datos > Almacenamiento) para desplegar k3s.",
+        "k3sHaNote": "El kubeconfig generado y la dirección de unión de los nodos apuntan al primer nodo del plano de control. Con 3 servidores, etcd tiene alta disponibilidad, pero el punto de acceso de la API no: si el primer servidor cae, el kubeconfig descargado deja de funcionar.",
+        "rke2HaNote": "El punto de acceso de la API es el primer nodo servidor. etcd con alta disponibilidad, un único punto de acceso de la API en esta versión (está prevista una IP virtual).",
+        "kubeadm": "Vanilla (kubeadm)",
+        "kubeadmDesc": "Kubernetes original, sin capa de proveedor. Punto de acceso de la API con alta disponibilidad mediante kube-vip y el CNI que elija.",
+        "kubeadmVersion": "Versión de Kubernetes",
+        "kubeadmChip": "Calico / Cilium",
+        "cniSelect": "Red de contenedores (CNI)",
+        "podCidr": "CIDR de la red de pods",
+        "kubeadmHaNote": "kubeadm necesita una IP libre dedicada en la subred de los nodos como IP virtual del plano de control (kube-vip, modo ARP). La indicará en el paso Red. Con 3 o 5 planos de control, tanto etcd como el punto de acceso de la API tienen alta disponibilidad."
+      },
+      "topology": {
+        "cpCount": "Nodos del plano de control",
+        "cpSizing": "Tamaño del plano de control",
+        "cores": "Núcleos",
+        "memory": "Memoria",
+        "disk": "Disco",
+        "workerCount": "Nodos de trabajo",
+        "workerSizing": "Tamaño de los nodos de trabajo"
+      },
+      "network": {
+        "subnetPrefix": "Prefijo de subred",
+        "gateway": "Puerta de enlace",
+        "dns": "Servidores DNS",
+        "dnsHelp": "Lista de direcciones de servidores DNS separadas por comas o espacios",
+        "controlPlaneNodes": "Nodos del plano de control",
+        "workerNodes": "Nodos de trabajo",
+        "ip": "Dirección IP",
+        "vmid": "ID de VM",
+        "vip": "VIP del plano de control",
+        "vipHelp": "Una IP libre, sin usar, en la misma subred que los nodos. kube-vip la anuncia (ARP) delante de todos los planos de control; el kubeconfig apunta a esta IP.",
+        "podCidr": "Red de pods",
+        "serviceCidr": "Red de servicios",
+        "cidrHelp": "Rangos de direcciones que el clúster usa internamente. No deben solaparse entre sí ni con la red de los nodos."
+      },
+      "review": {
+        "summary": "Revise la configuración del clúster antes de desplegar",
+        "deployNow": "Desplegar ahora",
+        "deployFailed": "El despliegue ha fallado",
+        "nodes": "{cp, plural, one {# nodo del plano de control} other {# nodos del plano de control}}, {workers, plural, =0 {ningún nodo de trabajo} one {# nodo de trabajo} other {# nodos de trabajo}}"
+      },
+      "progress": {
+        "noRun": "No hay ninguna ejecución de aprovisionamiento que mostrar",
+        "phase": {
+          "queued": "En cola",
+          "initializing": "Inicializando la infraestructura",
+          "applying": "Aplicando la configuración",
+          "bootstrapping": "Arrancando el clúster",
+          "ready": "Clúster listo",
+          "failed": "Error"
+        },
+        "steps": {
+          "init": "Inicialización",
+          "apply": "Creación de las VM",
+          "bootstrap": "Arranque del clúster",
+          "register": "Registro",
+          "ready": "Listo"
+        },
+        "failedTitle": "El aprovisionamiento ha fallado",
+        "registering": "Registrando el clúster...",
+        "registerFailed": "No se ha podido registrar el clúster",
+        "registered": "Clúster registrado",
+        "downloadKubeconfig": "Descargar el kubeconfig",
+        "openCluster": "Abrir el clúster",
+        "showLogs": "Mostrar los registros",
+        "hideLogs": "Ocultar los registros",
+        "waitingForLogs": "Esperando los registros..."
+      },
+      "error": {
+        "connection_busy": "Ya hay otro despliegue de Kubernetes en curso en este clúster de Proxmox. Espere a que termine.",
+        "cluster_name_active": "Ya hay un despliegue en curso con este nombre de clúster.",
+        "ssh_access_required": "Esta distribución necesita acceso SSH a los nodos de Proxmox para subir sus archivos de cloud-init. Active SSH en la conexión o elija Talos.",
+        "CONNECTION_LICENSE_EXCLUDED": "Esta conexión de Proxmox está fuera de la licencia: no se puede crear nada en ella.",
+        "unavailable": "No se ha podido contactar con el orquestador.",
+        "invalid_request": "La solicitud ha sido rechazada: {message}",
+        "generic": "No se ha podido iniciar el despliegue.",
+        "cidrInvalid": "{cidr} no es un rango válido (forma esperada: 10.244.0.0/16).",
+        "cidrOverlapNodes": "El rango {cidr} se solapa con la red de los nodos ({nodes}). Elija otro rango.",
+        "cidrOverlapEach": "Los rangos de pods y de servicios se solapan."
+      }
     }
   }
 }

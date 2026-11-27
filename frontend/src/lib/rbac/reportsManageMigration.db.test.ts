@@ -47,8 +47,11 @@ async function rolesHolding(permissionId: string) {
 beforeEach(async () => {
   await truncate(['rbac_user_permissions', 'rbac_role_permissions', 'users'])
   await prismaTest.rbacRole.deleteMany({})
-  await prismaTest.rbacPermission.deleteMany({ where: { id: 'reports.manage' } })
-  for (const id of ['reports.view', 'alerts.manage', 'vm.view']) {
+  const ids = ['reports.view', 'alerts.manage', 'vm.view']
+  // Another file may have left a row with one of these names under another id
+  // (the test schema is shared); it would break the upsert on the unique name.
+  await prismaTest.rbacPermission.deleteMany({ where: { OR: [{ id: 'reports.manage' }, { name: 'reports.manage' }, { name: { in: ids }, id: { notIn: ids } }] } })
+  for (const id of ids) {
     await prismaTest.rbacPermission.upsert({ where: { id }, update: {}, create: { id, name: id, category: 'operations' } })
   }
   for (const id of ['writer', 'reader', 'other']) {

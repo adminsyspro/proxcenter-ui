@@ -39,6 +39,10 @@ const now = new Date()
 const TENANT = 'acme'
 
 async function seedCatalogue() {
+  // The test schema is shared: drop rows another file left under a catalogue
+  // name but another id, they would break the upsert on the unique name.
+  const ids = ALL_PERMISSIONS.map(p => p.id)
+  await prismaTest.rbacPermission.deleteMany({ where: { name: { in: ids }, id: { notIn: ids } } })
   for (const p of ALL_PERMISSIONS) {
     await prismaTest.rbacPermission.upsert({
       where: { id: p.id },

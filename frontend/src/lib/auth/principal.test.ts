@@ -58,6 +58,16 @@ describe('getPrincipal, session fallback (step 2)', () => {
     })
   })
 
+  it('carries the pending 2FA enrollment of the session onto the principal', async () => {
+    setHeaders(new Headers())
+    getServerSessionMock.mockResolvedValue({
+      user: { id: 'user-1', email: 'a@b.c', tenantId: 'tenant-x', mustEnroll2fa: true },
+    })
+    const result = await getPrincipal()
+    expect(result.ok).toBe(true)
+    expect(result.principal?.mustEnroll2fa).toBe(true)
+  })
+
   it('falls back to the provider (default) tenant when the session carries no tenantId', async () => {
     setHeaders(new Headers())
     getServerSessionMock.mockResolvedValue({ user: { id: 'user-1', email: 'a@b.c' } })

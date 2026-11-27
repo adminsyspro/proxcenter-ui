@@ -46,6 +46,12 @@ export type Principal = {
    * speak of, so it states `null` too, same as an unrestricted token.
    */
   connectionIds: string[] | null
+  /**
+   * Session principals only: the account still has to enroll in 2FA. Identity
+   * (tenant, audit) stays resolvable so the enrollment itself works; the
+   * permission checks refuse it (rbac/index.ts).
+   */
+  mustEnroll2fa?: boolean
 }
 
 export type PrincipalRejection = {
@@ -100,6 +106,7 @@ async function sessionPrincipal(): Promise<PrincipalResult> {
       // No token perimeter applies to a session caller: stated explicitly
       // as unrestricted rather than left to be inferred from absence.
       connectionIds: null,
+      ...(session.user.mustEnroll2fa ? { mustEnroll2fa: true } : {}),
     },
   }
 }

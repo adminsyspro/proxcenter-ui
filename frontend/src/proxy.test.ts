@@ -35,6 +35,8 @@ function apiRequest(path: string, init: { method?: string; headers?: Record<stri
   })
 }
 
+const UPLOAD_PATH = '/api/v1/connections/c1/nodes/n1/storage/local/upload'
+
 beforeEach(() => {
   vi.clearAllMocks()
   getTokenMock.mockResolvedValue(null)
@@ -348,17 +350,17 @@ describe('VIP redirect host exemptions', () => {
 })
 
 describe('gesture 1: unconditional x-pxc-* strip on /api/*', () => {
-  it('strips forged x-pxc-* headers on the storage upload bypass path', async () => {
+  it('strips forged x-pxc-* headers on the storage upload path', async () => {
+    getTokenMock.mockResolvedValue({ sub: 'u1' })
     const res = await proxy(
-      apiRequest('/api/v1/connections/c1/nodes/n1/storage/local/upload', {
+      apiRequest(UPLOAD_PATH, {
         method: 'POST',
-        headers: { 'x-pxc-entry': 'vms-list', 'x-pxc-path': '/api/v1/vms', 'x-pxc-method': 'GET' },
+        headers: { cookie: 'x', 'x-pxc-entry': 'vms-list', 'x-pxc-path': '/api/v1/vms', 'x-pxc-method': 'GET' },
       }),
     )
     // NextResponse.next({request}) encodes forwarded request headers. The
-    // override list must exist (proof the strip ran on the bypass path, a
-    // bare NextResponse.next() would forward the forged headers untouched)
-    // and must not carry any x-pxc-* name.
+    // override list must exist (a bare NextResponse.next() would forward the
+    // forged headers untouched) and must not carry any x-pxc-* name.
     const overridden = res.headers.get('x-middleware-override-headers')
     expect(overridden).not.toBeNull()
     expect(overridden).not.toContain('x-pxc-entry')
@@ -490,6 +492,47 @@ describe('cookie-authenticated behavior unchanged', () => {
       error: 'ENROLLMENT_REQUIRED',
       redirect: '/profile/2fa/enrollment',
     })
+  })
+})
+
+// GHSA-hh9f-5mj2-8jfp: the storage upload route used to return before the
+// session read, so nothing the proxy decides after it applied to that route.
+// It now goes through the same checks as every other API route.
+describe('storage upload route goes through the session checks', () => {
+  const ENROLLMENT_REQUIRED = { error: 'ENROLLMENT_REQUIRED', redirect: '/profile/2fa/enrollment' }
+
+  it('refuses the upload while 2FA enrollment is pending', async () => {
+    getTokenMock.mockResolvedValue({ sub: 'u1', mustEnroll2fa: true })
+    const res = await proxy(apiRequest(UPLOAD_PATH, { method: 'POST', headers: { cookie: 'x' } }))
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual(ENROLLMENT_REQUIRED)
+  })
+
+  it('answers 401 to an upload without a session', async () => {
+    const res = await proxy(apiRequest(UPLOAD_PATH, { method: 'POST' }))
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ error: 'Not authenticated' })
+  })
+
+  it('lets an enrolled session through to the upload route', async () => {
+    getTokenMock.mockResolvedValue({ sub: 'u1', mustEnroll2fa: false })
+    const res = await proxy(apiRequest(UPLOAD_PATH, { method: 'POST', headers: { cookie: 'x' } }))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-middleware-next')).toBe('1')
+  })
+
+  it.each([
+    ['a storage named "upload"', '/api/v1/connections/c1/storage/upload'],
+    ['a volume named "upload"', '/api/v1/connections/c1/nodes/n1/storage/local/content/upload'],
+    ['a node named "storage"', '/api/v1/connections/c1/guests/qemu/storage/100/snapshots/upload'],
+  ])('holds a path that only spells the upload shape to the same checks: %s', async (_label, path) => {
+    getTokenMock.mockResolvedValue({ sub: 'u1', mustEnroll2fa: true })
+    const pending = await proxy(apiRequest(path, { headers: { cookie: 'x' } }))
+    expect(pending.status).toBe(403)
+
+    getTokenMock.mockResolvedValue(null)
+    const anonymous = await proxy(apiRequest(path))
+    expect(anonymous.status).toBe(401)
   })
 })
 

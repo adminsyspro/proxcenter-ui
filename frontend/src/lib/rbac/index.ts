@@ -780,6 +780,19 @@ export async function holdsBroadPermission(
 }
 
 /**
+ * A session that still has to enroll in 2FA holds no permission. The proxy
+ * answers the same body before the route is reached; this is the same refusal
+ * for a request that got to a route anyway (GHSA-hh9f-5mj2-8jfp), and for a
+ * requirement set after the session cookie was issued.
+ */
+function enrollmentRequired(): NextResponse {
+  return NextResponse.json(
+    { error: "ENROLLMENT_REQUIRED", redirect: "/profile/2fa/enrollment" },
+    { status: 403 }
+  )
+}
+
+/**
  * Check if the current caller has a specific permission
  * Returns a 401/403 NextResponse if denied, or null if allowed
  *
@@ -806,6 +819,7 @@ export async function checkPermission(
   if (!principal?.userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
   }
+  if (principal.mustEnroll2fa) return enrollmentRequired()
 
   const userId = principal.userId
   const tenantId = principal.tenantId
@@ -860,6 +874,7 @@ export async function checkPermissions(
   if (!principal?.userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
   }
+  if (principal.mustEnroll2fa) return enrollmentRequired()
 
   const userId = principal.userId
   const tenantId = principal.tenantId

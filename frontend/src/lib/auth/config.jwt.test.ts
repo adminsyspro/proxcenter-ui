@@ -213,6 +213,23 @@ describe('events.signOut', () => {
   })
 })
 
+describe('session callback', () => {
+  const sessionCb = (authOptions.callbacks as any).session
+  const token = { id: 'u1', email: 'a@b.test', name: 'A', role: 'admin', authProvider: 'credentials', tenantId: 't1' }
+
+  it('exposes a pending 2FA enrollment on the session, so the permission checks can refuse it', async () => {
+    const session = await sessionCb({ session: {}, token: { ...token, mustEnroll2fa: true } })
+
+    expect(session.user).toMatchObject({ id: 'u1', tenantId: 't1', mustEnroll2fa: true })
+  })
+
+  it('leaves the session without the flag once the enrollment is done', async () => {
+    const session = await sessionCb({ session: {}, token: { ...token, mustEnroll2fa: false } })
+
+    expect(session.user.mustEnroll2fa).toBeUndefined()
+  })
+})
+
 describe('session config', () => {
   afterEach(() => {
     delete process.env.SESSION_ABSOLUTE_TIMEOUT

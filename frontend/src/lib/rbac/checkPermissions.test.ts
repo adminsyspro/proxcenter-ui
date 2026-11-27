@@ -68,6 +68,43 @@ beforeEach(() => {
   m.getTenantConnectionIds.mockResolvedValue(new Set(['connA']))
 })
 
+// GHSA-hh9f-5mj2-8jfp: the 2FA enrollment requirement used to be enforced by
+// the proxy alone. A session that still has to enroll now holds no permission
+// here either, so a route keeps refusing it however the request reached it.
+describe('a session with a pending 2FA enrollment', () => {
+  const pending = { ok: true, principal: { kind: 'session', userId: 'u1', tenantId: 't1', connectionIds: null, mustEnroll2fa: true } }
+  const ENROLLMENT_REQUIRED = { status: 403, error: 'ENROLLMENT_REQUIRED', redirect: '/profile/2fa/enrollment' }
+
+  it('is refused by checkPermission even when the user holds the permission', async () => {
+    m.getPrincipal.mockResolvedValue(pending)
+    grantRole(['storage.upload'])
+
+    expect(await errorOf(await checkPermission('storage.upload', 'storage', 'conn-1:local'))).toEqual(ENROLLMENT_REQUIRED)
+  })
+
+  it('is refused by checkPermission even for a super admin', async () => {
+    m.getPrincipal.mockResolvedValue(pending)
+    m.prisma.rbacUserRole.findFirst.mockResolvedValue({ id: 'sa' })
+
+    expect(await errorOf(await checkPermission('vm.view'))).toEqual(ENROLLMENT_REQUIRED)
+  })
+
+  it('is refused by checkPermissions before any grant is read', async () => {
+    m.getPrincipal.mockResolvedValue(pending)
+    grantRole(['vm.view', 'vm.config'])
+
+    expect(await errorOf(await checkPermissions(['vm.view', 'vm.config'], 'vm', VM))).toEqual(ENROLLMENT_REQUIRED)
+    expect(m.prisma.rbacUserRole.findMany).not.toHaveBeenCalled()
+  })
+
+  it('control: the same user passes once the enrollment is done', async () => {
+    m.getPrincipal.mockResolvedValue({ ok: true, principal: { ...pending.principal, mustEnroll2fa: false } })
+    grantRole(['storage.upload'])
+
+    expect(await checkPermission('storage.upload', 'storage', 'conn-1:local')).toBeNull()
+  })
+})
+
 describe('expandPermissionHierarchy', () => {
   it('adds every child of a granted parent, and nothing else', () => {
     expect([...expandPermissionHierarchy(new Set(['vm.config', 'vm.view']))].sort((a, b) => a.localeCompare(b))).toEqual([

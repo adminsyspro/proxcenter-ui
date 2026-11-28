@@ -52,11 +52,14 @@ export async function runDetached(connId: string, target: SshTarget, argv: strin
   return { started: true, logPath: logPathOf(tag) }
 }
 
-/** The account's log for `tag`, or null when it cannot be read. */
+/** The account's log for `tag`; null when there is none or it cannot be read. */
 export async function readDetachedLog(connId: string, target: SshTarget, tag: string): Promise<string | null> {
   if (!TAG_RE.test(tag)) return null
-  const result = await executeSSH(connId, target, `tail -n 200 "${logPathOf(tag)}" 2>/dev/null`, 30_000, { readOnly: true, asAccount: true })
-  return result.success ? (result.output ?? '') : null
+  const path = logPathOf(tag)
+  const result = await executeSSH(connId, target, `if [ -f "${path}" ]; then tail -n 200 "${path}"; else echo PXC_NO_LOG; fi`, 30_000, { readOnly: true, asAccount: true })
+  if (!result.success) return null
+  const output = result.output ?? ''
+  return output.trim() === 'PXC_NO_LOG' ? null : output
 }
 
 /** The exit code a finished detached command wrote, null while it runs. */

@@ -7,7 +7,7 @@ vi.mock('@/lib/proxmox/client', () => ({ pveFetch: vi.fn<(...args: any[]) => Pro
 import { executeSSH } from '@/lib/ssh/exec'
 import { pveFetch } from '@/lib/proxmox/client'
 import { FRONTEND_SUDO_RULES, resolveSudo, sudoSegments, verifySudo } from '@/lib/ssh/sudo'
-import { followDetachedTask, runDetached, sudoAllows } from './detachedPveceph'
+import { followDetachedTask, readDetachedLog, runDetached, sudoAllows } from './detachedPveceph'
 import { osdCreateArgv } from './pvecephCommands'
 
 /*
@@ -114,5 +114,15 @@ describe('followDetachedTask', () => {
     pveMock.mockResolvedValue([])
     sshMock.mockResolvedValue({ success: true, output: 'still running\n' })
     expect(await followDetachedTask(conn, 'c1', 'pve1', 'pve1', { ...opts, budgetMs: 0 })).toEqual({ pending: true })
+  })
+})
+
+describe('readDetachedLog', () => {
+  it('tells a missing log from an empty one', async () => {
+    sshMock.mockResolvedValue({ success: true, output: 'PXC_NO_LOG\n' })
+    expect(await readDetachedLog('c1', 'pve1', 'ceph-install')).toBeNull()
+    sshMock.mockResolvedValue({ success: true, output: '' })
+    expect(await readDetachedLog('c1', 'pve1', 'ceph-install')).toBe('')
+    expect(sshMock.mock.calls[0][2]).toContain('if [ -f "$HOME/.cache/proxcenter/ceph-install.log" ]')
   })
 })

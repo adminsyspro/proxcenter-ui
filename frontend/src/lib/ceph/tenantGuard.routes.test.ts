@@ -118,6 +118,10 @@ const CASES: Case[] = [
   { name: "nodes/ceph/osd create POST", file: "connections/[id]/nodes/[node]/ceph/osd/route.ts", load: () => import("@/app/api/v1/connections/[id]/nodes/[node]/ceph/osd/route"), method: "POST", params: N, body: { dev: "/dev/sdb" } },
   { name: "nodes/ceph/osd DELETE", file: "connections/[id]/nodes/[node]/ceph/osd/[osdid]/route.ts", load: () => import("@/app/api/v1/connections/[id]/nodes/[node]/ceph/osd/[osdid]/route"), method: "DELETE", params: O, searchParams: { cleanup: "1" } },
   { name: "nodes/ceph/disks GET", file: "connections/[id]/nodes/[node]/ceph/disks/route.ts", load: () => import("@/app/api/v1/connections/[id]/nodes/[node]/ceph/disks/route"), method: "GET", params: N },
+  { name: "ceph/preflight GET", file: "connections/[id]/ceph/preflight/route.ts", load: () => import("@/app/api/v1/connections/[id]/ceph/preflight/route"), method: "GET", params: C },
+  { name: "ceph/init POST", file: "connections/[id]/ceph/init/route.ts", load: () => import("@/app/api/v1/connections/[id]/ceph/init/route"), method: "POST", params: C, body: { node: "pve1", network: "10.0.0.0/24", size: 3, minSize: 2 } },
+  { name: "nodes/ceph/install POST", file: "connections/[id]/nodes/[node]/ceph/install/route.ts", load: () => import("@/app/api/v1/connections/[id]/nodes/[node]/ceph/install/route"), method: "POST", params: N, body: { version: "tentacle", repository: "no-subscription" } },
+  { name: "nodes/ceph/install GET", file: "connections/[id]/nodes/[node]/ceph/install/route.ts", load: () => import("@/app/api/v1/connections/[id]/nodes/[node]/ceph/install/route"), method: "GET", params: N },
   { name: "orchestrator ceph history GET", file: "orchestrator/ceph/[connectionId]/history/route.ts", load: () => import("@/app/api/v1/orchestrator/ceph/[connectionId]/history/route"), method: "GET", params: { connectionId: "conn-1" }, searchParams: { range: "1h" } },
 ]
 

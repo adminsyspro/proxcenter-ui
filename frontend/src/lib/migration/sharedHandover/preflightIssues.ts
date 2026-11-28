@@ -116,22 +116,28 @@ const NEXT_ID_DEFAULT = { lower: 100, upper: 1000000 }
 async function sourceNextIdRange(conn: PveConn): Promise<{ lower: number; upper: number } | null> {
   const options = await pveFetch<Record<string, unknown>>(conn, '/cluster/options').catch(() => null)
   if (!options || typeof options !== 'object') return null
-  const raw = options['next-id']
-  const fields: Record<string, string> = {}
-  if (typeof raw === 'string') {
-    for (const part of raw.split(',')) {
-      const [k, v] = part.split('=')
-      if (k && v !== undefined) fields[k.trim()] = v.trim()
-    }
-  } else if (raw && typeof raw === 'object') {
-    for (const [k, v] of Object.entries(raw)) {
-      if (typeof v === 'string' || typeof v === 'number') fields[k] = String(v)
-    }
-  }
+  const fields = nextIdFields(options['next-id'])
   const lower = Number.parseInt(fields.lower ?? '', 10)
   const upper = Number.parseInt(fields.upper ?? '', 10)
   return {
     lower: Number.isFinite(lower) ? lower : NEXT_ID_DEFAULT.lower,
     upper: Number.isFinite(upper) ? upper : NEXT_ID_DEFAULT.upper,
   }
+}
+
+/** The `lower`/`upper` fields of `next-id`, from its object or property-string form. */
+function nextIdFields(raw: unknown): Record<string, string> {
+  const fields: Record<string, string> = {}
+  if (typeof raw === 'string') {
+    for (const part of raw.split(',')) {
+      const [k, v] = part.split('=')
+      if (k && v !== undefined) fields[k.trim()] = v.trim()
+    }
+    return fields
+  }
+  if (!raw || typeof raw !== 'object') return fields
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === 'string' || typeof v === 'number') fields[k] = String(v)
+  }
+  return fields
 }

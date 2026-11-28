@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   Box, List, ListItemButton, ListItemIcon, ListItemText, ListSubheader,
   Select, MenuItem, IconButton, Typography, Alert, Stack,
-  Dialog, DialogTitle, DialogActions, Button,
+  Dialog, DialogTitle, DialogActions, Button, Tooltip,
 } from '@mui/material'
 import { useTranslations } from 'next-intl'
 import { useRBAC } from '@/contexts/RBACContext'
@@ -25,6 +25,7 @@ import { ClusterOverview } from './ClusterOverview'
 import { K8sTopologyView } from './K8sTopologyView'
 import { HistoryView } from './HistoryView'
 import { AddWorkersDialog, RemoveWorkerDialog, WorkerChangeBanner, useWorkerChange } from './WorkerChange'
+import { UpgradeDialog } from './UpgradeCluster'
 
 /** How often the Nodes/Pods tables reload usage (metrics-server samples every 15-60 s). */
 const METRICS_POLL_MS = 30_000
@@ -47,6 +48,7 @@ export function ClusterExplorer({
   const tNodeOps = useTranslations('kubernetes.node.ops')
   const tHistory = useTranslations('kubernetes.history')
   const tWorkers = useTranslations('kubernetes.workers')
+  const tUpgrade = useTranslations('kubernetes.upgrade')
   const { hasPermission } = useRBAC()
   // Cosmetic gate for the node day-2 actions; the API routes re-check k8s.manage.
   const canManage = hasPermission('k8s.manage')
@@ -293,6 +295,7 @@ export function ClusterExplorer({
   const canChangeWorkers = canProvision && !!layout?.changeable && workerChange.state?.status === 'completed'
   const workerNames = new Set((layout?.workers ?? []).map(w => w.name))
   const [addWorkersOpen, setAddWorkersOpen] = useState(false)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [removeWorker, setRemoveWorker] = useState<string | null>(null)
   const [workerErrorHidden, setWorkerErrorHidden] = useState<string | null>(null)
   const workerState = workerChange.state && workerChange.state.error === workerErrorHidden
@@ -300,6 +303,7 @@ export function ClusterExplorer({
     : workerChange.state
   const startedWorkerChange = () => {
     setAddWorkersOpen(false)
+    setUpgradeOpen(false)
     setRemoveWorker(null)
     void workerChange.reload()
   }
@@ -455,6 +459,15 @@ export function ClusterExplorer({
           <Button size="small" variant="outlined" startIcon={<i className="ri-add-line" />} onClick={() => setAddWorkersOpen(true)}>
             {tWorkers('addButton')}
           </Button>
+        )}
+        {view === 'node' && canChangeWorkers && (
+          <Tooltip title={layout?.upgradable ? '' : tUpgrade('unsupported')}>
+            <span>
+              <Button size="small" variant="outlined" disabled={!layout?.upgradable} startIcon={<i className="ri-arrow-up-circle-line" />} onClick={() => setUpgradeOpen(true)}>
+                {tUpgrade('button')}
+              </Button>
+            </span>
+          </Tooltip>
         )}
 
         <IconButton onClick={handleRefresh} aria-label={t('refresh')} size="small">
@@ -626,6 +639,15 @@ export function ClusterExplorer({
                   clusterName={displayName ?? ''}
                   layout={layout}
                   onClose={() => setAddWorkersOpen(false)}
+                  onStarted={startedWorkerChange}
+                />
+              )}
+              {upgradeOpen && layout && (
+                <UpgradeDialog
+                  clusterId={clusterId}
+                  clusterName={displayName ?? ''}
+                  layout={layout}
+                  onClose={() => setUpgradeOpen(false)}
                   onStarted={startedWorkerChange}
                 />
               )}

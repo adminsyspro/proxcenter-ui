@@ -16753,6 +16753,35 @@
         "invalid_request": "Abgelehnt: Prüfen Sie die Adressen und VM-IDs.",
         "unavailable": "Der Orchestrator ist nicht erreichbar."
       }
+    },
+    "upgrade": {
+      "button": "Aktualisieren",
+      "unsupported": "Für diese Distribution noch nicht verfügbar (nur k3s und RKE2)",
+      "title": "{cluster} aktualisieren",
+      "current": "Laufende Version",
+      "target": "Zielversion",
+      "targetHelp": "Eine neuere Version derselben Distribution, höchstens eine Minor-Version höher (bis {next}).",
+      "refusal": {
+        "unknown_current": "Die laufende Version kann nicht verglichen werden.",
+        "format": "Kein Versionsname dieser Distribution (zum Beispiel v1.37.2+k3s1).",
+        "not_newer": "Nicht neuer als die laufende Version.",
+        "skips_minor": "Überspringt eine Minor-Version: zuerst auf {next} aktualisieren."
+      },
+      "how": "Zuerst werden die Control-Plane-Knoten aktualisiert, einzeln und abgesperrt (cordon), dann die Worker, einzeln und geleert (ihre Pods ziehen auf die anderen Knoten). Jeder Knoten läuft wieder mit der neuen Version, bevor der nächste beginnt. Proxmox wird nicht beansprucht.",
+      "singleControlPlane": "Mit nur einem Control-Plane-Knoten ist die Kubernetes-API während seines Neustarts nicht erreichbar (meist unter zwei Minuten).",
+      "cancel": "Abbrechen",
+      "start": "Aktualisieren",
+      "running": "Kubernetes wird aktualisiert, ein Knoten nach dem anderen",
+      "failed": "Die Aktualisierung wurde angehalten: {message}. Der betroffene Knoten nimmt wieder Pods an; starten Sie die Aktualisierung erneut, um fortzufahren.",
+      "error": {
+        "generic": "Die Aktualisierung konnte nicht starten.",
+        "invalid": "Abgelehnt: {message}",
+        "run_not_changeable": "Auf diesem Cluster läuft ein anderer Vorgang: versuchen Sie es nach dessen Ende erneut.",
+        "upgrade_unsupported": "Diese Distribution kann noch nicht aus ProxCenter aktualisiert werden.",
+        "connection_busy": "Auf dieser Proxmox-Verbindung läuft bereits eine andere Kubernetes-Bereitstellung.",
+        "not_deployed": "Nur ein von ProxCenter bereitgestellter Cluster kann aktualisiert werden.",
+        "unavailable": "Der Orchestrator ist nicht erreichbar."
+      }
     }
   }
 }

@@ -17169,6 +17169,35 @@
         "invalid_request": "已拒绝：请检查地址和 VM ID。",
         "unavailable": "无法连接编排器。"
       }
+    },
+    "upgrade": {
+      "button": "升级",
+      "unsupported": "此发行版暂不支持（仅支持 k3s 和 RKE2）",
+      "title": "升级 {cluster}",
+      "current": "当前版本",
+      "target": "目标版本",
+      "targetHelp": "同一发行版的更新版本，最多高一个次版本（最高 {next}）。",
+      "refusal": {
+        "unknown_current": "无法比较当前版本。",
+        "format": "不是此发行版的版本名称（例如 v1.37.2+k3s1）。",
+        "not_newer": "不比当前版本新。",
+        "skips_minor": "跳过了一个次版本：请先升级到 {next}。"
+      },
+      "how": "先逐个升级控制平面节点（升级时禁止调度），再逐个升级 worker（升级前排空，其 Pod 迁移到其他节点）。每个节点恢复为新版本后才开始下一个。不涉及 Proxmox。",
+      "singleControlPlane": "只有一个控制平面节点时，其重启期间 Kubernetes API 不可用（通常不到两分钟）。",
+      "cancel": "取消",
+      "start": "升级",
+      "running": "正在逐个节点升级 Kubernetes",
+      "failed": "升级已停止：{message}。相关节点已恢复接收 Pod；再次启动升级即可继续。",
+      "error": {
+        "generic": "升级无法启动。",
+        "invalid": "已拒绝：{message}",
+        "run_not_changeable": "此集群上有其他操作正在进行：请在其结束后重试。",
+        "upgrade_unsupported": "此发行版暂时无法从 ProxCenter 升级。",
+        "connection_busy": "此 Proxmox 连接上有另一个 Kubernetes 部署正在进行。",
+        "not_deployed": "只有 ProxCenter 部署的集群才能升级。",
+        "unavailable": "无法连接编排器。"
+      }
     }
   }
 }

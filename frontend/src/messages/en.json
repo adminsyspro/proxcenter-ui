@@ -17182,6 +17182,35 @@
         "invalid_request": "Refused: check the addresses and VM IDs.",
         "unavailable": "The orchestrator is not reachable."
       }
+    },
+    "upgrade": {
+      "button": "Upgrade",
+      "unsupported": "Not available for this distribution yet (k3s and RKE2 only)",
+      "title": "Upgrade {cluster}",
+      "current": "Running version",
+      "target": "Target version",
+      "targetHelp": "A newer release of the same distribution, at most one minor version ahead (up to {next}).",
+      "refusal": {
+        "unknown_current": "The running version cannot be compared.",
+        "format": "Not a release name of this distribution (for example v1.37.2+k3s1).",
+        "not_newer": "Not newer than the running version.",
+        "skips_minor": "Skips a minor version: upgrade to {next} first."
+      },
+      "how": "The control plane nodes are upgraded first, one at a time and cordoned, then the workers, one at a time and drained (their pods move to the other nodes). Each node comes back on the new version before the next one starts. Proxmox is not involved.",
+      "singleControlPlane": "With a single control plane node, the Kubernetes API is unavailable while it restarts (usually under two minutes).",
+      "cancel": "Cancel",
+      "start": "Upgrade",
+      "running": "Upgrading Kubernetes, one node at a time",
+      "failed": "The upgrade stopped: {message}. The node concerned takes pods again; start the upgrade again to resume.",
+      "error": {
+        "generic": "The upgrade could not start.",
+        "invalid": "Refused: {message}",
+        "run_not_changeable": "Another operation is running on this cluster: try again once it ends.",
+        "upgrade_unsupported": "This distribution cannot be upgraded from ProxCenter yet.",
+        "connection_busy": "Another Kubernetes deployment is running on this Proxmox connection.",
+        "not_deployed": "Only a cluster ProxCenter deployed can be upgraded.",
+        "unavailable": "The orchestrator is not reachable."
+      }
     }
   }
 }

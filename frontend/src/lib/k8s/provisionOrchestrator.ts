@@ -92,6 +92,9 @@ export interface WorkerLayout {
   workerDisk: number
   /** False for a cluster deployed before its join tokens were kept. */
   changeable: boolean
+  /** The release the nodes run, and whether ProxCenter can raise it (k3s, RKE2). */
+  version?: string
+  upgradable?: boolean
 }
 
 export interface ProvisionRunNode {
@@ -161,6 +164,25 @@ export async function destroyProvisionRun(
   try {
     const value = await orchestratorFetch<{ status: string }>(orchestratorPath`/k8s/provision/${runId}/destroy`, {
       method: 'POST',
+    })
+    return { ok: true, value }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'provisioning request failed' }
+  }
+}
+
+/**
+ * Raises the Kubernetes version of a completed k3s or RKE2 deployment, node by
+ * node, in the background (status "scaling", phase "upgrade").
+ */
+export async function upgradeCluster(
+  runId: string,
+  version: string
+): Promise<{ ok: boolean; error?: string; value?: { runId: string; status: string } }> {
+  try {
+    const value = await orchestratorFetch<{ runId: string; status: string }>(orchestratorPath`/k8s/provision/${runId}/upgrade`, {
+      method: 'POST',
+      body: { version },
     })
     return { ok: true, value }
   } catch (e: any) {

@@ -12,6 +12,7 @@ import {
   getProvisionLogs,
   destroyProvisionRun,
   changeWorkers,
+  upgradeCluster,
   type ProvisionRequest,
 } from './provisionOrchestrator'
 
@@ -169,5 +170,19 @@ describe('changeWorkers', () => {
   it('returns the error of a refused change', async () => {
     orchestratorFetchMock.mockRejectedValueOnce(new Error('Orchestrator 409: busy'))
     expect(await changeWorkers('run-1', [])).toEqual({ ok: false, error: 'Orchestrator 409: busy' })
+  })
+})
+
+describe('upgradeCluster', () => {
+  it('posts the target version to the run', async () => {
+    orchestratorFetchMock.mockResolvedValueOnce({ runId: 'run-1', status: 'scaling' })
+    expect(await upgradeCluster('run-1', 'v1.37.2+k3s1')).toEqual({ ok: true, value: { runId: 'run-1', status: 'scaling' } })
+    const [path, init] = orchestratorFetchMock.mock.calls.at(-1)!
+    expect(String(path)).toContain('/k8s/provision/run-1/upgrade')
+    expect(init).toEqual({ method: 'POST', body: { version: 'v1.37.2+k3s1' } })
+  })
+  it('returns the error of a refused upgrade', async () => {
+    orchestratorFetchMock.mockRejectedValueOnce(new Error('Orchestrator 409: busy'))
+    expect(await upgradeCluster('run-1', 'v1.37.2+k3s1')).toEqual({ ok: false, error: 'Orchestrator 409: busy' })
   })
 })

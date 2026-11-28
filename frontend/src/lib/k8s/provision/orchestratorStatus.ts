@@ -16,13 +16,14 @@ export type ProvisionErrorCode =
   | 'CONNECTION_LICENSE_EXCLUDED'
   | 'run_not_changeable'
   | 'workers_not_changeable'
+  | 'upgrade_unsupported'
   | 'not_found'
   | 'conflict'
   | 'unavailable'
 
 const KNOWN_CODES = new Set<string>([
   'invalid_request', 'connection_busy', 'cluster_name_active', 'ssh_access_required', 'CONNECTION_LICENSE_EXCLUDED',
-  'run_not_changeable', 'workers_not_changeable',
+  'run_not_changeable', 'workers_not_changeable', 'upgrade_unsupported',
 ])
 
 export interface OrchestratorFailure {

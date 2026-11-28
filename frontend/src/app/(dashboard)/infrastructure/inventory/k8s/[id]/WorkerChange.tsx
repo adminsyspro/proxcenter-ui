@@ -55,16 +55,18 @@ export function useWorkerChange(clusterId: string, onSettled?: () => void) {
   return { state, reload: load }
 }
 
-/** Progress or outcome of a worker change, above the node table. */
+/** Progress or outcome of a worker change or an upgrade, above the node table. */
 export function WorkerChangeBanner({ state, onDismissError }: { state: WorkerChangeState | null; onDismissError: () => void }) {
   const t = useTranslations('kubernetes.workers')
+  const tUpgrade = useTranslations('kubernetes.upgrade')
   if (!state) return null
+  const upgrade = state.phase === 'upgrade'
   if (state.status === 'scaling') {
     return (
       <Box sx={{ mb: 1.5, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <CircularProgress size={14} />
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>{t('changing')}</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>{upgrade ? tUpgrade('running') : t('changing')}</Typography>
           <Box sx={{ flex: 1 }} />
           <Typography variant="body2" color="text.secondary">{state.progress}%</Typography>
         </Box>
@@ -74,6 +76,9 @@ export function WorkerChangeBanner({ state, onDismissError }: { state: WorkerCha
   }
   if (state.error && state.phase === 'workers') {
     return <Alert severity="error" sx={{ mb: 1.5 }} onClose={onDismissError}>{t('failed', { message: state.error })}</Alert>
+  }
+  if (state.error && upgrade) {
+    return <Alert severity="error" sx={{ mb: 1.5 }} onClose={onDismissError}>{tUpgrade('failed', { message: state.error })}</Alert>
   }
   return null
 }

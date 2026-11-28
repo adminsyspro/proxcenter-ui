@@ -17183,6 +17183,35 @@
         "invalid_request": "Refusé : vérifiez les adresses et les VMID.",
         "unavailable": "L'orchestrateur est injoignable."
       }
+    },
+    "upgrade": {
+      "button": "Mettre à jour",
+      "unsupported": "Pas encore disponible pour cette distribution (k3s et RKE2 seulement)",
+      "title": "Mettre à jour {cluster}",
+      "current": "Version en cours",
+      "target": "Version cible",
+      "targetHelp": "Une version plus récente de la même distribution, au plus une version mineure au-dessus (jusqu'à {next}).",
+      "refusal": {
+        "unknown_current": "La version en cours ne peut pas être comparée.",
+        "format": "Ce n'est pas un nom de version de cette distribution (par exemple v1.37.2+k3s1).",
+        "not_newer": "Pas plus récente que la version en cours.",
+        "skips_minor": "Saute une version mineure : passez d'abord en {next}."
+      },
+      "how": "Les nœuds du plan de contrôle sont mis à jour en premier, un par un et cordonnés, puis les workers, un par un et vidés (leurs pods passent sur les autres nœuds). Chaque nœud revient sur la nouvelle version avant que le suivant commence. Proxmox n'est pas sollicité.",
+      "singleControlPlane": "Avec un seul nœud de plan de contrôle, l'API Kubernetes est indisponible pendant son redémarrage (en général moins de deux minutes).",
+      "cancel": "Annuler",
+      "start": "Mettre à jour",
+      "running": "Mise à jour de Kubernetes, un nœud à la fois",
+      "failed": "La mise à jour s'est arrêtée : {message}. Le nœud concerné reprend des pods ; relancez la mise à jour pour reprendre.",
+      "error": {
+        "generic": "La mise à jour n'a pas pu démarrer.",
+        "invalid": "Refusé : {message}",
+        "run_not_changeable": "Une autre opération est en cours sur ce cluster : réessayez quand elle sera finie.",
+        "upgrade_unsupported": "Cette distribution ne peut pas encore être mise à jour depuis ProxCenter.",
+        "connection_busy": "Un autre déploiement Kubernetes est en cours sur cette connexion Proxmox.",
+        "not_deployed": "Seul un cluster déployé par ProxCenter peut être mis à jour.",
+        "unavailable": "L'orchestrateur est injoignable."
+      }
     }
   }
 }

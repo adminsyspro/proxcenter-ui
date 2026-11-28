@@ -17169,6 +17169,35 @@
         "invalid_request": "Rechazado: compruebe las direcciones y los ID de VM.",
         "unavailable": "No se puede contactar con el orquestador."
       }
+    },
+    "upgrade": {
+      "button": "Actualizar",
+      "unsupported": "Aún no disponible para esta distribución (solo k3s y RKE2)",
+      "title": "Actualizar {cluster}",
+      "current": "Versión actual",
+      "target": "Versión de destino",
+      "targetHelp": "Una versión más reciente de la misma distribución, como máximo una versión menor por encima (hasta {next}).",
+      "refusal": {
+        "unknown_current": "La versión actual no se puede comparar.",
+        "format": "No es un nombre de versión de esta distribución (por ejemplo v1.37.2+k3s1).",
+        "not_newer": "No es más reciente que la versión actual.",
+        "skips_minor": "Se salta una versión menor: actualice primero a {next}."
+      },
+      "how": "Primero se actualizan los nodos del plano de control, uno a uno y acordonados, y luego los workers, uno a uno y vaciados (sus pods pasan a los demás nodos). Cada nodo vuelve con la nueva versión antes de que empiece el siguiente. Proxmox no interviene.",
+      "singleControlPlane": "Con un solo nodo de plano de control, la API de Kubernetes no está disponible mientras se reinicia (normalmente menos de dos minutos).",
+      "cancel": "Cancelar",
+      "start": "Actualizar",
+      "running": "Actualizando Kubernetes, un nodo a la vez",
+      "failed": "La actualización se detuvo: {message}. El nodo afectado vuelve a aceptar pods; inicie de nuevo la actualización para reanudarla.",
+      "error": {
+        "generic": "La actualización no pudo iniciarse.",
+        "invalid": "Rechazado: {message}",
+        "run_not_changeable": "Otra operación está en curso en este clúster: inténtelo de nuevo cuando termine.",
+        "upgrade_unsupported": "Esta distribución aún no se puede actualizar desde ProxCenter.",
+        "connection_busy": "Otro despliegue de Kubernetes está en curso en esta conexión de Proxmox.",
+        "not_deployed": "Solo se puede actualizar un clúster desplegado por ProxCenter.",
+        "unavailable": "No se puede contactar con el orquestador."
+      }
     }
   }
 }

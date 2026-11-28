@@ -6,7 +6,8 @@ import { requireK8sPermission } from '@/lib/k8s/requireK8sPermission'
 import { requireK8sProvision } from '@/lib/k8s/requireK8sProvision'
 import { requireProvisionTarget } from '@/lib/k8s/provisionAccess'
 import { resolveStrictTenant } from '@/lib/k8s/strictTenant'
-import { getClusterWithCredential, syncNodeMapping } from '@/lib/k8s/repository'
+import { syncNodeMapping } from '@/lib/k8s/repository'
+import { deployedCluster, type DeployedCluster } from '@/lib/k8s/deployedCluster'
 import { getProvisionRun, changeWorkers, type RunStatus, type WorkerLayout } from '@/lib/k8s/provisionOrchestrator'
 import { orchestratorFailure, failureBody } from '@/lib/k8s/provision/orchestratorStatus'
 import { nodeCordonState, removeNodeObject } from '@/lib/k8s/orchestrator'
@@ -17,20 +18,6 @@ import { audit } from '@/lib/audit'
 import { withAudit } from '@/lib/audit/withAudit'
 
 type Ctx = { params: Promise<{ id: string }> }
-
-type Deployed = NonNullable<Awaited<ReturnType<typeof getClusterWithCredential>>> & { runId: string; connectionId: string }
-
-/** The cluster, when ProxCenter deployed it (its run and its connection known). */
-async function deployedCluster(tenantId: string, id: string): Promise<Deployed | Response> {
-  const found = await getClusterWithCredential(tenantId, id)
-  if (!found) return NextResponse.json({ error: 'Cluster not found' }, { status: 404 })
-  const runId = found.row.provisioningRunId
-  const connectionId = found.row.proxmoxConnectionId
-  if (found.row.source !== 'deployed' || !runId || !connectionId) {
-    return NextResponse.json({ error: 'not_deployed' }, { status: 404 })
-  }
-  return { ...found, runId, connectionId }
-}
 
 /** The run of a deployed cluster: where a worker change stands, and the layout. */
 export async function GET(_req: Request, ctx: Ctx) {
@@ -128,7 +115,7 @@ async function requireVmRights(tenantId: string, connectionId: string, adding: b
  * (drained by the interface first): a worker still taking pods is refused
  * rather than cut off with them.
  */
-async function removalRefusal(id: string, tenantId: string, cluster: Deployed, workers: { name: string; vmid: number }[], remove: string[], clusterName: string): Promise<Response | null> {
+async function removalRefusal(id: string, tenantId: string, cluster: DeployedCluster, workers: { name: string; vmid: number }[], remove: string[], clusterName: string): Promise<Response | null> {
   const vmid = new Map(workers.map(w => [w.name, w.vmid]))
   const checks = await checkNodeVms(tenantId, remove.map(nodeName => ({ nodeName, connectionId: cluster.connectionId, vmid: vmid.get(nodeName)! })), clusterName)
   const refusals = checks.filter(c => c.refusal !== null)

@@ -52,6 +52,10 @@ export const Features = {
   // VMs that hold them and the actions on them. The GPU tab of the inventory
   // and the dashboard widget stay in Community.
   GPU_MANAGEMENT: 'gpu_management',
+  // Kubernetes: registered clusters (inventory, explorer, node operations)
+  // and their deployment onto Proxmox. Every /api/v1/k8s route gates on it
+  // (requireK8sPermission), the orchestrator's provisioning routes too.
+  KUBERNETES: 'kubernetes',
   // Option capabilities (granted by stackable add-on licenses, never by an
   // edition). NEVER add these to EDITION_FEATURES.
   // ProxCenter control-plane HA (this paid add-on): multi-node conversion of
@@ -102,6 +106,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'platform_status',
     'incidents',
     'gpu_management',
+    'kubernetes',
   ],
   enterprise_plus: [
     'drs',
@@ -134,6 +139,7 @@ export const EDITION_FEATURES: Record<string, readonly FeatureId[]> = {
     'platform_status',
     'incidents',
     'gpu_management',
+    'kubernetes',
   ],
 }
 

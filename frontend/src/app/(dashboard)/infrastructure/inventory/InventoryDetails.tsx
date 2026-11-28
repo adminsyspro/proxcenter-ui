@@ -99,6 +99,7 @@ import ClusterFirewallTab from '@/components/ClusterFirewallTab'
 import BackupJobsPanel from './BackupJobsPanel'
 import RollingUpdateWizard from '@/components/RollingUpdateWizard'
 import { useLicense, Features } from '@/contexts/LicenseContext'
+import EnterpriseGuard from '@/components/guards/EnterpriseGuard'
 import { useToast } from '@/contexts/ToastContext'
 import { useOpenMigrationJob } from './hooks/useOpenMigrationJob'
 import { requireOk } from '@/lib/api/fetchJsonSafe'
@@ -3026,6 +3027,11 @@ return vm?.isCluster ?? false
         />
       </Box>
     )
+  }
+  // Enterprise only: a Kubernetes link opened on another edition gets the
+  // usual Enterprise notice instead of the section.
+  if (kubernetesPanel) {
+    kubernetesPanel = <EnterpriseGuard requiredFeature={Features.KUBERNETES} featureName='Kubernetes'>{kubernetesPanel}</EnterpriseGuard>
   }
 
   return (

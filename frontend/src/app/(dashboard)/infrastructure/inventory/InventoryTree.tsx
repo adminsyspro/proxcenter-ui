@@ -65,7 +65,7 @@ import { useExpectedVmStatuses } from './hooks/useExpectedVmStatuses'
 import { networkConnKey } from './networkConnKey'
 import { useRBAC } from '@/contexts/RBACContext'
 import { showsClusterLevel } from '@/lib/rbac/scopeKinds'
-import { useLicense } from '@/contexts/LicenseContext'
+import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useTagColors } from '@/contexts/TagColorContext'
 import { useTenant } from '@/contexts/TenantContext'
 import { useTaskTracker } from '@/hooks/useTaskTracker'
@@ -506,10 +506,9 @@ export default function InventoryTree({ selected, onSelect, onRefreshRef, onPool
   const [poolMembersDialog, setPoolMembersDialog] = useState<PoolMembersState>(null)
   const [poolMenu, setPoolMenu] = useState<{ anchor?: HTMLElement; mouseX?: number; mouseY?: number; path: string; count?: number } | null>(null)
   // Kubernetes is an Enterprise-only feature; the section is hidden entirely
-  // on Community editions (the API also enforces this with a 403).
-  const { isEnterprise } = useLicense()
-  // K8s is visible to super-admins on any edition, or Enterprise users with k8s.view.
-  const canSeeK8s = isAdmin || (isEnterprise && hasPermission('k8s.view'))
+  // on other editions, super-admins included (the API answers 403 there too).
+  const { hasFeature } = useLicense()
+  const canSeeK8s = hasFeature(Features.KUBERNETES) && (isAdmin || hasPermission('k8s.view'))
   // Tenants other than the provider get the cloud-style abstraction —
   // shared storages on a multi-tenant cluster would leak other tenants'
   // VMID metadata, so we hide the STORAGES section from them entirely

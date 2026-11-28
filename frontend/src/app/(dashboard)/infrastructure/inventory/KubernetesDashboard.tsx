@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { Box, Typography, Stack, Button, IconButton, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, CircularProgress, Checkbox, FormControlLabel, Alert, Snackbar } from '@mui/material'
 import { useTranslations } from 'next-intl'
 import { useRBAC } from '@/contexts/RBACContext'
-import { useLicense } from '@/contexts/LicenseContext'
+import { useLicense, Features } from '@/contexts/LicenseContext'
 import { clusterUtilization, pct, type ClusterUtil } from '@/lib/k8s/metrics'
 import { isIntegrating } from '@/lib/k8s/clusterHealthStatus'
 import type { NodeMetricsResult, ListResourcesResult } from '@/lib/k8s/types'
@@ -39,9 +39,9 @@ export default function KubernetesDashboard({ onClusterClick, onClustersChanged 
   const t = useTranslations()
   const { hasPermission } = useRBAC()
   const canManage = hasPermission('k8s.manage')
-  // Deploying a cluster creates VMs: Enterprise, with its own permission.
-  const { isEnterprise } = useLicense()
-  const canProvision = isEnterprise && hasPermission('k8s.provision')
+  // Deploying a cluster creates VMs: its own permission, on top of the feature.
+  const { hasFeature } = useLicense()
+  const canProvision = hasFeature(Features.KUBERNETES) && hasPermission('k8s.provision')
   const [clusters, setClusters] = useState<K8sClusterRow[]>([])
   const [connectionNames, setConnectionNames] = useState<Record<string, string>>({})
   const [enrichment, setEnrichment] = useState<Record<string, Enrichment>>({})

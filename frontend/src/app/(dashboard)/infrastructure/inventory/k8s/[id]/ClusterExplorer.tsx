@@ -26,6 +26,9 @@ import { K8sTopologyView } from './K8sTopologyView'
 import { HistoryView } from './HistoryView'
 import { AddWorkersDialog, RemoveWorkerDialog, WorkerChangeBanner, useWorkerChange } from './WorkerChange'
 
+/** How often the Nodes/Pods tables reload usage (metrics-server samples every 15-60 s). */
+const METRICS_POLL_MS = 30_000
+
 export function ClusterExplorer({
   clusterId,
   clusterName,
@@ -83,6 +86,9 @@ export function ClusterExplorer({
   }, [initialView])
   const [docHidden, setDocHidden] = useState(false)
   const [overviewTick, setOverviewTick] = useState(0)
+  // Bumped to reload the usage and pod counts of the Nodes/Pods tables: on a
+  // timer, and when a node joins or leaves (its first sample comes later).
+  const [metricsTick, setMetricsTick] = useState(0)
   const [namespaces, setNamespaces] = useState<string[]>([])
   const [nodeMetrics, setNodeMetrics] = useState<Record<string, { cpuPct: number; memPct: number }>>({})
   // Per-pod CPU/RAM (% of the pod's node capacity), keyed `${namespace}/${name}`.
@@ -150,7 +156,7 @@ export function ClusterExplorer({
       })
       .catch(() => { if (!cancelled) setNodeMetrics({}) })
     return () => { cancelled = true }
-  }, [clusterId, view, overviewTick])
+  }, [clusterId, view, overviewTick, metricsTick])
 
   // Pod count per node for the Nodes table 'pods' column: list all pods once and
   // group by spec.nodeName (summary.node). Refetched on overviewTick (drain bumps it).
@@ -173,7 +179,7 @@ export function ClusterExplorer({
       })
       .catch(() => { if (!cancelled) setPodCounts({}) })
     return () => { cancelled = true }
-  }, [clusterId, view, overviewTick])
+  }, [clusterId, view, overviewTick, metricsTick])
 
   // Per-pod CPU/RAM utilization for the Pods table progress columns
   useEffect(() => {
@@ -190,7 +196,7 @@ export function ClusterExplorer({
       })
       .catch(() => { if (!cancelled) setPodMetrics({}) })
     return () => { cancelled = true }
-  }, [clusterId, view, overviewTick])
+  }, [clusterId, view, overviewTick, metricsTick])
 
   // Track document visibility so polling pauses when the tab is hidden
   useEffect(() => {
@@ -219,6 +225,24 @@ export function ClusterExplorer({
   useEffect(() => { refreshRef.current = refresh }, [refresh])
 
   const msg = panelMessage({ status, truncated })
+
+  // Usage and pod counts follow the table: every METRICS_POLL_MS while it
+  // shows, and at once when the set of nodes changes (a worker added or
+  // removed), instead of only when the view opens.
+  const tracksUsage = view === 'node' || view === 'pod'
+  useEffect(() => {
+    if (!tracksUsage || paused) return
+    const timer = setInterval(() => setMetricsTick(n => n + 1), METRICS_POLL_MS)
+    return () => clearInterval(timer)
+  }, [tracksUsage, paused])
+  const nodeNames = kind?.apiKind === 'node' ? items.map(i => i.name).sort((a, b) => a.localeCompare(b)).join(',') : ''
+  const seenNodeNames = useRef(nodeNames)
+  useEffect(() => {
+    if (seenNodeNames.current === nodeNames) return
+    const first = seenNodeNames.current === ''
+    seenNodeNames.current = nodeNames
+    if (!first && nodeNames) setMetricsTick(n => n + 1)
+  }, [nodeNames])
 
   // For the Nodes/Pods tables, merge live CPU/RAM utilization into each row's
   // summary (nodes keyed by name; pods by namespace/name).

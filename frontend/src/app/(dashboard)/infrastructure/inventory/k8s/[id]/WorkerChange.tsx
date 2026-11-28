@@ -20,6 +20,8 @@ export interface WorkerChangeState {
 }
 
 const POLL_MS = 5000
+/** Label column of the add-workers dialog: every line starts its controls there. */
+const LABEL_WIDTH = 160
 
 /**
  * The deployment behind a cluster ProxCenter deployed: its layout and where a
@@ -96,7 +98,6 @@ export function AddWorkersDialog({
   onStarted: () => void
 }) {
   const t = useTranslations('kubernetes.workers')
-  const tTopology = useTranslations('kubernetes.provision.topology')
   const [count, setCount] = useState(1)
   const [size, setSize] = useState({ cores: layout.workerCores, memory: layout.workerMemory, disk: layout.workerDisk })
   const [rows, setRows] = useState(() => proposeAddresses(layout, 1))
@@ -133,33 +134,31 @@ export function AddWorkersDialog({
     <Dialog open onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{t('addTitle', { cluster: clusterName })}</DialogTitle>
       <DialogContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, mt: 0.5 }}>
-          <Typography sx={{ width: 160, flexShrink: 0 }}>{t('count')}</Typography>
-          <Select size="small" value={count} onChange={e => changeCount(Number(e.target.value))} sx={{ ...SMALL_SELECT_SX, width: 90 }}>
-            {Array.from({ length: MAX_WORKERS_PER_CHANGE }, (_, i) => i + 1).map(n => <MenuItem key={n} value={n}>{n}</MenuItem>)}
-          </Select>
-        </Box>
-        <Typography variant="overline" sx={{ display: 'block', opacity: 0.6 }}>{t('size')}</Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2, mr: -1.5 }}>
-          <SizeSlider label={tTopology('cores')} value={size.cores} min={MIN_CORES} marks={CORES_MARKS} onChange={v => setSize(p => ({ ...p, cores: v }))} formatValue={formatCores} />
-          <SizeSlider label={tTopology('memory')} value={size.memory} min={MIN_MEMORY} marks={MEMORY_MARKS} unit="MB" onChange={v => setSize(p => ({ ...p, memory: v }))} formatValue={formatMemory} />
-          <SizeSlider label={tTopology('disk')} value={size.disk} min={MIN_DISK} marks={DISK_MARKS} unit="GB" onChange={v => setSize(p => ({ ...p, disk: v }))} formatValue={formatDisk} />
-        </Box>
-        <Typography variant="overline" sx={{ display: 'block', opacity: 0.6 }}>{t('addresses')}</Typography>
-        {rows.map((r, i) => (
-          <Box key={names[i]} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-            <Typography variant="body2" sx={{ width: 160, flexShrink: 0 }} noWrap title={names[i]}>{names[i]}</Typography>
-            <TextField
-              size="small" label={t('ip')} value={r.ip} sx={{ flex: 1 }}
-              onChange={e => setRows(prev => prev.map((p, j) => (j === i ? { ...p, ip: e.target.value.trim() } : p)))}
-            />
-            <TextField
-              size="small" label={t('vmid')} type="number" value={r.vmid} sx={{ width: 130 }}
-              onChange={e => setRows(prev => prev.map((p, j) => (j === i ? { ...p, vmid: Number(e.target.value) } : p)))}
-            />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Typography sx={{ width: LABEL_WIDTH, flexShrink: 0 }}>{t('count')}</Typography>
+            <Select size="small" value={count} onChange={e => changeCount(Number(e.target.value))} sx={{ ...SMALL_SELECT_SX, width: 90 }}>
+              {Array.from({ length: MAX_WORKERS_PER_CHANGE }, (_, i) => i + 1).map(n => <MenuItem key={n} value={n}>{n}</MenuItem>)}
+            </Select>
           </Box>
-        ))}
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{t('addHelp')}</Typography>
+          <SizeSlider labelWidth={LABEL_WIDTH} label={t('sizeCores')} value={size.cores} min={MIN_CORES} marks={CORES_MARKS} unit="vCPU" onChange={v => setSize(p => ({ ...p, cores: v }))} formatValue={formatCores} />
+          <SizeSlider labelWidth={LABEL_WIDTH} label={t('sizeMemory')} value={size.memory} min={MIN_MEMORY} marks={MEMORY_MARKS} unit="MB" onChange={v => setSize(p => ({ ...p, memory: v }))} formatValue={formatMemory} />
+          <SizeSlider labelWidth={LABEL_WIDTH} label={t('sizeDisk')} value={size.disk} min={MIN_DISK} marks={DISK_MARKS} unit="GB" onChange={v => setSize(p => ({ ...p, disk: v }))} formatValue={formatDisk} />
+          {rows.map((r, i) => (
+            <Box key={names[i]} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Typography sx={{ width: LABEL_WIDTH, flexShrink: 0 }} noWrap title={names[i]}>{names[i]}</Typography>
+              <TextField
+                size="small" label={t('ip')} value={r.ip} sx={{ flex: 1 }}
+                onChange={e => setRows(prev => prev.map((p, j) => (j === i ? { ...p, ip: e.target.value.trim() } : p)))}
+              />
+              <TextField
+                size="small" label={t('vmid')} type="number" value={r.vmid} sx={{ width: 120, flexShrink: 0 }}
+                onChange={e => setRows(prev => prev.map((p, j) => (j === i ? { ...p, vmid: Number(e.target.value) } : p)))}
+              />
+            </Box>
+          ))}
+        </Box>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>{t('addHelp')}</Typography>
         {error && <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert>}
       </DialogContent>
       <DialogActions>

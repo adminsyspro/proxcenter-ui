@@ -20,7 +20,8 @@ export const formatDisk = (v: number) => `${v} GB`
 /** Log-style slider (marks + free-typed override), mirroring DeployWizard's
  *  cores/memory/disk sliders. Declared at module scope (not inside a render
  *  body) so its component identity stays stable across re-renders and typed
- *  inputs do not lose focus. */
+ *  inputs do not lose focus. With labelWidth, it lays out on one line: the
+ *  label in a column of that width, then the slider and the input. */
 export function SizeSlider({
   label,
   value,
@@ -29,6 +30,7 @@ export function SizeSlider({
   unit,
   onChange,
   formatValue,
+  labelWidth,
 }: {
   label: string
   value: number
@@ -37,6 +39,7 @@ export function SizeSlider({
   unit?: string
   onChange: (v: number) => void
   formatValue: (v: number) => string
+  labelWidth?: number
 }) {
   const sliderMax = marks[marks.length - 1]
 
@@ -68,6 +71,42 @@ export function SizeSlider({
     }
   }
 
+  const slider = (
+    <Slider
+      size="small"
+      value={valueToSlider(Math.min(value, sliderMax))}
+      min={0}
+      max={marks.length - 1}
+      step={0.01}
+      onChange={(_, v) => onChange(sliderToValue(v as number))}
+      // On one line the input shows the value: the marks stay, their labels go.
+      marks={marks.map((m, i) => (labelWidth ? { value: i } : { value: i, label: formatValue(m) }))}
+      valueLabelDisplay="auto"
+      valueLabelFormat={() => formatValue(value)}
+      sx={{ '& .MuiSlider-markLabel': { fontSize: '0.65rem' } }}
+    />
+  )
+  const input = (
+    <TextField
+      size="small"
+      type="number"
+      value={value}
+      onChange={e => onChange(Math.max(min, Number.parseInt(e.target.value, 10) || min))}
+      slotProps={slotProps}
+      sx={{ width: 120, flexShrink: 0 }}
+    />
+  )
+
+  if (labelWidth) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Typography sx={{ width: labelWidth, flexShrink: 0 }} noWrap title={label}>{label}</Typography>
+        <Box sx={{ flex: 1, px: 1, display: 'flex', alignItems: 'center' }}>{slider}</Box>
+        {input}
+      </Box>
+    )
+  }
+
   return (
     <Box sx={{ px: 1.5 }}>
       <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 0.5 }}>
@@ -79,28 +118,8 @@ export function SizeSlider({
         </Typography>
       </Stack>
       <Stack direction="row" alignItems="center" spacing={5}>
-        <Box sx={{ flex: 1, pr: 2 }}>
-          <Slider
-            size="small"
-            value={valueToSlider(Math.min(value, sliderMax))}
-            min={0}
-            max={marks.length - 1}
-            step={0.01}
-            onChange={(_, v) => onChange(sliderToValue(v as number))}
-            marks={marks.map((m, i) => ({ value: i, label: formatValue(m) }))}
-            valueLabelDisplay="auto"
-            valueLabelFormat={() => formatValue(value)}
-            sx={{ '& .MuiSlider-markLabel': { fontSize: '0.65rem' } }}
-          />
-        </Box>
-        <TextField
-          size="small"
-          type="number"
-          value={value}
-          onChange={e => onChange(Math.max(min, Number.parseInt(e.target.value, 10) || min))}
-          slotProps={slotProps}
-          sx={{ width: 120 }}
-        />
+        <Box sx={{ flex: 1, pr: 2 }}>{slider}</Box>
+        {input}
       </Stack>
     </Box>
   )

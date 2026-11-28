@@ -5337,6 +5337,10 @@
         "logForwarder": {
           "label": "Reenvío de registros del cortafuegos",
           "features": "microsegmentación en modo reenvío: instala y retira el agente de reenvío de registros en los nodos (equivalente a root)"
+        },
+        "cephProvisioning": {
+          "label": "Aprovisionamiento de Ceph",
+          "features": "panel de Ceph: instala los paquetes de Ceph en un nodo, crea un OSD en un disco libre y destruye un OSD (pveceph, que Proxmox niega a un token de API)"
         }
       }
     },

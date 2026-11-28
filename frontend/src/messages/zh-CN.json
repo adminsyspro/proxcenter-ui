@@ -5337,6 +5337,10 @@
         "logForwarder": {
           "label": "防火墙日志转发",
           "features": "转发模式下的微分段：在节点上安装和移除日志转发器（等同于 root）"
+        },
+        "cephProvisioning": {
+          "label": "Ceph 部署",
+          "features": "Ceph 驾驶舱：在节点上安装 Ceph 软件包，在空闲磁盘上创建 OSD，并销毁 OSD（Proxmox 不允许 API 令牌执行的 pveceph 操作）"
         }
       }
     },

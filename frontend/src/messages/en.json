@@ -5350,6 +5350,10 @@
         "logForwarder": {
           "label": "Firewall log forwarder",
           "features": "micro-segmentation in forwarder mode: installs and removes the log forwarder on the nodes (equivalent to root)"
+        },
+        "cephProvisioning": {
+          "label": "Ceph provisioning",
+          "features": "Ceph cockpit: installs the Ceph packages on a node, creates an OSD on a free disk and destroys an OSD (pveceph, which Proxmox refuses to an API token)"
         }
       }
     },

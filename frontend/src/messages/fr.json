@@ -5350,6 +5350,10 @@
         "logForwarder": {
           "label": "Transfert des journaux du pare-feu",
           "features": "micro-segmentation en mode transfert : installe et retire l’outil de transfert des journaux sur les nœuds (équivalent à root)"
+        },
+        "cephProvisioning": {
+          "label": "Provisioning Ceph",
+          "features": "cockpit Ceph : installe les paquets Ceph sur un nœud, crée un OSD sur un disque libre et détruit un OSD (pveceph, que Proxmox refuse à un jeton d’API)"
         }
       }
     },

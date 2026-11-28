@@ -31,7 +31,7 @@ export function resolveSudo(cmd: string, useSudo: boolean): string {
   return cmd.split(MARK).join(useSudo ? 'sudo -n ' : '')
 }
 
-export const SUDO_PROFILES = ['node-ops', 'site-recovery', 'migrations', 'pbs-ops', 'log-forwarder'] as const
+export const SUDO_PROFILES = ['node-ops', 'site-recovery', 'migrations', 'pbs-ops', 'log-forwarder', 'ceph-provisioning'] as const
 export type SudoProfile = (typeof SUDO_PROFILES)[number]
 
 /** The profile of a Proxmox Backup Server account, the only one it is checked against. */
@@ -45,8 +45,19 @@ export const PBS_SUDO_PROFILE: SudoProfile = 'pbs-ops'
  */
 export const LOG_FORWARDER_SUDO_PROFILE: SudoProfile = 'log-forwarder'
 
+/**
+ * The profile that installs the Ceph packages and creates or destroys OSDs
+ * (ui#1450): PVE refuses OSD creation and destruction to an API token, and has
+ * no API to install the packages, so `pveceph` runs over SSH. Granted on
+ * purpose like the log forwarder: Test SSH does not ask for it, each dialog
+ * checks the exact command on the node before it runs anything.
+ */
+export const CEPH_PROVISIONING_SUDO_PROFILE: SudoProfile = 'ceph-provisioning'
+
 /** The profiles the nodes of a Proxmox VE cluster are checked against by Test SSH. */
-export const PVE_SUDO_PROFILES: SudoProfile[] = SUDO_PROFILES.filter(p => p !== PBS_SUDO_PROFILE && p !== LOG_FORWARDER_SUDO_PROFILE)
+export const PVE_SUDO_PROFILES: SudoProfile[] = SUDO_PROFILES.filter(
+  p => p !== PBS_SUDO_PROFILE && p !== LOG_FORWARDER_SUDO_PROFILE && p !== CEPH_PROVISIONING_SUDO_PROFILE,
+)
 
 /** The profiles a connection of this type is checked against by Test SSH. */
 export function sudoProfilesFor(connectionType: string | undefined): SudoProfile[] {
@@ -60,6 +71,7 @@ export const SUDO_PROFILE_I18N: Record<SudoProfile, string> = {
   migrations: 'migrations',
   'pbs-ops': 'pbsOps',
   'log-forwarder': 'logForwarder',
+  'ceph-provisioning': 'cephProvisioning',
 }
 
 /**
@@ -98,6 +110,13 @@ export interface SudoRule {
 const NODE = '[A-Za-z0-9][A-Za-z0-9.-]*'
 const VMID = '[0-9]+'
 const CONF = `/etc/pve/nodes/${NODE}/(qemu-server|lxc)/${VMID}\\.conf`
+
+// A block device of the node, as /nodes/{n}/disks/list names it: no dot, so no `..`.
+const BLOCK_DEV = '/dev/[A-Za-z0-9][A-Za-z0-9/_-]*'
+const GIB_SIZE = '[1-9][0-9]*'
+
+/** The arguments `pveceph osd create` may take, in the order osdCreateArgv (lib/ceph/pvecephCommands) writes them. */
+export const PVECEPH_OSD_CREATE_ARGS = `^osd create ${BLOCK_DEV}( --db_dev ${BLOCK_DEV}( --db_dev_size ${GIB_SIZE})?)?( --wal_dev ${BLOCK_DEV}( --wal_dev_size ${GIB_SIZE})?)?( --encrypted 1)?( --crush-device-class [a-z0-9_-]+)?$`
 
 const APT_DIST_UPGRADE_ARGS = '-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold dist-upgrade'
 
@@ -163,6 +182,9 @@ export const FRONTEND_SUDO_RULES: SudoRule[] = [
   { id: 'ui-cis-sshd', profile: 'node-ops', path: '/usr/sbin/sshd', args: '^-T$', usedBy: 'Compliance > CIS hardening (effective sshd configuration)' , example: '-T' },
   { id: 'ui-cis-apparmor', profile: 'node-ops', path: '/usr/sbin/aa-status', args: '^--json$', usedBy: 'Compliance > CIS hardening (AppArmor)' , example: '--json' },
   { id: 'ui-cis-fail2ban', profile: 'node-ops', path: '/usr/bin/fail2ban-client', args: '^status$', usedBy: 'Compliance > CIS hardening (fail2ban)' , example: 'status' },
+  { id: 'ui-ceph-install', profile: 'ceph-provisioning', path: '/usr/bin/pveceph', args: '^install --version (squid|tentacle) --repository (enterprise|no-subscription|manual)$', usedBy: 'Ceph > Deploy Ceph (package install)', example: 'install --version tentacle --repository no-subscription', sensitive: true, why: 'Installs the Ceph packages from a Proxmox repository and writes its apt source: a stolen key could install them on a node that should not run Ceph.' },
+  { id: 'ui-ceph-osd-create', profile: 'ceph-provisioning', path: '/usr/bin/pveceph', args: PVECEPH_OSD_CREATE_ARGS, usedBy: 'Ceph > OSD > Create OSD', example: 'osd create /dev/sdb', sensitive: true, why: 'Creating an OSD wipes the disk it is given: a stolen key could erase any unused disk of the node.' },
+  { id: 'ui-ceph-osd-destroy', profile: 'ceph-provisioning', path: '/usr/bin/pveceph', args: '^osd destroy [0-9]+( --cleanup 1)?$', usedBy: 'Ceph > OSD > Destroy OSD', example: 'osd destroy 3 --cleanup 1', sensitive: true, why: 'Destroying an OSD removes it and its data from the cluster: a stolen key could take OSDs away, down to data loss once fewer copies remain than min_size.' },
   { id: 'ui-cis-find', profile: 'node-ops', path: '/usr/bin/find', args: '^/ -xdev -type f (\\( -perm -4000 -o -perm -2000 \\)|-perm -0002 ! -path /proc/\\* ! -path /sys/\\* ! -path /tmp/\\* ! -path /var/tmp/\\*) -print$', usedBy: 'Compliance > CIS hardening (SUID and world-writable files)' , example: '/ -xdev -type f ( -perm -4000 -o -perm -2000 ) -print' },
 ]
 

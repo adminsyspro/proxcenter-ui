@@ -5337,6 +5337,10 @@
         "logForwarder": {
           "label": "방화벽 로그 전달",
           "features": "전달 모드의 마이크로 세분화: 노드에 로그 전달 에이전트를 설치하고 제거합니다(root와 동등)"
+        },
+        "cephProvisioning": {
+          "label": "Ceph 프로비저닝",
+          "features": "Ceph 콕핏: 노드에 Ceph 패키지를 설치하고, 빈 디스크에 OSD를 만들고, OSD를 제거합니다 (Proxmox가 API 토큰에 허용하지 않는 pveceph)"
         }
       }
     },

@@ -5339,6 +5339,10 @@
         "logForwarder": {
           "label": "Weiterleitung der Firewall-Protokolle",
           "features": "Mikrosegmentierung im Weiterleitungsmodus: installiert und entfernt den Weiterleitungsdienst auf den Knoten (entspricht root)"
+        },
+        "cephProvisioning": {
+          "label": "Ceph-Bereitstellung",
+          "features": "Ceph-Cockpit: installiert die Ceph-Pakete auf einem Knoten, erstellt ein OSD auf einer freien Festplatte und entfernt ein OSD (pveceph, das Proxmox einem API-Token verweigert)"
         }
       }
     },

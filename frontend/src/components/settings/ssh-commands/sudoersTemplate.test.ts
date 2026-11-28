@@ -121,3 +121,20 @@ describe('the log forwarder profile', () => {
     expect(SUDO_PROFILE_I18N['log-forwarder']).toBe('logForwarder')
   })
 })
+
+// ui#1450: pveceph install and OSD creation or destruction, granted on purpose.
+describe('the ceph-provisioning profile', () => {
+  it('gets its own alias, with the pinned pveceph rules', () => {
+    const template = buildProfileSudoersTemplate(FRONTEND_SUDO_RULES, ['ceph-provisioning'])
+
+    expect(template).toContain('Cmnd_Alias PXC_CEPH_PROVISIONING = /usr/bin/pveceph ^install --version (squid|tentacle) --repository (enterprise|no-subscription|manual)$')
+    expect(template).toContain('/usr/bin/pveceph ^osd destroy [0-9]+( --cleanup 1)?$')
+    expect(template).toContain('proxcenter ALL=(root) NOPASSWD: PXC_CEPH_PROVISIONING')
+    expect(template).not.toContain('PXC_NODE_OPS')
+  })
+
+  it('has its label', () => {
+    expect(SUDO_PROFILES).toContain('ceph-provisioning')
+    expect(SUDO_PROFILE_I18N['ceph-provisioning']).toBe('cephProvisioning')
+  })
+})

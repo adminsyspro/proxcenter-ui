@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 // POST /api/v1/orchestrator/reports - Generate a new report (scoped to tenant connections)
 async function handlePost(request: NextRequest) {
   try {
-    const denied = await checkPermission(PERMISSIONS.REPORTS_VIEW)
+    const denied = await checkPermission(PERMISSIONS.REPORTS_MANAGE)
     if (denied) return denied
 
     const body = await request.json()

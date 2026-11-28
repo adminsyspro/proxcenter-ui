@@ -166,6 +166,32 @@ describe('read path (no user) — refuses by throwing', () => {
     expect(touchSessionMock).not.toHaveBeenCalled()
   })
 
+  it('roadmap#280: ends a session whose user must now enroll, and revokes its row', async () => {
+    loadJwtContextMock.mockResolvedValue({
+      enabled: true, tenantId: 'default', tenantEnabled: true, mustEnroll2fa: true, session: liveSession,
+    })
+    await expect(jwtCb({ token: { id: 'u1', sid: 'sid1', mustEnroll2fa: false } })).rejects.toThrow(/2FA enrollment required/)
+    expect(revokeSessionMock).toHaveBeenCalledWith('sid1', 'u1')
+    expect(touchSessionMock).not.toHaveBeenCalled()
+  })
+
+  it('roadmap#280: still ends the session when the revoke itself fails', async () => {
+    loadJwtContextMock.mockResolvedValue({
+      enabled: true, tenantId: 'default', tenantEnabled: true, mustEnroll2fa: true, session: liveSession,
+    })
+    revokeSessionMock.mockRejectedValueOnce(new Error('db hiccup'))
+    await expect(jwtCb({ token: { id: 'u1', sid: 'sid1' } })).rejects.toThrow(/2FA enrollment required/)
+  })
+
+  it('roadmap#280: keeps a session that signed in already pending enrollment (the enrollment flow)', async () => {
+    loadJwtContextMock.mockResolvedValue({
+      enabled: true, tenantId: 'default', tenantEnabled: true, mustEnroll2fa: true, session: liveSession,
+    })
+    const token = await jwtCb({ token: { id: 'u1', sid: 'sid1', mustEnroll2fa: true, authAt: Date.now() } })
+    expect(token.mustEnroll2fa).toBe(true)
+    expect(revokeSessionMock).not.toHaveBeenCalled()
+  })
+
   it('FAILS OPEN when the database is unreachable', async () => {
     // A Postgres outage already makes the app unusable, so refusing adds no
     // security and only causes a reconnection storm when the DB returns.

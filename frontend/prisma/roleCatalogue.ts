@@ -77,9 +77,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   // Operations
   { id: "events.view", name: "events.view", category: "operations", description: "View events and logs" },
   { id: "alerts.view", name: "alerts.view", category: "operations", description: "View alerts" },
-  { id: "alerts.manage", name: "alerts.manage", category: "operations", description: "Manage alerts (acknowledge, resolve)", isDangerous: true },
+  { id: "alerts.manage", name: "alerts.manage", category: "operations", description: "Manage alerts and alert rules (acknowledge, resolve, create, edit, delete)", isDangerous: true },
   { id: "tasks.view", name: "tasks.view", category: "operations", description: "View task center" },
   { id: "reports.view", name: "reports.view", category: "operations", description: "View reports" },
+  { id: "reports.manage", name: "reports.manage", category: "operations", description: "Generate and delete reports, manage report schedules and their recipients", isDangerous: true },
 
   // Storage admin
   { id: "storage.admin", name: "storage.admin", category: "storage", description: "Access Storage Overview and Ceph pages", isDangerous: true },
@@ -146,7 +147,7 @@ export const ROLES: RoleSeed[] = [
       // Restore and PBS snapshot delete were reachable through vm.backup /
       // backup.view before their own keys were enforced.
       "backup.restore", "backup.delete",
-      "events.view", "tasks.view", "alerts.view", "automation.view", "reports.view",
+      "events.view", "tasks.view", "alerts.view", "automation.view", "reports.view", "reports.manage",
     ],
   },
   {
@@ -163,7 +164,7 @@ export const ROLES: RoleSeed[] = [
       // before its own key was enforced.
       "backup.view", "backup.restore", "backup.delete",
       "events.view", "tasks.view", "storage.admin",
-      "alerts.view", "alerts.manage", "automation.view", "automation.manage", "reports.view",
+      "alerts.view", "alerts.manage", "automation.view", "automation.manage", "reports.view", "reports.manage",
     ],
   },
   {
@@ -217,7 +218,7 @@ export const ROLES: RoleSeed[] = [
       "admin.apitokens",
       "alerts.view", "alerts.manage",
       "events.view", "tasks.view",
-      "reports.view",
+      "reports.view", "reports.manage",
       "sdn.vnet.view", "sdn.vnet.create", "sdn.vnet.edit", "sdn.vnet.delete", "sdn.vnet.firewall",
     ],
   },

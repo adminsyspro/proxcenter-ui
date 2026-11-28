@@ -58,12 +58,9 @@ async function compareRecoveryCode(plain: string, stored: string): Promise<boole
   return a.length === b.length && crypto.timingSafeEqual(a, b)
 }
 
-export async function consumeRecoveryCode(
-  userId: string,
-  candidate: string,
-  ip: string | null,
-): Promise<boolean> {
-  if (!RECOVERY_CODE_PATTERN.test(candidate)) return false
+/** The id of the unused recovery code matching `candidate`, or null. Spends nothing. */
+export async function findUnusedRecoveryCode(userId: string, candidate: string): Promise<string | null> {
+  if (!RECOVERY_CODE_PATTERN.test(candidate)) return null
 
   const rows = await prisma.userTotpRecoveryCode.findMany({
     where: { userId, consumedAt: null },
@@ -71,16 +68,28 @@ export async function consumeRecoveryCode(
   })
 
   for (const row of rows) {
-    if (await compareRecoveryCode(candidate, row.codeHash)) {
-      const result = await prisma.userTotpRecoveryCode.updateMany({
-        where: { id: row.id, consumedAt: null },
-        data: { consumedAt: new Date(), consumedIp: ip ?? undefined },
-      })
-      return result.count === 1
-    }
+    if (await compareRecoveryCode(candidate, row.codeHash)) return row.id
   }
 
-  return false
+  return null
+}
+
+/** Spend a recovery code found by findUnusedRecoveryCode; false when another request spent it first. */
+export async function markRecoveryCodeConsumed(id: string, ip: string | null): Promise<boolean> {
+  const result = await prisma.userTotpRecoveryCode.updateMany({
+    where: { id, consumedAt: null },
+    data: { consumedAt: new Date(), consumedIp: ip ?? undefined },
+  })
+  return result.count === 1
+}
+
+export async function consumeRecoveryCode(
+  userId: string,
+  candidate: string,
+  ip: string | null,
+): Promise<boolean> {
+  const id = await findUnusedRecoveryCode(userId, candidate)
+  return id !== null && markRecoveryCodeConsumed(id, ip)
 }
 
 export async function countRemainingRecoveryCodes(userId: string): Promise<number> {

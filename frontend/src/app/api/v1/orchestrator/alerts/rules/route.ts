@@ -82,10 +82,10 @@ async function handlePost(req: Request) {
   if (demo) return demo
 
   try {
-    // Relaxed from ALERTS_MANAGE so vDC tenants can author rules on their
-    // own scope. The body-level checks below enforce that they cannot
-    // create global rules and cannot escape their connection scope.
-    const denied = await checkPermission(PERMISSIONS.CONNECTION_VIEW)
+    // A write needs alerts.manage (roadmap#278): connection.view let every
+    // Viewer author fleet-wide rules. vDC tenant admins hold alerts.manage;
+    // the body-level checks below keep them inside their connection scope.
+    const denied = await checkPermission(PERMISSIONS.ALERTS_MANAGE)
     if (denied) return denied
 
     const body = await req.json()

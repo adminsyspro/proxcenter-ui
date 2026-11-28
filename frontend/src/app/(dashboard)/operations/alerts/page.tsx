@@ -774,8 +774,11 @@ return true
         return null
   }
 
+  // Rule writes need alerts.manage (roadmap#278): without it the rules are read-only.
+  const canManageRules = hasPermission('alerts.manage')
+
   const ruleColumns: GridColDef[] = [
-    { field: 'enabled', headerName: t('common.active'), width: 80, renderCell: (p) => <Switch size="small" checked={p.value} onChange={() => handleToggleRule(p.row.id)} /> },
+    { field: 'enabled', headerName: t('common.active'), width: 80, renderCell: (p) => <Switch size="small" checked={p.value} disabled={!canManageRules} onChange={() => handleToggleRule(p.row.id)} /> },
     { field: 'name', headerName: t('common.name'), width: 200, flex: 1 },
     { field: 'category', headerName: t('alerts.category'), width: 100, renderCell: (p) => {
       const labels: Record<string, string> = { task: t('alerts.tasksOnly'), log: 'Log', all: t('common.all') }
@@ -792,12 +795,12 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
     }},
     { field: 'severity', headerName: t('alerts.alertSeverity'), width: 120, renderCell: (p) => <SeverityChip severity={p.value} t={t} /> },
     { field: 'notify_email', headerName: 'Email', width: 80, renderCell: (p) => p.value ? <i className="ri-mail-check-line" style={{ color: 'var(--mui-palette-success-main)' }} /> : <i className="ri-mail-close-line" style={{ opacity: 0.3 }} /> },
-    { field: 'actions', headerName: t('common.actions'), width: 120, sortable: false, renderCell: (p) => (
+    ...(canManageRules ? [{ field: 'actions', headerName: t('common.actions'), width: 120, sortable: false, renderCell: (p) => (
       <Box sx={{ display: 'flex', gap: 0.5 }}>
         <Tooltip title={t('common.edit')}><Button size="small" onClick={() => openEditRuleDialog(p.row)}><i className="ri-edit-line" /></Button></Tooltip>
         <Tooltip title={t('common.delete')}><Button size="small" color="error" onClick={() => handleDeleteRule(p.row.id)}><i className="ri-delete-bin-line" /></Button></Tooltip>
       </Box>
-    )}
+    ) } as GridColDef] : []),
   ]
 
   // Attendre le montage côté client pour éviter les erreurs d'hydratation
@@ -936,7 +939,7 @@ return <Chip size="small" label={labels[p.value] || p.value} color={colors[p.val
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, p: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="body2" sx={{ opacity: 0.7 }}>{t('alerts.rulesDescription')}</Typography>
-              <Button variant="contained" size="small" onClick={openNewRuleDialog} startIcon={<i className="ri-add-line" />}>{t('common.add')}</Button>
+              {canManageRules && <Button variant="contained" size="small" onClick={openNewRuleDialog} startIcon={<i className="ri-add-line" />}>{t('common.add')}</Button>}
             </Box>
             <Box sx={{ flex: 1, minHeight: 0 }}>
               <DataGrid

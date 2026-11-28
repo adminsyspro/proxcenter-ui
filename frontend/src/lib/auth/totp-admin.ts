@@ -5,10 +5,11 @@ import { nanoid } from "nanoid"
 import { authOptions } from "@/lib/auth/config"
 import { prisma } from "@/lib/db/prisma"
 import { audit } from "@/lib/audit"
-import { hashRecoveryCode } from "./recovery"
+import { findUnusedRecoveryCode, hashRecoveryCode, markRecoveryCodeConsumed, RECOVERY_CODE_PATTERN } from "./recovery"
 import { verifyPassword } from "./password"
 import { verifyTotp } from "./totp"
 import { withTotpThrottle } from "./totpThrottle"
+import { revokeAllSessions } from "./sessions"
 
 type Tx = Prisma.TransactionClient
 
@@ -68,12 +69,17 @@ export async function replaceRecoveryCodes(
 }
 
 /**
- * Re-auth helper used by the self-disable, regenerate-recovery and re-enrol
- * routes. Always invokes both verifiers regardless of the request payload
- * shape (verifyPassword on empty input + null hash falls through to false;
- * verifyTotp on empty input returns false via otplib). The only conditional
- * uses server-loaded state (user.password). No user-input value gates a
- * security check.
+ * Re-auth helper of the routes that remove or replace a second factor that
+ * is already on: self-disable, regenerate the recovery codes, re-enrol. It
+ * asks for both factors (roadmap#280): the password AND a current code from
+ * the authenticator (or an unused recovery code), so a stolen session plus
+ * the password is not enough to drop the second factor. An account without
+ * a local password (SSO) proves itself with the code alone.
+ *
+ * A wrong password burns nothing: the authenticator code is only checked
+ * (and its time step spent) once the password holds, and a recovery code is
+ * hashed either way, so the answer time does not reveal the password, but
+ * only spent once the password holds.
  *
  * Rate limited by the same always-on floor as the sign-in second factor: a
  * stolen session could otherwise guess the password or the code through
@@ -86,13 +92,17 @@ export async function verifyReauthCredentials(
   body: { password?: unknown; totpCode?: unknown },
 ): Promise<boolean> {
   const passwordInput = typeof body.password === "string" ? body.password : ""
-  const totpInput = typeof body.totpCode === "string" ? body.totpCode : ""
+  const codeInput = typeof body.totpCode === "string" ? body.totpCode.trim().toUpperCase() : ""
   const outcome = await withTotpThrottle(userId, "reauth", async () => {
-    const passwordOk = passwordHash
-      ? await verifyPassword(passwordInput, passwordHash)
-      : false
-    const totpOk = await verifyTotp(userId, totpInput)
-    return passwordOk || totpOk
+    const passwordOk = passwordHash ? await verifyPassword(passwordInput, passwordHash) : true
+    if (RECOVERY_CODE_PATTERN.test(codeInput)) {
+      // Hashed whatever the password, so the answer time does not tell a
+      // right password from a wrong one; spent only once the password holds.
+      const codeId = await findUnusedRecoveryCode(userId, codeInput)
+      return passwordOk && codeId !== null && (await markRecoveryCodeConsumed(codeId, null))
+    }
+    // A wrong password never burns the current authenticator code.
+    return passwordOk && (await verifyTotp(userId, codeInput))
   })
   return outcome === "ok"
 }
@@ -109,7 +119,7 @@ export async function setUserRequire2faFlag(
 ): Promise<NextResponse> {
   const target = await prisma.user.findUnique({
     where: { id: targetId },
-    select: { email: true },
+    select: { email: true, totpEnabled: true },
   })
 
   if (!target) {
@@ -121,6 +131,10 @@ export async function setUserRequire2faFlag(
     data: { require2faEnrollment: value },
   })
 
+  // Requiring 2FA is what an admin does on a suspect account: it takes effect
+  // on every open session at once (roadmap#280), the next sign-in enrolls.
+  const revokedSessions = value && !target.totpEnabled ? await revokeAllSessions(targetId) : 0
+
   await audit({
     action: value ? "2fa_required_for_user" : "2fa_requirement_cleared",
     category: "auth",
@@ -130,7 +144,7 @@ export async function setUserRequire2faFlag(
     resourceId: targetId,
     resourceName: target.email,
     status: "success",
-    details: {},
+    details: value ? { revokedSessions } : {},
   })
 
   return NextResponse.json({ data: { ok: true } })

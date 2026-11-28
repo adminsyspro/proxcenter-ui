@@ -590,6 +590,7 @@ export const PERMISSIONS = {
   ALERTS_MANAGE: "alerts.manage",
   TASKS_VIEW: "tasks.view",
   REPORTS_VIEW: "reports.view",
+  REPORTS_MANAGE: "reports.manage",
 
   // Storage Admin
   STORAGE_ADMIN: "storage.admin",

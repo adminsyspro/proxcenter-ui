@@ -31,6 +31,7 @@ interface TwoFactorStatus {
   enabled: boolean
   enrolledAt?: string | null
   recoveryCodesRemaining?: number
+  passwordRequired?: boolean
 }
 
 function RecoveryCodesViewer({ codes, onClose }: { codes: string[]; onClose: () => void }) {
@@ -331,6 +332,7 @@ export default function TwoFactorCard() {
         onClose={() => setRegenReauthOpen(false)}
         onConfirm={handleRegen}
         title={t('twoFactor.regenReauthTitle')}
+        passwordRequired={status?.passwordRequired !== false}
       />
 
       {/* Reauth for disable */}
@@ -339,6 +341,7 @@ export default function TwoFactorCard() {
         onClose={() => setDisableReauthOpen(false)}
         onConfirm={handleDisable}
         title={t('twoFactor.disableReauthTitle')}
+        passwordRequired={status?.passwordRequired !== false}
       />
 
       {/* New codes viewer after regeneration */}

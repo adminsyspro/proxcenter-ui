@@ -15,7 +15,7 @@ async function handlePost(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const denied = await checkPermission(PERMISSIONS.REPORTS_VIEW)
+    const denied = await checkPermission(PERMISSIONS.REPORTS_MANAGE)
     if (denied) return denied
 
     const { id } = await params

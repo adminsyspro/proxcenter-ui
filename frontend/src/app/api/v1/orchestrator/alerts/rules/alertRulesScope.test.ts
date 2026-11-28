@@ -49,7 +49,7 @@ vi.mock("@/lib/orchestrator/client", () => ({
 vi.mock("@/lib/rbac", () => ({
   checkPermission: vi.fn().mockResolvedValue(null),
   getCurrentRbacInfraScope: (...a: any[]) => rbacScopeMock(...a),
-  PERMISSIONS: { CONNECTION_VIEW: "connection.view" },
+  PERMISSIONS: { CONNECTION_VIEW: "connection.view", ALERTS_MANAGE: "alerts.manage" },
 }))
 
 vi.mock("@/lib/demo/demo-api", () => ({

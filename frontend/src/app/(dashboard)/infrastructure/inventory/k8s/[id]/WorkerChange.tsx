@@ -8,6 +8,8 @@ import { useTranslations } from 'next-intl'
 import type { WorkerLayout } from '@/lib/k8s/provisionOrchestrator'
 import { MAX_WORKERS_PER_CHANGE, nextWorkerNames, proposeAddresses } from '@/lib/k8s/workers'
 import { SMALL_SELECT_SX } from '@/components/settings/VdcQuotaRow'
+import { SizeSlider, CORES_MARKS, MEMORY_MARKS, DISK_MARKS, formatCores, formatMemory, formatDisk } from '@/components/k8s/SizeSlider'
+import { MIN_CORES, MIN_MEMORY, MIN_DISK } from '@/lib/k8s/provision/types'
 
 export interface WorkerChangeState {
   status: string
@@ -79,7 +81,11 @@ function errorText(t: ReturnType<typeof useTranslations>, code: string | undefin
   return code && t.has(key) ? t(key) : t('error.generic')
 }
 
-/** Adds up to MAX_WORKERS_PER_CHANGE workers, with proposed addresses and VMIDs. */
+/**
+ * Adds up to MAX_WORKERS_PER_CHANGE workers, with proposed addresses and
+ * VMIDs. Their size starts from the cluster's worker sizing and applies to
+ * the new workers only: the deployed ones are not resized.
+ */
 export function AddWorkersDialog({
   clusterId, clusterName, layout, onClose, onStarted,
 }: {
@@ -90,7 +96,9 @@ export function AddWorkersDialog({
   onStarted: () => void
 }) {
   const t = useTranslations('kubernetes.workers')
+  const tTopology = useTranslations('kubernetes.provision.topology')
   const [count, setCount] = useState(1)
+  const [size, setSize] = useState({ cores: layout.workerCores, memory: layout.workerMemory, disk: layout.workerDisk })
   const [rows, setRows] = useState(() => proposeAddresses(layout, 1))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -113,15 +121,13 @@ export function AddWorkersDialog({
     const res = await fetch(`/api/v1/k8s/clusters/${clusterId}/workers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ add: rows }),
+      body: JSON.stringify({ add: rows.map(r => ({ ...r, ...size })) }),
     }).catch(() => null)
     const body = await res?.json().catch(() => null)
     setBusy(false)
     if (res?.ok) { onStarted(); return }
     setError(body?.error === 'invalid_request' && body?.message ? t('error.invalid', { message: body.message }) : errorText(t, body?.error))
   }
-
-  const sizing = t('sizing', { cores: layout.workerCores, memory: Math.round(layout.workerMemory / 1024 * 10) / 10, disk: layout.workerDisk })
 
   return (
     <Dialog open onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
@@ -132,8 +138,14 @@ export function AddWorkersDialog({
           <Select size="small" value={count} onChange={e => changeCount(Number(e.target.value))} sx={{ ...SMALL_SELECT_SX, width: 90 }}>
             {Array.from({ length: MAX_WORKERS_PER_CHANGE }, (_, i) => i + 1).map(n => <MenuItem key={n} value={n}>{n}</MenuItem>)}
           </Select>
-          <Typography variant="body2" color="text.secondary" noWrap>{sizing}</Typography>
         </Box>
+        <Typography variant="overline" sx={{ display: 'block', opacity: 0.6 }}>{t('size')}</Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2, mr: -1.5 }}>
+          <SizeSlider label={tTopology('cores')} value={size.cores} min={MIN_CORES} marks={CORES_MARKS} onChange={v => setSize(p => ({ ...p, cores: v }))} formatValue={formatCores} />
+          <SizeSlider label={tTopology('memory')} value={size.memory} min={MIN_MEMORY} marks={MEMORY_MARKS} unit="MB" onChange={v => setSize(p => ({ ...p, memory: v }))} formatValue={formatMemory} />
+          <SizeSlider label={tTopology('disk')} value={size.disk} min={MIN_DISK} marks={DISK_MARKS} unit="GB" onChange={v => setSize(p => ({ ...p, disk: v }))} formatValue={formatDisk} />
+        </Box>
+        <Typography variant="overline" sx={{ display: 'block', opacity: 0.6 }}>{t('addresses')}</Typography>
         {rows.map((r, i) => (
           <Box key={names[i]} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
             <Typography variant="body2" sx={{ width: 160, flexShrink: 0 }} noWrap title={names[i]}>{names[i]}</Typography>

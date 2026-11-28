@@ -11,7 +11,8 @@ import { getProvisionRun, changeWorkers, type RunStatus, type WorkerLayout } fro
 import { orchestratorFailure, failureBody } from '@/lib/k8s/provision/orchestratorStatus'
 import { nodeCordonState, removeNodeObject } from '@/lib/k8s/orchestrator'
 import { checkNodeVms } from '@/lib/k8s/server/destroyClusterNodes'
-import { planWorkers } from '@/lib/k8s/workers'
+import { planWorkers, type NewWorker } from '@/lib/k8s/workers'
+import { MIN_CORES, MIN_MEMORY, MIN_DISK } from '@/lib/k8s/provision/types'
 import { audit } from '@/lib/audit'
 import { withAudit } from '@/lib/audit/withAudit'
 
@@ -65,16 +66,32 @@ export async function GET(_req: Request, ctx: Ctx) {
   })
 }
 
-function readAdditions(raw: unknown): { ip: string; vmid: number }[] | null {
+/** Upper bounds of a worker's own sizing: a typo, not a VM, beyond them. */
+const MAX_CORES = 512
+const MAX_MEMORY = 4 * 1024 * 1024
+const MAX_DISK = 64 * 1024
+
+/** An optional size: undefined when absent, null when out of [min, max]. */
+function readSize(v: unknown, min: number, max: number): number | undefined | null {
+  if (v === undefined) return undefined
+  return Number.isInteger(v) && (v as number) >= min && (v as number) <= max ? (v as number) : null
+}
+
+function readAddition(a: any): NewWorker | null {
+  if (typeof a?.ip !== 'string' || !/^\d{1,3}(\.\d{1,3}){3}$/.test(a.ip)) return null
+  if (!Number.isInteger(a?.vmid) || a.vmid < 100 || a.vmid > 999_999_999) return null
+  const cores = readSize(a.cores, MIN_CORES, MAX_CORES)
+  const memory = readSize(a.memory, MIN_MEMORY, MAX_MEMORY)
+  const disk = readSize(a.disk, MIN_DISK, MAX_DISK)
+  if (cores === null || memory === null || disk === null) return null
+  return { ip: a.ip, vmid: a.vmid, cores, memory, disk }
+}
+
+function readAdditions(raw: unknown): NewWorker[] | null {
   if (raw === undefined) return []
   if (!Array.isArray(raw)) return null
-  const out: { ip: string; vmid: number }[] = []
-  for (const a of raw) {
-    if (typeof a?.ip !== 'string' || !/^\d{1,3}(\.\d{1,3}){3}$/.test(a.ip)) return null
-    if (!Number.isInteger(a?.vmid) || a.vmid < 100 || a.vmid > 999_999_999) return null
-    out.push({ ip: a.ip, vmid: a.vmid })
-  }
-  return out
+  const out = raw.map(readAddition)
+  return out.includes(null) ? null : (out as NewWorker[])
 }
 
 function readRemovals(raw: unknown): string[] | null {
@@ -128,7 +145,7 @@ async function removalRefusal(id: string, tenantId: string, cluster: Deployed, w
 }
 
 /**
- * Adds workers ({ add: [{ ip, vmid }] }) or removes them ({ remove: [name] }).
+ * Adds workers ({ add: [{ ip, vmid, cores?, memory?, disk? }] }) or removes them ({ remove: [name] }).
  * A removed worker must be cordoned (drained by the caller); the orchestrator
  * destroys its VM, and its node object goes once that is done (GET).
  */

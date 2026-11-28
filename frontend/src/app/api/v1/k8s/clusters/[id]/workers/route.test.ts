@@ -100,6 +100,18 @@ describe('POST /api/v1/k8s/clusters/[id]/workers', () => {
     expect(changeWorkersMock).toHaveBeenCalledWith('run-1', [layout.workers[0], { name: 'dev-worker-2', ip: '10.42.0.89', vmid: 98513 }])
     expect(auditMock).toHaveBeenCalledWith(expect.objectContaining({ action: 'workers', status: 'success', details: { added: ['dev-worker-2'], removed: [] } }))
   })
+  it('passes the size chosen for the new workers on', async () => {
+    const res = await post({ add: [{ ip: '10.42.0.89', vmid: 98513, cores: 8, memory: 16384, disk: 100 }] })
+    expect(res.status).toBe(202)
+    expect(changeWorkersMock).toHaveBeenCalledWith('run-1', [layout.workers[0], { name: 'dev-worker-2', ip: '10.42.0.89', vmid: 98513, cores: 8, memory: 16384, disk: 100 }])
+  })
+  it('refuses a size below the floors or not a whole number', async () => {
+    for (const size of [{ cores: 0 }, { memory: 1024 }, { disk: 5 }, { cores: 2.5 }, { memory: '4096' }, { disk: 999_999 }]) {
+      const res = await post({ add: [{ ip: '10.42.0.89', vmid: 98513, ...size }] })
+      expect(res.status).toBe(400)
+    }
+    expect(changeWorkersMock).not.toHaveBeenCalled()
+  })
   it('removes a cordoned worker whose VM is still the node, with vm.delete', async () => {
     const res = await post({ remove: ['dev-worker-1'] })
     expect(res.status).toBe(202)

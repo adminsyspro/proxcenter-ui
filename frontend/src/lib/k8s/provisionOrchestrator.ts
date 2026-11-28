@@ -11,6 +11,10 @@ export interface ProvisionNodeSpec {
   name: string
   ip: string
   vmid: number
+  /** A worker sized on its own (cores, memory in MiB, disk in GiB); absent = the cluster's worker sizing. */
+  cores?: number
+  memory?: number
+  disk?: number
 }
 
 export interface ProvisionRequest {

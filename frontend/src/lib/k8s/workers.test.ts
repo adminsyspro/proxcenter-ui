@@ -47,6 +47,11 @@ describe('planWorkers', () => {
     expect(p.ok && p.workers.map(w => w.name)).toEqual(['dev-worker-1', 'dev-worker-2'])
     expect(p.ok && p.added).toEqual([{ name: 'dev-worker-2', ip: '10.42.0.89', vmid: 98513 }])
   })
+  it('gives a new worker its own sizing, leaving the kept ones as deployed', () => {
+    const p = planWorkers('dev', layout, [{ ip: '10.42.0.89', vmid: 98513, cores: 8, memory: 16384, disk: 100 }], [])
+    expect(p.ok && p.added).toEqual([{ name: 'dev-worker-2', ip: '10.42.0.89', vmid: 98513, cores: 8, memory: 16384, disk: 100 }])
+    expect(p.ok && p.workers[0]).toEqual(layout.workers[0])
+  })
   it('removes a worker', () => {
     const p = planWorkers('dev', layout, [], ['dev-worker-1'])
     expect(p.ok && p.workers).toEqual([])

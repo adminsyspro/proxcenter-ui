@@ -68,6 +68,15 @@ export function nextWorkerNames(clusterName: string, layout: WorkerLayout, count
   return Array.from({ length: count }, (_, i) => `${prefix}${highest + i + 1}`)
 }
 
+/** A worker to add: its address, its VMID and, optionally, its own sizing. */
+export interface NewWorker {
+  ip: string
+  vmid: number
+  cores?: number
+  memory?: number
+  disk?: number
+}
+
 export type WorkerPlanError = 'nothing_to_change' | 'too_many' | 'not_a_worker'
 
 /**
@@ -78,7 +87,7 @@ export type WorkerPlanError = 'nothing_to_change' | 'too_many' | 'not_a_worker'
 export function planWorkers(
   clusterName: string,
   layout: WorkerLayout,
-  add: { ip: string; vmid: number }[],
+  add: NewWorker[],
   remove: string[],
 ): { ok: true; workers: ProvisionNodeSpec[]; added: ProvisionNodeSpec[]; error?: undefined } | { ok: false; error: WorkerPlanError; workers?: undefined; added?: undefined } {
   if (add.length === 0 && remove.length === 0) return { ok: false, error: 'nothing_to_change' }
@@ -86,7 +95,12 @@ export function planWorkers(
   const workerNames = new Set(layout.workers.map(w => w.name))
   if (remove.some(name => !workerNames.has(name))) return { ok: false, error: 'not_a_worker' }
   const names = nextWorkerNames(clusterName, layout, add.length)
-  const added = add.map((a, i) => ({ name: names[i], ip: a.ip, vmid: a.vmid }))
+  const added: ProvisionNodeSpec[] = add.map((a, i) => ({
+    name: names[i], ip: a.ip, vmid: a.vmid,
+    ...(a.cores ? { cores: a.cores } : {}),
+    ...(a.memory ? { memory: a.memory } : {}),
+    ...(a.disk ? { disk: a.disk } : {}),
+  }))
   const kept = layout.workers.filter(w => !remove.includes(w.name))
   return { ok: true, workers: [...kept, ...added], added }
 }

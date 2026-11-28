@@ -3227,7 +3227,8 @@
         "sparse": "Thin Provisioning",
         "nowritecache": "Schreibcache deaktivieren",
         "path": "Verzeichnis",
-        "is_mountpoint": "Das Verzeichnis ist ein Mountpoint"
+        "is_mountpoint": "Das Verzeichnis ist ein Mountpoint",
+        "managed-multipath": "Multipath von Proxmox verwaltet"
       },
       "contentTypes": {
         "images": "Disk-Image",
@@ -3245,7 +3246,15 @@
         "restore": "Wiederherstellung",
         "clone": "Klonen",
         "move": "Disk verschieben"
-      }
+      },
+      "multipathManual": "Dieses Ziel antwortet auf {count} Portalen. Ohne Multipath auf jedem Knoten bleibt ein LVM auf seinen LUNs inaktiv: LVM ignoriert die doppelten Pfade. Richten Sie zuerst multipath-tools auf den Knoten ein (Proxmox VE 9.3 kann es selbst verwalten).",
+      "iscsiZeroHint": "Ein iSCSI-Speicher zeigt immer 0 B: Proxmox rechnet ihm keine Kapazität zu. Seine LUNs dienen direkt als VM-Disks (Inhalt Disk-Image) oder bleiben (Inhalt Keiner) für ein LVM auf einer von ihnen, das dann die Kapazität zeigt.",
+      "lvmMultipathHint": "Eine über mehrere Pfade erreichte LUN braucht Multipath auf jedem Knoten (unter Proxmox VE 9.3 die Option „Multipath von Proxmox verwaltet“ des iSCSI-Speichers), sonst bleibt das LVM inaktiv.",
+      "lunPaths": "{active}/{total} Pfade",
+      "lunInUse": "belegt ({usage})",
+      "inactiveAfterAdd": "Der Speicher wurde hinzugefügt, aber Proxmox meldet ihn als inaktiv auf: {nodes}.",
+      "inactiveLvmMultipath": "Ein LVM auf einer über mehrere Pfade erreichten LUN bleibt inaktiv, bis Multipath auf den Knoten läuft.",
+      "unverifiedAfterAdd": "Der Speicher wurde hinzugefügt; sein Zustand konnte nicht gelesen werden auf: {nodes}."
     }
   },
   "backups": {

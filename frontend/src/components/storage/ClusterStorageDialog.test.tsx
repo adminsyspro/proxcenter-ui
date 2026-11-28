@@ -17,14 +17,21 @@ afterEach(() => cleanup())
 const CLUSTER = { id: 'c1', name: 'Production' }
 const BASE = '*/api/v1/connections/c1'
 
-function backend(opts: { config?: any; scan?: (body: any) => Response; save?: (body: any) => Response } = {}) {
+function backend(opts: { config?: any; version?: string; sanLuns?: any; scan?: (body: any) => Response; save?: (body: any) => Response } = {}) {
   const calls: Array<{ method: string; url: string; body: any }> = []
 
   server.use(
     http.get(`${BASE}/nodes`, () => HttpResponse.json({ data: [{ node: 'pve2' }, { node: 'pve1' }] })),
     http.get(`${BASE}/storage`, () => HttpResponse.json({ data: [{ storage: 'local', type: 'dir' }, { storage: 'san', type: 'iscsi' }] })),
     http.get(`${BASE}/storage/:sid`, () => HttpResponse.json({ data: opts.config })),
-    http.get(`${BASE}/nodes/:node/storage/san/content`, () => HttpResponse.json({ data: [{ volid: 'san:0.0.0.scsi-1', size: 2 ** 31 }] })),
+    http.get(`${BASE}/version`, () => HttpResponse.json({ data: { version: opts.version ?? '9.2.26' } })),
+    http.get(`${BASE}/nodes/:node/san-luns`, ({ request }) => {
+      calls.push({ method: 'SAN', url: new URL(request.url).search, body: null })
+      return HttpResponse.json({ data: opts.sanLuns ?? null })
+    }),
+    http.get(`${BASE}/nodes/:node/storage/san/content`, () => HttpResponse.json({
+      data: [{ volid: 'san:0.0.0.scsi-1', size: 2 ** 31 }, { volid: 'san:0.0.1.dm-uuid-mpath-2', size: 2 ** 30 }],
+    })),
     http.post(`${BASE}/nodes/:node/storage-scan`, async ({ request, params }) => {
       const body = await request.json()
       calls.push({ method: 'SCAN', url: String(params.node), body })
@@ -173,6 +180,108 @@ describe('ClusterStorageDialog: create', () => {
 
     await choose('Storage type', 'Proxmox Backup Server')
     expect(onTypeChange).toHaveBeenCalledWith('pbs')
+  })
+})
+
+describe('ClusterStorageDialog: multipath and state after an add (issue #1436)', () => {
+  const multiPortal = () => HttpResponse.json({ data: [{ value: 'iqn.a', detail: '10.0.0.1:3260,10.0.0.2:3260' }] })
+
+  async function scanIscsi() {
+    type(/Storage name/, 'san2')
+    type(/Portal/, '10.0.0.1')
+    const test = screen.getByRole('button', { name: /Test connection/ })
+    await waitFor(() => expect(test).toBeEnabled())
+    fireEvent.click(test)
+    expect(await screen.findByText('1 entry found')).toBeInTheDocument()
+    type(/Target/, 'iqn.a')
+  }
+
+  it('on Proxmox VE 9.3, turns managed multipath on for a target on several portals', async () => {
+    const calls = backend({ version: '9.3.1', scan: multiPortal })
+    open({ initialType: 'iscsi' })
+
+    const box = await screen.findByLabelText('Multipath managed by Proxmox')
+    expect(box).not.toBeChecked()
+    expect(screen.getByText(/always shows 0 B/)).toBeInTheDocument()
+    await scanIscsi()
+    expect(box).toBeChecked()
+    expect(screen.queryByText(/answers on 2 portals/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(calls.find(c => c.method === 'POST')).toBeDefined())
+    expect(calls.find(c => c.method === 'POST')!.body.fields).toEqual({ portal: '10.0.0.1', target: 'iqn.a', 'managed-multipath': true })
+  })
+
+  it('before 9.3, offers no option and warns that multipath must be set up by hand', async () => {
+    const calls = backend({ scan: multiPortal })
+    open({ initialType: 'iscsi' })
+
+    await scanIscsi()
+    expect(screen.getByText(/answers on 2 portals/)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Multipath managed by Proxmox')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(calls.find(c => c.method === 'POST')).toBeDefined())
+    expect(calls.find(c => c.method === 'POST')!.body.fields).not.toHaveProperty('managed-multipath')
+  })
+
+  it('on 9.3, shows the paths and health of each LUN and greys a LUN already used', async () => {
+    const calls = backend({
+      version: '9.3.1',
+      sanLuns: [
+        { wwid: '1', state: 'optimal', pathsActive: 2, pathsTotal: 2, usage: 'unused' },
+        { wwid: '2', state: 'degraded', pathsActive: 1, pathsTotal: 2, usage: 'lvm' },
+      ],
+    })
+    open({ initialType: 'lvm' })
+
+    await choose('Base storage', 'san')
+    expect(screen.getByText(/needs multipath on every node/)).toBeInTheDocument()
+    await waitFor(() => expect(calls.some(c => c.method === 'SAN')).toBe(true))
+    expect(calls.find(c => c.method === 'SAN')!.url).toBe('?storage=san')
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Base volume (LUN)' }))
+    expect(await screen.findByText('2 GiB · 2/2 paths · optimal')).toBeInTheDocument()
+    expect(screen.getByText('1 GiB · 1/2 paths · degraded · in use (lvm)')).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /dm-uuid-mpath-2/ })).toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('reads no SAN view before 9.3', async () => {
+    const calls = backend()
+    open({ initialType: 'lvm' })
+
+    await choose('Base storage', 'san')
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Base volume (LUN)' }))
+    expect(await screen.findByRole('option', { name: /0\.0\.0\.scsi-1/ })).toBeInTheDocument()
+    expect(calls.some(c => c.method === 'SAN')).toBe(false)
+  })
+
+  it('says where an added LVM is not active instead of closing on a success', async () => {
+    backend({ save: () => HttpResponse.json({ data: { storage: 'vg-san', type: 'lvm', inactive: ['pve1', 'pve2'], unverified: ['pve3'] } }, { status: 201 }) })
+    const { onSaved, onClose } = open({ initialType: 'lvm' })
+
+    type(/Storage name/, 'vg-san')
+    await choose('Base storage', 'san')
+    await choose('Base volume (LUN)', /0\.0\.0\.scsi-1/)
+    type(/Volume group/, 'vgsan')
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    expect(await screen.findByText(/not active on: pve1, pve2\. An LVM on a LUN reached through several paths/)).toBeInTheDocument()
+    expect(screen.getByText('The storage was added; its state could not be read on: pve3.')).toBeInTheDocument()
+    expect(onSaved).toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('closes on an add active everywhere', async () => {
+    backend({ save: () => HttpResponse.json({ data: { storage: 'd', type: 'dir', inactive: [], unverified: [] } }, { status: 201 }) })
+    const { onClose } = open({ initialType: 'dir' })
+
+    type(/Storage name/, 'd1')
+    type(/Directory/, '/srv/d')
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 })
 

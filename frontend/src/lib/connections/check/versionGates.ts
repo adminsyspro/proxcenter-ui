@@ -45,7 +45,7 @@ export function parsePveVersion(raw: unknown): ParsedPveVersion | null {
   return { major: Number(match[1]), minor: Number(match[2]) }
 }
 
-export function isAtLeast(version: ParsedPveVersion, min: [number, number]): boolean {
+export function isAtLeast(version: ParsedPveVersion, min: readonly [number, number]): boolean {
   if (version.major !== min[0]) return version.major > min[0]
   return version.minor >= min[1]
 }

@@ -13,7 +13,7 @@ import { getTenantInfrastructureScope, maskingScope } from "@/lib/tenant/infraSc
 import { resolveCallerInfraScope } from "@/lib/tenant/iaasGuard"
 import { iaasStorageView } from "@/lib/connections/iaasView"
 import { attachPbsStorage, PbsAttachError } from "@/lib/storage/attachPbsStorage"
-import { buildStorageParams, ClusterStorageError, pveMessage, redactSecrets, scrubStorageConfig } from "@/lib/storage/clusterStorage"
+import { buildStorageParams, ClusterStorageError, pveMessage, redactSecrets, scrubStorageConfig, storageActivation } from "@/lib/storage/clusterStorage"
 import { isClusterStorageType } from "@/lib/storage/clusterStorageTypes"
 import { audit } from "@/lib/audit"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
@@ -393,6 +393,13 @@ async function createClusterStorage(id: string, body: any) {
 
     await pveFetch<any>(conn, "/storage", { method: "POST", body: new URLSearchParams(built.params) })
 
+    // Proxmox can accept a storage no node can use (an LVM on a LUN reached
+    // through two paths without multipath): the dialog says so instead of a
+    // plain success. A storage added disabled is never active, nothing to read.
+    const activation = built.params.disable === "1"
+      ? { inactive: [], unverified: [] }
+      : await storageActivation(conn, storage, built.params.nodes ? built.params.nodes.split(",") : [])
+
     await audit({
       action: "create",
       category: "storage",
@@ -400,10 +407,15 @@ async function createClusterStorage(id: string, body: any) {
       resourceId: storage,
       resourceName: storage,
       status: "success",
-      details: { connectionId: id, connectionName: conn.name, ...details },
+      details: {
+        connectionId: id,
+        connectionName: conn.name,
+        ...details,
+        ...(activation.inactive.length ? { inactiveOn: activation.inactive } : {}),
+      },
     })
 
-    return NextResponse.json({ data: { storage, type: body.type } }, { status: 201 })
+    return NextResponse.json({ data: { storage, type: body.type, ...activation } }, { status: 201 })
   } catch (e: any) {
     const excluded = licenseExcludedResponse(e)
     if (excluded) return excluded

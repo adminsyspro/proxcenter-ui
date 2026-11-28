@@ -3225,7 +3225,8 @@
         "sparse": "씬 프로비저닝",
         "nowritecache": "쓰기 캐시 비활성화",
         "path": "디렉터리",
-        "is_mountpoint": "디렉터리가 마운트 지점입니다"
+        "is_mountpoint": "디렉터리가 마운트 지점입니다",
+        "managed-multipath": "Proxmox가 관리하는 멀티패스"
       },
       "contentTypes": {
         "images": "디스크 이미지",
@@ -3243,7 +3244,15 @@
         "restore": "복원",
         "clone": "복제",
         "move": "디스크 이동"
-      }
+      },
+      "multipathManual": "이 대상은 {count}개의 포털에서 응답합니다. 모든 노드에 멀티패스를 구성하지 않으면 해당 LUN 위에 만든 LVM은 비활성 상태로 남습니다. LVM이 중복 경로를 무시하기 때문입니다. 먼저 노드에 multipath-tools를 구성하세요(Proxmox VE 9.3은 직접 관리할 수 있습니다).",
+      "iscsiZeroHint": "iSCSI 스토리지는 항상 0 B로 표시됩니다. Proxmox는 이 스토리지의 용량을 집계하지 않습니다. LUN은 VM 디스크로 직접 사용하거나(콘텐츠: 디스크 이미지), 그중 하나 위에 만들 LVM용으로 남겨 두며(콘텐츠: 없음), 용량은 그 LVM에 표시됩니다.",
+      "lvmMultipathHint": "여러 경로로 연결된 LUN은 모든 노드에 멀티패스가 필요합니다(Proxmox VE 9.3에서는 iSCSI 스토리지의 \"Proxmox가 관리하는 멀티패스\" 옵션). 그렇지 않으면 LVM이 비활성 상태로 남습니다.",
+      "lunPaths": "경로 {active}/{total}",
+      "lunInUse": "사용 중 ({usage})",
+      "inactiveAfterAdd": "스토리지가 추가되었지만 Proxmox가 다음 노드에서 비활성으로 보고합니다: {nodes}.",
+      "inactiveLvmMultipath": "여러 경로로 연결된 LUN 위의 LVM은 노드에서 멀티패스가 실행될 때까지 비활성 상태로 남습니다.",
+      "unverifiedAfterAdd": "스토리지가 추가되었지만 다음 노드에서 상태를 읽을 수 없습니다: {nodes}."
     }
   },
   "backups": {

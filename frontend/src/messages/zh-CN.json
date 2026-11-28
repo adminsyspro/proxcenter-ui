@@ -3225,7 +3225,8 @@
         "sparse": "精简配置",
         "nowritecache": "禁用写缓存",
         "path": "目录",
-        "is_mountpoint": "该目录是挂载点"
+        "is_mountpoint": "该目录是挂载点",
+        "managed-multipath": "由 Proxmox 管理多路径"
       },
       "contentTypes": {
         "images": "磁盘映像",
@@ -3243,7 +3244,15 @@
         "restore": "恢复",
         "clone": "克隆",
         "move": "磁盘移动"
-      }
+      },
+      "multipathManual": "此目标在 {count} 个门户上应答。若未在每个节点上配置多路径，基于其 LUN 创建的 LVM 将保持非活动状态：LVM 会忽略重复的路径。请先在节点上配置 multipath-tools（Proxmox VE 9.3 可自行管理）。",
+      "iscsiZeroHint": "iSCSI 存储始终显示 0 B：Proxmox 不为其计算容量。其 LUN 可直接用作虚拟机磁盘（内容：磁盘映像），或保留（内容：无）用于在其中一个 LUN 上创建 LVM，容量随后显示在该 LVM 上。",
+      "lvmMultipathHint": "通过多条路径访问的 LUN 需要在每个节点上启用多路径（在 Proxmox VE 9.3 中为 iSCSI 存储的“由 Proxmox 管理多路径”选项），否则 LVM 将保持非活动状态。",
+      "lunPaths": "{active}/{total} 条路径",
+      "lunInUse": "已使用（{usage}）",
+      "inactiveAfterAdd": "存储已添加，但 Proxmox 报告其在以下节点上未激活：{nodes}。",
+      "inactiveLvmMultipath": "在通过多条路径访问的 LUN 上的 LVM，在节点运行多路径之前将保持非活动状态。",
+      "unverifiedAfterAdd": "存储已添加；无法读取其在以下节点上的状态：{nodes}。"
     }
   },
   "backups": {

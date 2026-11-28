@@ -6099,6 +6099,20 @@
                   },
                   "type": {
                     "type": "string"
+                  },
+                  "inactive": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Nodes where Proxmox reports the new storage as not active"
+                  },
+                  "unverified": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Nodes whose status could not be read"
                   }
                 }
               }
@@ -6152,6 +6166,52 @@
               }
             },
             "description": "nfs: export paths, cifs: shares, iscsi: targets, lvm: volume groups"
+          }
+        }
+      },
+      "StorageSanLunsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "description": "null before Proxmox VE 9.3",
+            "items": {
+              "type": "object",
+              "properties": {
+                "wwid": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "optimal, degraded, failed..."
+                },
+                "pathsActive": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "pathsTotal": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "usage": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "unused, lvm, partitions, other"
+                }
+              }
+            }
           }
         }
       },
@@ -23906,6 +23966,20 @@
                             },
                             "type": {
                               "type": "string"
+                            },
+                            "inactive": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "description": "Nodes where Proxmox reports the new storage as not active"
+                            },
+                            "unverified": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "description": "Nodes whose status could not be read"
                             }
                           }
                         }
@@ -24677,6 +24751,179 @@
                 "example": {
                   "error": "Method not allowed for this API token route",
                   "method": "DELETE"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-token quota exhausted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Rate limit exceeded",
+                  "retryAfter": 42
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/nodes/{node}/san-luns": {
+      "get": {
+        "operationId": "storage-san-luns",
+        "summary": "SAN LUNs of an iSCSI storage seen from a node",
+        "description": "The LUNs {node} reaches through the target of the iSCSI storage `?storage=`, with their WWID, path health (`state`, `pathsActive`, `pathsTotal`) and what they already hold (`usage`: unused, lvm, partitions, other). Read from the SAN view of Proxmox VE 9.3; `data` is null on an older release. Needs connection.manage. Not available to a vDC tenant token.\n\nRequired scope: `storage:read` or `storage:write`",
+        "tags": [
+          "Storage"
+        ],
+        "x-required-scopes": [
+          "storage:read",
+          "storage:write"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Raw connection id; must be inside the token connection perimeter."
+          },
+          {
+            "name": "node",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Path parameter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "headers": {
+              "RateLimit-Limit": {
+                "description": "Requests allowed per minute",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in the window",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until the window resets",
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "ProxCenter-Version": {
+                "description": "ProxCenter version that served the request",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "description": "null before Proxmox VE 9.3",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "wwid": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "optimal, degraded, failed..."
+                          },
+                          "pathsActive": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "pathsTotal": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "usage": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "unused, lvm, partitions, other"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown, invalid, revoked or expired token",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Invalid or expired API token"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Token holds none of the required scopes, or the target is outside the token perimeter",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "scope": {
+                    "value": {
+                      "error": "Route not available to API tokens",
+                      "route": "/api/v1/connections/{id}/nodes/{node}/san-luns"
+                    }
+                  },
+                  "perimeter": {
+                    "value": {
+                      "error": "Connection not in token scope",
+                      "connection": "conn-1"
+                    }
+                  },
+                  "clusterObject": {
+                    "value": {
+                      "error": "Cluster-level object not available to a vDC tenant token"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed for this API token route",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Method not allowed for this API token route",
+                  "method": "POST"
                 }
               }
             }

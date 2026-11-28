@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useMemo } from 'react'
+import { useTranslations } from 'next-intl'
 import {
   Box,
   Card,
@@ -9,6 +10,7 @@ import {
   LinearProgress,
   Stack,
   Chip,
+  Tooltip as MuiTooltip,
   alpha,
   useTheme,
 } from '@mui/material'
@@ -73,6 +75,7 @@ interface StorageDashboardProps {
 }
 
 export default function StorageDashboard({ clusterStorages, onStorageClick }: StorageDashboardProps) {
+  const t = useTranslations()
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
 
@@ -400,10 +403,12 @@ export default function StorageDashboard({ clusterStorages, onStorageClick }: St
                         />
                       </Box>
 
-                      {/* Usage text */}
-                      <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.6rem', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                        {formatBytes(s.used)}/{formatBytes(s.total)}
-                      </Typography>
+                      {/* Usage text; an iSCSI storage has no capacity of its own (#1436) */}
+                      <MuiTooltip title={s.type === 'iscsi' && !(s.total > 0) ? t('storage.clusterStorage.iscsiZeroHint') : ''}>
+                        <Typography variant="caption" sx={{ opacity: 0.5, fontSize: '0.6rem', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                          {formatBytes(s.used)}/{formatBytes(s.total)}
+                        </Typography>
+                      </MuiTooltip>
 
                       {/* Percentage */}
                       <Typography

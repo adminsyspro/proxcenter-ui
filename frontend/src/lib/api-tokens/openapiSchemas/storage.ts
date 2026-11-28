@@ -140,7 +140,20 @@ export const STORAGE_RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> =
     description: "Answered with HTTP 201: the PBS attach result, or the new storage and its type.",
     oneOf: [
       { $ref: "#/components/schemas/StorageAttachPbsResponse" },
-      { type: "object", properties: { data: { type: "object", properties: { storage: { type: "string" }, type: { type: "string" } } } } },
+      {
+        type: "object",
+        properties: {
+          data: {
+            type: "object",
+            properties: {
+              storage: { type: "string" },
+              type: { type: "string" },
+              inactive: { ...STRINGS, description: "Nodes where Proxmox reports the new storage as not active" },
+              unverified: { ...STRINGS, description: "Nodes whose status could not be read" },
+            },
+          },
+        },
+      },
     ],
   },
   StorageConfigResponse: {
@@ -158,6 +171,25 @@ export const STORAGE_RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> =
         type: "array",
         items: { type: "object", properties: { value: { type: "string" }, detail: { type: ["string", "null"] } } },
         description: "nfs: export paths, cifs: shares, iscsi: targets, lvm: volume groups",
+      },
+    },
+  },
+  StorageSanLunsResponse: {
+    type: "object",
+    properties: {
+      data: {
+        type: ["array", "null"],
+        description: "null before Proxmox VE 9.3",
+        items: {
+          type: "object",
+          properties: {
+            wwid: { type: "string" },
+            state: { type: ["string", "null"], description: "optimal, degraded, failed..." },
+            pathsActive: { type: ["integer", "null"] },
+            pathsTotal: { type: ["integer", "null"] },
+            usage: { type: ["string", "null"], description: "unused, lvm, partitions, other" },
+          },
+        },
       },
     },
   },

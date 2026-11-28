@@ -92,6 +92,18 @@ export const STORAGE_ENTRIES: AllowlistEntry[] = [
     responseSchemaRef: "StorageScanResponse",
   }),
   storageEntry({
+    id: "storage-san-luns",
+    method: "GET",
+    file: "connections/[id]/nodes/[node]/san-luns",
+    pattern: `${CONN}/nodes/{node}/san-luns`,
+    requiredScopes: STORAGE_READ_SCOPES,
+    clusterObject: true,
+    summary: "SAN LUNs of an iSCSI storage seen from a node",
+    description:
+      "The LUNs {node} reaches through the target of the iSCSI storage `?storage=`, with their WWID, path health (`state`, `pathsActive`, `pathsTotal`) and what they already hold (`usage`: unused, lvm, partitions, other). Read from the SAN view of Proxmox VE 9.3; `data` is null on an older release. Needs connection.manage. Not available to a vDC tenant token.",
+    responseSchemaRef: "StorageSanLunsResponse",
+  }),
+  storageEntry({
     id: "storage-content-delete",
     method: "DELETE",
     file: `${NODE_STORAGE_FILE}/content/[volid]`,

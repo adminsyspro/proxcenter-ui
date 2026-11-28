@@ -167,6 +167,7 @@ describe('shared canonical matcher', () => {
       'storage-config-read': '/api/v1/connections/c1/storage/nfs-main',
       'storage-update': '/api/v1/connections/c1/storage/nfs-main',
       'storage-scan': '/api/v1/connections/c1/nodes/pve1/storage-scan',
+      'storage-san-luns': '/api/v1/connections/c1/nodes/pve1/san-luns',
       'storage-content-delete': '/api/v1/connections/c1/nodes/pve1/storage/local/content/local%3Aiso%2Fdebian.iso',
       'storage-download-url': '/api/v1/connections/c1/nodes/pve1/storage/local/download-url',
       'aplinfo-list': '/api/v1/connections/c1/nodes/pve1/aplinfo',

@@ -280,6 +280,124 @@ export function pveMessage(e: any): string {
   }
 }
 
+// ── State right after an add ────────────────────────────────────────────────
+
+/** Past this, a node's status counts as unread: it is a check, not a job. */
+export const STATUS_TIMEOUT_MS = 10_000
+const STATUS_CONCURRENCY = 2
+/**
+ * A node read inactive is read again this many times before it counts: right
+ * after an iSCSI add, the other nodes of PVE-PROD (9.2) answered inactive for
+ * a few seconds while their first login ran, then active.
+ */
+export const STATUS_RETRIES = 2
+export const STATUS_RETRY_DELAY_MS = 5_000
+
+export type StorageActivation = {
+  /** Nodes where Proxmox reports the storage as not active. */
+  inactive: string[]
+  /** Nodes whose status could not be read (offline, timeout). */
+  unverified: string[]
+}
+
+/**
+ * Whether a storage that was just added is active on its nodes. Proxmox
+ * accepts an LVM on a LUN reached through two paths without multipath, then
+ * LVM drops both paths as multipath components: the storage exists, inactive,
+ * at 0 B (measured on PVE 9.2). One status read per node, two at a time; a
+ * node read inactive is read again, at most STATUS_RETRIES times.
+ */
+export async function storageActivation(
+  conn: ProxmoxClientOptions,
+  storage: string,
+  restricted: string[],
+  { retryDelayMs = STATUS_RETRY_DELAY_MS }: { retryDelayMs?: number } = {},
+): Promise<StorageActivation> {
+  const out: StorageActivation = { inactive: [], unverified: [] }
+  let nodes = restricted
+
+  if (!nodes.length) {
+    const rows: any[] | null = await pveFetch<any[]>(conn, '/nodes').catch(() => null)
+    if (!rows) return out
+    const all = rows.map(r => ({ node: String(r?.node ?? ''), online: r?.status === 'online' })).filter(r => r.node)
+    nodes = all.filter(r => r.online).map(r => r.node)
+    out.unverified.push(...all.filter(r => !r.online).map(r => r.node))
+  }
+
+  let inactive: string[] = []
+  const read = async (node: string): Promise<void> => {
+    try {
+      const st = await pveFetch<any>(conn, `/nodes/${encodeURIComponent(node)}/storage/${encodeURIComponent(storage)}/status`, {}, { timeoutMs: STATUS_TIMEOUT_MS })
+      if (Number(st?.active) !== 1) inactive.push(node)
+    } catch {
+      out.unverified.push(node)
+    }
+  }
+  const inBatches = async (rest: string[]): Promise<void> => {
+    if (!rest.length) return
+    await Promise.all(rest.slice(0, STATUS_CONCURRENCY).map(read))
+    return inBatches(rest.slice(STATUS_CONCURRENCY))
+  }
+
+  await inBatches(nodes)
+  for (let attempt = 0; attempt < STATUS_RETRIES && inactive.length; attempt++) {
+    const again = inactive
+    inactive = []
+    await new Promise(resolve => setTimeout(resolve, retryDelayMs))
+    await inBatches(again)
+  }
+  out.inactive = inactive
+  out.inactive.sort(byName)
+  out.unverified.sort(byName)
+  return out
+}
+
+const byName = (a: string, b: string) => a.localeCompare(b)
+
+// ── SAN LUNs (PVE 9.3) ──────────────────────────────────────────────────────
+
+export type SanLun = {
+  wwid: string
+  /** Health of the LUN from its paths: optimal, degraded, failed... */
+  state: string | null
+  pathsActive: number | null
+  pathsTotal: number | null
+  /** What the LUN already holds: unused, lvm, partitions, other. */
+  usage: string | null
+}
+
+const WWID_RE = /\.(?:scsi|dm-uuid-mpath)-([A-Za-z0-9_.:]+)$/
+
+/** The WWID of an iSCSI LUN volume, plain (`scsi-<wwid>`) or multipath (`dm-uuid-mpath-<wwid>`). */
+export function wwidOfVolid(volid: string): string | null {
+  return WWID_RE.exec(String(volid ?? ''))?.[1] ?? null
+}
+
+const numOrNull = (v: unknown) => (v === undefined || v === null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v))
+
+/**
+ * The LUNs one node reaches through an iSCSI target, with their paths, health
+ * and usage, from the SAN view Proxmox VE 9.3 added. Null before 9.3 or when
+ * the node does not answer: the LUN list then goes without these details.
+ */
+export async function sanLunsOfTarget(conn: ProxmoxClientOptions, node: string, target: string): Promise<SanLun[] | null> {
+  if (!NODE_RE.test(String(node ?? ''))) throw new ClusterStorageError('Invalid node name')
+  try {
+    const rows = await pveFetch<any[]>(conn, `/nodes/${encodeURIComponent(node)}/san/luns`, {}, { timeoutMs: SCAN_TIMEOUT_MS })
+    return (Array.isArray(rows) ? rows : [])
+      .filter(r => r?.['iscsi-target'] === target && r?.wwid)
+      .map(r => ({
+        wwid: String(r.wwid),
+        state: r.state ? String(r.state) : null,
+        pathsActive: numOrNull(r['paths-active']),
+        pathsTotal: numOrNull(r['paths-total']),
+        usage: r.usage ? String(r.usage) : null,
+      }))
+  } catch {
+    return null
+  }
+}
+
 // ── Usage before removal ────────────────────────────────────────────────────
 
 export type StorageUsage = {

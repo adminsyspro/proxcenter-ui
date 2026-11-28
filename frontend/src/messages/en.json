@@ -3238,7 +3238,8 @@
         "sparse": "Thin provisioning",
         "nowritecache": "Disable write cache",
         "path": "Directory",
-        "is_mountpoint": "The directory is a mount point"
+        "is_mountpoint": "The directory is a mount point",
+        "managed-multipath": "Multipath managed by Proxmox"
       },
       "contentTypes": {
         "images": "Disk image",
@@ -3256,7 +3257,15 @@
         "restore": "Restore",
         "clone": "Clone",
         "move": "Disk move"
-      }
+      },
+      "multipathManual": "This target answers on {count} portals. Without multipath configured on every node, an LVM built on its LUNs stays inactive: LVM ignores the duplicate paths. Set up multipath-tools on the nodes first (Proxmox VE 9.3 can manage it itself).",
+      "iscsiZeroHint": "An iSCSI storage always shows 0 B: Proxmox counts no capacity for it. Its LUNs are used directly as VM disks (content Disk image), or kept (content None) for an LVM built on one of them, which then shows the capacity.",
+      "lvmMultipathHint": "A LUN reached through several paths needs multipath on every node (on Proxmox VE 9.3, the “Multipath managed by Proxmox” option of the iSCSI storage), or the LVM stays inactive.",
+      "lunPaths": "{active}/{total} paths",
+      "lunInUse": "in use ({usage})",
+      "inactiveAfterAdd": "The storage was added, but Proxmox reports it as not active on: {nodes}.",
+      "inactiveLvmMultipath": "An LVM on a LUN reached through several paths stays inactive until multipath runs on the nodes.",
+      "unverifiedAfterAdd": "The storage was added; its state could not be read on: {nodes}."
     }
   },
   "backups": {

@@ -3129,21 +3129,16 @@ export default function ClusterTabs(props: any) {
                                       }} 
                                     />
                                   </TableCell>
+                                  {/* Same font as the ID column: the cell's own (#1436). */}
                                   <TableCell>
-                                    <Typography variant="caption" sx={{ opacity: 0.9 }}>
-                                      {(Array.isArray(storage.content) ? storage.content : String(storage.content || '').split(',')).filter(Boolean).join(', ') || '—'}
-                                    </Typography>
+                                    {(Array.isArray(storage.content) ? storage.content : String(storage.content || '').split(',')).filter(Boolean).join(', ') || '—'}
                                   </TableCell>
-                                  <TableCell>
-                                    <Typography variant="caption" sx={{ fontFamily: 'monospace', opacity: 0.8 }}>
-                                      {storage.path || storage.server || storage.pool || '—'}
-                                    </Typography>
-                                  </TableCell>
+                                  <TableCell>{storage.path || storage.server || storage.pool || '—'}</TableCell>
                                   <TableCell align="center">
                                     {storage.shared ? (
                                       <i className="ri-checkbox-circle-fill" style={{ color: '#4caf50', fontSize: 18 }} />
                                     ) : (
-                                      <Typography variant="caption" sx={{ opacity: 0.5 }}>{t('common.no')}</Typography>
+                                      <Box component="span" sx={{ color: 'text.secondary' }}>{t('common.no')}</Box>
                                     )}
                                   </TableCell>
                                   <TableCell align="center">

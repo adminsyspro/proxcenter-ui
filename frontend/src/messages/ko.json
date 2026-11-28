@@ -13875,6 +13875,57 @@
         "openSlow": "OSD {id} 열기, 느림",
         "slow": "느림"
       }
+    },
+    "provision": {
+      "task": {
+        "following": "Proxmox 작업을 기다리는 중…",
+        "failed": "Proxmox 작업이 실패했습니다: {reason}",
+        "failedBare": "Proxmox 작업이 실패했습니다.",
+        "timeout": "Proxmox 작업이 아직 실행 중입니다. 작업 센터에서 확인하세요. 작업이 끝나면 콕핏이 갱신됩니다."
+      },
+      "pool": {
+        "create": "풀 만들기",
+        "edit": "편집",
+        "delete": "삭제",
+        "createTitle": "Ceph 풀 만들기",
+        "editTitle": "풀 {name} 편집",
+        "name": "이름",
+        "size": "크기",
+        "minSize": "최소 크기",
+        "singleCopy": "단일 복사본에 쓰기 허용",
+        "rule": "CRUSH 규칙",
+        "ruleDefault": "기본 규칙",
+        "autoscale": "PG 자동 조정",
+        "autoscaleModes": {
+          "on": "켜기",
+          "warn": "경고만",
+          "off": "끄기"
+        },
+        "target": "자동 조정 목표",
+        "targetKinds": {
+          "none": "없음",
+          "ratio": "클러스터 비율",
+          "size": "예상 크기"
+        },
+        "targetRatio": "목표 비율 (0~1)",
+        "targetSize": "목표 크기",
+        "application": "애플리케이션",
+        "addStorage": "Proxmox VE 스토리지로 추가",
+        "pgNote": "풀은 배치 그룹 32개로 시작하며, 자동 조정이 데이터에 맞춰 조정합니다.",
+        "created": "풀 {name}이(가) 생성되었습니다",
+        "updated": "풀 {name}이(가) 수정되었습니다",
+        "deleted": "풀 {name}이(가) 삭제되었습니다",
+        "deleteTitle": "풀 {name} 삭제",
+        "deleteData": "데이터",
+        "deleteDataValue": "{used} 사용, 객체 {objects}개",
+        "deleteStorages": "Proxmox VE 스토리지",
+        "deleteNoStorage": "없음",
+        "deleteRemoveStorages": "이 풀의 PVE 스토리지도 제거",
+        "deleteConfirm": "확인하려면 {name} 입력",
+        "deleteExternal": "이 풀을 외부 RBD 스토리지로 쓰는 다른 클러스터는 확인하지 않습니다.",
+        "hasGuests": "이 게스트 디스크가 아직 풀에 있습니다. 먼저 옮기거나 삭제하세요.",
+        "guestsUnknown": "이 스토리지의 내용을 읽을 수 없어 풀을 삭제하지 않습니다:"
+      }
     }
   },
   "microsegPilot": {

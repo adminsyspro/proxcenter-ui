@@ -13888,6 +13888,57 @@
         "openSlow": "Open OSD {id}, slow",
         "slow": "Slow"
       }
+    },
+    "provision": {
+      "task": {
+        "following": "Waiting for the Proxmox task…",
+        "failed": "The Proxmox task failed: {reason}",
+        "failedBare": "The Proxmox task failed.",
+        "timeout": "The Proxmox task is still running. Follow it in the Task Center; the cockpit updates once it ends."
+      },
+      "pool": {
+        "create": "Create pool",
+        "edit": "Edit",
+        "delete": "Delete",
+        "createTitle": "Create a Ceph pool",
+        "editTitle": "Edit pool {name}",
+        "name": "Name",
+        "size": "Size",
+        "minSize": "Min. size",
+        "singleCopy": "Accept writes on a single copy",
+        "rule": "CRUSH rule",
+        "ruleDefault": "Default rule",
+        "autoscale": "PG autoscale",
+        "autoscaleModes": {
+          "on": "On",
+          "warn": "Warn only",
+          "off": "Off"
+        },
+        "target": "Autoscale target",
+        "targetKinds": {
+          "none": "None",
+          "ratio": "Share of the cluster",
+          "size": "Expected size"
+        },
+        "targetRatio": "Target ratio (0 to 1)",
+        "targetSize": "Target size",
+        "application": "Application",
+        "addStorage": "Add as a Proxmox VE storage",
+        "pgNote": "The pool starts with 32 placement groups; the autoscaler adjusts them to the data.",
+        "created": "Pool {name} created",
+        "updated": "Pool {name} updated",
+        "deleted": "Pool {name} deleted",
+        "deleteTitle": "Delete pool {name}",
+        "deleteData": "Data",
+        "deleteDataValue": "{used} used, {objects} objects",
+        "deleteStorages": "Proxmox VE storages",
+        "deleteNoStorage": "None",
+        "deleteRemoveStorages": "Also remove the PVE storages of this pool",
+        "deleteConfirm": "Type {name} to confirm",
+        "deleteExternal": "Other clusters that use this pool as an external RBD storage are not checked.",
+        "hasGuests": "These guest disks are still on the pool: move or delete them first.",
+        "guestsUnknown": "The content of these storages could not be read, so the pool is not deleted:"
+      }
     }
   },
   "microsegPilot": {

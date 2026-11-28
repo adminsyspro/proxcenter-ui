@@ -1,25 +1,27 @@
 import { NextResponse } from 'next/server'
 
 import { licenseExcludedResponse } from '@/lib/api/response'
-import { denyIaasTenantCeph } from '@/lib/ceph/tenantGuard'
 import { pickOnlineNode } from '@/lib/ceph/nodeNoout'
 import { getConnectionById, isConnectionNotFoundError } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
 import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 
 /*
-   What every Ceph provisioning route does first (ui#1450): storage.admin on
-   the connection, then the IaaS tenant gate (Ceph is a whole-cluster object),
-   then the connection. And the online node a cluster-wide write goes through.
+   Shared steps of the Ceph provisioning routes (ui#1450). Each route checks
+   storage.admin on the connection, then calls the IaaS tenant gate itself
+   (`await denyIaasTenantCeph()` in its own source: tenantGuard.routes.test
+   reads it there), then loads the connection with cephConnection. And the
+   online node a cluster-wide write goes through.
 */
 
-export type CephWriteGate = { ok: true; conn: any } | { ok: false; response: Response }
+export type CephConnection = { ok: true; conn: any } | { ok: false; response: Response }
 
-export async function cephWriteGate(connectionId: string): Promise<CephWriteGate> {
-  const denied = await checkPermission(PERMISSIONS.STORAGE_ADMIN, 'connection', connectionId)
-  if (denied) return { ok: false, response: denied }
-  const cephDenied = await denyIaasTenantCeph()
-  if (cephDenied) return { ok: false, response: cephDenied }
+/** storage.admin on the connection: the first check of every provisioning route. */
+export function checkCephWrite(connectionId: string) {
+  return checkPermission(PERMISSIONS.STORAGE_ADMIN, 'connection', connectionId)
+}
+
+export async function cephConnection(connectionId: string): Promise<CephConnection> {
   const conn = await getConnectionById(connectionId)
   if (!conn) return { ok: false, response: NextResponse.json({ error: 'Connection not found' }, { status: 404 }) }
   return { ok: true, conn }

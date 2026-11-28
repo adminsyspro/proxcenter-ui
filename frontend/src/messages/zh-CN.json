@@ -13875,6 +13875,57 @@
         "openSlow": "打开 OSD {id}，较慢",
         "slow": "较慢"
       }
+    },
+    "provision": {
+      "task": {
+        "following": "正在等待 Proxmox 任务…",
+        "failed": "Proxmox 任务失败：{reason}",
+        "failedBare": "Proxmox 任务失败。",
+        "timeout": "Proxmox 任务仍在运行。请在任务中心查看，任务结束后驾驶舱会自动更新。"
+      },
+      "pool": {
+        "create": "创建存储池",
+        "edit": "编辑",
+        "delete": "删除",
+        "createTitle": "创建 Ceph 存储池",
+        "editTitle": "编辑存储池 {name}",
+        "name": "名称",
+        "size": "副本数",
+        "minSize": "最小副本数",
+        "singleCopy": "允许仅在一个副本上写入",
+        "rule": "CRUSH 规则",
+        "ruleDefault": "默认规则",
+        "autoscale": "PG 自动伸缩",
+        "autoscaleModes": {
+          "on": "开启",
+          "warn": "仅警告",
+          "off": "关闭"
+        },
+        "target": "自动伸缩目标",
+        "targetKinds": {
+          "none": "无",
+          "ratio": "占集群比例",
+          "size": "预期大小"
+        },
+        "targetRatio": "目标比例（0 到 1）",
+        "targetSize": "目标大小",
+        "application": "应用",
+        "addStorage": "添加为 Proxmox VE 存储",
+        "pgNote": "存储池以 32 个归置组起步，自动伸缩会按数据量调整。",
+        "created": "存储池 {name} 已创建",
+        "updated": "存储池 {name} 已更新",
+        "deleted": "存储池 {name} 已删除",
+        "deleteTitle": "删除存储池 {name}",
+        "deleteData": "数据",
+        "deleteDataValue": "已用 {used}，{objects} 个对象",
+        "deleteStorages": "Proxmox VE 存储",
+        "deleteNoStorage": "无",
+        "deleteRemoveStorages": "同时移除此存储池的 PVE 存储",
+        "deleteConfirm": "输入 {name} 以确认",
+        "deleteExternal": "不会检查将此存储池用作外部 RBD 存储的其他集群。",
+        "hasGuests": "这些客户机磁盘仍在存储池上：请先迁移或删除它们。",
+        "guestsUnknown": "无法读取这些存储的内容，因此不删除存储池："
+      }
     }
   },
   "microsegPilot": {

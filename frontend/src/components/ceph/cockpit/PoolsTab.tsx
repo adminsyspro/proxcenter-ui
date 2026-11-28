@@ -2,19 +2,21 @@
 
 import { useMemo, useState } from 'react'
 
-import { Box, Card, IconButton, Skeleton, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material'
+import { Box, Button, Card, IconButton, Skeleton, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { poolFillRatio } from '@/lib/ceph/overview'
 
 import type { CockpitTabProps } from './CephCockpit'
 import { useCephPoolStorages } from './hooks/useCephPoolStorages'
+import PoolDeleteDialog from './PoolDeleteDialog'
 import PoolDrawer from './PoolDrawer'
+import PoolFormDialog from './PoolFormDialog'
 import { poolAvailReported, type StorageReadState, poolDotState, poolObjectsReported, poolRuleName, RuleLink, type Pool } from './PoolParts'
 import { fillColumnLg, fillGrowLg, StateDot, TABULAR, ThresholdBar, usePercent } from './ui'
 
 /*
-   Pools tab of the Ceph cockpit, read only: one row per pool (application, PVE storage,
+   Pools tab of the Ceph cockpit (creation, edit and deletion of a pool since ui#1450): one row per pool (application, PVE storage,
    protection, CRUSH rule, PG and autoscale, net fill with its thresholds, used, net
    available, objects), 20 rows per page. A click opens the pool sheet in a drawer and
    writes `item=pool:<name>` in the URL. The rule is a link to the CRUSH tab.
@@ -97,10 +99,13 @@ function PoolRow({ pool, fill, ratios, rule, storages, storageState, selected, o
   )
 }
 
+type PoolDialog = { kind: 'create' } | { kind: 'edit'; pool: Pool } | { kind: 'delete'; pool: Pool }
+
 export default function PoolsTab({ conn, inventory, url, ratios, onNavigate }: CockpitTabProps) {
   const t = useTranslations('cephCockpit')
   const inv = inventory.inventory
-  const { storages, loading: storagesLoading, error: storagesError } = useCephPoolStorages(conn)
+  const { storages, loading: storagesLoading, error: storagesError, reload: reloadStorages } = useCephPoolStorages(conn)
+  const [dialog, setDialog] = useState<PoolDialog | null>(null)
   const storageState: StorageReadState = storages ? 'ready' : storagesError ? 'error' : storagesLoading ? 'loading' : 'ready'
   const [page, setPage] = useState(0)
   const [followed, setFollowed] = useState<string | null>(null)
@@ -132,8 +137,18 @@ export default function PoolsTab({ conn, inventory, url, ratios, onNavigate }: C
     if (target) open(target.pool.name)
   }
 
+  const done = () => {
+    inventory.reload()
+    reloadStorages?.()
+  }
+
   return (
     <Box data-testid='pools-tab' sx={fillColumnLg}>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+        <Button size='small' variant='outlined' startIcon={<i className='ri-add-line' />} onClick={() => setDialog({ kind: 'create' })}>
+          {t('provision.pool.create')}
+        </Button>
+      </Box>
       <Card variant='outlined' data-testid='pools-card' sx={fillColumnLg}>
         <Box data-testid='pools-table' sx={[{ overflowX: 'auto' }, fillGrowLg]}>
           <Table size='small' sx={{ minWidth: 900, '& th, & td': { px: 1.25 } }}>
@@ -192,6 +207,33 @@ export default function PoolsTab({ conn, inventory, url, ratios, onNavigate }: C
           onPrev={() => step(-1)}
           onNext={() => step(1)}
           onRule={() => onNavigate({ tab: 'crush' })}
+          onEdit={() => setDialog({ kind: 'edit', pool: selected.pool })}
+          onDelete={() => setDialog({ kind: 'delete', pool: selected.pool })}
+        />
+      )}
+
+      {dialog && dialog.kind !== 'delete' && (
+        <PoolFormDialog
+          open
+          mode={dialog.kind}
+          connId={conn}
+          pool={dialog.kind === 'edit' ? dialog.pool : undefined}
+          crushRules={inv.crushRules}
+          onClose={() => setDialog(null)}
+          onDone={done}
+        />
+      )}
+      {dialog?.kind === 'delete' && (
+        <PoolDeleteDialog
+          open
+          connId={conn}
+          pool={dialog.pool}
+          storages={storages?.[dialog.pool.name] ?? []}
+          onClose={() => setDialog(null)}
+          onDone={() => {
+            url.set({ item: null })
+            done()
+          }}
         />
       )}
     </Box>

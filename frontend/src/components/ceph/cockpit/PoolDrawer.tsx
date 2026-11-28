@@ -2,7 +2,7 @@
 
 import { useEffect, useId } from 'react'
 
-import { Box, Dialog, DialogContent, DialogTitle, IconButton, Tooltip, Typography, useMediaQuery } from '@mui/material'
+import { Box, Button, Dialog, DialogContent, DialogTitle, IconButton, Tooltip, Typography, useMediaQuery } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { useFormatter, useTranslations } from 'next-intl'
 
@@ -12,7 +12,7 @@ import { poolAvailReported, poolDotState, poolObjectsReported, RuleLink, type Po
 import { Eyebrow, isTypingTarget, Row, StateDot, Tag, TABULAR, ThresholdBar, usePercent } from './ui'
 
 /*
-   Sheet of one pool, read only, in a centered modal: net fill,
+   Sheet of one pool, in a centered modal (edit and delete buttons in its bar, ui#1450): net fill,
    protection, CRUSH rule, PG count and target, autoscale mode, the PVE storages that
    use it, figures and the quotas when the pool has any. Up and down arrows move to the
    previous and next pool of the table.
@@ -32,9 +32,12 @@ export interface PoolDrawerProps {
   onPrev: () => void
   onNext: () => void
   onRule: () => void
+  /** Edit and delete the pool (ui#1450): the buttons show when given. */
+  onEdit?: () => void
+  onDelete?: () => void
 }
 
-export default function PoolDrawer({ pool, fill, ratios, rule, storages, storageState, hasPrev, hasNext, onClose, onPrev, onNext, onRule }: PoolDrawerProps) {
+export default function PoolDrawer({ pool, fill, ratios, rule, storages, storageState, hasPrev, hasNext, onClose, onPrev, onNext, onRule, onEdit, onDelete }: PoolDrawerProps) {
   const t = useTranslations('cephCockpit')
   const format = useFormatter()
   const percent = usePercent()
@@ -88,6 +91,16 @@ export default function PoolDrawer({ pool, fill, ratios, rule, storages, storage
           <Typography id={titleId} component='h2' sx={{ fontSize: 15, fontWeight: 700, minWidth: 0, flexShrink: 1 }} noWrap title={pool.name}>{pool.name}</Typography>
           <Typography variant='body2' color='text.secondary' noWrap title={subtitle} sx={{ minWidth: 0, flexShrink: 2 }}>{subtitle}</Typography>
         </Box>
+        {onEdit && (
+          <Button size='small' variant='outlined' color='inherit' startIcon={<i className='ri-edit-line' />} onClick={onEdit} sx={{ flex: 'none' }}>
+            {t('provision.pool.edit')}
+          </Button>
+        )}
+        {onDelete && (
+          <Button size='small' variant='outlined' color='error' startIcon={<i className='ri-delete-bin-line' />} onClick={onDelete} sx={{ flex: 'none' }}>
+            {t('provision.pool.delete')}
+          </Button>
+        )}
         <Tooltip title={t('pools.drawer.prev')}>
           <span><IconButton size='small' aria-label={t('pools.drawer.prev')} disabled={!hasPrev} onClick={onPrev}><i className='ri-arrow-up-s-line' /></IconButton></span>
         </Tooltip>

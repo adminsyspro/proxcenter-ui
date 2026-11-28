@@ -13,6 +13,7 @@ import { FILL_COLUMN, lgStyle } from './fillTestUtils'
 let storagesState: { storages: Record<string, string[]> | null; loading: boolean; error: Error | null } = { storages: {}, loading: false, error: null }
 
 vi.mock('./hooks/useCephPoolStorages', () => ({ useCephPoolStorages: () => storagesState }))
+vi.mock('@/contexts/ToastContext', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }) }))
 
 const theme = createTheme()
 const GiB = 1024 ** 3
@@ -116,12 +117,13 @@ describe('PoolsTab table', () => {
     expect(within(screen.getByTestId('pool-row')).getByRole('button', { name: /replicated_rule/ })).toBeInTheDocument()
   })
 
-  it('no write action rendered', () => {
+  it('the only write actions are create, edit and delete (ui#1450): nothing resizes or removes a PG', () => {
     renderTab(propsOf([pool(2, 'ceph-vm')], { kind: 'pool', name: 'ceph-vm' }).props)
 
-    const labels = screen.queryAllByRole('button').map(b => `${b.textContent} ${b.getAttribute('aria-label') ?? ''}`).join('|')
+    const labels = screen.queryAllByRole('button', { hidden: true }).map(b => `${b.textContent} ${b.getAttribute('aria-label') ?? ''}`)
+    const writes = labels.filter(l => /create|delete|edit|modify|remove|add|resize/i.test(l)).map(l => l.trim())
 
-    expect(labels).not.toMatch(/create|delete|edit|modify|remove|add|resize/i)
+    expect(writes).toEqual(['Create pool', 'Edit', 'Delete'])
   })
 
   it('pool over nearfull shows warning tone', () => {
@@ -288,5 +290,28 @@ describe('PoolDrawer', () => {
   it('opens nothing for a pool the cluster does not have', () => {
     renderTab(propsOf([pool(2, 'ceph-vm')], { kind: 'pool', name: 'gone' }).props)
     expect(screen.queryByTestId('pool-drawer')).toBeNull()
+  })
+})
+
+describe('PoolsTab provisioning (ui#1450)', () => {
+  it('opens the creation dialog from the tab', () => {
+    renderTab(propsOf([pool(1, 'ceph-vm')]).props)
+    fireEvent.click(screen.getByRole('button', { name: 'Create pool' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('Create a Ceph pool')
+  })
+
+  it('offers edit and delete from the pool sheet', () => {
+    renderTab(propsOf([pool(1, 'ceph-vm')], { kind: 'pool', name: 'ceph-vm' }).props)
+    const sheet = screen.getByTestId('pool-drawer')
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Edit' }))
+    expect(screen.getByText('Edit pool ceph-vm')).toBeInTheDocument()
+  })
+
+  it('opens the deletion dialog with the PVE storages of the pool', () => {
+    renderTab(propsOf([pool(1, 'ceph-vm')], { kind: 'pool', name: 'ceph-vm' }).props)
+    fireEvent.click(within(screen.getByTestId('pool-drawer')).getByRole('button', { name: 'Delete' }))
+    const dialog = screen.getAllByRole('dialog').find(d => d.textContent?.includes('Delete pool ceph-vm'))
+    expect(dialog).toBeDefined()
+    expect(dialog).toHaveTextContent('Also remove the PVE storages of this pool')
   })
 })

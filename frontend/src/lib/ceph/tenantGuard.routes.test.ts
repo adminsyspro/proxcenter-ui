@@ -91,6 +91,7 @@ type Case = {
 const C = { id: "conn-1" }
 const N = { id: "conn-1", node: "pve1" }
 const O = { id: "conn-1", node: "pve1", osdid: "3" }
+const P = { id: "conn-1", pool: "vm-pool" }
 
 const CASES: Case[] = [
   { name: "ceph GET", file: "connections/[id]/ceph/route.ts", load: () => import("@/app/api/v1/connections/[id]/ceph/route"), method: "GET", params: C },
@@ -111,6 +112,9 @@ const CASES: Case[] = [
   { name: "nodes/ceph/service POST", file: "connections/[id]/nodes/[node]/ceph/service/route.ts", load: () => import("@/app/api/v1/connections/[id]/nodes/[node]/ceph/service/route"), method: "POST", params: N, body: { action: "restart", service: "osd.3" } },
   { name: "nodes/ceph/osd POST", file: "connections/[id]/nodes/[node]/ceph/osd/[osdid]/route.ts", load: () => import("@/app/api/v1/connections/[id]/nodes/[node]/ceph/osd/[osdid]/route"), method: "POST", params: O, body: { action: "out" } },
   { name: "nodes/ceph/osd/ok-to-stop POST", file: "connections/[id]/nodes/[node]/ceph/osd/[osdid]/ok-to-stop/route.ts", load: () => import("@/app/api/v1/connections/[id]/nodes/[node]/ceph/osd/[osdid]/ok-to-stop/route"), method: "POST", params: O },
+  { name: "ceph/pools POST", file: "connections/[id]/ceph/pools/route.ts", load: () => import("@/app/api/v1/connections/[id]/ceph/pools/route"), method: "POST", params: C, body: { name: "p1", size: 3, minSize: 2 } },
+  { name: "ceph/pools/[pool] PUT", file: "connections/[id]/ceph/pools/[pool]/route.ts", load: () => import("@/app/api/v1/connections/[id]/ceph/pools/[pool]/route"), method: "PUT", params: P, body: { size: 3, minSize: 2 } },
+  { name: "ceph/pools/[pool] DELETE", file: "connections/[id]/ceph/pools/[pool]/route.ts", load: () => import("@/app/api/v1/connections/[id]/ceph/pools/[pool]/route"), method: "DELETE", params: P },
   { name: "orchestrator ceph history GET", file: "orchestrator/ceph/[connectionId]/history/route.ts", load: () => import("@/app/api/v1/orchestrator/ceph/[connectionId]/history/route"), method: "GET", params: { connectionId: "conn-1" }, searchParams: { range: "1h" } },
 ]
 

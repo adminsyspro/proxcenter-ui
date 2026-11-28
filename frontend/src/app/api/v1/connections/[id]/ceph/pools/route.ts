@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 
 import { withAudit } from '@/lib/audit/withAudit'
 import { parsePoolCreate } from '@/lib/ceph/poolForm'
-import { cephWriteGate, NO_ONLINE_NODE, onlineCephNode, provisionError } from '@/lib/ceph/provisionRoute'
+import { denyIaasTenantCeph } from '@/lib/ceph/tenantGuard'
+import { cephConnection, checkCephWrite, NO_ONLINE_NODE, onlineCephNode, provisionError } from '@/lib/ceph/provisionRoute'
 import { pveFetch } from '@/lib/proxmox/client'
 
 export const runtime = 'nodejs'
@@ -24,7 +25,11 @@ type Ctx = { params: Promise<{ id: string }> }
 async function handlePost(req: Request, ctx: Ctx) {
   try {
     const { id } = await ctx.params
-    const gate = await cephWriteGate(id)
+    const denied = await checkCephWrite(id)
+    if (denied) return denied
+    const cephDenied = await denyIaasTenantCeph()
+    if (cephDenied) return cephDenied
+    const gate = await cephConnection(id)
     if (gate.ok === false) return gate.response
 
     const parsed = parsePoolCreate(await req.json().catch(() => ({})))

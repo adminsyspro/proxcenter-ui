@@ -19,7 +19,7 @@ interface StorageEntry {
 export function useCephPoolStorages(conn: string | null) {
   const key = conn ? (['ceph-cockpit', 'pool-storages', conn] as const) : null
 
-  const { data, error, isLoading } = useSWR<Record<string, string[]>, Error, typeof key>(
+  const { data, error, isLoading, mutate } = useSWR<Record<string, string[]>, Error, typeof key>(
     key,
     async ([, , id]: readonly [string, string, string]) => {
       const list = await fetchCockpitData<unknown>(`/api/v1/connections/${encodeURIComponent(id)}/storage`)
@@ -39,5 +39,8 @@ export function useCephPoolStorages(conn: string | null) {
     { revalidateOnFocus: false, revalidateIfStale: false, revalidateOnReconnect: false, ...COCKPIT_SWR_RETRY },
   )
 
-  return { storages: data ?? null, loading: isLoading, error: (error as Error | undefined) ?? null }
+  // A pool created with its storage, or deleted with it, changes the list (ui#1450).
+  const reload = () => void mutate()
+
+  return { storages: data ?? null, loading: isLoading, error: (error as Error | undefined) ?? null, reload }
 }

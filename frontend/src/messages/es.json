@@ -13875,6 +13875,57 @@
         "openSlow": "Abrir OSD {id}, lento",
         "slow": "Lento"
       }
+    },
+    "provision": {
+      "task": {
+        "following": "Esperando la tarea de Proxmox…",
+        "failed": "La tarea de Proxmox ha fallado: {reason}",
+        "failedBare": "La tarea de Proxmox ha fallado.",
+        "timeout": "La tarea de Proxmox sigue en curso. Sígala en el centro de tareas; el panel se actualizará cuando termine."
+      },
+      "pool": {
+        "create": "Crear pool",
+        "edit": "Editar",
+        "delete": "Eliminar",
+        "createTitle": "Crear un pool de Ceph",
+        "editTitle": "Editar el pool {name}",
+        "name": "Nombre",
+        "size": "Tamaño",
+        "minSize": "Tamaño mín.",
+        "singleCopy": "Aceptar escrituras en una sola copia",
+        "rule": "Regla CRUSH",
+        "ruleDefault": "Regla predeterminada",
+        "autoscale": "Autoescalado de PG",
+        "autoscaleModes": {
+          "on": "Activado",
+          "warn": "Solo avisar",
+          "off": "Desactivado"
+        },
+        "target": "Objetivo del autoescalado",
+        "targetKinds": {
+          "none": "Ninguno",
+          "ratio": "Proporción del clúster",
+          "size": "Tamaño previsto"
+        },
+        "targetRatio": "Proporción objetivo (0 a 1)",
+        "targetSize": "Tamaño objetivo",
+        "application": "Aplicación",
+        "addStorage": "Añadir como almacenamiento de Proxmox VE",
+        "pgNote": "El pool empieza con 32 placement groups; el autoescalado los ajusta a los datos.",
+        "created": "Pool {name} creado",
+        "updated": "Pool {name} actualizado",
+        "deleted": "Pool {name} eliminado",
+        "deleteTitle": "Eliminar el pool {name}",
+        "deleteData": "Datos",
+        "deleteDataValue": "{used} usados, {objects} objetos",
+        "deleteStorages": "Almacenamientos de Proxmox VE",
+        "deleteNoStorage": "Ninguno",
+        "deleteRemoveStorages": "Quitar también los almacenamientos PVE de este pool",
+        "deleteConfirm": "Escriba {name} para confirmar",
+        "deleteExternal": "No se comprueban otros clústeres que usen este pool como almacenamiento RBD externo.",
+        "hasGuests": "Estos discos de invitados siguen en el pool: muévalos o elimínelos primero.",
+        "guestsUnknown": "No se pudo leer el contenido de estos almacenamientos, así que el pool no se elimina:"
+      }
     }
   },
   "microsegPilot": {

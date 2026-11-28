@@ -1161,6 +1161,8 @@
     "deleteVmConfirmHint": "请输入虚拟机的 ID 或名称以确认：",
     "deleteVmLockedError": "虚拟机被锁定在 「{lock}」 状态。请右键点击树中的虚拟机并选择解锁以释放锁（需要在连接上启用 SSH）。",
     "deleteVmRunningError": "删除前必须先停止虚拟机。请先停止虚拟机。",
+    "deleteVmKeptSharedVolumes": "已保留 {volumes}：另一个集群在同一存储上有使用此 VMID 的客户机，可能正在使用它。",
+    "deleteVmUnreferencedKept": "已在共享存储上保留未引用的磁盘：它们可能属于另一个集群中具有相同 VMID 的客户机。",
     "vmRunningWarning": "请先停止虚拟机再删除",
     "health": {
       "label": "健康状况",
@@ -8592,6 +8594,7 @@
           "notPortable": "绑定到其节点：{keys}",
           "isoDetached": "{isos} 将被弹出",
           "poolNotCarried": "离开池 {pool}，在目标上不加入任何池",
+          "vmidReusable": "{vmid} 在源集群上重新空闲，源集群从 {lower} 到 {last} 分配新 ID",
           "storageFormat": "{sourceType} 磁盘无法离线复制到 {targetType}（{storage}）"
         }
       },

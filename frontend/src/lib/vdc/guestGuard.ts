@@ -112,6 +112,16 @@ async function sessionScope(): Promise<{ tenantId: string; infra: InfraScope } |
   }
 }
 
+/**
+ * True for a vDC (IaaS) session, or when its scope cannot be resolved: an
+ * answer must then name nothing outside the vDC, such as a storage of the
+ * cluster it does not hold.
+ */
+export async function sessionIsVdcTenant(): Promise<boolean> {
+  const scope = await sessionScope()
+  return !scope || scope.infra.kind === "iaas"
+}
+
 export type SessionGuestGuardInput = {
   connectionId: string
   /**

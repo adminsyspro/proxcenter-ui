@@ -1,4 +1,5 @@
 import { pveFetch, type ProxmoxClientOptions } from "@/lib/proxmox/client"
+import { decideUnreferencedDiskPurge, type UnreferencedDiskDecision } from "@/lib/proxmox/unreferencedDisks"
 
 // PVE `PUT /qemu/{vmid}/config` is synchronous and can take ~10s on slow storage
 // (e.g. ZFS-over-iSCSI). pveFetch's 8s default fires before the metadata write
@@ -37,15 +38,21 @@ export async function pveSetVmConfig(
  * cleanup and leaks the VMID plus its disk on a failed migration (issue #400).
  * Centralised here so every failed-migration cleanup path uses the query-string
  * form and the body footgun can't be reintroduced on a new call site.
+ *
+ * `destroy-unreferenced-disks` is dropped when a shared storage holds volumes
+ * of this VMID that a guest of another cluster may own (ui#1460); the answer
+ * names them so the caller can log what was left.
  */
 export async function destroyPveVm(
   pveConn: ProxmoxClientOptions,
   node: string,
   vmid: number | string,
-): Promise<void> {
+): Promise<UnreferencedDiskDecision> {
+  const decision = await decideUnreferencedDiskPurge({ conn: pveConn, connectionId: pveConn.id, node, type: "qemu", vmid })
   await pveFetch<unknown>(
     pveConn,
-    `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(vmid))}?purge=1&destroy-unreferenced-disks=1`,
+    `/nodes/${encodeURIComponent(node)}/qemu/${encodeURIComponent(String(vmid))}?purge=1${decision.destroyUnreferenced ? "&destroy-unreferenced-disks=1" : ""}`,
     { method: "DELETE" },
   )
+  return decision
 }

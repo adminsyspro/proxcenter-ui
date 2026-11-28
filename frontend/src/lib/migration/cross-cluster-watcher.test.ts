@@ -11,6 +11,7 @@ const {
   shellEscapeMock,
   safeLogMock,
   orchestratorHeadersMock,
+  decideMock,
 } = vi.hoisted(() => ({
   applyRestorePlanMock: vi.fn(),
   rollbackPrereqsOnSourceMock: vi.fn(),
@@ -22,6 +23,12 @@ const {
   shellEscapeMock: vi.fn(),
   safeLogMock: vi.fn(),
   orchestratorHeadersMock: vi.fn(),
+  decideMock: vi.fn(),
+}))
+
+vi.mock('@/lib/proxmox/unreferencedDisks', async (importActual) => ({
+  ...(await importActual<typeof import('@/lib/proxmox/unreferencedDisks')>()),
+  decideUnreferencedDiskPurge: (...args: any[]) => decideMock(...args),
 }))
 
 vi.mock('@/lib/migration/ccm-prereqs', () => ({
@@ -87,6 +94,7 @@ beforeEach(() => {
   shellEscapeMock.mockReset().mockImplementation((value: string) => `'${value}'`)
   safeLogMock.mockReset().mockImplementation((value: unknown) => String(value))
   orchestratorHeadersMock.mockReset().mockReturnValue({ 'Content-Type': 'application/json' })
+  decideMock.mockReset().mockResolvedValue({ destroyUnreferenced: true, keptVolumes: [] })
 
   vi.spyOn(console, 'log').mockImplementation(() => {})
   vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -284,6 +292,24 @@ describe('watchMigrationAndCleanup', () => {
         { method: 'DELETE' },
       ],
     ])
+  })
+
+  // ui#1460, measured on the lab: the target imported the disk as
+  // vm-100-disk-1 on the storage both clusters reach, and the source delete
+  // with destroy-unreferenced-disks wiped it.
+  it('deletes the source without destroy-unreferenced-disks when the target may own a shared volume', async () => {
+    pveFetchMock
+      .mockResolvedValueOnce({ status: 'stopped', exitstatus: 'OK' })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce(undefined)
+    decideMock.mockResolvedValueOnce({ destroyUnreferenced: false, keptVolumes: ['Shared:vm-100-disk-1'] })
+
+    const outcome = await watchMigrationAndCleanup({ ...BASE_OPTS, deleteSource: true })
+
+    expect(outcome).toEqual({ outcome: 'completed', sourceLeft: false })
+    expect(decideMock).toHaveBeenCalledWith({ conn: SOURCE_CONN, connectionId: 'source-connection', node: 'source-node', type: 'qemu', vmid: '100' })
+    expect(deleteCalls()).toEqual([[SOURCE_CONN, '/nodes/source-node/qemu/100?purge=1', { method: 'DELETE' }]])
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('Kept Shared:vm-100-disk-1'))
   })
 
   // roadmap#192: once the guest moved, a reload shows it on the target and no

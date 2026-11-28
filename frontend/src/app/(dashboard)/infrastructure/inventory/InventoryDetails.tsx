@@ -2822,11 +2822,21 @@ return (
         void onRefresh?.()
       }
 
+      // ui#1460: unreferenced disks left on a storage another cluster shares.
+      const keptVolumes: string[] | undefined = Array.isArray(json.keptVolumes) ? json.keptVolumes : undefined
+      let keptNote = ''
+      if (keptVolumes) {
+        keptNote = keptVolumes.length > 0
+          ? ` ${t('inventory.deleteVmKeptSharedVolumes', { volumes: keptVolumes.join(', ') })}`
+          : ` ${t('inventory.deleteVmUnreferencedKept')}`
+      }
+      const warningNote = json.warning ? ` (${json.warning})` : ''
+
       // Afficher un message de succès
       setConfirmAction({
         action: 'info',
         title: t('common.success'),
-        message: `${t('common.delete')} "${vmName}" ${t('common.success')}${json.warning ? ` (${json.warning})` : ''}`,
+        message: `${t('common.delete')} "${vmName}" ${t('common.success')}${warningNote}${keptNote}`,
         vmName: undefined,
         onConfirm: () => {
           setConfirmAction(null)

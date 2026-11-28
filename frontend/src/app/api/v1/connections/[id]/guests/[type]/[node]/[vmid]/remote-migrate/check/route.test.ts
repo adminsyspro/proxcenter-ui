@@ -470,7 +470,9 @@ describe("POST .../remote-migrate/check — move without copy (handover)", () =>
     const json = await check()
 
     expect(json.valid).toBe(true)
-    expect(json.issues).toEqual([])
+    // Only the reminder that the source cluster, on its default range of new
+    // IDs, can hand this VMID out again (ui#1460).
+    expect(json.issues.map((i: any) => [i.type, i.code])).toEqual([["warning", "VMID_REUSABLE_ON_SOURCE"]])
   })
 
   it("blocks a running guest and offers to shut it down", async () => {

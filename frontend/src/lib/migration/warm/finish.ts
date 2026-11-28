@@ -1,5 +1,6 @@
 import { keepTargetVm, volumesToFree, volumesToKeep, PVESM_FREE_TIMEOUT_MS, type AllocatedVolume } from "../pvesm-alloc"
 import { destroyPveVm, pveSetVmConfig } from "../pve-vm-config"
+import { keptVolumesNote } from "@/lib/proxmox/unreferencedDisks"
 import { convertDisksToQcow2 } from "../qcow2-convert"
 import { startMigratedVm } from "../start-migrated-vm"
 import { verifyDiskIntegrity, type FaultInjection, type IntegritySettings } from "../integrity"
@@ -111,9 +112,10 @@ export async function removeTargetVmOnFailure(a: {
     return
   }
   try {
-    await destroyPveVm(pveConn, node, vmid)
+    const kept = keptVolumesNote(await destroyPveVm(pveConn, node, vmid))
     const held = removeCopies && keepTargetVm(allocatedVolumes)
-    await appendLog(jobId, held ? `Removed target VM ${vmid} and the copy it held, as asked when cancelling` : `Removed target VM ${vmid} created by this migration`, "warn").catch(() => {})
+    const removed = held ? `Removed target VM ${vmid} and the copy it held, as asked when cancelling` : `Removed target VM ${vmid} created by this migration`
+    await appendLog(jobId, kept ? `${removed}. ${kept}` : removed, "warn").catch(() => {})
   } catch (e: any) {
     const msg = e?.message || String(e)
     // PVE answers a missing guest config with a 500: nothing is left behind.

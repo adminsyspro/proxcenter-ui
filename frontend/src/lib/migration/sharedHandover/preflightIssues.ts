@@ -90,5 +90,46 @@ export async function handoverPreflightIssues(input: {
     })
   }
 
+  const range = await sourceNextIdRange(sourceConn)
+  const id = Number(vmid)
+  if (range && id >= range.lower && id < range.upper) {
+    issues.push({
+      type: 'warning',
+      code: 'VMID_REUSABLE_ON_SOURCE',
+      message: `VMID ${vmid} becomes free on the source cluster, which can give it to a new guest`,
+      details: `The source cluster hands out new IDs from ${range.lower} to ${range.upper - 1} (Datacenter options, next free VMID range). A guest created there with this VMID finds the moved disks on the shared storage under its own name: give clusters that share a storage separate ranges.`,
+      context: { vmid, lower: range.lower, last: range.upper - 1 },
+    })
+  }
+
   return issues
+}
+
+/** Proxmox defaults of `next-id`: lower inclusive, upper exclusive. */
+const NEXT_ID_DEFAULT = { lower: 100, upper: 1000000 }
+
+/**
+ * The range `/cluster/nextid` of the source cluster draws from, or null when
+ * its options cannot be read. GET returns `next-id` as an object; a property
+ * string is read too.
+ */
+async function sourceNextIdRange(conn: PveConn): Promise<{ lower: number; upper: number } | null> {
+  const options = await pveFetch<Record<string, unknown>>(conn, '/cluster/options').catch(() => null)
+  if (!options || typeof options !== 'object') return null
+  const raw = options['next-id']
+  const fields: Record<string, string> = {}
+  if (typeof raw === 'string') {
+    for (const part of raw.split(',')) {
+      const [k, v] = part.split('=')
+      if (k && v !== undefined) fields[k.trim()] = v.trim()
+    }
+  } else if (raw && typeof raw === 'object') {
+    for (const [k, v] of Object.entries(raw)) fields[k] = String(v)
+  }
+  const lower = Number.parseInt(fields.lower ?? '', 10)
+  const upper = Number.parseInt(fields.upper ?? '', 10)
+  return {
+    lower: Number.isFinite(lower) ? lower : NEXT_ID_DEFAULT.lower,
+    upper: Number.isFinite(upper) ? upper : NEXT_ID_DEFAULT.upper,
+  }
 }

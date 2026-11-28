@@ -64,6 +64,7 @@ import {
 } from "@/lib/vmware/soap"
 import type { SoapSession, EsxiVmConfig, EsxiDiskInfo } from "@/lib/vmware/soap"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
+import { keptVolumesNote } from "@/lib/proxmox/unreferencedDisks"
 import { startJobHeartbeat } from "./job-heartbeat"
 import { MIGRATION_CPU_TYPE_DEFAULT } from "./cpu-type"
 import { sanitizeV2vRoot, planV2vRootRetry } from "./v2v-root-select"
@@ -3193,8 +3194,8 @@ export async function runV2vMigrationPipeline(
     if (vmCreated && targetVmid && config.targetConnectionId) {
       try {
         const pveConn = await getConnectionById(config.targetConnectionId)
-        await destroyPveVm(pveConn, config.targetNode, targetVmid)
-        await appendLog(jobId, `Cleaned up partial VM ${targetVmid}`, "warn")
+        const kept = keptVolumesNote(await destroyPveVm(pveConn, config.targetNode, targetVmid))
+        await appendLog(jobId, `Cleaned up partial VM ${targetVmid}${kept ? `. ${kept}` : ""}`, "warn")
       } catch (delErr: any) {
         const delMsg = delErr?.message || String(delErr)
         // PVE reports a missing guest config as a 500 on the DELETE. Nothing is

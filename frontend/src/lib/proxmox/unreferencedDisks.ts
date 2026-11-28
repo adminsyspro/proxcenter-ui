@@ -155,3 +155,9 @@ export function keptVolumesNote(decision: UnreferencedDiskDecision | undefined):
   if (decision.keptVolumes.length === 0) return 'Unreferenced disks were kept: the shared storages could not be checked and another cluster runs a guest with this VMID.'
   return `Kept ${decision.keptVolumes.join(', ')}: another cluster runs a guest with this VMID and may use it.`
 }
+
+/** A log line with the note of the kept volumes appended, when there is one. */
+export function withKeptNote(text: string, decision: UnreferencedDiskDecision | undefined): string {
+  const note = keptVolumesNote(decision)
+  return note ? text + '. ' + note : text
+}

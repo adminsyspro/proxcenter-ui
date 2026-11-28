@@ -124,7 +124,9 @@ async function sourceNextIdRange(conn: PveConn): Promise<{ lower: number; upper:
       if (k && v !== undefined) fields[k.trim()] = v.trim()
     }
   } else if (raw && typeof raw === 'object') {
-    for (const [k, v] of Object.entries(raw)) fields[k] = String(v)
+    for (const [k, v] of Object.entries(raw)) {
+      if (typeof v === 'string' || typeof v === 'number') fields[k] = String(v)
+    }
   }
   const lower = Number.parseInt(fields.lower ?? '', 10)
   const upper = Number.parseInt(fields.upper ?? '', 10)

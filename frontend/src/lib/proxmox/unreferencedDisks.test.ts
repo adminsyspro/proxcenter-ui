@@ -14,7 +14,7 @@ import { prisma } from '@/lib/db/prisma'
 import { getConnectionById } from '@/lib/connections/getConnection'
 import { pveFetch } from '@/lib/proxmox/client'
 
-import { decideUnreferencedDiskPurge, keptVolumesNote, referencedVolids } from './unreferencedDisks'
+import { decideUnreferencedDiskPurge, keptVolumesNote, referencedVolids, withKeptNote } from './unreferencedDisks'
 
 const findManyMock = prisma.connection.findMany as any
 const getConnectionByIdMock = getConnectionById as any
@@ -255,5 +255,17 @@ describe('keptVolumesNote', () => {
   it('says unreferenced disks were kept when they could not be checked', () => {
     expect(keptVolumesNote({ destroyUnreferenced: false, keptVolumes: [] }))
       .toBe('Unreferenced disks were kept: the shared storages could not be checked and another cluster runs a guest with this VMID.')
+  })
+})
+
+describe('withKeptNote', () => {
+  it('leaves the line alone when nothing was kept', () => {
+    expect(withKeptNote('Cleaned up partial VM 101', { destroyUnreferenced: true, keptVolumes: [] })).toBe('Cleaned up partial VM 101')
+    expect(withKeptNote('Cleaned up partial VM 101', undefined)).toBe('Cleaned up partial VM 101')
+  })
+
+  it('appends the kept volumes', () => {
+    expect(withKeptNote('Cleaned up partial VM 101', { destroyUnreferenced: false, keptVolumes: ['Shared:vm-101-disk-1'] }))
+      .toBe('Cleaned up partial VM 101. Kept Shared:vm-101-disk-1: another cluster runs a guest with this VMID and may use it.')
   })
 })

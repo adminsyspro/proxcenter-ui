@@ -38,7 +38,7 @@ import type { XoVmConfig, XoDiskInfo } from "@/lib/xcpng/client"
 import { allocateAndMapBlockVolume, nextFreeDiskName, type AllocatedVolume } from "./pvesm-alloc"
 import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
-import { keptVolumesNote } from "@/lib/proxmox/unreferencedDisks"
+import { withKeptNote } from "@/lib/proxmox/unreferencedDisks"
 import { convertDisksToQcow2 } from "./qcow2-convert"
 import { startMigratedVm } from "./start-migrated-vm"
 import { startJobHeartbeat } from "./job-heartbeat"
@@ -781,8 +781,8 @@ export async function runXcpngMigrationPipeline(jobId: string, config: Migration
     if (vmCreated && targetVmid && config.targetConnectionId) {
       try {
         const pveConn = await getConnectionById(config.targetConnectionId)
-        const kept = keptVolumesNote(await destroyPveVm(pveConn, config.targetNode, targetVmid))
-        await appendLog(jobId, `Cleaned up partial VM ${targetVmid}${kept ? `. ${kept}` : ""}`, "warn")
+        const disks = await destroyPveVm(pveConn, config.targetNode, targetVmid)
+        await appendLog(jobId, withKeptNote(`Cleaned up partial VM ${targetVmid}`, disks), "warn")
       } catch {
         // Cleanup failed — leave for manual intervention
       }

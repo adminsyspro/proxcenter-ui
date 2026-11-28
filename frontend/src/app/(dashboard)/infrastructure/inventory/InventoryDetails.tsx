@@ -186,6 +186,20 @@ const VM_BACKUPS_TAB_INDEX = 4
 /* ------------------------------------------------------------------ */
 
 
+/**
+ * What follows "Deleted" in the result of a guest delete: the IPAM warning,
+ * then the unreferenced disks kept on a storage another cluster shares (ui#1460).
+ */
+function deleteResultNotes(json: { warning?: unknown; keptVolumes?: unknown }, t: (key: string, values?: Record<string, string>) => string): string {
+  const warningNote = json.warning ? ` (${String(json.warning)})` : ''
+  if (!Array.isArray(json.keptVolumes)) return warningNote
+  const kept = json.keptVolumes.map(String)
+  const keptNote = kept.length > 0
+    ? t('inventory.deleteVmKeptSharedVolumes', { volumes: kept.join(', ') })
+    : t('inventory.deleteVmUnreferencedKept')
+  return warningNote + ' ' + keptNote
+}
+
 export default function InventoryDetails({
   selection,
   onSelect,
@@ -2822,21 +2836,11 @@ return (
         void onRefresh?.()
       }
 
-      // ui#1460: unreferenced disks left on a storage another cluster shares.
-      const keptVolumes: string[] | undefined = Array.isArray(json.keptVolumes) ? json.keptVolumes : undefined
-      let keptNote = ''
-      if (keptVolumes) {
-        keptNote = keptVolumes.length > 0
-          ? ` ${t('inventory.deleteVmKeptSharedVolumes', { volumes: keptVolumes.join(', ') })}`
-          : ` ${t('inventory.deleteVmUnreferencedKept')}`
-      }
-      const warningNote = json.warning ? ` (${json.warning})` : ''
-
       // Afficher un message de succès
       setConfirmAction({
         action: 'info',
         title: t('common.success'),
-        message: `${t('common.delete')} "${vmName}" ${t('common.success')}${warningNote}${keptNote}`,
+        message: `${t('common.delete')} "${vmName}" ${t('common.success')}${deleteResultNotes(json, t)}`,
         vmName: undefined,
         onConfirm: () => {
           setConfirmAction(null)

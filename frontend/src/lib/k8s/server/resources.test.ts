@@ -434,6 +434,14 @@ describe('projectNode scheduling', () => {
     expect(projectNode({ metadata: { name: 'n1' }, spec: { unschedulable: true }, status: {} }).summary['unschedulable']).toBe('true')
     expect(projectNode({ metadata: { name: 'n2' }, spec: {}, status: {} }).summary['unschedulable']).toBe('false')
   })
+  it('projects the size of the node from its capacity', () => {
+    const sized = projectNode({ metadata: { name: 'w' }, spec: {}, status: { capacity: { cpu: '4', memory: '4015600Ki' } } }).summary
+    expect(sized['cpuSize']).toBe('4')
+    expect(sized['memSize']).toBe(String(4015600 * 1024))
+    const unsized = projectNode({ metadata: { name: 'u' }, spec: {}, status: {} }).summary
+    expect(unsized['cpuSize']).toBeUndefined()
+    expect(unsized['memSize']).toBeUndefined()
+  })
 })
 
 describe('podReason', () => {

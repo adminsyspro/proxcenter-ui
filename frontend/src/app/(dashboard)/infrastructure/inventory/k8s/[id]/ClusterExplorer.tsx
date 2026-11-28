@@ -227,22 +227,27 @@ export function ClusterExplorer({
   const msg = panelMessage({ status, truncated })
 
   // Usage and pod counts follow the table: every METRICS_POLL_MS while it
-  // shows, and at once when the set of nodes changes (a worker added or
-  // removed), instead of only when the view opens.
+  // shows, and at once when the nodes change (a worker joins, leaves or
+  // becomes ready), instead of only when the view opens. The header count
+  // (ready/total nodes) is read again on such a change too.
   const tracksUsage = view === 'node' || view === 'pod'
   useEffect(() => {
     if (!tracksUsage || paused) return
     const timer = setInterval(() => setMetricsTick(n => n + 1), METRICS_POLL_MS)
     return () => clearInterval(timer)
   }, [tracksUsage, paused])
-  const nodeNames = kind?.apiKind === 'node' ? items.map(i => i.name).sort((a, b) => a.localeCompare(b)).join(',') : ''
-  const seenNodeNames = useRef(nodeNames)
+  const nodesKey = kind?.apiKind === 'node'
+    ? items.map(i => `${i.name}:${i.summary?.['ready'] ?? ''}`).sort((a, b) => a.localeCompare(b)).join(',')
+    : ''
+  const seenNodesKey = useRef(nodesKey)
   useEffect(() => {
-    if (seenNodeNames.current === nodeNames) return
-    const first = seenNodeNames.current === ''
-    seenNodeNames.current = nodeNames
-    if (!first && nodeNames) setMetricsTick(n => n + 1)
-  }, [nodeNames])
+    if (seenNodesKey.current === nodesKey) return
+    const first = seenNodesKey.current === ''
+    seenNodesKey.current = nodesKey
+    if (first || !nodesKey) return
+    setMetricsTick(n => n + 1)
+    void loadMeta(true)
+  }, [nodesKey, loadMeta])
 
   // For the Nodes/Pods tables, merge live CPU/RAM utilization into each row's
   // summary (nodes keyed by name; pods by namespace/name).

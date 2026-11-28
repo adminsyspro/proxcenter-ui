@@ -10,6 +10,8 @@ export interface ColumnDef {
   type: ColumnType
   /** Defaults to key when omitted */
   sortKey?: string
+  /** A progress column also showing the size it is a share of (summary.cpuSize / summary.memSize). */
+  size?: 'cpu' | 'memory'
 }
 
 export interface KindDef {
@@ -55,8 +57,8 @@ export const RESOURCE_KINDS: KindDef[] = [
       { key: 'pods', header: 'pods', type: 'number' },
       { key: 'version', header: 'version', type: 'text' },
       { key: 'internalIP', header: 'internalIP', type: 'text' },
-      { key: 'cpuPct', header: 'cpu', type: 'progress' },
-      { key: 'memPct', header: 'memory', type: 'progress' },
+      { key: 'cpuPct', header: 'cpu', type: 'progress', size: 'cpu' },
+      { key: 'memPct', header: 'memory', type: 'progress', size: 'memory' },
       AGE,
     ],
   },

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cellValue, sortItems } from './tableColumns'
+import { cellValue, nodeSize, sortItems } from './tableColumns'
 import type { ResourceListItem } from './types'
 
 const item = (over: Partial<ResourceListItem>): ResourceListItem => ({
@@ -94,5 +94,19 @@ describe('table columns', () => {
     const copy = [...items]
     sortItems(items, { key: 'name', header: 'name', type: 'text' }, 'asc')
     expect(items[0].name).toBe(copy[0].name)
+  })
+})
+
+describe('nodeSize', () => {
+  const node = (summary: Record<string, string>) => ({ summary } as unknown as ResourceListItem)
+  it('formats the cores and the memory of a node', () => {
+    expect(nodeSize(node({ cpuSize: '4', memSize: String(4015600 * 1024) }), 'cpu')).toBe('4 vCPU')
+    expect(nodeSize(node({ cpuSize: '0.5' }), 'cpu')).toBe('0.5 vCPU')
+    expect(nodeSize(node({ memSize: String(4015600 * 1024) }), 'memory')).toBe('3.8 GB')
+  })
+  it('shows nothing without a size or for a column without one', () => {
+    expect(nodeSize(node({}), 'cpu')).toBeUndefined()
+    expect(nodeSize(node({}), 'memory')).toBeUndefined()
+    expect(nodeSize(node({ cpuSize: '4' }), undefined)).toBeUndefined()
   })
 })

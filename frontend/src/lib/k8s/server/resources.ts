@@ -8,6 +8,7 @@ import type { ResourceListItem, K8sResourceKind } from '../types'
 import type { K8sErrorCode } from './errors'
 import { classifyK8sError } from './errors'
 import { buildKubeClient, type BuildKubeClientInput } from './client'
+import { parseCpuMillis, parseMemBytes } from './metrics'
 
 const LIST_CAP = 500
 
@@ -109,6 +110,12 @@ export function projectNode(n: any): ResourceListItem {
   const providerID: string = n.spec?.providerID ?? ''
   if (providerID) it.summary['providerID'] = providerID
   it.summary['unschedulable'] = n.spec?.unschedulable === true ? 'true' : 'false'
+  // Size of the node as Kubernetes sees it (cores, memory in bytes): the
+  // workers of one cluster may differ.
+  const cpuMilli = parseCpuMillis(n.status?.capacity?.cpu ?? '')
+  const memBytes = parseMemBytes(n.status?.capacity?.memory ?? '')
+  if (cpuMilli > 0) it.summary['cpuSize'] = String(cpuMilli / 1000)
+  if (memBytes > 0) it.summary['memSize'] = String(memBytes)
   const pressure = (n.status?.conditions ?? [])
     .filter((c: any) => NODE_PRESSURE_CONDITIONS.has(c.type) && c.status === 'True')
     .map((c: any) => c.type)

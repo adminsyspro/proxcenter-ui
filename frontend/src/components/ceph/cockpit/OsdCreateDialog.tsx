@@ -30,7 +30,7 @@ export interface OsdCreateDialogProps {
   onDone: () => void
 }
 
-type DiskRead = { state: 'loading' } | { state: 'ready'; disks: FreeDisk[]; ssh: SshVerdict } | { state: 'error'; error: string }
+type DiskRead = { state: 'loading' } | { state: 'ready'; disks: FreeDisk[]; journal: FreeDisk[]; ssh: SshVerdict } | { state: 'error'; error: string }
 
 function useNodeDisks(connId: string, node: string): DiskRead {
   // Keyed by node: a read of the previous node is no answer for this one (no reset inside the effect).
@@ -42,7 +42,7 @@ function useNodeDisks(connId: string, node: string): DiskRead {
       .then(async res => {
         const json = await res.json().catch(() => ({}))
         if (!live) return
-        if (res.ok) setRead({ node, read: { state: 'ready', disks: json?.data?.disks ?? [], ssh: json?.data?.ssh ?? 'unreachable' } })
+        if (res.ok) setRead({ node, read: { state: 'ready', disks: json?.data?.disks ?? [], journal: json?.data?.journalDisks ?? [], ssh: json?.data?.ssh ?? 'unreachable' } })
         else setRead({ node, read: { state: 'error', error: json?.error || `HTTP ${res.status}` } })
       })
       .catch((e: Error) => { if (live) setRead({ node, read: { state: 'error', error: e.message } }) })
@@ -74,12 +74,15 @@ export default function OsdCreateDialog({ open, connId, nodes, onClose, onDone }
   const [deviceClass, setDeviceClass] = useState('')
   const read = useNodeDisks(connId, node)
   const disks = read.state === 'ready' ? read.disks : []
+  // DB and WAL: a free disk, or one already holding the DB or WAL of other OSDs.
+  const sideDisks = read.state === 'ready' ? [...read.disks, ...read.journal.filter(j => !read.disks.some(d => d.devpath === j.devpath))] : []
 
   // A disk of the previous node is no choice on this one: a pick counts only while the node offers it.
   const offered = (path: string) => disks.some(d => d.devpath === path)
+  const offeredSide = (path: string) => sideDisks.some(d => d.devpath === path)
   const dev = offered(devPick) ? devPick : (disks[0]?.devpath ?? '')
-  const dbDev = offered(dbPick) && dbPick !== dev ? dbPick : ''
-  const walDev = offered(walPick) && walPick !== dev && walPick !== dbDev ? walPick : ''
+  const dbDev = offeredSide(dbPick) && dbPick !== dev ? dbPick : ''
+  const walDev = offeredSide(walPick) && walPick !== dev && walPick !== dbDev ? walPick : ''
 
   const size = (n: number) => {
     const unit = binaryUnit(n)
@@ -115,7 +118,7 @@ export default function OsdCreateDialog({ open, connId, nodes, onClose, onDone }
 
   const sideOptions = (exclude: string[]) => [
     <MenuItem key='' value=''>{t('none')}</MenuItem>,
-    ...disks.filter(d => !exclude.includes(d.devpath)).map(d => <MenuItem key={d.devpath} value={d.devpath}>{diskText(d)}</MenuItem>),
+    ...sideDisks.filter(d => !exclude.includes(d.devpath)).map(d => <MenuItem key={d.devpath} value={d.devpath}>{diskText(d)}</MenuItem>),
   ]
 
   return (

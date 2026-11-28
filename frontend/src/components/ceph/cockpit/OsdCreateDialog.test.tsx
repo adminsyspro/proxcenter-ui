@@ -21,9 +21,9 @@ const json = (data: unknown, status = 200) => ({ ok: status < 400, status, json:
 const DISK = { devpath: '/dev/sdg', sizeBytes: 10737418240, model: 'QEMU_HARDDISK', serial: 's6', type: 'hdd', wearout: 'N/A' }
 const UPID = 'UPID:pve1:1:2:3:cephcreateosd:sdg:root@pam:'
 
-function route(disks: unknown[], ssh = 'ok', create: unknown = json({ data: { upid: UPID, node: 'pve1' } })) {
+function route(disks: unknown[], ssh = 'ok', create: unknown = json({ data: { upid: UPID, node: 'pve1' } }), journalDisks: unknown[] = []) {
   fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-    if (url.endsWith('/ceph/disks')) return json({ data: { disks, ssh } })
+    if (url.endsWith('/ceph/disks')) return json({ data: { disks, journalDisks, ssh } })
     if (init?.method === 'POST') return create
     throw new Error(`unexpected ${url}`)
   })
@@ -93,6 +93,15 @@ describe('OsdCreateDialog', () => {
     fireEvent.click(d.getByRole('button', { name: 'Advanced options' }))
     expect(d.getByRole('combobox', { name: 'DB device' })).toBeInTheDocument()
     expect(d.getByRole('combobox', { name: 'WAL device' })).toBeInTheDocument()
+  })
+
+  it('offers a disk already holding the DB of another OSD as the DB device', async () => {
+    route([DISK], 'ok', json({ data: { upid: UPID, node: 'pve1' } }), [{ ...DISK, devpath: '/dev/nvme0n1', model: 'NVME' }])
+    const d = open()
+    await d.findAllByText(/\/dev\/sdg/)
+    fireEvent.click(d.getByRole('button', { name: 'Advanced options' }))
+    fireEvent.mouseDown(d.getByRole('combobox', { name: 'DB device' }))
+    expect(await screen.findByRole('option', { name: /\/dev\/nvme0n1/ })).toBeInTheDocument()
   })
 
   it('reads the disks of the node picked', async () => {

@@ -29,6 +29,8 @@ import { ConfigStep, DoneStep, InstallStep, MonitorsStep, PreflightStep, preflig
 type StepId = 'preflight' | 'install' | 'config' | 'monitors' | 'done'
 const STEPS: StepId[] = ['preflight', 'install', 'config', 'monitors', 'done']
 const POLL_MS = 3000
+/** A started install whose log is still missing after this long has not run. */
+const NO_LOG_AFTER_MS = 60_000
 
 export interface CephDeployWizardProps {
   open: boolean
@@ -102,18 +104,42 @@ export default function CephDeployWizard({ open, candidates, initialId, onClose,
   }, [connId, t])
 
   // Install progress: one read right after the start, then every 3 s while a node is still installing.
+  // When each node's run was started here: a log that never shows up ends as a failure, not as an endless run.
+  const startedAt = useRef<Record<string, number>>({})
   const pollInstall = useCallback((nodes: string[]) => {
     for (const n of nodes) {
       fetch(`/api/v1/connections/${enc(connId)}/nodes/${enc(n)}/ceph/install`)
         .then(r => r.json())
         .then(json => {
           const next = json?.data as InstallState | undefined
-          // A log not written yet reads UNKNOWN: the run was started, so it is still running.
-          if (next && alive.current) setInstalls(s => ({ ...s, [n]: next.status === 'UNKNOWN' ? { ...next, status: 'RUNNING' } : next }))
+          if (!next || !alive.current) return
+          let state = next
+          if (next.status === 'UNKNOWN') {
+            const since = startedAt.current[n]
+            // A log not written yet reads UNKNOWN: right after the start the run is still coming up.
+            state = since !== undefined && Date.now() - since > NO_LOG_AFTER_MS ? { status: 'FAILED', logs: t('install.noLog') } : { ...next, status: 'RUNNING' }
+          }
+          setInstalls(s => ({ ...s, [n]: state }))
         })
         .catch(() => {})
     }
-  }, [connId])
+  }, [connId, t])
+
+  // Back in the install step (wizard reopened): an install still running on a node is followed, not started again.
+  const resumed = useRef<string | null>(null)
+  useEffect(() => {
+    if (step !== 'install' || resumed.current === connId) return
+    resumed.current = connId
+    for (const n of toInstall) {
+      fetch(`/api/v1/connections/${enc(connId)}/nodes/${enc(n)}/ceph/install`)
+        .then(r => r.json())
+        .then(json => {
+          const next = json?.data as InstallState | undefined
+          if (next?.status === 'RUNNING' && alive.current) setInstalls(s => (s[n] ? s : { ...s, [n]: next }))
+        })
+        .catch(() => {})
+    }
+  }, [step, connId, toInstall])
 
   const running = toInstall.filter(n => installs[n]?.status === 'RUNNING')
   const installing = running.length > 0
@@ -124,7 +150,11 @@ export default function CephDeployWizard({ open, candidates, initialId, onClose,
     return () => clearInterval(timer)
   }, [runningKey, pollInstall])
 
+  const starting = useRef(false)
   const startInstall = async () => {
+    // One start at a time: the POSTs go node after node, a second click would start apt twice.
+    if (starting.current) return
+    starting.current = true
     const started: Record<string, InstallState> = {}
     for (const n of toInstall) {
       if (installs[n]?.status === 'COMPLETED') continue
@@ -134,7 +164,9 @@ export default function CephDeployWizard({ open, candidates, initialId, onClose,
       const json = res ? await res.json().catch(() => ({})) : {}
       started[n] = res?.ok ? { status: 'RUNNING', logs: '' } : { status: 'FAILED', logs: json?.error || 'Network error' }
     }
+    for (const n of Object.keys(started)) startedAt.current[n] = Date.now()
     setInstalls(s => ({ ...s, ...started }))
+    starting.current = false
     pollInstall(Object.keys(started).filter(n => started[n].status === 'RUNNING'))
   }
 

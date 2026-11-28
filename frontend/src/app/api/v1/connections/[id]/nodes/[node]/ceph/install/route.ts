@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { withAudit } from '@/lib/audit/withAudit'
 import { installStatus } from '@/lib/ceph/deployPreflight'
-import { detachedOutput, readDetachedLog, runDetached } from '@/lib/ceph/detachedPveceph'
+import { detachedOutput, installRunning, readDetachedLog, runDetached } from '@/lib/ceph/detachedPveceph'
 import { cephConnection, checkCephWrite, isClusterNode, prepareCephSsh, provisionError } from '@/lib/ceph/provisionRoute'
 import { installArgv, parseCephInstall } from '@/lib/ceph/pvecephCommands'
 import { denyIaasTenantCeph } from '@/lib/ceph/tenantGuard'
@@ -53,6 +53,9 @@ async function handlePost(req: Request, ctx: Ctx) {
     const argv = installArgv(parsed.params.version, parsed.params.repository)
     const ssh = await prepareCephSsh(id, gate.conn, safeNode, argv)
     if (ssh.ok === false) return ssh.response
+    if (await installRunning(id, ssh.endpoint)) {
+      return NextResponse.json({ error: 'A Ceph installation is already running on this node', code: 'INSTALL_RUNNING' }, { status: 409 })
+    }
     const started = await runDetached(id, ssh.endpoint, argv, TAG, { answerYes: true })
     if ('error' in started) return NextResponse.json({ error: started.error, code: 'SSH_FAILED' }, { status: 502 })
     return NextResponse.json({ data: { started: true, node: safeNode } })

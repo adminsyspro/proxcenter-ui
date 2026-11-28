@@ -32,6 +32,7 @@ beforeEach(() => {
   ;(pveFetch as any).mockImplementation(async (_c: any, path: string) => {
     if (path === '/nodes') return [{ node: 'pve1' }]
     if (path === '/nodes/pve1/disks/list') return DISKS
+    if (path === '/nodes/pve1/disks/list?type=journal_disks') return [{ devpath: '/dev/nvme0n1', size: 5, used: 'LVM', osdid: -1, model: 'NVME' }]
     throw new Error(`unexpected ${path}`)
   })
   ;(sudoAllows as any).mockResolvedValue('missing-rule')
@@ -42,7 +43,11 @@ describe('GET /api/v1/connections/[id]/nodes/[node]/ceph/disks', () => {
     const res = await callRoute(GET, { params: { id: 'c1', node: 'pve1' } })
     expect(res.status).toBe(200)
     expect(await readJson(res)).toEqual({
-      data: { disks: [{ devpath: '/dev/sdg', sizeBytes: 10737418240, model: 'QEMU_HARDDISK', serial: 's6', type: 'hdd', wearout: 'N/A' }], ssh: 'missing-rule' },
+      data: {
+        disks: [{ devpath: '/dev/sdg', sizeBytes: 10737418240, model: 'QEMU_HARDDISK', serial: 's6', type: 'hdd', wearout: 'N/A' }],
+        journalDisks: [{ devpath: '/dev/nvme0n1', sizeBytes: 5, model: 'NVME', serial: '', type: '', wearout: '' }],
+        ssh: 'missing-rule',
+      },
     })
     expect((sudoAllows as any).mock.calls[0][2]).toEqual(['/usr/bin/pveceph', 'osd', 'create', '/dev/sdb'])
   })

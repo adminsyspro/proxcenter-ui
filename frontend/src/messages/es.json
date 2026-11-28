@@ -14028,7 +14028,8 @@
             "COMPLETED": "Instalado",
             "FAILED": "Error"
           },
-          "reposHint": "apt no pudo instalar los paquetes. Revise los repositorios del nodo (un repositorio enterprise sin suscripción responde 401) o elija Manual con un espejo y reintente."
+          "reposHint": "apt no pudo instalar los paquetes. Revise los repositorios del nodo (un repositorio enterprise sin suscripción responde 401) o elija Manual con un espejo y reintente.",
+          "noLog": "La instalación no dejó ningún registro en el nodo: no se inició. Reintente o revise la cuenta SSH de este nodo."
         },
         "config": {
           "help": "Escribe /etc/pve/ceph.conf para todo el clúster y luego crea el primer monitor y el primer manager en el nodo elegido.",

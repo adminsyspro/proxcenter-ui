@@ -522,6 +522,18 @@ describe('Ceph deploy entry points (ui#1450)', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('Deploy Ceph on LAB-NEW')
   })
 
+  it('keeps the wizard open, and its progress, when the cluster it initialized joins the cockpit', () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: { nodes: [], releases: ['tentacle'] } }) }))
+    vi.stubGlobal('fetch', fetchMock)
+    const view = render(tree([]))
+    fireEvent.click(within(screen.getByTestId('cockpit-empty')).getByRole('button', { name: 'Deploy Ceph' }))
+    const calls = fetchMock.mock.calls.length
+    view.rerender(tree([{ id: 'c9', name: 'LAB-NEW' }], []))
+    expect(screen.getByRole('dialog')).toHaveTextContent('Deploy Ceph on LAB-NEW')
+    // Remounted, the wizard would read the nodes again from scratch.
+    expect(fetchMock.mock.calls.length).toBe(calls)
+  })
+
   it('shows no deploy entry without a candidate', () => {
     render(tree(CONNS, []))
     expect(screen.queryByRole('button', { name: 'Deploy Ceph on another cluster' })).toBeNull()

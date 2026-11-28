@@ -439,7 +439,9 @@ export default function CephCockpit({ connections, candidates = [], onConnection
     )
   }
 
+  // The wizard keeps the same place as on the empty page: a cluster it initialized joins the cockpit without remounting it.
   return (
+    <>
     <Box data-testid='cockpit-root' sx={[{ minWidth: 0 }, fillColumnLg, { [theme.breakpoints.up('lg')]: { flexGrow: 1, flexShrink: 0 } }]}>
       {!showsTabs && <Box sx={{ mb: 1 }}>{header}</Box>}
       {body}
@@ -454,7 +456,8 @@ export default function CephCockpit({ connections, candidates = [], onConnection
         osdFlags={osdFlags.osdFlags}
         onToggleHost={osdFlags.toggleHost}
       />
-      {wizard}
     </Box>
+    {wizard}
+    </>
   )
 }

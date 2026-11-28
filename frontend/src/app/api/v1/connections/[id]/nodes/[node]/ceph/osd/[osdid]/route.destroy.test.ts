@@ -14,7 +14,7 @@ vi.mock('@/lib/proxmox/client', () => ({ pveFetch: vi.fn<(...args: any[]) => Pro
 vi.mock('@/lib/rbac', () => ({ checkPermission: vi.fn<(...args: any[]) => Promise<any>>(), PERMISSIONS: { STORAGE_ADMIN: 'storage.admin' } }))
 vi.mock('@/lib/ssh/node-endpoint', () => ({ resolveNodeSshEndpoint: vi.fn(async () => ({ host: '10.42.0.102', port: 22 })) }))
 vi.mock('@/lib/ssh/verify-node-target', () => ({ verifyNodeTarget: vi.fn(async () => ({ ok: true })), sshTargetError: (_n: string, _t: unknown, f?: string) => f ?? 'unreachable' }))
-vi.mock('@/lib/ceph/detachedPveceph', () => ({ sudoAllows: vi.fn(), runDetached: vi.fn(), followDetachedTask: vi.fn() }))
+vi.mock('@/lib/ceph/detachedPveceph', async (orig) => ({ ...(await orig<typeof import('@/lib/ceph/detachedPveceph')>()), sudoAllows: vi.fn(), runDetached: vi.fn(), followDetachedTask: vi.fn() }))
 vi.mock('@/lib/audit', () => ({ audit: vi.fn() }))
 
 import { DELETE } from './route'

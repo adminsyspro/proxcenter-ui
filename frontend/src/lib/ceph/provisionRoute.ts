@@ -8,7 +8,7 @@ import { checkPermission, PERMISSIONS } from '@/lib/rbac'
 import type { SshTarget } from '@/lib/ssh/node-endpoint-core'
 import { resolveNodeSshEndpoint } from '@/lib/ssh/node-endpoint'
 import { sshTargetError, verifyNodeTarget } from '@/lib/ssh/verify-node-target'
-import { followDetachedTask, runDetached, sudoAllows, type FollowOptions } from './detachedPveceph'
+import { existingTaskUpids, followDetachedTask, runDetached, sudoAllows, type FollowOptions } from './detachedPveceph'
 
 /*
    Shared steps of the Ceph provisioning routes (ui#1450). Each route checks
@@ -92,10 +92,12 @@ export function pvecephTag(prefix: string, subject: string): string {
 export async function runPvecephTask(connectionId: string, conn: any, node: string, endpoint: SshTarget, argv: string[], follow: Pick<FollowOptions, 'tag' | 'taskType' | 'taskId'>): Promise<Response> {
   // A few seconds of margin for a node clock behind ProxCenter's; the task id tells the tasks apart.
   const since = Math.floor(Date.now() / 1000) - 30
+  // An earlier try on the same disk or OSD inside that margin is never this run's task.
+  const exclude = await existingTaskUpids(conn, node, follow.taskType, follow.taskId, since)
   const started = await runDetached(connectionId, endpoint, argv, follow.tag)
   if ('error' in started) return NextResponse.json({ error: started.error, code: 'SSH_FAILED' }, { status: 502 })
 
-  const outcome = await followDetachedTask(conn, connectionId, endpoint, node, { ...follow, since })
+  const outcome = await followDetachedTask(conn, connectionId, endpoint, node, { ...follow, since, exclude })
   if ('upid' in outcome) return NextResponse.json({ data: { upid: outcome.upid, node } })
   if ('failed' in outcome) return NextResponse.json({ error: 'pveceph failed', code: 'PVECEPH_FAILED', output: outcome.failed }, { status: 422 })
   return NextResponse.json({ data: { pending: true, node } }, { status: 202 })

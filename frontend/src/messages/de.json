@@ -13612,7 +13612,8 @@
             "COMPLETED": "Installiert",
             "FAILED": "Fehlgeschlagen"
           },
-          "reposHint": "apt konnte die Pakete nicht installieren. Prüfen Sie die Repositories des Knotens (ein Enterprise-Repository ohne Subskription antwortet mit 401) oder wählen Sie Manuell mit einem Spiegel und versuchen Sie es erneut."
+          "reposHint": "apt konnte die Pakete nicht installieren. Prüfen Sie die Repositories des Knotens (ein Enterprise-Repository ohne Subskription antwortet mit 401) oder wählen Sie Manuell mit einem Spiegel und versuchen Sie es erneut.",
+          "noLog": "Die Installation hat kein Protokoll auf dem Knoten hinterlassen: Sie wurde nicht gestartet. Versuchen Sie es erneut oder prüfen Sie das SSH-Konto auf diesem Knoten."
         },
         "config": {
           "help": "Schreibt /etc/pve/ceph.conf für den ganzen Cluster und erstellt dann den ersten Monitor und Manager auf dem gewählten Knoten.",

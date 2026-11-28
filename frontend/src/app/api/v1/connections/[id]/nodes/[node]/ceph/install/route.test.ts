@@ -18,10 +18,11 @@ vi.mock('@/lib/ceph/detachedPveceph', async (orig) => ({
   sudoAllows: vi.fn(async () => 'ok'),
   runDetached: vi.fn(async () => ({ started: true, logPath: 'x' })),
   readDetachedLog: vi.fn(),
+  installRunning: vi.fn(async () => false),
 }))
 
 import { GET, POST } from './route'
-import { readDetachedLog, runDetached, sudoAllows } from '@/lib/ceph/detachedPveceph'
+import { installRunning, readDetachedLog, runDetached, sudoAllows } from '@/lib/ceph/detachedPveceph'
 import { pveFetch } from '@/lib/proxmox/client'
 
 const params = { id: 'c1', node: 'pve1' }
@@ -37,6 +38,14 @@ describe('POST /api/v1/connections/[id]/nodes/[node]/ceph/install', () => {
     expect(res.status).toBe(200)
     expect(await readJson(res)).toEqual({ data: { started: true, node: 'pve1' } })
     expect((runDetached as any).mock.calls[0]).toEqual(['c1', 'ip-pve1', ['/usr/bin/pveceph', 'install', '--version', 'tentacle', '--repository', 'no-subscription'], 'ceph-install', { answerYes: true }])
+  })
+
+  it('refuses a second install while one runs on the node', async () => {
+    ;(installRunning as any).mockResolvedValueOnce(true)
+    const res = await callRoute(POST, { params, method: 'POST', body: { version: 'tentacle', repository: 'no-subscription' } })
+    expect(res.status).toBe(409)
+    expect(await readJson(res)).toMatchObject({ code: 'INSTALL_RUNNING' })
+    expect(runDetached).not.toHaveBeenCalled()
   })
 
   it('refuses the test repository and runs nothing without the sudo rule', async () => {

@@ -18,7 +18,7 @@ vi.mock('@/lib/proxmox/client', () => ({ pveFetch: vi.fn<(...args: any[]) => Pro
 vi.mock('@/lib/rbac', () => ({ checkPermission: vi.fn<(...args: any[]) => Promise<any>>(), PERMISSIONS: { STORAGE_ADMIN: 'storage.admin' } }))
 vi.mock('@/lib/ssh/node-endpoint', () => ({ resolveNodeSshEndpoint: vi.fn(async () => ({ host: '10.42.0.101', port: 22 })) }))
 vi.mock('@/lib/ssh/verify-node-target', () => ({ verifyNodeTarget: vi.fn(async () => ({ ok: true })), sshTargetError: (_n: string, _t: unknown, f?: string) => f ?? 'unreachable' }))
-vi.mock('@/lib/ceph/detachedPveceph', () => ({ sudoAllows: vi.fn(), runDetached: vi.fn(), followDetachedTask: vi.fn() }))
+vi.mock('@/lib/ceph/detachedPveceph', async (orig) => ({ ...(await orig<typeof import('@/lib/ceph/detachedPveceph')>()), sudoAllows: vi.fn(), runDetached: vi.fn(), followDetachedTask: vi.fn() }))
 
 import { POST } from './route'
 import { checkPermission } from '@/lib/rbac'
@@ -53,6 +53,17 @@ describe('POST /api/v1/connections/[id]/nodes/[node]/ceph/osd', () => {
     expect(sudoMock).toHaveBeenCalledWith('c1', { host: '10.42.0.101', port: 22 }, argv)
     expect(runMock).toHaveBeenCalledWith('c1', { host: '10.42.0.101', port: 22 }, argv, 'ceph-osd-create-sdb')
     expect(followMock.mock.calls[0][4]).toMatchObject({ tag: 'ceph-osd-create-sdb', taskType: 'cephcreateosd', taskId: 'sdb' })
+  })
+
+  it('leaves out the earlier tasks of the same disk when it looks for the new one', async () => {
+    const OLD = 'UPID:pve1:000A1:0C1:6B0A1:cephcreateosd:sdb:root@pam:'
+    ;(pveFetch as any).mockImplementation(async (_c: any, path: string) => {
+      if (path === '/nodes') return [{ node: 'pve1' }]
+      if (path.startsWith('/nodes/pve1/tasks')) return [{ type: 'cephcreateosd', id: 'sdb', upid: OLD }, { type: 'cephcreateosd', id: 'sdc', upid: 'other' }]
+      return null
+    })
+    await post({ dev: '/dev/sdb' })
+    expect(followMock.mock.calls[0][4].exclude).toEqual([OLD])
   })
 
   it('runs nothing when the sudo rule is missing', async () => {

@@ -14042,7 +14042,8 @@
             "COMPLETED": "Installé",
             "FAILED": "Échec"
           },
-          "reposHint": "apt n’a pas pu installer les paquets. Vérifiez les dépôts du nœud (un dépôt enterprise sans abonnement répond 401), ou choisissez Manuel avec un miroir, puis réessayez."
+          "reposHint": "apt n’a pas pu installer les paquets. Vérifiez les dépôts du nœud (un dépôt enterprise sans abonnement répond 401), ou choisissez Manuel avec un miroir, puis réessayez.",
+          "noLog": "L’installation n’a laissé aucun journal sur le nœud : elle n’a pas démarré. Réessayez, ou vérifiez le compte SSH sur ce nœud."
         },
         "config": {
           "help": "Écrit /etc/pve/ceph.conf pour tout le cluster, puis crée le premier moniteur et le premier manager sur le nœud choisi.",

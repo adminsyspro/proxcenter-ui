@@ -114,6 +114,29 @@ describe('CephDeployWizard', () => {
     await waitFor(() => expect(d.getByRole('button', { name: 'Next' })).toBeEnabled())
   })
 
+  it('picks up an install already under way instead of starting another, and starts once on a double click', async () => {
+    preflight = { nodes: [node('pve1', 'absent'), node('pve2', 'absent'), node('pve3', 'installed')], releases: ['tentacle'] }
+    installLog = { status: 'RUNNING', logs: 'unpacking ceph-mon' }
+    let d = open()
+    await d.findByText('pve3')
+    fireEvent.click(d.getByRole('button', { name: 'Next' }))
+    expect(await d.findAllByText('Installing…')).toHaveLength(2)
+    expect(posts()).toEqual([])
+    cleanup()
+    installLog = { status: 'UNKNOWN', logs: '' }
+    d = open()
+    await d.findByText('pve3')
+    fireEvent.click(d.getByRole('button', { name: 'Next' }))
+    const start = await d.findByRole('button', { name: 'Install' })
+    fireEvent.click(start)
+    fireEvent.click(start)
+    await waitFor(() => expect(posts()).toHaveLength(2))
+    expect(posts().map(([u]) => u)).toEqual([
+      '/api/v1/connections/c2/nodes/pve1/ceph/install',
+      '/api/v1/connections/c2/nodes/pve2/ceph/install',
+    ])
+  })
+
   it('stops on a failed install and says to fix the repositories', async () => {
     preflight = { nodes: [node('pve1', 'absent'), node('pve2', 'installed'), node('pve3', 'installed')], releases: ['tentacle'] }
     installLog = { status: 'FAILED', logs: 'E: Failed to fetch https://enterprise.proxmox.com/debian/ceph-tentacle 401 Unauthorized' }

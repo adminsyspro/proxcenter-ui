@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import lab from './__fixtures__/disks-list-lab.json'
-import { freeDisks } from './freeDisks'
+import { freeDisks, journalDisks } from './freeDisks'
 
 /*
    ui#1450: the disks of a node an OSD can be created on, out of PVE's
@@ -33,5 +33,17 @@ describe('freeDisks', () => {
   it('reads anything that is not a list as no disk', () => {
     expect(freeDisks(null)).toEqual([])
     expect(freeDisks({ data: [] })).toEqual([])
+  })
+})
+
+describe('journalDisks', () => {
+  it('keeps a disk already holding the DB of another OSD, never an OSD data disk (PVE type=journal_disks, lab 28/11)', () => {
+    const rows = [
+      { devpath: '/dev/sdc', size: 10737418240, used: 'LVM', osdid: -1, model: 'QEMU_HARDDISK', serial: 's2', type: 'ssd', wearout: 'N/A' },
+      { devpath: '/dev/sdb', size: 10737418240, used: 'LVM', osdid: 0 },
+      { devpath: '/dev/x y', size: 1 },
+    ]
+    expect(journalDisks(rows).map(d => d.devpath)).toEqual(['/dev/sdc'])
+    expect(journalDisks(null)).toEqual([])
   })
 })

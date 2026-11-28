@@ -14041,7 +14041,8 @@
             "COMPLETED": "Installed",
             "FAILED": "Failed"
           },
-          "reposHint": "apt could not install the packages. Check the node’s repositories (an enterprise repository without a subscription answers 401), or pick Manual with a mirror, then retry."
+          "reposHint": "apt could not install the packages. Check the node’s repositories (an enterprise repository without a subscription answers 401), or pick Manual with a mirror, then retry.",
+          "noLog": "The installation left no log on the node: it did not start. Retry, or check the SSH account on this node."
         },
         "config": {
           "help": "Writes /etc/pve/ceph.conf for the whole cluster, then creates the first monitor and manager on the chosen node.",

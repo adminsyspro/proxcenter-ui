@@ -7,7 +7,7 @@ vi.mock('@/lib/proxmox/client', () => ({ pveFetch: vi.fn<(...args: any[]) => Pro
 import { executeSSH } from '@/lib/ssh/exec'
 import { pveFetch } from '@/lib/proxmox/client'
 import { FRONTEND_SUDO_RULES, resolveSudo, sudoSegments, verifySudo } from '@/lib/ssh/sudo'
-import { followDetachedTask, readDetachedLog, runDetached, sudoAllows } from './detachedPveceph'
+import { followDetachedTask, installRunning, readDetachedLog, runDetached, sudoAllows } from './detachedPveceph'
 import { osdCreateArgv } from './pvecephCommands'
 
 /*
@@ -89,6 +89,15 @@ describe('runDetached', () => {
     expect(sshMock).not.toHaveBeenCalled()
   })
 
+  it('reports a log directory the account cannot write, instead of a start', async () => {
+    sshMock.mockResolvedValue({ success: true, output: 'PXC_NO_LOGDIR\n' })
+    expect(await runDetached('c1', 'pve1', ARGV, 'ceph-osd-create-sdb')).toEqual({ started: false, error: expect.stringMatching(/cannot write its log directory/) })
+    const command: string = sshMock.mock.calls[0][2]
+    expect(command).toContain('PXC_NO_LOGDIR')
+    sshMock.mockResolvedValue({ success: true, output: '' })
+    expect((await runDetached('c1', 'pve1', ARGV, 'ceph-osd-create-sdb')).started).toBe(false)
+  })
+
   it('reports an SSH failure', async () => {
     sshMock.mockResolvedValue({ success: false, error: 'Permission denied (publickey)' })
     expect(await runDetached('c1', 'pve1', ARGV, 'ceph-osd-create-sdb')).toEqual({ started: false, error: 'Permission denied (publickey)' })
@@ -105,6 +114,16 @@ describe('followDetachedTask', () => {
     sshMock.mockResolvedValue({ success: true, output: '' })
     expect(await followDetachedTask(conn, 'c1', 'pve1', 'pve1', opts)).toEqual({ upid: UPID })
     expect(pveMock.mock.calls[0][1]).toBe('/nodes/pve1/tasks?typefilter=cephcreateosd&since=1795850000&source=all&limit=20')
+  })
+
+  it('skips the tasks that existed before the run (a retry of the same disk)', async () => {
+    const OLD = 'UPID:pve1:000B1:0C1:6B0A1:cephcreateosd:sdb:root@pam:'
+    let calls = 0
+    pveMock.mockImplementation(async () => (++calls < 2
+      ? [{ type: 'cephcreateosd', id: 'sdb', upid: OLD }]
+      : [{ type: 'cephcreateosd', id: 'sdb', upid: UPID }, { type: 'cephcreateosd', id: 'sdb', upid: OLD }]))
+    sshMock.mockResolvedValue({ success: true, output: '' })
+    expect(await followDetachedTask(conn, 'c1', 'pve1', 'pve1', { ...opts, exclude: [OLD] })).toEqual({ upid: UPID })
   })
 
   it('returns what pveceph printed when it failed before any task', async () => {
@@ -135,5 +154,16 @@ describe('readDetachedLog', () => {
     sshMock.mockResolvedValue({ success: true, output: '' })
     expect(await readDetachedLog('c1', 'pve1', 'ceph-install')).toBe('')
     expect(sshMock.mock.calls[0][2]).toContain('if [ -f "$HOME/.cache/proxcenter/ceph-install.log" ]')
+  })
+})
+
+describe('installRunning', () => {
+  it('tells whether a pveceph install runs on the node, without matching its own probe', async () => {
+    sshMock.mockResolvedValue({ success: true, output: 'PXC_RUNNING\n' })
+    expect(await installRunning('c1', 'pve1')).toBe(true)
+    expect(sshMock.mock.calls[0][2]).toContain('pveceph [i]nstall')
+    expect(sshMock.mock.calls[0][4]).toEqual({ readOnly: true, asAccount: true })
+    sshMock.mockResolvedValue({ success: true, output: 'PXC_IDLE\n' })
+    expect(await installRunning('c1', 'pve1')).toBe(false)
   })
 })

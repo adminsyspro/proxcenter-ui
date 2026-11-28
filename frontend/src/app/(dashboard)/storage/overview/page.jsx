@@ -521,7 +521,10 @@ return (
       width: 100,
       renderCell: params => (
         <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-          <Typography variant='body2' sx={{ fontWeight: 600 }}>{params.row.totalFormatted}</Typography>
+          {/* An iSCSI storage has no capacity of its own: the tooltip says why it reads 0 B (#1436). */}
+          <Tooltip title={params.row.type === 'iscsi' && !(params.row.total > 0) ? t('storage.clusterStorage.iscsiZeroHint') : ''}>
+            <Typography variant='body2' sx={{ fontWeight: 600 }}>{params.row.totalFormatted}</Typography>
+          </Tooltip>
         </Box>
       )
     },

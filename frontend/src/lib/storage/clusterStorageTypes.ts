@@ -29,6 +29,8 @@ export type StorageField = {
   requiredWhen?: { key: string; value: string }
   /** Shown only when another field has this value. */
   shownWhen?: { key: string; value: string }
+  /** The first Proxmox VE release (major, minor) that knows the parameter. */
+  since?: readonly [number, number]
 }
 
 export type StorageTypeSpec = {
@@ -73,6 +75,8 @@ export const STORAGE_TYPE_SPECS: Record<ClusterStorageType, StorageTypeSpec> = {
     fields: [
       { key: 'portal', kind: 'text', required: true, fixed: true },
       { key: 'target', kind: 'text', required: true, fixed: true },
+      // PVE 9.3: Proxmox assembles the multipath maps of the LUNs itself.
+      { key: 'managed-multipath', kind: 'boolean', since: [9, 3] },
     ],
     // `images` uses the LUNs directly, `none` keeps them for an LVM on top.
     contents: ['images', 'none'],

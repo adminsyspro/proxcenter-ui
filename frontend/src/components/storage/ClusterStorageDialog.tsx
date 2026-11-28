@@ -30,6 +30,7 @@ import {
 } from '@mui/material'
 
 import { SMALL_SELECT_SX } from '@/components/settings/VdcQuotaRow'
+import { isAtLeast, parsePveVersion, type ParsedPveVersion } from '@/lib/connections/check/versionGates'
 import {
   asText,
   BWLIMIT_KINDS,
@@ -41,11 +42,14 @@ import {
   type StorageField,
 } from '@/lib/storage/clusterStorageTypes'
 
+/** The glyph of an iSCSI storage and of its LUNs. */
+const ISCSI_ICON = 'ri-hard-drive-3-line'
+
 /** Every type of the Add dialog, PBS included, with its glyph. */
 export const ADD_STORAGE_TYPES: Array<{ value: ClusterStorageType | 'pbs'; icon: string }> = [
   { value: 'nfs', icon: 'ri-folder-shared-line' },
   { value: 'cifs', icon: 'ri-folder-shared-line' },
-  { value: 'iscsi', icon: 'ri-hard-drive-3-line' },
+  { value: 'iscsi', icon: ISCSI_ICON },
   { value: 'lvm', icon: 'ri-stack-line' },
   { value: 'rbd', icon: 'ri-database-2-line' },
   { value: 'cephfs', icon: 'ri-folders-line' },
@@ -61,6 +65,15 @@ const SCAN_AFTER: Partial<Record<ClusterStorageType, string>> = { nfs: 'server',
 const SCANNED_FIELD: Partial<Record<ClusterStorageType, string>> = { nfs: 'export', cifs: 'share', iscsi: 'target', zfs: 'target', lvm: 'vgname' }
 
 type ScanEntry = { value: string; detail: string | null }
+/** A LUN as Proxmox VE 9.3's SAN view describes it (route san-luns). */
+type SanLun = { wwid: string; state: string | null; pathsActive: number | null; pathsTotal: number | null; usage: string | null }
+/** What Proxmox reports right after an add, per node. */
+type Activation = { inactive: string[]; unverified: string[] }
+
+/** The WWID at the end of an iSCSI LUN volume, plain or multipath. */
+const lunWwid = (volid: string) => /\.(?:scsi|dm-uuid-mpath)-([A-Za-z0-9_.:]+)$/.exec(volid)?.[1] ?? null
+/** Several portals in an iSCSI scan entry (`a:3260,b:3260`): the target has several paths. */
+const portalCount = (detail: string | null) => (detail ? detail.split(',').filter(Boolean).length : 0)
 type Props = {
   cluster: { id: string; name?: string | null }
   mode: 'create' | 'edit'
@@ -192,6 +205,47 @@ function useStoredConfig(url: string | null, apply: (form: StoredForm) => void) 
   return state
 }
 
+/** The Proxmox VE release of the cluster (the node that answers the API). */
+function usePveVersion(url: string) {
+  const [version, setVersion] = useState<ParsedPveVersion | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    const load = async () => {
+      const data = await getData<any>(url).catch(() => null)
+
+      if (alive) setVersion(parsePveVersion(data?.version))
+    }
+
+    void load()
+
+    return () => { alive = false }
+  }, [url])
+
+  return version
+}
+
+/** PVE 9.3: paths, health and usage of the LUNs, by WWID. Empty before 9.3. */
+function useSanLuns(url: string | null) {
+  const [byWwid, setByWwid] = useState<Map<string, SanLun>>(new Map())
+
+  useEffect(() => {
+    if (!url) return
+    let alive = true
+    const load = async () => {
+      const rows = await getData<SanLun[] | null>(url).catch(() => null)
+
+      if (alive) setByWwid(new Map((Array.isArray(rows) ? rows : []).map(l => [l.wwid, l])))
+    }
+
+    void load()
+
+    return () => { alive = false }
+  }, [url])
+
+  return byWwid
+}
+
 /** LVM on iSCSI: the LUNs of the chosen base storage, read from one node. */
 function useLuns(url: string | null) {
   const [luns, setLuns] = useState<ScanEntry[]>([])
@@ -239,11 +293,13 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activation, setActivation] = useState<Activation | null>(null)
 
   const spec = STORAGE_TYPE_SPECS[type]
   const base = `/api/v1/connections/${encodeURIComponent(cluster.id)}`
   const { nodes: clusterNodes, taken, iscsi: iscsiStorages } = useClusterLists(base)
   const scanNode = pickedScanNode || clusterNodes[0] || ''
+  const pveVersion = usePveVersion(`${base}/version`)
 
   const { loading, error: loadError } = useStoredConfig(
     mode === 'edit' && storage ? `${base}/storage/${encodeURIComponent(storage)}` : null,
@@ -259,8 +315,12 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
     },
   )
 
-  const luns = useLuns(type === 'lvm' && baseStorage && scanNode && mode === 'create'
+  const pickingLun = type === 'lvm' && !!baseStorage && !!scanNode && mode === 'create'
+  const luns = useLuns(pickingLun
     ? `${base}/nodes/${encodeURIComponent(scanNode)}/storage/${encodeURIComponent(baseStorage)}/content`
+    : null)
+  const sanLuns = useSanLuns(pickingLun && pveVersion && isAtLeast(pveVersion, [9, 3])
+    ? `${base}/nodes/${encodeURIComponent(scanNode)}/san-luns?storage=${encodeURIComponent(baseStorage)}`
     : null)
 
   const pickType = (next: string) => {
@@ -278,7 +338,11 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
   const setField = (key: string, value: string | boolean) => setFields(prev => ({ ...prev, [key]: value }))
 
   const holds = (cond?: { key: string; value: string }) => !!cond && asText(fields[cond.key]) === cond.value
-  const visible = (f: StorageField) => !f.shownWhen || holds(f.shownWhen)
+  // A parameter of a newer Proxmox VE stays hidden on an older cluster, unless
+  // the stored configuration already carries it.
+  const released = (f: StorageField) => !f.since || fields[f.key] !== undefined || (!!pveVersion && isAtLeast(pveVersion, f.since))
+  const visible = (f: StorageField) => released(f) && (!f.shownWhen || holds(f.shownWhen))
+  const managedMultipath = STORAGE_TYPE_SPECS.iscsi.fields.find(f => f.key === 'managed-multipath')!
   const missing = mode === 'create' && spec.fields.some(f => visible(f) && (f.required || holds(f.requiredWhen)) && !asText(fields[f.key]).trim())
   const idInvalid = mode === 'create' && storageId !== '' && !STORAGE_ID_RE.test(storageId)
   const nameTaken = mode === 'create' && taken.includes(storageId)
@@ -305,7 +369,13 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
         body: JSON.stringify(body),
       })
       const json = await res.json().catch(() => ({}))
-      setScan(res.ok ? { ok: true, entries: json.data || [] } : { ok: false, entries: [], error: json?.error || `HTTP ${res.status}` })
+      const entries: ScanEntry[] = res.ok ? json.data || [] : []
+      setScan(res.ok ? { ok: true, entries } : { ok: false, entries: [], error: json?.error || `HTTP ${res.status}` })
+      // A target on several portals: Proxmox VE 9.3 can assemble the multipath
+      // maps itself, so the option starts on unless the operator set it.
+      if (type === 'iscsi' && released(managedMultipath) && fields['managed-multipath'] === undefined && entries.some(e => portalCount(e.detail) > 1)) {
+        setField('managed-multipath', true)
+      }
     } catch (e: any) {
       setScan({ ok: false, entries: [], error: e?.message || String(e) })
     } finally {
@@ -324,7 +394,11 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`)
       onSaved()
-      onClose()
+      // Added, but not active everywhere: say so before closing (issue #1436).
+      const inactive: string[] = json?.data?.inactive ?? []
+      const unverified: string[] = json?.data?.unverified ?? []
+      if (inactive.length || unverified.length) setActivation({ inactive, unverified })
+      else onClose()
     } catch (e: any) {
       setError(e?.message || String(e))
     } finally {
@@ -425,7 +499,7 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
           sx={SMALL_SELECT_SX}
         >
           <MenuItem value=''><em>{label('baseNone')}</em></MenuItem>
-          {iscsiStorages.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+          {iscsiStorages.map(s => <MenuItem key={s} value={s}><OptionRow icon={ISCSI_ICON}>{s}</OptionRow></MenuItem>)}
         </Select>
       </FormControl>
       {baseStorage && (
@@ -439,14 +513,29 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
             sx={SMALL_SELECT_SX}
           >
             {mode === 'edit' && fields.base && <MenuItem value={String(fields.base)}>{String(fields.base)}</MenuItem>}
-            {luns.map(l => (
-              <MenuItem key={l.value} value={l.value}>
-                <ListItemText primary={l.value.split(':')[1] || l.value} secondary={l.detail} sx={{ my: 0 }} />
-              </MenuItem>
-            ))}
+            {luns.map(l => {
+              const san = sanLuns.get(lunWwid(l.value) ?? '')
+              const used = !!san?.usage && san.usage !== 'unused'
+              const secondary = [
+                l.detail,
+                san?.pathsTotal ? t('storage.clusterStorage.lunPaths', { active: san.pathsActive ?? 0, total: san.pathsTotal }) : null,
+                san?.state,
+                used ? t('storage.clusterStorage.lunInUse', { usage: san!.usage! }) : null,
+              ].filter(Boolean).join(' · ')
+
+              return (
+                // The theme keeps a disabled item opaque: dim the LUN already used.
+                <MenuItem key={l.value} value={l.value} disabled={used} sx={{ '&.Mui-disabled': { opacity: 0.5 } }}>
+                  <OptionRow icon={ISCSI_ICON}>
+                    <ListItemText primary={l.value.split(':')[1] || l.value} secondary={secondary || null} sx={{ my: 0 }} />
+                  </OptionRow>
+                </MenuItem>
+              )
+            })}
           </Select>
         </FormControl>
       )}
+      {baseStorage && <Typography variant='caption' sx={{ opacity: 0.7 }}>{t('storage.clusterStorage.lvmMultipathHint')}</Typography>}
     </React.Fragment>
   )
 
@@ -475,6 +564,12 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
 
   const contentLabel = (c: string) => t(`storage.clusterStorage.contentTypes.${c}` as any)
 
+  // Before 9.3, a target on several portals needs multipath set up by hand on
+  // every node, or an LVM on its LUNs stays inactive (measured on PVE 9.2).
+  const multipathWarning = type === 'iscsi' && scan?.ok && !released(managedMultipath)
+    ? Math.max(0, ...scan.entries.map(e => portalCount(e.detail)))
+    : 0
+
   // The connection test, under the fields it reads, above the one it fills.
   const scanRow = spec.scan && mode === 'create' ? (
     <Box>
@@ -500,6 +595,7 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
         )}
       </Box>
       {scan && !scan.ok && <Alert severity='error' sx={{ mt: 2 }}>{scan.error}</Alert>}
+      {multipathWarning > 1 && <Alert severity='warning' sx={{ mt: 2 }}>{t('storage.clusterStorage.multipathManual', { count: multipathWarning })}</Alert>}
     </Box>
   ) : null
 
@@ -514,9 +610,23 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
         {title}
       </DialogTitle>
       <DialogContent>
-        {loading ? (
+        {activation && (
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {activation.inactive.length > 0 && (
+              <Alert severity='warning'>
+                {t('storage.clusterStorage.inactiveAfterAdd', { nodes: activation.inactive.join(', ') })}
+                {type === 'lvm' && baseStorage ? ` ${t('storage.clusterStorage.inactiveLvmMultipath')}` : ''}
+              </Alert>
+            )}
+            {activation.unverified.length > 0 && (
+              <Alert severity='info'>{t('storage.clusterStorage.unverifiedAfterAdd', { nodes: activation.unverified.join(', ') })}</Alert>
+            )}
+          </Stack>
+        )}
+        {!activation && loading && (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={24} /></Box>
-        ) : (
+        )}
+        {!activation && !loading && (
           <Stack spacing={2} sx={{ mt: 1 }}>
             {loadError && <Alert severity='error'>{loadError}</Alert>}
 
@@ -551,6 +661,7 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
             ))}
 
             {type === 'zfs' && <Typography variant='caption' sx={{ opacity: 0.7 }}>{t('storage.clusterStorage.zfsSshHint')}</Typography>}
+            {type === 'iscsi' && <Typography variant='caption' sx={{ opacity: 0.7 }}>{t('storage.clusterStorage.iscsiZeroHint')}</Typography>}
             {(type === 'rbd' || type === 'cephfs') && <Typography variant='caption' sx={{ opacity: 0.7 }}>{t('storage.clusterStorage.cephNoTest')}</Typography>}
 
 
@@ -591,15 +702,21 @@ export default function ClusterStorageDialog({ cluster, mode, storage, initialTy
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={submitting}>{t('common.cancel')}</Button>
-        <Button
-          variant='contained'
-          onClick={submit}
-          disabled={!canSubmit}
-          startIcon={submitting ? <CircularProgress size={16} color='inherit' /> : null}
-        >
-          {mode === 'create' ? t('common.create') : t('common.save')}
-        </Button>
+        {activation ? (
+          <Button variant='contained' onClick={onClose}>{t('common.close')}</Button>
+        ) : (
+          <>
+            <Button onClick={onClose} disabled={submitting}>{t('common.cancel')}</Button>
+            <Button
+              variant='contained'
+              onClick={submit}
+              disabled={!canSubmit}
+              startIcon={submitting ? <CircularProgress size={16} color='inherit' /> : null}
+            >
+              {mode === 'create' ? t('common.create') : t('common.save')}
+            </Button>
+          </>
+        )}
       </DialogActions>
     </Dialog>
   )

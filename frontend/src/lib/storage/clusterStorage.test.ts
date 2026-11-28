@@ -25,8 +25,14 @@ import {
   resetScanLocks,
   scanStorageTarget,
   SCAN_HOLD_MS,
+  sanLunsOfTarget,
   scrubStorageConfig,
+  storageActivation,
   storageUsage,
+  STATUS_RETRIES,
+  STATUS_RETRY_DELAY_MS,
+  STATUS_TIMEOUT_MS,
+  wwidOfVolid,
 } from './clusterStorage'
 import { formatBwlimit, isClusterStorageType, parseBwlimit } from './clusterStorageTypes'
 
@@ -269,5 +275,125 @@ describe('storageUsage', () => {
     const usage = await storageUsage(conn, 's', { type: 'rbd' }, ['a', 'b'])
 
     expect(usage.unverified).toEqual(['a', 'b', 'storage.cfg'])
+  })
+})
+
+describe('buildStorageParams: managed multipath (PVE 9.3)', () => {
+  it('sends managed-multipath only when the dialog set it', () => {
+    const on = buildStorageParams({ type: 'iscsi', storage: 'san', fields: { portal: '10.0.0.1', target: 'iqn.x', 'managed-multipath': true }, content: ['none'] }, 'create')
+    const unset = buildStorageParams({ type: 'iscsi', storage: 'san', fields: { portal: '10.0.0.1', target: 'iqn.x' }, content: ['none'] }, 'create')
+
+    expect(on.params['managed-multipath']).toBe('1')
+    expect(unset.params).not.toHaveProperty('managed-multipath')
+  })
+
+  it('lets an update switch it off, the portal and target staying fixed', () => {
+    const out = buildStorageParams({ type: 'iscsi', fields: { portal: 'x', target: 'y', 'managed-multipath': false }, content: ['images'] }, 'update')
+
+    expect(out.params).toEqual({ 'managed-multipath': '0', content: 'images' })
+  })
+})
+
+describe('storageActivation', () => {
+  const route = (map: Record<string, any>) => pveFetchMock.mockImplementation(async (_c: any, path: string) => {
+    if (path in map) {
+      const v = map[path]
+      if (v instanceof Error) throw v
+      return v
+    }
+    throw new Error(`unexpected ${path}`)
+  })
+
+  it('names the nodes where the new storage is not active and those it could not read', async () => {
+    route({
+      '/nodes': [{ node: 'pve1', status: 'online' }, { node: 'pve2', status: 'online' }, { node: 'pve3', status: 'online' }, { node: 'pve4', status: 'offline' }],
+      '/nodes/pve1/storage/lvm1/status': { active: 1 },
+      '/nodes/pve2/storage/lvm1/status': { active: 0 },
+      '/nodes/pve3/storage/lvm1/status': new Error('timeout'),
+    })
+
+    expect(await storageActivation(conn, 'lvm1', [], { retryDelayMs: 0 })).toEqual({ inactive: ['pve2'], unverified: ['pve3', 'pve4'] })
+    // An inactive node is read again before it counts: 1 + STATUS_RETRIES reads.
+    expect(pveFetchMock.mock.calls.filter(c => c[1] === '/nodes/pve2/storage/lvm1/status')).toHaveLength(1 + STATUS_RETRIES)
+    expect(pveFetchMock.mock.calls.filter(c => c[1] === '/nodes/pve1/storage/lvm1/status')).toHaveLength(1)
+    expect(pveFetchMock.mock.calls.find(c => c[1] === '/nodes/pve1/storage/lvm1/status')?.[3]).toEqual({ timeoutMs: STATUS_TIMEOUT_MS })
+  })
+
+  it('reads only the nodes the storage is restricted to, two at a time', async () => {
+    let inFlight = 0
+    let peak = 0
+    pveFetchMock.mockImplementation(async (_c: any, path: string) => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await new Promise(r => setTimeout(r, 5))
+      inFlight--
+      if (path === '/nodes/b/storage/s%20x/status') return { active: '0' }
+      return { active: 1 }
+    })
+
+    expect(await storageActivation(conn, 's x', ['a', 'b', 'c'], { retryDelayMs: 0 })).toEqual({ inactive: ['b'], unverified: [] })
+    expect(peak).toBe(2)
+    expect(pveFetchMock.mock.calls.map(c => c[1])).not.toContain('/nodes')
+  })
+
+  it('counts a node active once a later read finds it so (first activation still running)', async () => {
+    let reads = 0
+    pveFetchMock.mockImplementation(async () => ({ active: ++reads >= 2 ? 1 : 0 }))
+
+    expect(await storageActivation(conn, 'san', ['pve2'], { retryDelayMs: 0 })).toEqual({ inactive: [], unverified: [] })
+    expect(reads).toBe(2)
+  })
+
+  it('waits between two reads of an inactive node', async () => {
+    vi.useFakeTimers()
+    pveFetchMock.mockResolvedValue({ active: 0 })
+
+    const done = storageActivation(conn, 'san', ['pve2'])
+    await vi.advanceTimersByTimeAsync(STATUS_RETRY_DELAY_MS - 1)
+    expect(pveFetchMock).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(STATUS_RETRIES * STATUS_RETRY_DELAY_MS)
+    expect(await done).toEqual({ inactive: ['pve2'], unverified: [] })
+    expect(pveFetchMock).toHaveBeenCalledTimes(1 + STATUS_RETRIES)
+  })
+
+  it('checks nothing when the node list cannot be read', async () => {
+    route({ '/nodes': new Error('x') })
+
+    expect(await storageActivation(conn, 's', [])).toEqual({ inactive: [], unverified: [] })
+  })
+})
+
+describe('SAN LUNs (PVE 9.3)', () => {
+  it('reads the WWID out of a plain or a multipath LUN volume', () => {
+    expect(wwidOfVolid('san:0.0.0.scsi-360014055da67a6945b74cdb9c27d4503')).toBe('360014055da67a6945b74cdb9c27d4503')
+    expect(wwidOfVolid('san:0.0.1.dm-uuid-mpath-36001405eec39c111ab048b1bd34c9f44')).toBe('36001405eec39c111ab048b1bd34c9f44')
+    expect(wwidOfVolid('san:something-else')).toBeNull()
+  })
+
+  it("keeps the LUNs of one target, with their paths, health and usage", async () => {
+    pveFetchMock.mockResolvedValueOnce([
+      { wwid: 'w1', 'iscsi-target': 'iqn.a', state: 'optimal', 'paths-active': 2, 'paths-total': 2, usage: 'unused', size: 4294967296 },
+      { wwid: 'w2', 'iscsi-target': 'iqn.a', state: 'degraded', 'paths-active': 1, 'paths-total': 2, usage: 'lvm' },
+      { wwid: 'w3', 'iscsi-target': 'iqn.other', state: 'optimal', usage: 'unused' },
+      { wwid: 'w4', transport: 'fc', state: 'optimal' },
+    ])
+
+    expect(await sanLunsOfTarget(conn, 'pve1', 'iqn.a')).toEqual([
+      { wwid: 'w1', state: 'optimal', pathsActive: 2, pathsTotal: 2, usage: 'unused' },
+      { wwid: 'w2', state: 'degraded', pathsActive: 1, pathsTotal: 2, usage: 'lvm' },
+    ])
+    expect(pveFetchMock.mock.calls[0][1]).toBe('/nodes/pve1/san/luns')
+  })
+
+  it('answers null where Proxmox has no SAN view (before 9.3) or the node fails', async () => {
+    pveFetchMock.mockRejectedValueOnce(new PveApplicationError('PVE 501 /nodes/pve1/san/luns: Method not implemented', 501))
+    expect(await sanLunsOfTarget(conn, 'pve1', 'iqn.a')).toBeNull()
+
+    pveFetchMock.mockRejectedValueOnce(new Error('down'))
+    expect(await sanLunsOfTarget(conn, 'pve1', 'iqn.a')).toBeNull()
+  })
+
+  it('refuses a bad node name', async () => {
+    await expect(sanLunsOfTarget(conn, '../x', 'iqn.a')).rejects.toThrow('Invalid node name')
   })
 })

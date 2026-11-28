@@ -4,6 +4,7 @@ import React from 'react'
 import { useTranslations } from 'next-intl'
 
 import {
+  Alert,
   Box,
   Card,
   CardContent,
@@ -159,6 +160,11 @@ export default function StorageDetailPanel({
 
   return (
     <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {/* An iSCSI storage has no capacity of its own: say why it reads 0 B (#1436). */}
+      {si.type === 'iscsi' && !(si.total > 0) && (
+        <Alert severity="info" variant="outlined" sx={{ flexShrink: 0 }}>{t('storage.clusterStorage.iscsiZeroHint')}</Alert>
+      )}
+
       {/* Usage chart card - fixed, never cropped */}
       {si.total > 0 && (
         <Card variant="outlined" sx={{ borderRadius: 2, flexShrink: 0 }}>

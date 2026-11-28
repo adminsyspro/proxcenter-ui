@@ -3240,7 +3240,8 @@
         "sparse": "Allocation dynamique",
         "nowritecache": "Désactiver le cache d’écriture",
         "path": "Répertoire",
-        "is_mountpoint": "Le répertoire est un point de montage"
+        "is_mountpoint": "Le répertoire est un point de montage",
+        "managed-multipath": "Multipath géré par Proxmox"
       },
       "contentTypes": {
         "images": "Image disque",
@@ -3258,7 +3259,15 @@
         "restore": "Restauration",
         "clone": "Clonage",
         "move": "Déplacement de disque"
-      }
+      },
+      "multipathManual": "Cette cible répond sur {count} portails. Sans multipath configuré sur chaque nœud, un LVM créé sur ses LUN reste inactif : LVM ignore les chemins en double. Configurez d’abord multipath-tools sur les nœuds (Proxmox VE 9.3 sait le gérer lui-même).",
+      "iscsiZeroHint": "Un stockage iSCSI affiche toujours 0 o : Proxmox ne lui compte aucune capacité. Ses LUN servent directement de disques de VM (contenu Image disque), ou sont gardés (contenu Aucun) pour un LVM créé sur l’un d’eux, qui affiche alors la capacité.",
+      "lvmMultipathHint": "Un LUN joint par plusieurs chemins demande le multipath sur chaque nœud (en Proxmox VE 9.3, l’option « Multipath géré par Proxmox » du stockage iSCSI), sinon le LVM reste inactif.",
+      "lunPaths": "{active}/{total} chemins",
+      "lunInUse": "utilisé ({usage})",
+      "inactiveAfterAdd": "Le stockage a été ajouté, mais Proxmox le signale inactif sur : {nodes}.",
+      "inactiveLvmMultipath": "Un LVM sur un LUN joint par plusieurs chemins reste inactif tant que le multipath ne tourne pas sur les nœuds.",
+      "unverifiedAfterAdd": "Le stockage a été ajouté ; son état n’a pas pu être lu sur : {nodes}."
     }
   },
   "backups": {

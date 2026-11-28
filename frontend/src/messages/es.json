@@ -3227,7 +3227,8 @@
         "sparse": "Aprovisionamiento fino",
         "nowritecache": "Desactivar la caché de escritura",
         "path": "Directorio",
-        "is_mountpoint": "El directorio es un punto de montaje"
+        "is_mountpoint": "El directorio es un punto de montaje",
+        "managed-multipath": "Multipath gestionado por Proxmox"
       },
       "contentTypes": {
         "images": "Imagen de disco",
@@ -3245,7 +3246,15 @@
         "restore": "Restauración",
         "clone": "Clonación",
         "move": "Mover disco"
-      }
+      },
+      "multipathManual": "Este destino responde en {count} portales. Sin multipath configurado en cada nodo, un LVM creado sobre sus LUN queda inactivo: LVM ignora las rutas duplicadas. Configure primero multipath-tools en los nodos (Proxmox VE 9.3 puede gestionarlo por sí mismo).",
+      "iscsiZeroHint": "Un almacenamiento iSCSI siempre muestra 0 B: Proxmox no le cuenta capacidad. Sus LUN se usan directamente como discos de VM (contenido Imagen de disco) o se reservan (contenido Ninguno) para un LVM creado sobre uno de ellos, que entonces muestra la capacidad.",
+      "lvmMultipathHint": "Un LUN alcanzado por varias rutas necesita multipath en cada nodo (en Proxmox VE 9.3, la opción «Multipath gestionado por Proxmox» del almacenamiento iSCSI); si no, el LVM queda inactivo.",
+      "lunPaths": "{active}/{total} rutas",
+      "lunInUse": "en uso ({usage})",
+      "inactiveAfterAdd": "El almacenamiento se añadió, pero Proxmox lo indica inactivo en: {nodes}.",
+      "inactiveLvmMultipath": "Un LVM sobre un LUN alcanzado por varias rutas queda inactivo mientras multipath no funcione en los nodos.",
+      "unverifiedAfterAdd": "El almacenamiento se añadió; no se pudo leer su estado en: {nodes}."
     }
   },
   "backups": {

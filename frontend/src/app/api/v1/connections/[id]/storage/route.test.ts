@@ -420,22 +420,54 @@ describe('POST /api/v1/connections/[id]/storage: cluster storage types (roadmap#
     const calls: Array<{ path: string; body?: Record<string, string> }> = []
     pveFetchMock.mockImplementation(async (_c: any, path: string, init?: any) => {
       calls.push({ path, body: init?.body ? Object.fromEntries(init.body) : undefined })
-      return path === '/nodes' ? [{ node: 'n1' }] : null
+      if (path === '/nodes') return [{ node: 'n1' }]
+      return path.endsWith('/status') ? { active: 1 } : null
     })
 
     const res = await callRoute(POST, { method: 'POST', params: { id: 'c1' }, body: nfs })
 
     expect(res.status).toBe(201)
-    expect(await readJson(res)).toEqual({ data: { storage: 'nfs-main', type: 'nfs' } })
+    expect(await readJson(res)).toEqual({ data: { storage: 'nfs-main', type: 'nfs', inactive: [], unverified: [] } })
     expect(calls).toEqual([
       { path: '/nodes', body: undefined },
       { path: '/storage', body: { storage: 'nfs-main', type: 'nfs', server: '10.0.0.5', export: '/srv', content: 'images,iso', nodes: 'n1', bwlimit: 'default=10240' } },
+      { path: '/nodes/n1/storage/nfs-main/status', body: undefined },
     ])
     expect(vi.mocked(audit).mock.calls[0][0]).toMatchObject({ action: 'create', status: 'success', resourceId: 'nfs-main' })
 
     pveFetchMock.mockResolvedValue(null)
     await callRoute(POST, { method: 'POST', params: { id: 'c1' }, body: cifs })
     expect(JSON.stringify(vi.mocked(audit).mock.calls)).not.toContain('pa55-word')
+  })
+
+  it('names the nodes where the new storage is not active, and audits them', async () => {
+    const lvm = { type: 'lvm', storage: 'san-lvm', fields: { base: 'san:0.0.0.scsi-3600', vgname: 'vg1' }, content: ['images'], shared: true }
+    pveFetchMock.mockImplementation(async (_c: any, path: string) => {
+      if (path === '/nodes') return [{ node: 'n1', status: 'online' }, { node: 'n2', status: 'online' }]
+      if (path === '/nodes/n1/storage/san-lvm/status') return { active: 1 }
+      if (path === '/nodes/n2/storage/san-lvm/status') return { active: 0 }
+      return null
+    })
+
+    // n2 stays inactive through the re-reads, spaced by real-time delays.
+    vi.useFakeTimers()
+    const pending = callRoute(POST, { method: 'POST', params: { id: 'c1' }, body: lvm })
+    await vi.advanceTimersByTimeAsync(60_000)
+    const res = await pending
+    vi.useRealTimers()
+
+    expect(res.status).toBe(201)
+    expect(await readJson(res)).toEqual({ data: { storage: 'san-lvm', type: 'lvm', inactive: ['n2'], unverified: [] } })
+    expect(vi.mocked(audit).mock.calls[0][0]).toMatchObject({ status: 'success', details: { inactiveOn: ['n2'] } })
+  })
+
+  it('checks nothing on a storage added disabled', async () => {
+    pveFetchMock.mockResolvedValue([{ node: 'n1' }])
+
+    const res = await callRoute(POST, { method: 'POST', params: { id: 'c1' }, body: { ...nfs, enabled: false } })
+
+    expect(await readJson(res)).toEqual({ data: { storage: 'nfs-main', type: 'nfs', inactive: [], unverified: [] } })
+    expect(pveFetchMock.mock.calls.map((c: any[]) => c[1]).filter((p: string) => p.endsWith('/status'))).toEqual([])
   })
 
   it('refuses a node that is not part of the cluster', async () => {

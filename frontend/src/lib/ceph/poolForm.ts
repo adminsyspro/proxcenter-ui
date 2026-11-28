@@ -103,7 +103,7 @@ export function parsePoolCreate(body: unknown): ParsedBody<Fields> {
   const application = b.application ?? 'rbd'
   if (!APPLICATIONS.includes(application as PoolApplication)) return { ok: false, error: 'Application must be rbd, cephfs or rgw' }
   const shared = parseShared(b)
-  if (!shared.ok) return shared
+  if (shared.ok === false) return shared
   const { size, min_size, pg_autoscale_mode, ...rest } = shared.params
 
   return {

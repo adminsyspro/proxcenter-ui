@@ -160,6 +160,14 @@ export type AuditAction =
   // OSD in, out, scrub or deep-scrub from the Ceph cockpit; the details name which one
   | "ceph_osd"
   | "ceph_create"
+  // Ceph provisioning from the cockpit (ui#1450): pools, OSD creation and destruction, package install, initialization
+  | "ceph_pool_create"
+  | "ceph_pool_update"
+  | "ceph_pool_delete"
+  | "ceph_osd_create"
+  | "ceph_osd_destroy"
+  | "ceph_install"
+  | "ceph_init"
   | "execute"
   | "apply"
   | "sync"

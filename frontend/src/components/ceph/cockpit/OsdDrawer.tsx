@@ -16,6 +16,7 @@ import { useToast } from '@/contexts/ToastContext'
 
 import OsdActionConfirm, { type OsdRiskyAction } from './OsdActionConfirm'
 import OsdActivity from './OsdActivity'
+import OsdDestroyDialog from './OsdDestroyDialog'
 import { fetchOkToStop, postOsdAction, postOsdService, type OsdQuickAction } from './osdActions'
 import { CephOsdGlyph, Eyebrow, HostGlyph, isTypingTarget, Row, StateDot, Tag, TABULAR, ThresholdBar, usePercent } from './ui'
 
@@ -157,6 +158,7 @@ export default function OsdDrawer({ conn, node, osd, inventory, ratios, issues =
   const titleId = useId()
   const [risky, setRisky] = useState<OsdRiskyAction | null>(null)
   const [busy, setBusy] = useState<OsdQuickAction | 'start' | null>(null)
+  const [destroying, setDestroying] = useState(false)
   const load = toOsdLoad(osd)
   const pools = useMemo(() => poolsOnOsd(inventory, osd), [inventory, osd])
   const latency = osdLatencyMs(osd)
@@ -288,6 +290,24 @@ export default function OsdDrawer({ conn, node, osd, inventory, ratios, issues =
                   )
                 })}
               </Box>
+              {canManage && node && (
+                <Box data-testid='osd-destroy' sx={{ mt: -1.25, mb: 2.5 }}>
+                  {!osd.in && !osd.up ? (
+                    <Button
+                      size='small'
+                      variant='outlined'
+                      color='error'
+                      startIcon={<i className='ri-delete-bin-line' style={{ fontSize: 16 }} aria-hidden />}
+                      onClick={() => setDestroying(true)}
+                      sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}
+                    >
+                      {t('provision.osd.destroyAction')}
+                    </Button>
+                  ) : (
+                    <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>{t('provision.osd.destroyHint')}</Typography>
+                  )}
+                </Box>
+              )}
 
               <Eyebrow>{t('osd.drawer.fill')}</Eyebrow>
               <ThresholdBar value={osd.usedPct / 100} max={1} nearfull={ratios.nearfull} full={ratios.full} />
@@ -347,6 +367,16 @@ export default function OsdDrawer({ conn, node, osd, inventory, ratios, issues =
           action={risky}
           onClose={() => setRisky(null)}
           onDone={onDone}
+        />
+      )}
+      {destroying && node && (
+        <OsdDestroyDialog
+          open
+          connId={conn}
+          node={node}
+          osd={osd}
+          onClose={() => setDestroying(false)}
+          onDone={() => { onDone(); onClose() }}
         />
       )}
     </>

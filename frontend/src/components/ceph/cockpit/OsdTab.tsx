@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 
 import {
+  Button,
   Box, ButtonBase, Card, IconButton, InputAdornment, MenuItem, Select, Skeleton, Table, TableBody, TableCell, TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material'
 import { useFormatter, useTranslations } from 'next-intl'
@@ -20,6 +21,7 @@ import { binaryUnit, osdLatencyMs } from '@/lib/ceph/overview'
 import type { CephOsd, OsdFilter } from '@/lib/ceph/types'
 
 import type { CockpitTabProps } from './CephCockpit'
+import OsdCreateDialog from './OsdCreateDialog'
 import OsdDrawer from './OsdDrawer'
 import OsdIoCell, { OSD_IO_CELL_WIDTH } from './OsdIoCell'
 import OsdLatencyTrend from './OsdLatencyTrend'
@@ -152,6 +154,7 @@ export default function OsdTab({ conn, live, inventory, url, enterprise, ratios,
   const [classPick, setClassPick] = useState('')
   const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set())
   const [page, setPage] = useState(0)
+  const [creating, setCreating] = useState(false)
   const [followed, setFollowed] = useState<number | null>(null)
 
   const hosts = useMemo(() => osdHosts(osds), [osds])
@@ -272,6 +275,11 @@ export default function OsdTab({ conn, live, inventory, url, enterprise, ratios,
               )
             })}
           </Box>
+          {canManage && (
+            <Button size='small' variant='outlined' startIcon={<i className='ri-add-line' />} onClick={() => setCreating(true)}>
+              {t('provision.osd.create')}
+            </Button>
+          )}
         </Box>
 
         <Box data-testid='osd-table' sx={[{ overflowX: 'auto' }, fillGrowLg]}>
@@ -356,6 +364,16 @@ export default function OsdTab({ conn, live, inventory, url, enterprise, ratios,
           onClose={() => url.set({ item: null })}
           onPrev={() => step(-1)}
           onNext={() => step(1)}
+          onDone={() => { inventory.reload(); live.refresh() }}
+        />
+      )}
+
+      {creating && (
+        <OsdCreateDialog
+          open
+          connId={conn}
+          nodes={inv.pveNodes ?? []}
+          onClose={() => setCreating(false)}
           onDone={() => { inventory.reload(); live.refresh() }}
         />
       )}

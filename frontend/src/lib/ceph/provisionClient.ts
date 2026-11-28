@@ -19,8 +19,9 @@ export interface CephProvisionResult {
   storages?: string[]
   /** What pveceph printed before it failed (PVECEPH_FAILED). */
   output?: string
-  /** Ceph's reason an OSD cannot be destroyed (OSD_NOT_SAFE). */
   message?: string
+  /** Placement groups an OSD destruction would leave without enough copies (OSD_NOT_SAFE). */
+  numNotOkPgs?: number | null
 }
 
 const enc = encodeURIComponent
@@ -30,7 +31,14 @@ export const cephPoolsUrl = (connId: string) => `${base(connId)}/ceph/pools`
 export const cephPoolUrl = (connId: string, pool: string, opts: { removeStorages?: boolean } = {}) =>
   `${base(connId)}/ceph/pools/${enc(pool)}${opts.removeStorages ? '?removeStorages=1' : ''}`
 
-const DETAILS = ['code', 'disks', 'storages', 'output', 'message'] as const
+const node = (connId: string, n: string) => `${base(connId)}/nodes/${enc(n)}`
+export const cephDisksUrl = (connId: string, n: string) => `${node(connId, n)}/ceph/disks`
+export const cephOsdCreateUrl = (connId: string, n: string) => `${node(connId, n)}/ceph/osd`
+export const cephOsdUrl = (connId: string, n: string, osd: number, opts: { cleanup?: boolean } = {}) =>
+  `${node(connId, n)}/ceph/osd/${osd}${opts.cleanup ? '?cleanup=1' : ''}`
+
+/** What the server may add to a refusal, kept as is for the dialog. */
+const DETAILS = ['code', 'disks', 'storages', 'output', 'message', 'numNotOkPgs'] as const
 
 export async function sendCephTask(url: string, method: 'POST' | 'PUT' | 'DELETE', body?: Record<string, unknown>): Promise<CephProvisionResult> {
   try {

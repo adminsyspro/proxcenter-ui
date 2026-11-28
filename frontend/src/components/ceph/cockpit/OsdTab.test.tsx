@@ -828,3 +828,34 @@ describe('OsdTab IOPS and throughput columns', () => {
     expect(exporterUrls()).toEqual(['/api/v1/connections/c1/ceph/exporter?nodes=pve1'])
   })
 })
+
+describe('OsdTab provisioning (ui#1450)', () => {
+  beforeEach(() => {
+    permissions = ['storage.admin', 'node.manage']
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: { disks: [], ssh: 'ok' } }) })))
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('opens the Create OSD dialog from the tab', async () => {
+    renderTab(propsOf().props)
+    fireEvent.click(screen.getByRole('button', { name: 'Create OSD' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('Create an OSD')
+  })
+
+  it('hides Create OSD without storage.admin', () => {
+    permissions = ['node.manage']
+    renderTab(propsOf().props)
+    expect(screen.queryByRole('button', { name: 'Create OSD' })).toBeNull()
+  })
+
+  it('offers Destroy OSD only for an OSD out and down, the steps otherwise', () => {
+    const list = [osd(0, 'pve1'), osd(5, 'pve2', { up: false, in: false, status: 'down' })]
+    const { unmount } = renderTab(propsOf({ list, item: { kind: 'osd', id: 0 } }).props)
+    expect(within(drawer()).queryByRole('button', { name: 'Destroy OSD' })).toBeNull()
+    expect(drawer()).toHaveTextContent('To destroy this OSD: mark it out')
+    unmount()
+    renderTab(propsOf({ list, item: { kind: 'osd', id: 5 } }).props)
+    fireEvent.click(inDrawer('Destroy OSD'))
+    expect(screen.getAllByRole('dialog').some(d => d.textContent?.includes('Destroy osd.5 on pve2'))).toBe(true)
+  })
+})

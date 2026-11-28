@@ -16663,6 +16663,8 @@
         "roles": "角色",
         "version": "版本",
         "internalIP": "内部 IP",
+        "vcpu": "vCPU",
+        "ram": "内存容量",
         "cpu": "CPU",
         "memory": "内存",
         "podIP": "Pod IP",

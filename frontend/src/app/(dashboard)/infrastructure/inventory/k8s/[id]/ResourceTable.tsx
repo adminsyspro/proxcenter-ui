@@ -17,7 +17,7 @@ import { useTranslations } from 'next-intl'
 import type { ColumnDef, KindDef } from '@/lib/k8s/resourceKinds'
 import { KindIcon } from './KindIcon'
 import type { ResourceListItem } from '@/lib/k8s/types'
-import { cellValue, nodeSize, sortItems } from '@/lib/k8s/tableColumns'
+import { cellValue, formatGiB, sortItems } from '@/lib/k8s/tableColumns'
 import { relativeAge } from '@/lib/k8s/overviewCharts'
 import { utilizationColor } from '@/lib/k8s/metrics'
 import { NODE_OP_ICONS, type DrainRowState } from '@/lib/k8s/nodeOpsClient'
@@ -25,27 +25,17 @@ import { podListPreview } from '@/lib/k8s/nodeDrain'
 import { useTooltipSlotProps } from '@/lib/ui/tooltipSlotProps'
 import { actionsFor, WORKLOAD_ACTION_ICONS, type WorkloadAction } from '@/lib/k8s/workloadActions'
 
-/** Renders a 0-100 percentage summary value as a compact usage bar, followed by the size it is a share of. */
-function ProgressCell({ value, size }: { value: string; size?: string }) {
-  const n = Number.parseFloat(value)
-  const sizeText = size ? <Box component="span" sx={{ fontSize: '0.72rem', opacity: 0.6, whiteSpace: 'nowrap' }}>{size}</Box> : null
-  if (!Number.isFinite(n)) {
-    return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Box component="span" sx={{ opacity: 0.4 }}>n/a</Box>
-        {sizeText}
-      </Box>
-    )
-  }
+/** Renders a 0-100 percentage summary value as a compact usage bar. */
+function ProgressCell({ value }: { value: string }) {
+  const n = parseFloat(value)
+  if (!Number.isFinite(n)) return <Box component="span" sx={{ opacity: 0.4 }}>n/a</Box>
   const color = utilizationColor(n)
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: size ? undefined : 120 }}>
-      {/* With a size beside it, the bar keeps a fixed width so the cell stays as narrow as before. */}
-      <Box sx={{ ...(size ? { width: 40, flexShrink: 0 } : { flex: 1 }), height: 6, borderRadius: 3, bgcolor: 'action.hover', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 120 }}>
+      <Box sx={{ flex: 1, height: 6, borderRadius: 3, bgcolor: 'action.hover', overflow: 'hidden' }}>
         <Box sx={{ width: `${Math.max(0, Math.min(100, n))}%`, height: '100%', bgcolor: color }} />
       </Box>
       <Box sx={{ fontSize: '0.72rem', opacity: 0.8, width: 32, textAlign: 'right', flexShrink: 0 }}>{n}%</Box>
-      {sizeText}
     </Box>
   )
 }
@@ -253,7 +243,8 @@ export function ResourceTable({ kind, items, onRowClick, canManage, drainStates,
         </Box>
       )
     }
-    if (col.type === 'progress') return <ProgressCell value={cellValue(item, col)} size={nodeSize(item, col.size)} />
+    if (col.type === 'progress') return <ProgressCell value={cellValue(item, col)} />
+    if (col.type === 'bytes') return formatGiB(cellValue(item, col))
     if (col.type === 'age') return <span title={cellValue(item, col)}>{relativeAge(cellValue(item, col))}</span>
 
     return cellValue(item, col)

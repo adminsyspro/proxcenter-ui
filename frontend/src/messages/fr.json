@@ -16677,6 +16677,8 @@
         "roles": "Rôles",
         "version": "Version",
         "internalIP": "IP interne",
+        "vcpu": "vCPU",
+        "ram": "RAM",
         "cpu": "CPU",
         "memory": "Mémoire",
         "podIP": "IP du pod",

@@ -16247,6 +16247,8 @@
         "roles": "Rollen",
         "version": "Version",
         "internalIP": "Interne IP",
+        "vcpu": "vCPU",
+        "ram": "RAM",
         "cpu": "CPU",
         "memory": "Arbeitsspeicher",
         "podIP": "Pod-IP",

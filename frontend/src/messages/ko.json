@@ -16663,6 +16663,8 @@
         "roles": "역할",
         "version": "버전",
         "internalIP": "내부 IP",
+        "vcpu": "vCPU",
+        "ram": "메모리 용량",
         "cpu": "CPU",
         "memory": "메모리",
         "podIP": "파드 IP",

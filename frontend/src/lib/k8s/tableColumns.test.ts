@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cellValue, nodeSize, sortItems } from './tableColumns'
+import { cellValue, formatGiB, sortItems } from './tableColumns'
 import type { ResourceListItem } from './types'
 
 const item = (over: Partial<ResourceListItem>): ResourceListItem => ({
@@ -97,16 +97,22 @@ describe('table columns', () => {
   })
 })
 
-describe('nodeSize', () => {
-  const node = (summary: Record<string, string>) => ({ summary } as unknown as ResourceListItem)
-  it('formats the cores and the memory of a node', () => {
-    expect(nodeSize(node({ cpuSize: '4', memSize: String(4015600 * 1024) }), 'cpu')).toBe('4 vCPU')
-    expect(nodeSize(node({ cpuSize: '0.5' }), 'cpu')).toBe('0.5 vCPU')
-    expect(nodeSize(node({ memSize: String(4015600 * 1024) }), 'memory')).toBe('3.8 GB')
+describe('formatGiB', () => {
+  it('formats a byte count as GB with one decimal', () => {
+    expect(formatGiB(String(4015600 * 1024))).toBe('3.8 GB')
+    expect(formatGiB(String(16 * 1024 ** 3))).toBe('16 GB')
   })
-  it('shows nothing without a size or for a column without one', () => {
-    expect(nodeSize(node({}), 'cpu')).toBeUndefined()
-    expect(nodeSize(node({}), 'memory')).toBeUndefined()
-    expect(nodeSize(node({ cpuSize: '4' }), undefined)).toBeUndefined()
+  it('is empty without a size', () => {
+    expect(formatGiB('')).toBe('')
+    expect(formatGiB('0')).toBe('')
+  })
+})
+
+describe('sorting the node size columns', () => {
+  const node = (name: string, cpuSize: string, memSize: string) => ({ name, summary: { cpuSize, memSize } } as unknown as ResourceListItem)
+  const nodes = [node('a', '4', String(8 * 1024 ** 3)), node('b', '16', String(2 * 1024 ** 3)), node('c', '2', String(32 * 1024 ** 3))]
+  it('sorts the cores and the memory as numbers', () => {
+    expect(sortItems(nodes, { key: 'cpuSize', header: 'vcpu', type: 'number' }, 'asc').map(n => n.name)).toEqual(['c', 'a', 'b'])
+    expect(sortItems(nodes, { key: 'memSize', header: 'ram', type: 'bytes' }, 'desc').map(n => n.name)).toEqual(['c', 'a', 'b'])
   })
 })

@@ -16,7 +16,7 @@ describe('resourceKinds catalogue', () => {
       expect(k.icon).toMatch(/^ri-/)
       expect(k.columns.length).toBeGreaterThan(0)
       for (const c of k.columns) {
-        expect(['text','number','age','ratio','badge','progress']).toContain(c.type)
+        expect(['text','number','age','ratio','badge','progress','bytes']).toContain(c.type)
       }
     }
   })

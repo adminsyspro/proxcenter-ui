@@ -20,12 +20,13 @@ const PG_COUNT = /(\d+)\s+PGs?\b/i
 
 /**
  * Ask PVE, through `viaNode` (an online node of the cluster), whether stopping
- * `osd` is safe. `label` prefixes the log line with the calling route.
+ * `osd` is safe, or destroying it (`action: 'destroy'`, ui#1450). `label`
+ * prefixes the log line with the calling route.
  */
-export async function runOkToStopApi(conn: any, viaNode: string, osd: number, label = "ceph"): Promise<OkToStopResult> {
+export async function runOkToStopApi(conn: any, viaNode: string, osd: number, label = "ceph", action: "stop" | "destroy" = "stop"): Promise<OkToStopResult> {
   try {
-    const path = `/nodes/${encodeURIComponent(viaNode)}/ceph/cmd-safety?service=osd&id=${osd}&action=stop`
-    console.log(`[${label}] ok-to-stop via PVE cmd-safety on ${safeLog(viaNode)}: osd.${osd}`)
+    const path = `/nodes/${encodeURIComponent(viaNode)}/ceph/cmd-safety?service=osd&id=${osd}&action=${action}`
+    console.log(`[${label}] ok-to-${action} via PVE cmd-safety on ${safeLog(viaNode)}: osd.${osd}`)
     const answer = await pveFetch<any>(conn, path)
     const safe = answer?.safe
 

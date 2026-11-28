@@ -108,3 +108,11 @@ describe('runOkToStopApi', () => {
     expect(pveFetchMock.mock.calls[0][1]).toBe('/nodes/pve%201%2Fx/ceph/cmd-safety?service=osd&id=3&action=stop')
   })
 })
+
+describe('runOkToStopApi, destroy (ui#1450)', () => {
+  it('asks cmd-safety about destroying the OSD', async () => {
+    pveFetchMock.mockResolvedValue({ safe: false, status: 'osd.3 is not safe to destroy (4 PGs are degraded)' })
+    expect(await runOkToStopApi(conn, 'pve1', 3, 'ceph/osd', 'destroy')).toEqual({ verdict: { ok: false, osds: [3], numOkPgs: 0, numNotOkPgs: 4 } })
+    expect(pveFetchMock.mock.calls[0][1]).toBe('/nodes/pve1/ceph/cmd-safety?service=osd&id=3&action=destroy')
+  })
+})

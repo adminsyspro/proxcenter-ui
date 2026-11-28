@@ -115,6 +115,9 @@ const CASES: Case[] = [
   { name: "ceph/pools POST", file: "connections/[id]/ceph/pools/route.ts", load: () => import("@/app/api/v1/connections/[id]/ceph/pools/route"), method: "POST", params: C, body: { name: "p1", size: 3, minSize: 2 } },
   { name: "ceph/pools/[pool] PUT", file: "connections/[id]/ceph/pools/[pool]/route.ts", load: () => import("@/app/api/v1/connections/[id]/ceph/pools/[pool]/route"), method: "PUT", params: P, body: { size: 3, minSize: 2 } },
   { name: "ceph/pools/[pool] DELETE", file: "connections/[id]/ceph/pools/[pool]/route.ts", load: () => import("@/app/api/v1/connections/[id]/ceph/pools/[pool]/route"), method: "DELETE", params: P },
+  { name: "nodes/ceph/osd create POST", file: "connections/[id]/nodes/[node]/ceph/osd/route.ts", load: () => import("@/app/api/v1/connections/[id]/nodes/[node]/ceph/osd/route"), method: "POST", params: N, body: { dev: "/dev/sdb" } },
+  { name: "nodes/ceph/osd DELETE", file: "connections/[id]/nodes/[node]/ceph/osd/[osdid]/route.ts", load: () => import("@/app/api/v1/connections/[id]/nodes/[node]/ceph/osd/[osdid]/route"), method: "DELETE", params: O, searchParams: { cleanup: "1" } },
+  { name: "nodes/ceph/disks GET", file: "connections/[id]/nodes/[node]/ceph/disks/route.ts", load: () => import("@/app/api/v1/connections/[id]/nodes/[node]/ceph/disks/route"), method: "GET", params: N },
   { name: "orchestrator ceph history GET", file: "orchestrator/ceph/[connectionId]/history/route.ts", load: () => import("@/app/api/v1/orchestrator/ceph/[connectionId]/history/route"), method: "GET", params: { connectionId: "conn-1" }, searchParams: { range: "1h" } },
 ]
 

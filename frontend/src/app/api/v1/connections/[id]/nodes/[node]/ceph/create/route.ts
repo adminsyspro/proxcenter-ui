@@ -16,9 +16,10 @@ export const runtime = "nodejs"
      mon  POST /nodes/{node}/ceph/mon/{node}  optional mon-address
      mgr  POST /nodes/{node}/ceph/mgr/{node}
    Both carry the node's name, as the PVE GUI does, and answer a task UPID.
-   No OSD creation: PVE refuses it to an API token ("Permission check failed
-   (user != root@pam)", measured on PVE 9.2), and running it as root over SSH
-   would sidestep that guard on purpose (product decision, 21/10/2026).
+   OSD creation lives in ../osd/route.ts: PVE refuses it to an API token
+   ("Permission check failed (user != root@pam)", measured on PVE 9.2), so it
+   runs pveceph over SSH under the ceph-provisioning sudo profile (ui#1450,
+   decided 28/11/2026, reversing the decision of 21/10/2026).
 */
 
 type Ctx = { params: Promise<{ id: string; node: string }> }

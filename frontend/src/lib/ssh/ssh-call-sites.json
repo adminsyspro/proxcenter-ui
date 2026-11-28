@@ -12,6 +12,7 @@
     "app/api/v1/connections/[id]/nodes/[node]/upgrade/route.ts": 2,
     "app/api/v1/connections/[id]/test-ssh/route.ts": 3,
     "app/api/v1/tasks/[connectionId]/[node]/[upid]/route.ts": 1,
+    "lib/ceph/detachedPveceph.ts": 3,
     "lib/ceph/okToStopSsh.ts": 1,
     "lib/compliance/collectHardeningData.ts": 1,
     "lib/connections/check/transport.ts": 1,

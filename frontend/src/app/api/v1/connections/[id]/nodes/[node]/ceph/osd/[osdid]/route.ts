@@ -11,6 +11,9 @@ import { assertNodeName } from "@/lib/ssh/validate"
 import { pickOnlineNode } from "@/lib/ceph/nodeNoout"
 import { runOkToStopApi } from "@/lib/ceph/okToStopApi"
 import { clientOkToStopPayload, OK_TO_STOP_UNAVAILABLE } from "@/lib/ceph/okToStopClient"
+import { findNodeOsds } from "@/lib/ceph/nodeNoout"
+import { cephConnection, checkCephWrite, prepareCephSsh, provisionError, pvecephTag, runPvecephTask } from "@/lib/ceph/provisionRoute"
+import { osdDestroyArgv } from "@/lib/ceph/pvecephCommands"
 
 export const runtime = "nodejs"
 
@@ -21,6 +24,12 @@ export const runtime = "nodejs"
    (PVE `GET /nodes/{node}/ceph/cmd-safety`, no SSH): when placement groups would go offline
    the answer is 409 `not_ok_to_stop` and nothing happens, unless the body
    says `force: true`.
+
+   DELETE destroys the OSD (ui#1450): only one already out and down, on the
+   node that hosts it, once `cmd-safety ... action=destroy` says it is safe.
+   PVE keeps `DELETE /nodes/{n}/ceph/osd/{id}` to root@pam (measured with an
+   API token on PVE 9.2), so pveceph runs over SSH under the pinned rule
+   ui-ceph-osd-destroy of the ceph-provisioning sudo profile.
 */
 
 type Ctx = { params: Promise<{ id: string; node: string; osdid: string }> }
@@ -137,3 +146,63 @@ async function handlePost(req: Request, ctx: Ctx) {
 }
 
 export const POST = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node", action: "ceph_osd" }, handlePost)
+
+/**
+ * DELETE /api/v1/connections/[id]/nodes/[node]/ceph/osd/[osdid]?cleanup=1
+ * Answers { data: { upid, node } }, 202 { data: { pending, node } }, or a
+ * refusal: 409 OSD_NOT_OUT_DOWN, 409 OSD_NOT_SAFE, 412 SUDO_RULE_MISSING...
+ */
+async function handleDelete(req: Request, ctx: Ctx) {
+  try {
+    const { id, node, osdid } = await ctx.params
+    if (!/^\d+$/.test(osdid)) return NextResponse.json({ error: "Invalid OSD id" }, { status: 400 })
+    let safeNode: string
+    try {
+      safeNode = assertNodeName(node)
+    } catch {
+      return NextResponse.json({ error: "Invalid node name" }, { status: 400 })
+    }
+
+    const denied = await checkCephWrite(id)
+    if (denied) return denied
+    // Ceph is a whole-cluster object: an IaaS tenant gets 404, before any PVE call.
+    const cephDenied = await denyIaasTenantCeph()
+    if (cephDenied) return cephDenied
+
+    const gate = await cephConnection(id)
+    if (gate.ok === false) return gate.response
+    const conn = gate.conn
+    const osd = Number(osdid)
+
+    const hosted = findNodeOsds(await pveFetch<any>(conn, `/nodes/${encodeURIComponent(safeNode)}/ceph/osd`), safeNode).osds.find(o => o.id === osd)
+    if (!hosted) return NextResponse.json({ error: `osd.${osd} is not hosted by ${safeNode}` }, { status: 400 })
+    if (hosted.in || hosted.status === "up") {
+      return NextResponse.json({ error: `osd.${osd} must be out and stopped before it is destroyed`, code: "OSD_NOT_OUT_DOWN" }, { status: 409 })
+    }
+
+    const clusterStatus = await pveFetch<any[]>(conn, "/cluster/status").catch(() => null)
+    const viaNode = pickOnlineNode(clusterStatus, safeNode) ?? safeNode
+    const safety = await runOkToStopApi(conn, viaNode, osd, "ceph/osd", "destroy")
+    if (!safety.verdict?.ok) {
+      return NextResponse.json({
+        error: safety.verdict ? `Destroying osd.${osd} is not safe yet` : `Ceph gave no verdict on destroying osd.${osd}`,
+        code: "OSD_NOT_SAFE",
+        numNotOkPgs: safety.verdict?.numNotOkPgs ?? null,
+      }, { status: 409 })
+    }
+
+    const argv = osdDestroyArgv(osd, new URL(req.url).searchParams.get("cleanup") === "1")
+    const ssh = await prepareCephSsh(id, conn, safeNode, argv)
+    if (ssh.ok === false) return ssh.response
+
+    return await runPvecephTask(id, conn, safeNode, ssh.endpoint, argv, {
+      tag: pvecephTag("ceph-osd-destroy", String(osd)),
+      taskType: "cephdestroyosd",
+      taskId: `osd.${osd}`,
+    })
+  } catch (e: any) {
+    return provisionError("osd", e, "Failed to destroy the OSD")
+  }
+}
+
+export const DELETE = withAudit({ category: "nodes", resourceType: "node", resourceParam: "node", action: "ceph_osd_destroy" }, handleDelete)

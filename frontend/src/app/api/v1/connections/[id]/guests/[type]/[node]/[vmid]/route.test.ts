@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@/lib/vdc/guestGuard', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/vdc/guestGuard')>()),
   guardSessionGuest: async () => null,
+  sessionIsVdcTenant: vi.fn<() => Promise<boolean>>(),
 }))
 vi.mock('@/lib/api-tokens/routeGuard', () => ({
   withPublicApiGuard: (_entryId: string, handler: any) => handler,
@@ -20,6 +21,11 @@ vi.mock('@/lib/connections/getConnection', () => ({
 
 vi.mock('@/lib/proxmox/client', () => ({
   pveFetch: vi.fn<(...args: any[]) => Promise<any>>(),
+}))
+
+vi.mock('@/lib/proxmox/unreferencedDisks', async (importActual) => ({
+  ...(await importActual<typeof import('@/lib/proxmox/unreferencedDisks')>()),
+  decideUnreferencedDiskPurge: vi.fn<(...args: any[]) => Promise<any>>(),
 }))
 
 vi.mock('@/lib/rbac', () => ({
@@ -47,12 +53,16 @@ import { pveFetch } from '@/lib/proxmox/client'
 import { checkPermission } from '@/lib/rbac'
 import { releaseAllocationsForVm } from '@/lib/vdc/ipam'
 import { audit } from '@/lib/audit'
+import { decideUnreferencedDiskPurge } from '@/lib/proxmox/unreferencedDisks'
+import { sessionIsVdcTenant } from '@/lib/vdc/guestGuard'
 
 const getConnectionByIdMock = getConnectionById as any
 const pveFetchMock = pveFetch as any
 const checkPermissionMock = checkPermission as any
 const releaseAllocationsForVmMock = releaseAllocationsForVm as any
 const auditMock = audit as any
+const decideMock = decideUnreferencedDiskPurge as any
+const vdcSessionMock = sessionIsVdcTenant as any
 
 const CONN_ID = 'conn-1'
 const NODE = 'pve-node-01'
@@ -71,6 +81,8 @@ beforeEach(() => {
   pveFetchMock.mockResolvedValue({ status: 'stopped' })
   releaseAllocationsForVmMock.mockResolvedValue(undefined)
   auditMock.mockResolvedValue(undefined)
+  decideMock.mockResolvedValue({ destroyUnreferenced: true, keptVolumes: [] })
+  vdcSessionMock.mockResolvedValue(false)
 })
 
 describe('DELETE /api/v1/connections/[id]/guests/[type]/[node]/[vmid]', () => {
@@ -248,6 +260,60 @@ describe('DELETE /api/v1/connections/[id]/guests/[type]/[node]/[vmid]', () => {
       `/nodes/${NODE}/qemu/${VMID}?purge=1&destroy-unreferenced-disks=1`,
       { method: 'DELETE' }
     )
+  })
+
+  // ui#1460, measured on the lab: the default delete of the UI wiped the disk
+  // of another cluster's guest with the same VMID on a shared storage.
+  it.each(['qemu', 'lxc'])('200 %s: destroy-unreferenced-disks dropped and the kept volumes named', async (type) => {
+    pveFetchMock
+      .mockResolvedValueOnce({ status: 'stopped' })
+      .mockResolvedValueOnce('UPID:delete:task')
+    decideMock.mockResolvedValueOnce({ destroyUnreferenced: false, keptVolumes: ['Shared:vm-101-disk-1'] })
+    const res = await DELETE(makeReq(`http://test.local/_?purge=1&destroy-unreferenced-disks=1`), {
+      params: Promise.resolve({ ...baseParams, type }),
+    })
+    expect(res.status).toBe(200)
+    expect(decideMock).toHaveBeenCalledWith({ conn: { id: CONN_ID }, connectionId: CONN_ID, node: NODE, type, vmid: VMID })
+    expect(pveFetchMock).toHaveBeenNthCalledWith(2, { id: CONN_ID }, `/nodes/${NODE}/${type}/${VMID}?purge=1`, { method: 'DELETE' })
+    const body = await readJson<any>(res)
+    expect(body.keptVolumes).toEqual(['Shared:vm-101-disk-1'])
+    expect(body.warning).toBeUndefined()
+  })
+
+  it('names no volume to a vDC session: its storages may lie outside its vDC', async () => {
+    pveFetchMock
+      .mockResolvedValueOnce({ status: 'stopped' })
+      .mockResolvedValueOnce('UPID:delete:task')
+    decideMock.mockResolvedValueOnce({ destroyUnreferenced: false, keptVolumes: ['Shared:vm-101-disk-1'] })
+    vdcSessionMock.mockResolvedValueOnce(true)
+    const res = await DELETE(makeReq(`http://test.local/_?purge=1&destroy-unreferenced-disks=1`), { params: Promise.resolve(baseParams) })
+    const body = await readJson<any>(res)
+    expect(body.keptVolumes).toEqual([])
+    expect(JSON.stringify(body)).not.toContain('Shared')
+    expect(JSON.stringify(auditMock.mock.calls)).not.toContain('Shared')
+  })
+
+  // Both notes reach the caller: the IPAM one used to be swallowed by the UI.
+  it('keeps the IPAM warning apart from the kept volumes', async () => {
+    pveFetchMock
+      .mockResolvedValueOnce({ status: 'stopped' })
+      .mockResolvedValueOnce('UPID:delete:task')
+    decideMock.mockResolvedValueOnce({ destroyUnreferenced: false, keptVolumes: ['Shared:vm-101-disk-1'] })
+    releaseAllocationsForVmMock.mockRejectedValueOnce(new Error('db down'))
+    const res = await DELETE(makeReq(`http://test.local/_?purge=1&destroy-unreferenced-disks=1`), { params: Promise.resolve(baseParams) })
+    const body = await readJson<any>(res)
+    expect(body.warning).toBe('IPAM release failed: db down')
+    expect(body.keptVolumes).toEqual(['Shared:vm-101-disk-1'])
+  })
+
+  it('does not check the shared storages when unreferenced disks are not asked for', async () => {
+    pveFetchMock
+      .mockResolvedValueOnce({ status: 'stopped' })
+      .mockResolvedValueOnce('UPID:delete:task')
+    const res = await DELETE(makeReq(`http://test.local/_?purge=1`), { params: Promise.resolve(baseParams) })
+    expect(res.status).toBe(200)
+    expect(decideMock).not.toHaveBeenCalled()
+    expect((await readJson<any>(res)).keptVolumes).toBeUndefined()
   })
 
   it('200 happy path: lxc container deleted, IPAM NOT released', async () => {

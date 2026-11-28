@@ -186,6 +186,20 @@ const VM_BACKUPS_TAB_INDEX = 4
 /* ------------------------------------------------------------------ */
 
 
+/**
+ * What follows "Deleted" in the result of a guest delete: the IPAM warning,
+ * then the unreferenced disks kept on a storage another cluster shares (ui#1460).
+ */
+function deleteResultNotes(json: { warning?: string; keptVolumes?: unknown }, t: (key: string, values?: Record<string, string>) => string): string {
+  const warningNote = typeof json.warning === 'string' && json.warning ? ` (${json.warning})` : ''
+  if (!Array.isArray(json.keptVolumes)) return warningNote
+  const kept = json.keptVolumes.map(String)
+  const keptNote = kept.length > 0
+    ? t('inventory.deleteVmKeptSharedVolumes', { volumes: kept.join(', ') })
+    : t('inventory.deleteVmUnreferencedKept')
+  return warningNote + ' ' + keptNote
+}
+
 export default function InventoryDetails({
   selection,
   onSelect,
@@ -2826,7 +2840,7 @@ return (
       setConfirmAction({
         action: 'info',
         title: t('common.success'),
-        message: `${t('common.delete')} "${vmName}" ${t('common.success')}${json.warning ? ` (${json.warning})` : ''}`,
+        message: `${t('common.delete')} "${vmName}" ${t('common.success')}${deleteResultNotes(json, t)}`,
         vmName: undefined,
         onConfirm: () => {
           setConfirmAction(null)

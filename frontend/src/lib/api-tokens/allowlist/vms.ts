@@ -268,7 +268,7 @@ export const VM_ENTRIES: AllowlistEntry[] = [
     description: "Destroys the guest. It must be stopped and unlocked. Its IPAM addresses are released.",
     queryParams: [
       { name: "purge", description: "Set to '1' to also remove the guest from backup jobs, replication and HA" },
-      { name: "destroy-unreferenced-disks", description: "Set to '1' to also destroy disks not referenced in the config" },
+      { name: "destroy-unreferenced-disks", description: "Set to '1' to also destroy disks not referenced in the config. Not applied when a shared storage holds such a volume and another managed cluster has a guest with this VMID: the response lists those volumes in keptVolumes" },
     ],
     responseSchemaRef: "VmDeleteResponse",
   }),

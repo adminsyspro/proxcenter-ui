@@ -1157,6 +1157,8 @@
     "deleteVmConfirmHint": "Pour confirmer, saisissez l'ID ou le nom de la VM :",
     "deleteVmLockedError": "La VM est verrouillée dans l''état « {lock} ». Effectuez un clic droit sur la VM dans l''arborescence puis sélectionnez Déverrouiller pour lever le verrou (nécessite SSH activé sur la connexion).",
     "deleteVmRunningError": "La VM doit être arrêtée avant d'être supprimée. Arrêtez la VM en amont.",
+    "deleteVmKeptSharedVolumes": "{volumes} conservé : un autre cluster a un invité avec ce VMID sur le même stockage et peut l'utiliser.",
+    "deleteVmUnreferencedKept": "Les disques non référencés ont été conservés sur le stockage partagé : ils peuvent appartenir à un invité d'un autre cluster ayant le même VMID.",
     "vmRunningWarning": "Arrêtez la VM avant de la supprimer",
     "health": {
       "label": "Santé",
@@ -8614,6 +8616,7 @@
           "notPortable": "lié à son nœud : {keys}",
           "isoDetached": "{isos} sera éjecté",
           "poolNotCarried": "quitte le pool {pool}, aucun sur la cible",
+          "vmidReusable": "{vmid} redevient libre sur le cluster source, qui attribue les nouveaux ID de {lower} à {last}",
           "storageFormat": "disques {sourceType} non copiables à froid vers {targetType} ({storage})"
         }
       },

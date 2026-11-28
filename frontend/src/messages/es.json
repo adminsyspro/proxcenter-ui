@@ -1157,6 +1157,8 @@
     "deleteVmConfirmHint": "Para confirmar, escribe el ID o el nombre de la VM:",
     "deleteVmLockedError": "La VM está bloqueada en estado \"{lock}\". Haz clic derecho en la VM en el árbol y selecciona Desbloquear para liberar el bloqueo (requiere SSH en la conexión).",
     "deleteVmRunningError": "La VM debe estar detenida antes de eliminarla. Detén primero la VM.",
+    "deleteVmKeptSharedVolumes": "{volumes} conservado: otro clúster tiene un invitado con este VMID en el mismo almacenamiento y puede usarlo.",
+    "deleteVmUnreferencedKept": "Se conservaron los discos no referenciados en el almacenamiento compartido: pueden pertenecer a un invitado de otro clúster con el mismo VMID.",
     "vmRunningWarning": "Detén la VM antes de eliminarla",
     "health": {
       "label": "Salud",
@@ -8601,6 +8603,7 @@
           "notPortable": "ligado a su nodo: {keys}",
           "isoDetached": "{isos} será expulsado",
           "poolNotCarried": "sale del pool {pool}, ninguno en el destino",
+          "vmidReusable": "{vmid} vuelve a quedar libre en el clúster de origen, que asigna los nuevos ID de {lower} a {last}",
           "storageFormat": "los discos {sourceType} no se pueden copiar en frío a {targetType} ({storage})"
         }
       },

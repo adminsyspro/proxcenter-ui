@@ -6,6 +6,11 @@ vi.mock('@/lib/proxmox/client', () => ({
   pveFetch: pveFetchMock,
 }))
 
+const decideMock = vi.fn<(...args: any[]) => Promise<any>>()
+vi.mock('@/lib/proxmox/unreferencedDisks', () => ({
+  decideUnreferencedDiskPurge: decideMock,
+}))
+
 const pveConn = {
   baseUrl: 'https://pve.test:8006',
   apiToken: 'tok',
@@ -15,6 +20,7 @@ const pveConn = {
 
 beforeEach(() => {
   pveFetchMock.mockReset().mockResolvedValue(undefined)
+  decideMock.mockReset().mockResolvedValue({ destroyUnreferenced: true, keptVolumes: [] })
 })
 
 describe('pveSetVmConfig', () => {
@@ -89,6 +95,21 @@ describe('destroyPveVm', () => {
 
     const [, path] = pveFetchMock.mock.calls[0]
     expect(path).toBe('/nodes/node%20with%20space/qemu/101?purge=1&destroy-unreferenced-disks=1')
+  })
+
+  // ui#1460: a guest of another cluster with this VMID on a shared storage
+  // owns volumes PVE would delete with destroy-unreferenced-disks.
+  it('drops destroy-unreferenced-disks when the shared-storage check keeps volumes, and says which', async () => {
+    const kept = { destroyUnreferenced: false, keptVolumes: ['Shared:vm-112-disk-1'] }
+    decideMock.mockResolvedValueOnce(kept)
+    const { destroyPveVm } = await import('./pve-vm-config')
+
+    await expect(destroyPveVm(pveConn, 'pve-node-1', 112)).resolves.toEqual(kept)
+
+    expect(decideMock).toHaveBeenCalledWith({ conn: pveConn, connectionId: 'conn-1', node: 'pve-node-1', type: 'qemu', vmid: 112 })
+    const [, path, init] = pveFetchMock.mock.calls[0]
+    expect(path).toBe('/nodes/pve-node-1/qemu/112?purge=1')
+    expect(init.body).toBeUndefined()
   })
 
   it('propagates pveFetch errors to the caller (cleanup is best-effort at call sites)', async () => {

@@ -4508,6 +4508,13 @@
           "warning": {
             "type": "string",
             "description": "Present when the IPAM addresses could not be released"
+          },
+          "keptVolumes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Present when destroy-unreferenced-disks was asked but not passed to Proxmox, because another managed cluster has a guest with the same VMID: the unreferenced volumes of this VMID left on a shared storage. Empty when the shared storages could not be checked, and for a vDC tenant."
           }
         }
       },
@@ -16188,7 +16195,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Set to '1' to also destroy disks not referenced in the config"
+            "description": "Set to '1' to also destroy disks not referenced in the config. Not applied when a shared storage holds such a volume and another managed cluster has a guest with this VMID: the response lists those volumes in keptVolumes"
           }
         ],
         "responses": {
@@ -16242,6 +16249,13 @@
                     "warning": {
                       "type": "string",
                       "description": "Present when the IPAM addresses could not be released"
+                    },
+                    "keptVolumes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Present when destroy-unreferenced-disks was asked but not passed to Proxmox, because another managed cluster has a guest with the same VMID: the unreferenced volumes of this VMID left on a shared storage. Empty when the shared storages could not be checked, and for a vDC tenant."
                     }
                   }
                 }

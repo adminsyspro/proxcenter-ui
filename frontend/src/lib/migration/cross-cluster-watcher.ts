@@ -1,6 +1,7 @@
 import { applyRestorePlan, rollbackPrereqsOnSource, type CcmRestorePlan } from '@/lib/migration/ccm-prereqs'
 import { asRoot, hasSudoMark, resolveSudo } from '@/lib/ssh/sudo'
 import { pveFetch } from '@/lib/proxmox/client'
+import { decideUnreferencedDiskPurge, keptVolumesNote } from '@/lib/proxmox/unreferencedDisks'
 import { decryptSecret } from '@/lib/crypto/secret'
 import { getTenantPrisma } from '@/lib/tenant'
 import { resolveNodeSshEndpoint } from '@/lib/ssh/node-endpoint'
@@ -274,12 +275,17 @@ export async function watchMigrationAndCleanup(opts: WatcherOpts): Promise<Watch
 
   if (deleteSource && unlocked) {
     try {
+      // A target storage the source also reaches got the copy under this
+      // VMID (vm-<vmid>-disk-N): unreferenced here, it is the target's disk.
+      const disks = await decideUnreferencedDiskPurge({ conn: sourceConn, connectionId, node: sourceNode, type: 'qemu', vmid })
       await pveFetch(
         sourceConn,
-        `/nodes/${encodeURIComponent(sourceNode)}/qemu/${encodeURIComponent(vmid)}?purge=1&destroy-unreferenced-disks=1`,
+        `/nodes/${encodeURIComponent(sourceNode)}/qemu/${encodeURIComponent(vmid)}?purge=1${disks.destroyUnreferenced ? '&destroy-unreferenced-disks=1' : ''}`,
         { method: 'DELETE' },
       )
       console.log(`${tag} deleted source VM on ${sourceNode}`)
+      const kept = keptVolumesNote(disks)
+      if (kept) console.warn(`${tag} ${kept}`)
       forgetCachedGuest(connectionId, guestType || 'qemu', vmid)
       return { outcome: 'completed', sourceLeft: false }
     } catch (e: any) {

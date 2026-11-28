@@ -2,13 +2,14 @@ import { NextResponse } from "next/server"
 import { licenseExcludedResponse } from "@/lib/api/response"
 
 import { pveFetch } from "@/lib/proxmox/client"
+import { decideUnreferencedDiskPurge, type UnreferencedDiskDecision } from "@/lib/proxmox/unreferencedDisks"
 import { isVmConfigNotFoundError, locateVmOrMissing, type GuestType } from "@/lib/proxmox/locateVm"
 import { getConnectionById } from "@/lib/connections/getConnection"
 import { checkPermission, buildVmResourceId, PERMISSIONS } from "@/lib/rbac"
 import { releaseAllocationsForVm } from "@/lib/vdc/ipam"
 import { deleteGuestIpEntry, guestKey } from "@/lib/cache/guestIpCache"
 import { forgetCachedGuest } from "@/lib/cache/inventoryCache"
-import { guardSessionGuest } from "@/lib/vdc/guestGuard"
+import { guardSessionGuest, sessionIsVdcTenant } from "@/lib/vdc/guestGuard"
 import { withPublicApiGuard } from "@/lib/api-tokens/routeGuard"
 import { withAudit } from "@/lib/audit/withAudit"
 
@@ -81,38 +82,17 @@ async function handler(
       }, { status: 400 })
     }
 
-    // Construire les paramètres de suppression
+    // Same two options for QEMU and LXC; the guest is stopped, never forced.
     const params = new URLSearchParams()
-    
-    // Options pour QEMU
-    if (type === 'qemu') {
-      // purge: Remove vmid from backup cron jobs
-      if (searchParams.get('purge') === '1') {
-        params.append('purge', '1')
-      }
+    if (searchParams.get('purge') === '1') params.append('purge', '1')
 
-
-      // destroy-unreferenced-disks: Destroy also unreferenced disks
-      if (searchParams.get('destroy-unreferenced-disks') === '1') {
-        params.append('destroy-unreferenced-disks', '1')
-      }
-    }
-    
-    // Options pour LXC
-    if (type === 'lxc') {
-      // purge: Remove container from all related configurations
-      if (searchParams.get('purge') === '1') {
-        params.append('purge', '1')
-      }
-
-
-      // destroy-unreferenced-disks
-      if (searchParams.get('destroy-unreferenced-disks') === '1') {
-        params.append('destroy-unreferenced-disks', '1')
-      }
-
-      // force: Force destroy, even if running
-      // Note: On ne force pas, on vérifie que c'est arrêté
+    // destroy-unreferenced-disks deletes every volume named after the VMID on
+    // every storage of the node: on a storage another cluster reaches, a guest
+    // of that cluster with this VMID owns some of them (ui#1460).
+    let disks: UnreferencedDiskDecision | undefined
+    if (searchParams.get('destroy-unreferenced-disks') === '1') {
+      disks = await decideUnreferencedDiskPurge({ conn, connectionId: id, node, type: type as GuestType, vmid })
+      if (disks.destroyUnreferenced) params.append('destroy-unreferenced-disks', '1')
     }
 
     const queryString = params.toString()
@@ -149,6 +129,11 @@ async function handler(
       }
     }
 
+    // Unreferenced disks left in place: named to the provider and MSP, not to
+    // a vDC session, whose cluster storages may lie outside its vDC.
+    let keptVolumes: string[] | undefined
+    if (disks && !disks.destroyUnreferenced) keptVolumes = (await sessionIsVdcTenant()) ? [] : disks.keptVolumes
+
     // Audit
     const { audit } = await import("@/lib/audit")
 
@@ -159,7 +144,7 @@ async function handler(
       resourceId: vmid,
       // The destroy task: a vDC tenant follows it by this line once the
       // guest, and with it its vDC scope, is gone (task status route).
-      details: { node, connectionId: id, upid: result, ipamReleaseError: ipamWarning },
+      details: { node, connectionId: id, upid: result, ipamReleaseError: ipamWarning, ...(keptVolumes ? { keptVolumes } : {}) },
     })
 
     return NextResponse.json({
@@ -167,6 +152,7 @@ async function handler(
       data: result,
       message: `VM ${vmid} deleted`,
       ...(ipamWarning ? { warning: ipamWarning } : {}),
+      ...(keptVolumes ? { keptVolumes } : {}),
     })
   } catch (e: any) {
     const excluded = licenseExcludedResponse(e)

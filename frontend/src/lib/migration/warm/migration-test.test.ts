@@ -13,9 +13,11 @@ const h = vi.hoisted(() => ({
   cutover: false,
   stop: false,
   clear: vi.fn(),
+  decide: vi.fn(async (..._a: unknown[]): Promise<unknown> => ({ destroyUnreferenced: true, keptVolumes: [] })),
 }))
 
 vi.mock("@/lib/proxmox/client", () => ({ pveFetch: h.pve }))
+vi.mock("@/lib/proxmox/unreferencedDisks", () => ({ decideUnreferencedDiskPurge: h.decide }))
 vi.mock("@/lib/ssh/exec", async (importActual) => ({ ...(await importActual<typeof import("@/lib/ssh/exec")>()), executeSSH: h.ssh }))
 vi.mock("../pve-tasks", () => ({ waitForPveTask: h.waitTask }))
 vi.mock("../reserve-target-vmid", () => ({ reserveTargetVmid: h.reserve }))
@@ -273,6 +275,16 @@ describe("runMigrationTest", () => {
     h.fields.mockImplementation(async (_id: unknown, data: any) => { if (data?.testState?.phase === "running") now = t0 + 3600 * 1000 + 1 })
     await runMigrationTest(target())
     expect(states().at(-1)).toMatchObject({ phase: "ended", reason: "time limit reached" })
+  })
+
+  // ui#1460: a guest of another cluster with this VMID on a shared storage.
+  it("removes the test VM without destroy-unreferenced-disks when a shared volume may belong to another cluster", async () => {
+    h.decide.mockResolvedValueOnce({ destroyUnreferenced: false, keptVolumes: ["Shared:vm-9001-disk-0"] })
+    h.fields.mockImplementation(async (_id: unknown, data: any) => { if (data?.testState?.phase === "running") h.cancelled = true })
+    await expect(runMigrationTest(target())).rejects.toThrow("Migration cancelled")
+    expect(h.decide).toHaveBeenCalledWith(expect.objectContaining({ node: "pve1", type: "qemu", vmid: 9001 }))
+    expect(pveCalls()).toContain("DELETE /nodes/pve1/qemu/9001?purge=1")
+    expect(pveCalls()).not.toContain("DELETE /nodes/pve1/qemu/9001?purge=1&destroy-unreferenced-disks=1")
   })
 
   it("stops the test before a cutover that reached the engine anyway", async () => {

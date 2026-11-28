@@ -72,6 +72,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     if (cephDenied) return cephDenied
     const gate = await cephConnection(id)
     if (gate.ok === false) return gate.response
+    if (!(await isClusterNode(gate.conn, safeNode))) return NextResponse.json({ error: 'Node not found in this connection' }, { status: 404 })
 
     const log = await readDetachedLog(id, await resolveNodeSshEndpoint(gate.conn, safeNode), TAG)
     return NextResponse.json({ data: { status: installStatus(log), logs: log === null ? '' : detachedOutput(log, 40) } })

@@ -57,4 +57,10 @@ describe('GET /api/v1/connections/[id]/nodes/[node]/ceph/install', () => {
     ;(readDetachedLog as any).mockResolvedValue(null)
     expect(await readJson(await callRoute(GET, { params }))).toEqual({ data: { status: 'UNKNOWN', logs: '' } })
   })
+
+  it('reads nothing on a node of another cluster', async () => {
+    const res = await callRoute(GET, { params: { id: 'c1', node: 'pve9' } })
+    expect(res.status).toBe(404)
+    expect(readDetachedLog).not.toHaveBeenCalled()
+  })
 })

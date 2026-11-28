@@ -8,6 +8,7 @@ import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 
 import { usePageTitle } from '@/contexts/PageTitleContext'
+import { useLicense, Features } from '@/contexts/LicenseContext'
 import { useRBACScopeProfile } from '@/hooks/useRBACScopeProfile'
 import { useRunningTasks } from '@/hooks/useRunningTasks'
 import { usePVEConnections } from '@/hooks/useConnections'
@@ -68,6 +69,15 @@ export default function InventoryPage() {
 
   // RBAC scope profile — determines default view & allowed view modes
   const { defaultViewMode, allowedViewModes, loading: rbacLoading } = useRBACScopeProfile()
+
+  // Kubernetes is Enterprise only and its section is hidden on other editions,
+  // so a stale link to it (bookmark, shared URL) lands on the inventory root.
+  const { hasFeature, loading: licenseLoading } = useLicense()
+  const kubernetesLocked = !licenseLoading && !hasFeature(Features.KUBERNETES)
+
+  useEffect(() => {
+    if (kubernetesLocked && selection?.type.startsWith('kubernetes-')) setSelection({ type: 'root', id: 'root' })
+  }, [kubernetesLocked, selection])
 
   // Mode de vue actuel et listes de données
   const [viewMode, setViewMode] = useState<ViewMode>('tree')

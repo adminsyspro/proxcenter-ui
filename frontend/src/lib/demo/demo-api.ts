@@ -3503,6 +3503,16 @@ function lookupMock(method: string, urlPath: string, url?: URL): any | Response 
   }
 
   // --- 4d. Ceph cockpit history (Enterprise, as the demo announces): depends on ?range= ---
+  // First step of the Ceph deploy wizard (ui#1450): the demo nodes, without the packages. The
+  // writes that follow (install, init) get the generic demo refusal, like every Ceph write.
+  const cephPreflightMatch = method === 'GET' ? /^\/api\/v1\/connections\/([^/]+)\/ceph\/preflight$/.exec(cleanPath) : null
+  if (cephPreflightMatch) {
+    const nodes = (demoNodes(cephPreflightMatch[1]) || []).map((n: any) => ({
+      node: n.node, online: n.status !== 'offline', address: n.ip ?? null, ceph: 'absent', pveVersion: '9.2.26', repository: 'no-subscription', ssh: 'ok',
+    }))
+    return { data: { nodes, releases: ['tentacle', 'squid'] } }
+  }
+
   const cephHistoryMatch = method === 'GET' ? /^\/api\/v1\/orchestrator\/ceph\/([^/]+)\/history$/.exec(cleanPath) : null
   if (cephHistoryMatch) {
     // Any other id reads as the production cluster, like normaliseConnectionId does for the other routes.

@@ -13983,6 +13983,94 @@
         "disabledLink": "Paramètres > Connexions",
         "unreachable": "Le nœud est injoignable en SSH.",
         "pvecephFailed": "pveceph a échoué :"
+      },
+      "deploy": {
+        "title": "Déployer Ceph",
+        "titleOn": "Déployer Ceph sur {cluster}",
+        "deployOther": "Déployer Ceph sur un autre cluster",
+        "candidates": "Ces clusters Proxmox VE n’ont pas encore Ceph :",
+        "cluster": "Cluster",
+        "steps": {
+          "preflight": "Vérification",
+          "install": "Installation",
+          "config": "Configuration",
+          "monitors": "Moniteurs",
+          "done": "Terminé"
+        },
+        "preflight": {
+          "loading": "Lecture des nœuds…",
+          "node": "Nœud",
+          "version": "Proxmox VE",
+          "ceph": "Ceph",
+          "ssh": "SSH (pveceph)",
+          "states": {
+            "absent": "Non installé",
+            "installed": "Installé",
+            "initialized": "Initialisé",
+            "unknown": "Inconnu"
+          },
+          "sshStates": {
+            "ok": "Autorisé",
+            "missing-rule": "Règle sudo absente",
+            "ssh-disabled": "SSH désactivé",
+            "unreachable": "Injoignable"
+          },
+          "offline": "Hors ligne",
+          "offlineLeftOut": "Les nœuds hors ligne sont laissés de côté : installez Ceph dessus plus tard depuis l’interface Proxmox VE.",
+          "alreadyInitialized": "Ceph est déjà initialisé sur ce cluster : lancez plutôt Re-détecter Ceph dans Paramètres > Connexions.",
+          "unknownState": "L’état de Ceph n’a pas pu être lu sur un nœud : vérifiez-le d’abord dans l’interface Proxmox VE.",
+          "noNode": "Aucun nœud du cluster n’est en ligne.",
+          "fewNodes": "{count, plural, one {# nœud} other {# nœuds}} : Ceph garde par défaut 3 copies sur 3 hôtes différents, un pool ne deviendra donc pas sain avec moins de 3 nœuds.",
+          "unreadable": "Les nœuds de ce cluster n’ont pas pu être lus."
+        },
+        "install": {
+          "help": "{count, plural, one {# nœud n’a pas} other {# nœuds n’ont pas}} les paquets Ceph : pveceph les installe en SSH.",
+          "version": "Version de Ceph",
+          "repository": "Dépôt",
+          "repositories": {
+            "enterprise": "Enterprise (abonnement)",
+            "no-subscription": "No-subscription",
+            "manual": "Manuel (déjà configuré)"
+          },
+          "start": "Installer",
+          "retry": "Réessayer",
+          "log": "Journal",
+          "status": {
+            "waiting": "En attente",
+            "RUNNING": "Installation…",
+            "UNKNOWN": "Installation…",
+            "COMPLETED": "Installé",
+            "FAILED": "Échec"
+          },
+          "reposHint": "apt n’a pas pu installer les paquets. Vérifiez les dépôts du nœud (un dépôt enterprise sans abonnement répond 401), ou choisissez Manuel avec un miroir, puis réessayez."
+        },
+        "config": {
+          "help": "Écrit /etc/pve/ceph.conf pour tout le cluster, puis crée le premier moniteur et le premier manager sur le nœud choisi.",
+          "monNode": "Premier moniteur",
+          "network": "Réseau public",
+          "clusterNetwork": "Réseau cluster",
+          "clusterNetworkNone": "identique au public",
+          "size": "Taille par défaut",
+          "minSize": "Taille min. par défaut",
+          "init": "Initialiser",
+          "fewNodes": "Moins de 3 nœuds : un pool de taille 3 ne deviendra pas sain."
+        },
+        "monitors": {
+          "help": "Deux moniteurs de plus gardent le quorum quand un nœud tombe.",
+          "none": "Aucun autre nœud en ligne : ajoutez des moniteurs plus tard depuis l’onglet Services.",
+          "create": "Créer les moniteurs",
+          "skip": "Passer",
+          "done": "créé",
+          "created": "Moniteur et manager créés sur {node}"
+        },
+        "done": {
+          "title": "Ceph tourne sur {cluster}.",
+          "next": "Ensuite : créez un OSD sur chaque nœud, puis un pool.",
+          "addOsd": "Ajouter des OSD",
+          "createPool": "Créer un pool",
+          "open": "Ouvrir dans le cockpit"
+        },
+        "deploy": "Déployer Ceph"
       }
     }
   },

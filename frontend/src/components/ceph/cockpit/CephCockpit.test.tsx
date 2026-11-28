@@ -492,3 +492,38 @@ describe('CephCockpit', () => {
     expect(screen.getByTestId('osd-trend').getAttribute('aria-label')).toContain('2 / 2 / 2 ms')
   })
 })
+
+describe('Ceph deploy entry points (ui#1450)', () => {
+  const CANDIDATES = [{ id: 'c9', name: 'LAB-NEW' }]
+  const tree = (connections: typeof CONNS, candidates = CANDIDATES) => (
+    <NextIntlClientProvider locale='en' messages={en as Record<string, unknown>}>
+      <ThemeProvider theme={theme}>
+        <CephCockpit connections={connections} candidates={candidates} onConnectionsChanged={vi.fn()} />
+      </ThemeProvider>
+    </NextIntlClientProvider>
+  )
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: { nodes: [], releases: ['tentacle'] } }) })))
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('lists the clusters without Ceph on the empty page and opens the wizard', () => {
+    render(tree([]))
+    const empty = screen.getByTestId('cockpit-empty')
+    expect(empty).toHaveTextContent('These Proxmox VE clusters run no Ceph yet:')
+    fireEvent.click(within(empty).getByRole('button', { name: 'Deploy Ceph' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('Deploy Ceph on LAB-NEW')
+  })
+
+  it('offers the wizard from the header when Ceph clusters exist', () => {
+    render(tree(CONNS))
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy Ceph on another cluster' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('Deploy Ceph on LAB-NEW')
+  })
+
+  it('shows no deploy entry without a candidate', () => {
+    render(tree(CONNS, []))
+    expect(screen.queryByRole('button', { name: 'Deploy Ceph on another cluster' })).toBeNull()
+  })
+})

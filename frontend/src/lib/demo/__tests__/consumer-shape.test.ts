@@ -530,6 +530,19 @@ describe('demo mock: Ceph cockpit per-OSD history, precheck, exporter failure, C
     expect(action.body.message).toBe('Action disabled in demo mode')
   })
 
+  it('the Ceph deploy wizard reads the demo nodes, and its writes stay disabled (ui#1450)', async () => {
+    const pre = await raw(`/api/v1/connections/${PROD}/ceph/preflight`)
+
+    expect(pre.status).toBe(200)
+    expect(pre.body.data.releases).toEqual(['tentacle', 'squid'])
+    expect(pre.body.data.nodes.length).toBeGreaterThan(0)
+    expect(pre.body.data.nodes[0]).toMatchObject({ ceph: 'absent', ssh: 'ok', repository: 'no-subscription' })
+
+    const init = await raw(`/api/v1/connections/${PROD}/ceph/init`, 'POST')
+
+    expect(init.body.message).toBe('Action disabled in demo mode')
+  })
+
   it('the exporter of the last DR host is refused: grouped route, per-OSD route and history agree, PROD stays fully ok', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(NOW)

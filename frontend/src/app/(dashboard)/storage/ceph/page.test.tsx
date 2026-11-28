@@ -19,8 +19,11 @@ vi.mock('@/components/guards/PermissionGuard', () => ({
   ),
 }))
 vi.mock('@/components/ceph/cockpit/CephCockpit', () => ({
-  default: ({ connections }: { connections: { id: string; name: string }[] }) => (
-    <div data-testid='cockpit'>{connections.map(c => `${c.id}:${c.name}`).join(',')}</div>
+  default: ({ connections, candidates = [] }: { connections: { id: string; name: string }[]; candidates?: { id: string; name: string }[] }) => (
+    <>
+      <div data-testid='cockpit'>{connections.map(c => `${c.id}:${c.name}`).join(',')}</div>
+      <div data-testid='candidates'>{candidates.map(c => `${c.id}:${c.name}`).join(',')}</div>
+    </>
   ),
 }))
 
@@ -61,6 +64,19 @@ describe('/storage/ceph page', () => {
 
     await waitFor(() => expect(screen.getByTestId('cockpit')).toHaveTextContent('c1:PVE-PROD,7:7'))
     expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/connections?type=pve&hasCeph=true')
+  })
+
+  it('hands the PVE connections without Ceph to the deploy wizard (ui#1450)', async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: url.includes('hasCeph') ? [{ id: 'c1', name: 'PVE-PROD', hasCeph: true }] : [{ id: 'c1', name: 'PVE-PROD', hasCeph: true }, { id: 'c9', name: 'LAB', hasCeph: false }] }),
+    }))
+    renderPage()
+
+    await waitFor(() => expect(screen.getByTestId('candidates')).toHaveTextContent('c9:LAB'))
+    expect(screen.getByTestId('candidates')).not.toHaveTextContent('c1')
+    expect(fetchMock.mock.calls.map(c => c[0])).toContain('/api/v1/connections?type=pve')
   })
 
   it('says so when the connection list cannot be read', async () => {

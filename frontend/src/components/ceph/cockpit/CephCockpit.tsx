@@ -14,6 +14,7 @@ import { withMonDisk, withoutMonDisk } from '@/lib/ceph/monDisk'
 import { cephRatios } from '@/lib/ceph/thresholds'
 import type { CephInventory, CephRange, CockpitTab } from '@/lib/ceph/types'
 
+import CephDeployWizard from './CephDeployWizard'
 import CephHeader, { type HeaderCluster } from './CephHeader'
 import HealthRail from './HealthRail'
 import OsdTab from './OsdTab'
@@ -94,7 +95,7 @@ const RAIL_MIN_HEIGHT = 360
 /** Grey out figures that are no longer fresh, without hiding them. */
 const STALE_SX = { opacity: 0.55, filter: 'grayscale(0.6)', transition: 'opacity 200ms, filter 200ms' } as const
 
-function EmptyState({ cluster = false }: { cluster?: boolean }) {
+function EmptyState({ cluster = false, candidates = [], onDeploy }: { cluster?: boolean; candidates?: CockpitConnection[]; onDeploy?: (id: string) => void }) {
   const t = useTranslations('cephCockpit')
 
   const ring = (icon: string, pos: Record<string, number>) => (
@@ -142,6 +143,20 @@ function EmptyState({ cluster = false }: { cluster?: boolean }) {
               </Box>
             ))}
           </Box>
+          {candidates.length > 0 && onDeploy && (
+            <Box data-testid='deploy-candidates' sx={{ width: '100%', maxWidth: 440, mb: 3, textAlign: 'left' }}>
+              <Typography variant='body2' color='text.secondary' sx={{ mb: 1 }}>{t('provision.deploy.candidates')}</Typography>
+              {candidates.map(c => (
+                <Box key={c.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.75, px: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'background.paper', mb: 0.75 }}>
+                  <i className='ri-server-line' style={{ fontSize: 16, opacity: 0.7 }} aria-hidden />
+                  <Typography variant='body2' fontWeight={600} sx={{ flex: 1, minWidth: 0 }} noWrap>{c.name}</Typography>
+                  <Button size='small' variant='outlined' startIcon={<img src='/images/ceph-logo.svg' alt='' width={14} height={14} />} onClick={() => onDeploy(c.id)}>
+                    {t('provision.deploy.deploy')}
+                  </Button>
+                </Box>
+              ))}
+            </Box>
+          )}
           <Button variant='outlined' size='small' component={Link} href='/storage/overview'>
             {t('empty.storages')}
           </Button>
@@ -199,7 +214,13 @@ export const TAB_ICONS_WHEN_NARROW = {
   [`@container ${TABBAR_CONTAINER} (max-width: ${TAB_ICONS_MIN_BAR_PX - 0.02}px)`]: { '& .MuiTab-iconWrapper': { display: 'none' } },
 } as const
 
-export default function CephCockpit({ connections }: { connections: CockpitConnection[] }) {
+export default function CephCockpit({ connections, candidates = [], onConnectionsChanged }: {
+  connections: CockpitConnection[]
+  /** The PVE connections without Ceph, where the deploy wizard can install it (ui#1450). */
+  candidates?: CockpitConnection[]
+  /** A cluster got Ceph: the page rereads its connection lists. */
+  onConnectionsChanged?: () => void
+}) {
   const t = useTranslations('cephCockpit')
   const theme = useTheme()
   const narrow = useMediaQuery(theme.breakpoints.down('lg'))
@@ -228,6 +249,7 @@ export default function CephCockpit({ connections }: { connections: CockpitConne
   const osdFlags = useCephOsdFlags(conn, hasData)
   const [flagsOpen, setFlagsOpen] = useState(false)
   const [focus, setFocus] = useState<CockpitFocus | null>(null)
+  const [deploying, setDeploying] = useState<{ initialId?: string } | null>(null)
 
   const { set } = url
   const navigate = useCallback((target: HealthTarget) => {
@@ -239,7 +261,27 @@ export default function CephCockpit({ connections }: { connections: CockpitConne
     }
   }, [set])
 
-  if (visible.length === 0) return <EmptyState />
+  const wizard = deploying && (
+    <CephDeployWizard
+      open
+      candidates={candidates}
+      initialId={deploying.initialId}
+      onClose={() => setDeploying(null)}
+      onInitialized={() => onConnectionsChanged?.()}
+      onOpenCluster={id => {
+        onConnectionsChanged?.()
+        set({ conn: id })
+      }}
+    />
+  )
+  if (visible.length === 0) {
+    return (
+      <>
+        <EmptyState candidates={candidates} onDeploy={id => setDeploying({ initialId: id })} />
+        {wizard}
+      </>
+    )
+  }
 
   const health = live.live?.health ?? inventory.inventory?.health ?? null
   const clusters: HeaderCluster[] = visible.map(c => ({
@@ -278,6 +320,7 @@ export default function CephCockpit({ connections }: { connections: CockpitConne
       liveState={live.live && !live.stale ? 'ok' : 'muted'}
       inventoryStaleSince={inventoryStaleSince}
       onRefresh={refresh}
+      onDeploy={candidates.length > 0 ? () => setDeploying({}) : undefined}
     />
   )
 
@@ -411,6 +454,7 @@ export default function CephCockpit({ connections }: { connections: CockpitConne
         osdFlags={osdFlags.osdFlags}
         onToggleHost={osdFlags.toggleHost}
       />
+      {wizard}
     </Box>
   )
 }

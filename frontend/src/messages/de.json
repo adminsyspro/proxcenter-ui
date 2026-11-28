@@ -13553,6 +13553,94 @@
         "disabledLink": "Einstellungen > Verbindungen",
         "unreachable": "Der Knoten ist per SSH nicht erreichbar.",
         "pvecephFailed": "pveceph ist fehlgeschlagen:"
+      },
+      "deploy": {
+        "title": "Ceph bereitstellen",
+        "titleOn": "Ceph auf {cluster} bereitstellen",
+        "deployOther": "Ceph auf einem anderen Cluster bereitstellen",
+        "candidates": "Diese Proxmox-VE-Cluster haben noch kein Ceph:",
+        "cluster": "Cluster",
+        "steps": {
+          "preflight": "Prüfung",
+          "install": "Installation",
+          "config": "Konfiguration",
+          "monitors": "Monitore",
+          "done": "Fertig"
+        },
+        "preflight": {
+          "loading": "Knoten werden gelesen…",
+          "node": "Knoten",
+          "version": "Proxmox VE",
+          "ceph": "Ceph",
+          "ssh": "SSH (pveceph)",
+          "states": {
+            "absent": "Nicht installiert",
+            "installed": "Installiert",
+            "initialized": "Initialisiert",
+            "unknown": "Unbekannt"
+          },
+          "sshStates": {
+            "ok": "Erlaubt",
+            "missing-rule": "Sudo-Regel fehlt",
+            "ssh-disabled": "SSH aus",
+            "unreachable": "Nicht erreichbar"
+          },
+          "offline": "Offline",
+          "offlineLeftOut": "Offline-Knoten werden übersprungen: Installieren Sie Ceph später über die Proxmox-VE-Oberfläche darauf.",
+          "alreadyInitialized": "Ceph ist auf diesem Cluster bereits initialisiert: Verwenden Sie stattdessen Ceph neu erkennen unter Einstellungen > Verbindungen.",
+          "unknownState": "Der Ceph-Zustand konnte auf einem Knoten nicht gelesen werden: Prüfen Sie ihn zuerst in der Proxmox-VE-Oberfläche.",
+          "noNode": "Kein Knoten des Clusters ist online.",
+          "fewNodes": "{count, plural, one {# Knoten} other {# Knoten}}: Ceph hält standardmäßig 3 Kopien auf 3 verschiedenen Hosts, ein Pool wird mit weniger als 3 Knoten also nicht gesund.",
+          "unreadable": "Die Knoten dieses Clusters konnten nicht gelesen werden."
+        },
+        "install": {
+          "help": "{count, plural, one {# Knoten fehlen} other {# Knoten fehlen}} die Ceph-Pakete: pveceph installiert sie per SSH.",
+          "version": "Ceph-Version",
+          "repository": "Repository",
+          "repositories": {
+            "enterprise": "Enterprise (Subskription)",
+            "no-subscription": "No-Subscription",
+            "manual": "Manuell (bereits konfiguriert)"
+          },
+          "start": "Installieren",
+          "retry": "Erneut versuchen",
+          "log": "Protokoll",
+          "status": {
+            "waiting": "Wartend",
+            "RUNNING": "Wird installiert…",
+            "UNKNOWN": "Wird installiert…",
+            "COMPLETED": "Installiert",
+            "FAILED": "Fehlgeschlagen"
+          },
+          "reposHint": "apt konnte die Pakete nicht installieren. Prüfen Sie die Repositories des Knotens (ein Enterprise-Repository ohne Subskription antwortet mit 401) oder wählen Sie Manuell mit einem Spiegel und versuchen Sie es erneut."
+        },
+        "config": {
+          "help": "Schreibt /etc/pve/ceph.conf für den ganzen Cluster und erstellt dann den ersten Monitor und Manager auf dem gewählten Knoten.",
+          "monNode": "Erster Monitor",
+          "network": "Öffentliches Netz",
+          "clusterNetwork": "Cluster-Netz",
+          "clusterNetworkNone": "wie öffentlich",
+          "size": "Standardgröße",
+          "minSize": "Standard-Min.-Größe",
+          "init": "Initialisieren",
+          "fewNodes": "Weniger als 3 Knoten: Ein Pool der Größe 3 wird nicht gesund."
+        },
+        "monitors": {
+          "help": "Zwei weitere Monitore halten das Quorum, wenn ein Knoten ausfällt.",
+          "none": "Kein anderer Knoten online: Fügen Sie Monitore später über den Reiter Dienste hinzu.",
+          "create": "Monitore erstellen",
+          "skip": "Überspringen",
+          "done": "erstellt",
+          "created": "Monitor und Manager auf {node} erstellt"
+        },
+        "done": {
+          "title": "Ceph läuft auf {cluster}.",
+          "next": "Als Nächstes: Erstellen Sie auf jedem Knoten ein OSD, dann einen Pool.",
+          "addOsd": "OSDs hinzufügen",
+          "createPool": "Pool erstellen",
+          "open": "Im Cockpit öffnen"
+        },
+        "deploy": "Ceph bereitstellen"
       }
     }
   },

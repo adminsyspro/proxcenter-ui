@@ -34,6 +34,8 @@ export interface CephHeaderProps {
   /** Last good inventory read when only the inventory fails to refresh (the Live is fine). */
   inventoryStaleSince?: number | null
   onRefresh: () => void
+  /** Open the Ceph deploy wizard (ui#1450): the button shows when given. */
+  onDeploy?: () => void
 }
 
 /*
@@ -69,7 +71,7 @@ export const TOGGLE_SX = {
   '&.Mui-selected, &.Mui-selected:hover': { bgcolor: 'text.primary', color: 'background.paper' },
 } as const
 
-export default function CephHeader({ clusters, conn, onConn, lastOkAt, range, ranges, onRange, liveState, inventoryStaleSince = null, onRefresh }: CephHeaderProps) {
+export default function CephHeader({ clusters, conn, onConn, lastOkAt, range, ranges, onRange, liveState, inventoryStaleSince = null, onRefresh, onDeploy }: CephHeaderProps) {
   const t = useTranslations('cephCockpit')
   const byId = new Map(clusters.map(c => [c.id, c]))
 
@@ -123,6 +125,19 @@ export default function CephHeader({ clusters, conn, onConn, lastOkAt, range, ra
           <i className='ri-refresh-line' style={{ fontSize: 16 }} />
         </IconButton>
       </Tooltip>
+
+      {onDeploy && (
+        <Tooltip title={t('provision.deploy.deployOther')}>
+          <IconButton
+            size='small'
+            aria-label={t('provision.deploy.deployOther')}
+            onClick={onDeploy}
+            sx={{ border: '1px solid', borderColor: 'divider', borderRadius: CONTROL_BORDER_RADIUS, bgcolor: 'background.paper', width: CONTROL_HEIGHT, height: CONTROL_HEIGHT, boxSizing: 'border-box', p: 0, flex: 'none' }}
+          >
+            <i className='ri-add-line' style={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+      )}
 
       <FormControl size='small' sx={{ minWidth: 150, maxWidth: 220, flex: '0 1 auto', height: CONTROL_HEIGHT }}>
         <Select

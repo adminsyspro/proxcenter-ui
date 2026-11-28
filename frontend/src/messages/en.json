@@ -13982,6 +13982,94 @@
         "disabledLink": "Settings > Connections",
         "unreachable": "The node cannot be reached over SSH.",
         "pvecephFailed": "pveceph failed:"
+      },
+      "deploy": {
+        "title": "Deploy Ceph",
+        "titleOn": "Deploy Ceph on {cluster}",
+        "deployOther": "Deploy Ceph on another cluster",
+        "candidates": "These Proxmox VE clusters run no Ceph yet:",
+        "cluster": "Cluster",
+        "steps": {
+          "preflight": "Check",
+          "install": "Install",
+          "config": "Configure",
+          "monitors": "Monitors",
+          "done": "Done"
+        },
+        "preflight": {
+          "loading": "Reading the nodes…",
+          "node": "Node",
+          "version": "Proxmox VE",
+          "ceph": "Ceph",
+          "ssh": "SSH (pveceph)",
+          "states": {
+            "absent": "Not installed",
+            "installed": "Installed",
+            "initialized": "Initialized",
+            "unknown": "Unknown"
+          },
+          "sshStates": {
+            "ok": "Allowed",
+            "missing-rule": "Sudo rule missing",
+            "ssh-disabled": "SSH off",
+            "unreachable": "Unreachable"
+          },
+          "offline": "Offline",
+          "offlineLeftOut": "Offline nodes are left out: install Ceph on them later from the Proxmox VE interface.",
+          "alreadyInitialized": "Ceph is already initialized on this cluster: run Re-detect Ceph in Settings > Connections instead.",
+          "unknownState": "The state of Ceph could not be read on a node: check it in the Proxmox VE interface first.",
+          "noNode": "No node of the cluster is online.",
+          "fewNodes": "{count, plural, one {# node} other {# nodes}}: Ceph keeps 3 copies on 3 different hosts by default, so a pool will not become healthy with fewer than 3 nodes.",
+          "unreadable": "The nodes of this cluster could not be read."
+        },
+        "install": {
+          "help": "{count, plural, one {# node lacks} other {# nodes lack}} the Ceph packages: pveceph installs them over SSH.",
+          "version": "Ceph version",
+          "repository": "Repository",
+          "repositories": {
+            "enterprise": "Enterprise (subscription)",
+            "no-subscription": "No-subscription",
+            "manual": "Manual (already configured)"
+          },
+          "start": "Install",
+          "retry": "Retry",
+          "log": "Log",
+          "status": {
+            "waiting": "Waiting",
+            "RUNNING": "Installing…",
+            "UNKNOWN": "Installing…",
+            "COMPLETED": "Installed",
+            "FAILED": "Failed"
+          },
+          "reposHint": "apt could not install the packages. Check the node’s repositories (an enterprise repository without a subscription answers 401), or pick Manual with a mirror, then retry."
+        },
+        "config": {
+          "help": "Writes /etc/pve/ceph.conf for the whole cluster, then creates the first monitor and manager on the chosen node.",
+          "monNode": "First monitor",
+          "network": "Public network",
+          "clusterNetwork": "Cluster network",
+          "clusterNetworkNone": "same as public",
+          "size": "Default size",
+          "minSize": "Default min. size",
+          "init": "Initialize",
+          "fewNodes": "Fewer than 3 nodes: a size 3 pool will not become healthy."
+        },
+        "monitors": {
+          "help": "Two more monitors keep the quorum when a node goes down.",
+          "none": "No other online node: add monitors later from the Services tab.",
+          "create": "Create monitors",
+          "skip": "Skip",
+          "done": "created",
+          "created": "Monitor and manager created on {node}"
+        },
+        "done": {
+          "title": "Ceph is running on {cluster}.",
+          "next": "Next: create an OSD on each node, then a pool.",
+          "addOsd": "Add OSDs",
+          "createPool": "Create a pool",
+          "open": "Open in the cockpit"
+        },
+        "deploy": "Deploy Ceph"
       }
     }
   },

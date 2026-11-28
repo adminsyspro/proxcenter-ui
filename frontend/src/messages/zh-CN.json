@@ -13969,6 +13969,94 @@
         "disabledLink": "设置 > 连接",
         "unreachable": "无法通过 SSH 访问该节点。",
         "pvecephFailed": "pveceph 失败："
+      },
+      "deploy": {
+        "title": "部署 Ceph",
+        "titleOn": "在 {cluster} 上部署 Ceph",
+        "deployOther": "在其他集群上部署 Ceph",
+        "candidates": "以下 Proxmox VE 集群尚未运行 Ceph：",
+        "cluster": "集群",
+        "steps": {
+          "preflight": "检查",
+          "install": "安装",
+          "config": "配置",
+          "monitors": "监视器",
+          "done": "完成"
+        },
+        "preflight": {
+          "loading": "正在读取节点…",
+          "node": "节点",
+          "version": "Proxmox VE",
+          "ceph": "Ceph",
+          "ssh": "SSH（pveceph）",
+          "states": {
+            "absent": "未安装",
+            "installed": "已安装",
+            "initialized": "已初始化",
+            "unknown": "未知"
+          },
+          "sshStates": {
+            "ok": "允许",
+            "missing-rule": "缺少 sudo 规则",
+            "ssh-disabled": "SSH 未启用",
+            "unreachable": "无法访问"
+          },
+          "offline": "离线",
+          "offlineLeftOut": "离线节点将被跳过：稍后请在 Proxmox VE 界面中为其安装 Ceph。",
+          "alreadyInitialized": "此集群已初始化 Ceph：请改为在 设置 > 连接 中执行“重新检测 Ceph”。",
+          "unknownState": "无法读取某个节点上的 Ceph 状态：请先在 Proxmox VE 界面中检查。",
+          "noNode": "集群中没有在线节点。",
+          "fewNodes": "{count} 个节点：Ceph 默认在 3 台不同主机上保留 3 份副本，因此节点少于 3 个时存储池不会达到健康状态。",
+          "unreadable": "无法读取此集群的节点。"
+        },
+        "install": {
+          "help": "{count} 个节点缺少 Ceph 软件包：pveceph 将通过 SSH 安装。",
+          "version": "Ceph 版本",
+          "repository": "软件源",
+          "repositories": {
+            "enterprise": "Enterprise（订阅）",
+            "no-subscription": "No-subscription",
+            "manual": "手动（已配置）"
+          },
+          "start": "安装",
+          "retry": "重试",
+          "log": "日志",
+          "status": {
+            "waiting": "等待中",
+            "RUNNING": "正在安装…",
+            "UNKNOWN": "正在安装…",
+            "COMPLETED": "已安装",
+            "FAILED": "失败"
+          },
+          "reposHint": "apt 无法安装软件包。请检查节点的软件源（没有订阅的 enterprise 软件源会返回 401），或选择“手动”并使用镜像，然后重试。"
+        },
+        "config": {
+          "help": "为整个集群写入 /etc/pve/ceph.conf，然后在所选节点上创建第一个监视器和管理器。",
+          "monNode": "第一个监视器",
+          "network": "公共网络",
+          "clusterNetwork": "集群网络",
+          "clusterNetworkNone": "与公共网络相同",
+          "size": "默认副本数",
+          "minSize": "默认最小副本数",
+          "init": "初始化",
+          "fewNodes": "少于 3 个节点：副本数为 3 的存储池不会达到健康状态。"
+        },
+        "monitors": {
+          "help": "再增加两个监视器，可在某个节点宕机时保持法定人数。",
+          "none": "没有其他在线节点：稍后请在“服务”选项卡中添加监视器。",
+          "create": "创建监视器",
+          "skip": "跳过",
+          "done": "已创建",
+          "created": "已在 {node} 上创建监视器和管理器"
+        },
+        "done": {
+          "title": "Ceph 已在 {cluster} 上运行。",
+          "next": "下一步：在每个节点上创建一个 OSD，然后创建存储池。",
+          "addOsd": "添加 OSD",
+          "createPool": "创建存储池",
+          "open": "在驾驶舱中打开"
+        },
+        "deploy": "部署 Ceph"
       }
     }
   },

@@ -213,6 +213,11 @@ export const VM_RESPONSE_SCHEMAS: Record<string, Record<string, unknown>> = {
     success: { type: "boolean" },
     message: { type: "string" },
     warning: { type: "string", description: "Present when the IPAM addresses could not be released" },
+    keptVolumes: {
+      type: "array",
+      items: { type: "string" },
+      description: "Present when destroy-unreferenced-disks was asked but not passed to Proxmox, because another managed cluster has a guest with the same VMID: the unreferenced volumes of this VMID left on a shared storage. Empty when the shared storages could not be checked, and for a vDC tenant.",
+    },
   }),
   VmRemoteMigrateResponse: taskStarted({
     success: { type: "boolean" },

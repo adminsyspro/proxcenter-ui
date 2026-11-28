@@ -1157,6 +1157,8 @@
     "deleteVmConfirmHint": "To confirm, type the VM's ID or name:",
     "deleteVmLockedError": "VM is locked in state \"{lock}\". Right-click the VM in the tree and select Unlock to release the lock (requires SSH on the connection).",
     "deleteVmRunningError": "VM must be stopped before being deleted. Stop the VM first.",
+    "deleteVmKeptSharedVolumes": "Kept {volumes}: another cluster runs a guest with this VMID on the same storage and may use it.",
+    "deleteVmUnreferencedKept": "Unreferenced disks were kept on shared storage: they may belong to a guest of another cluster with the same VMID.",
     "vmRunningWarning": "Stop the VM before deleting it",
     "health": {
       "label": "Health",
@@ -8605,6 +8607,7 @@
           "notPortable": "bound to its node: {keys}",
           "isoDetached": "{isos} will be ejected",
           "poolNotCarried": "leaves pool {pool}, joins none on the target",
+          "vmidReusable": "{vmid} becomes free again on the source cluster, which hands out new IDs from {lower} to {last}",
           "storageFormat": "{sourceType} disks cannot be copied offline to {targetType} ({storage})"
         }
       },

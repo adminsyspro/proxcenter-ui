@@ -27,6 +27,7 @@
  * the orphan cleanup finds it.
  */
 import { pveFetch } from "@/lib/proxmox/client"
+import { decideUnreferencedDiskPurge } from "@/lib/proxmox/unreferencedDisks"
 import { executeSSH, shellEscape } from "@/lib/ssh/exec"
 import type { SshTarget } from "@/lib/ssh/node-endpoint-core"
 
@@ -165,7 +166,9 @@ export async function removeTestVm(a: { pveConn: any; node: string; vmid: number
       if (stopped) await waitForPveTask(a.pveConn, a.node, String(stopped))
     }
     // Query string, never a body: PVE's DELETE rejects one (#400, as destroyPveVm).
-    const destroyed = await pveFetch<string>(a.pveConn, `${vm}?purge=1&destroy-unreferenced-disks=1`, { method: "DELETE" })
+    // Shared volumes of this VMID another cluster may own stay (ui#1460).
+    const disks = await decideUnreferencedDiskPurge({ conn: a.pveConn, connectionId: a.connectionId, node: a.node, type: "qemu", vmid: a.vmid })
+    const destroyed = await pveFetch<string>(a.pveConn, `${vm}?purge=1${disks.destroyUnreferenced ? "&destroy-unreferenced-disks=1" : ""}`, { method: "DELETE" })
     if (destroyed) await waitForPveTask(a.pveConn, a.node, String(destroyed))
   } catch (e: any) {
     return { removed: false, reason: String(e?.message || e) }

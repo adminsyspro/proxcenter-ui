@@ -23,7 +23,7 @@ beforeEach(() => {
 
 describe("removeTargetVmOnFailure (roadmap#57)", () => {
   it("removes the empty VM shell so a retry can reuse its VMID", async () => {
-    vi.mocked(destroyPveVm).mockResolvedValue(undefined)
+    vi.mocked(destroyPveVm).mockResolvedValue({ destroyUnreferenced: true, keptVolumes: [] })
 
     await removeTargetVmOnFailure({ jobId: "j", pveConn: conn, node: "pve1", vmid: 113, allocatedVolumes: [{ volumeId: "c:vm-113-disk-0", devicePath: "/dev/rbd1" }] })
 
@@ -39,12 +39,21 @@ describe("removeTargetVmOnFailure (roadmap#57)", () => {
   })
 
   it("removes the VM with its completed copy when the operator cancelled with the target removed", async () => {
-    vi.mocked(destroyPveVm).mockResolvedValue(undefined)
+    vi.mocked(destroyPveVm).mockResolvedValue({ destroyUnreferenced: true, keptVolumes: [] })
 
     await removeTargetVmOnFailure({ jobId: "j", pveConn: conn, node: "pve1", vmid: 113, allocatedVolumes: [{ volumeId: "c:vm-113-disk-0", devicePath: "/dev/rbd1", copied: true }], removeCopies: true })
 
     expect(destroyPveVm).toHaveBeenCalledWith(conn, "pve1", 113)
     expect(logs()).toContainEqual(["Removed target VM 113 and the copy it held, as asked when cancelling", "warn"])
+  })
+
+  // ui#1460: a volume of this VMID on a shared storage another cluster may own.
+  it("names the shared volumes left in place when it removes the VM", async () => {
+    vi.mocked(destroyPveVm).mockResolvedValue({ destroyUnreferenced: false, keptVolumes: ["Shared:vm-113-disk-1"] })
+
+    await removeTargetVmOnFailure({ jobId: "j", pveConn: conn, node: "pve1", vmid: 113, allocatedVolumes: [{ volumeId: "c:vm-113-disk-0", devicePath: "/dev/rbd1" }] })
+
+    expect(logs()).toContainEqual(["Removed target VM 113 created by this migration. Kept Shared:vm-113-disk-1: another cluster runs a guest with this VMID and may use it.", "warn"])
   })
 
   it("stays quiet when the VM is already gone", async () => {

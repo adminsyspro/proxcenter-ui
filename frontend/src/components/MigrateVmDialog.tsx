@@ -223,6 +223,7 @@ const CHECK_DETAIL_KEY: Record<string, string> = {
   NOT_PORTABLE: 'notPortable',
   ISO_DETACHED: 'isoDetached',
   POOL_NOT_CARRIED: 'poolNotCarried',
+  VMID_REUSABLE_ON_SOURCE: 'vmidReusable',
 }
 
 const CHECK_LABEL_SLUG: Record<string, string> = {
@@ -261,6 +262,7 @@ const CHECK_LABEL_SLUG: Record<string, string> = {
   NOT_PORTABLE: 'portability',
   ISO_DETACHED: 'cdrom',
   POOL_NOT_CARRIED: 'pool',
+  VMID_REUSABLE_ON_SOURCE: 'vmid',
 }
 
 const CHECK_ROW_GLYPH: Record<string, { icon: string; color: string }> = {

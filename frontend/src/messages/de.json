@@ -1146,6 +1146,8 @@
     "deleteVmConfirmHint": "Zum Bestätigen geben Sie die ID oder den Namen der VM ein:",
     "deleteVmLockedError": "Die VM ist im Zustand „{lock}“ gesperrt. Klicken Sie mit der rechten Maustaste auf die VM in der Baumansicht und wählen Sie Entsperren, um die Sperre aufzuheben (benötigt SSH auf der Verbindung).",
     "deleteVmRunningError": "Die VM muss vor dem Löschen gestoppt werden. Stoppen Sie die VM zuerst.",
+    "deleteVmKeptSharedVolumes": "{volumes} behalten: Ein anderer Cluster hat einen Gast mit dieser VMID auf demselben Speicher und nutzt ihn möglicherweise.",
+    "deleteVmUnreferencedKept": "Nicht referenzierte Datenträger wurden auf dem gemeinsamen Speicher behalten: Sie können zu einem Gast eines anderen Clusters mit derselben VMID gehören.",
     "vmRunningWarning": "Stoppen Sie die VM vor dem Löschen",
     "health": {
       "label": "Zustand",
@@ -8586,6 +8588,7 @@
           "notPortable": "an seinen Knoten gebunden: {keys}",
           "isoDetached": "{isos} wird ausgeworfen",
           "poolNotCarried": "verlässt Pool {pool}, keiner auf dem Ziel",
+          "vmidReusable": "{vmid} wird auf dem Quellcluster wieder frei, der neue IDs von {lower} bis {last} vergibt",
           "storageFormat": "{sourceType}-Datenträger können nicht offline nach {targetType} kopiert werden ({storage})"
         }
       },

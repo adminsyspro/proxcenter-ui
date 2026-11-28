@@ -39,6 +39,7 @@ import {
 } from "./pvesm-alloc"
 import { adoptImportAndAttachFileVolume } from "./adopt-file-volume"
 import { pveSetVmConfig, destroyPveVm } from "./pve-vm-config"
+import { withKeptNote } from "@/lib/proxmox/unreferencedDisks"
 import { waitForPveTask, getNodeSshEndpointForMigration } from "./pve-tasks"
 import { convertDisksToQcow2 } from "./qcow2-convert"
 import { startMigratedVm } from "./start-migrated-vm"
@@ -3173,8 +3174,8 @@ export async function runMigrationPipeline(jobId: string, config: MigrationConfi
     if (vmCreated && targetVmid && config.targetConnectionId) {
       try {
         const pveConn = await getConnectionById(config.targetConnectionId)
-        await destroyPveVm(pveConn, config.targetNode, targetVmid)
-        await appendLog(jobId, `Cleaned up partial VM ${targetVmid}`, "warn")
+        const disks = await destroyPveVm(pveConn, config.targetNode, targetVmid)
+        await appendLog(jobId, withKeptNote(`Cleaned up partial VM ${targetVmid}`, disks), "warn")
       } catch {
         // Cleanup failed — leave for manual intervention
       }

@@ -36,7 +36,7 @@ describe('POST /api/v1/connections/[id]/nodes/[node]/ceph/install', () => {
     const res = await callRoute(POST, { params, method: 'POST', body: { version: 'tentacle', repository: 'no-subscription' } })
     expect(res.status).toBe(200)
     expect(await readJson(res)).toEqual({ data: { started: true, node: 'pve1' } })
-    expect((runDetached as any).mock.calls[0]).toEqual(['c1', 'ip-pve1', ['/usr/bin/pveceph', 'install', '--version', 'tentacle', '--repository', 'no-subscription'], 'ceph-install'])
+    expect((runDetached as any).mock.calls[0]).toEqual(['c1', 'ip-pve1', ['/usr/bin/pveceph', 'install', '--version', 'tentacle', '--repository', 'no-subscription'], 'ceph-install', { answerYes: true }])
   })
 
   it('refuses the test repository and runs nothing without the sudo rule', async () => {

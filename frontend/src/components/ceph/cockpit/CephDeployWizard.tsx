@@ -49,7 +49,11 @@ export default function CephDeployWizard({ open, candidates, initialId, onClose,
   const tc = useTranslations('common')
   const toast = useToast()
   const [connId, setConnId] = useState(initialId ?? candidates[0]?.id ?? '')
-  const cluster = candidates.find(c => c.id === connId)?.name ?? connId
+  // Once initialized, the cluster leaves the candidates (it has Ceph now): keep the name it had.
+  const [knownNames, setKnownNames] = useState<Record<string, string>>(() => Object.fromEntries(candidates.map(c => [c.id, c.name])))
+  const listedName = candidates.find(c => c.id === connId)?.name
+  if (listedName && knownNames[connId] !== listedName) setKnownNames(n => ({ ...n, [connId]: listedName }))
+  const cluster = listedName ?? knownNames[connId] ?? connId
   const task = useCephTask(connId)
 
   const [step, setStep] = useState<StepId>('preflight')
@@ -65,7 +69,11 @@ export default function CephDeployWizard({ open, candidates, initialId, onClose,
   const [monCreated, setMonCreated] = useState<string[]>([])
   const [extra, setExtra] = useState<'osd' | 'pool' | null>(null)
   const alive = useRef(true)
-  useEffect(() => () => { alive.current = false }, [])
+  // Mounted again after a StrictMode or Fast Refresh unmount: the flag is set back here, not only at creation.
+  useEffect(() => {
+    alive.current = true
+    return () => { alive.current = false }
+  }, [])
 
   const online = useMemo(() => (preflight?.nodes ?? []).filter(n => n.online), [preflight])
   const toInstall = useMemo(() => online.filter(n => n.ceph === 'absent').map(n => n.node), [online])
@@ -175,14 +183,16 @@ export default function CephDeployWizard({ open, candidates, initialId, onClose,
   else if (step === 'install') {
     actions = (
       <>
-        <Button
-          variant='outlined'
-          disabled={installing || installDone}
-          startIcon={installing ? <CircularProgress size={16} /> : <i className='ri-download-2-line' />}
-          onClick={() => void startInstall()}
-        >
-          {Object.keys(installs).length > 0 ? t('install.retry') : t('install.start')}
-        </Button>
+        {!installDone && (
+          <Button
+            variant='outlined'
+            disabled={installing}
+            startIcon={installing ? <CircularProgress size={16} /> : <i className='ri-download-2-line' />}
+            onClick={() => void startInstall()}
+          >
+            {Object.keys(installs).length > 0 ? t('install.retry') : t('install.start')}
+          </Button>
+        )}
         <Button variant='contained' disabled={!installDone} onClick={goNext}>{tc('next')}</Button>
       </>
     )

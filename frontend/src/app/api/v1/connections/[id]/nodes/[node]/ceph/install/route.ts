@@ -17,7 +17,8 @@ export const runtime = 'nodejs'
    pinned rule ui-ceph-install of the ceph-provisioning sudo profile, detached
    (apt takes minutes, a route may not last past 60 s), its output in the SSH
    account's log. With --version given and no terminal, pveceph asks nothing
-   (PVE/CLI/pveceph.pm). GET polls that log. ProxCenter never rewrites the
+   itself (PVE/CLI/pveceph.pm), but its `apt-get install` has no -y: the run
+   answers yes on its input. GET polls that log. ProxCenter never rewrites the
    node's apt sources: a repository answering 401 ends the run with apt's line.
 */
 
@@ -52,7 +53,7 @@ async function handlePost(req: Request, ctx: Ctx) {
     const argv = installArgv(parsed.params.version, parsed.params.repository)
     const ssh = await prepareCephSsh(id, gate.conn, safeNode, argv)
     if (ssh.ok === false) return ssh.response
-    const started = await runDetached(id, ssh.endpoint, argv, TAG)
+    const started = await runDetached(id, ssh.endpoint, argv, TAG, { answerYes: true })
     if ('error' in started) return NextResponse.json({ error: started.error, code: 'SSH_FAILED' }, { status: 502 })
     return NextResponse.json({ data: { started: true, node: safeNode } })
   } catch (e: any) {

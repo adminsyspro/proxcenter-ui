@@ -60,6 +60,8 @@ export default function OsdCreateDialog({ open, connId, nodes, onClose, onDone }
   const nodeLabel = useId()
   const diskLabel = useId()
   const classId = useId()
+  const dbLabel = useId()
+  const walLabel = useId()
 
   const [node, setNode] = useState(nodes[0] ?? '')
   const [devPick, setDev] = useState('')
@@ -171,14 +173,14 @@ export default function OsdCreateDialog({ open, connId, nodes, onClose, onDone }
         </Box>
         <Collapse in={advanced} unmountOnExit>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-            <FormRow label={t('dbDevice')}>
-              <TextField select size='small' value={dbDev} onChange={e => setDbDev(e.target.value)} slotProps={{ select: { displayEmpty: true } }} sx={{ width: 340, ...SMALL_SELECT_SX }}>
+            <FormRow label={t('dbDevice')} labelId={dbLabel}>
+              <TextField select size='small' value={dbDev} onChange={e => setDbDev(e.target.value)} slotProps={{ select: { displayEmpty: true, labelId: dbLabel, SelectDisplayProps: { 'aria-labelledby': dbLabel } as object } }} sx={{ width: 340, ...SMALL_SELECT_SX }}>
                 {sideOptions([dev, walDev])}
               </TextField>
             </FormRow>
             {dbDev && <NumberRow label={t('dbSize')} value={dbSize} onChange={setDbSize} min={1} suffix={<Typography variant='body2' color='text.secondary'>GiB</Typography>} />}
-            <FormRow label={t('walDevice')}>
-              <TextField select size='small' value={walDev} onChange={e => setWalDev(e.target.value)} slotProps={{ select: { displayEmpty: true } }} sx={{ width: 340, ...SMALL_SELECT_SX }}>
+            <FormRow label={t('walDevice')} labelId={walLabel}>
+              <TextField select size='small' value={walDev} onChange={e => setWalDev(e.target.value)} slotProps={{ select: { displayEmpty: true, labelId: walLabel, SelectDisplayProps: { 'aria-labelledby': walLabel } as object } }} sx={{ width: 340, ...SMALL_SELECT_SX }}>
                 {sideOptions([dev, dbDev])}
               </TextField>
             </FormRow>

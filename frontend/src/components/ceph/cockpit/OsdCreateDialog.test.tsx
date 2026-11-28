@@ -86,6 +86,15 @@ describe('OsdCreateDialog', () => {
     expect(waitMock).not.toHaveBeenCalled()
   })
 
+  it('labels the DB and WAL selects of the advanced options', async () => {
+    route([DISK, { ...DISK, devpath: '/dev/sdh' }])
+    const d = open()
+    await d.findAllByText(/\/dev\/sdg/)
+    fireEvent.click(d.getByRole('button', { name: 'Advanced options' }))
+    expect(d.getByRole('combobox', { name: 'DB device' })).toBeInTheDocument()
+    expect(d.getByRole('combobox', { name: 'WAL device' })).toBeInTheDocument()
+  })
+
   it('reads the disks of the node picked', async () => {
     route([DISK])
     const d = open()

@@ -50,7 +50,9 @@ export async function GET(_req: Request, ctx: Ctx) {
     if (gate.ok === false) return gate.response
 
     const status = await pveFetch<any[]>(gate.conn, '/cluster/status')
-    const rows = (Array.isArray(status) ? status : []).filter((r: any) => r?.type === 'node' && typeof r.name === 'string')
+    const rows = (Array.isArray(status) ? status : [])
+      .filter((r: any) => r?.type === 'node' && typeof r.name === 'string')
+      .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true }))
 
     const nodes = await Promise.all(rows.map(async (r: any) => {
       const online = r.online === 1 || r.online === true

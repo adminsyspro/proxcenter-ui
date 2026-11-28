@@ -36,10 +36,15 @@ export async function sudoAllows(connId: string, target: SshTarget, argv: string
   return (result.output ?? '').includes('PXC_OK') ? 'ok' : 'missing-rule'
 }
 
-/** Start `argv` as root under nohup; its output and exit code go to the account's log for `tag`. */
-export async function runDetached(connId: string, target: SshTarget, argv: string[], tag: string): Promise<{ started: true; logPath: string } | { started: false; error: string }> {
+/**
+ * Start `argv` as root under nohup; its output and exit code go to the account's log for `tag`.
+ * `answerYes` feeds `yes` on its input: `pveceph install` runs `apt-get install` without -y
+ * and, with no terminal, reads the confirmation as end of input and aborts (measured on PVE
+ * 9.2.2, ui#1450). The pipe runs as the account; only pveceph goes through sudo.
+ */
+export async function runDetached(connId: string, target: SshTarget, argv: string[], tag: string, opts: { answerYes?: boolean } = {}): Promise<{ started: true; logPath: string } | { started: false; error: string }> {
   if (!TAG_RE.test(tag)) return { started: false, error: 'Invalid log tag' }
-  const inner = `${asRoot(argvLine(argv))} > "$1" 2>&1; echo "PXC_EXIT:$?" >> "$1"`
+  const inner = `${opts.answerYes ? 'yes | ' : ''}${asRoot(argvLine(argv))} > "$1" 2>&1; echo "PXC_EXIT:$?" >> "$1"`
   const command = [
     `D="${DETACHED_LOG_DIR}"`,
     'mkdir -p "$D" && chmod 700 "$D"',

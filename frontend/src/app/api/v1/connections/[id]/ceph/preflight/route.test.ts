@@ -24,9 +24,9 @@ import { checkPermission } from '@/lib/rbac'
 const pveMock = pveFetch as any
 const STATUS = [
   { type: 'cluster', name: 'LAB' },
+  { type: 'node', name: 'pve3', online: 0, ip: '10.42.0.103' },
   { type: 'node', name: 'pve1', online: 1, ip: '10.42.0.101' },
   { type: 'node', name: 'pve2', online: 1, ip: '10.42.0.102' },
-  { type: 'node', name: 'pve3', online: 0, ip: '10.42.0.103' },
 ]
 
 beforeEach(() => {
@@ -44,7 +44,7 @@ beforeEach(() => {
 })
 
 describe('GET /api/v1/connections/[id]/ceph/preflight', () => {
-  it('reads each online node and leaves the offline one alone', async () => {
+  it('reads each online node, leaves the offline one alone, and lists them by name', async () => {
     const res = await callRoute(GET, { params: { id: 'c1' } })
     expect(res.status).toBe(200)
     expect(await readJson(res)).toEqual({

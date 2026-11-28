@@ -73,6 +73,17 @@ describe('runDetached', () => {
     }
   })
 
+  it('answers yes to apt for pveceph install, which runs apt-get install without -y (measured on PVE 9.2)', async () => {
+    sshMock.mockResolvedValue({ success: true, output: 'PXC_STARTED' })
+    await runDetached('c1', 'pve1', ['/usr/bin/pveceph', 'install', '--version', 'tentacle', '--repository', 'no-subscription'], 'ceph-install', { answerYes: true })
+    const command: string = sshMock.mock.calls[0][2]
+    expect(command).toContain('yes | ')
+    expect(verifySudo(resolveSudo(command, true), FRONTEND_SUDO_RULES)).toEqual([])
+    for (const useSudo of [false, true]) expect(() => execFileSync('sh', ['-n', '-c', resolveSudo(command, useSudo)])).not.toThrow()
+    await runDetached('c1', 'pve1', ARGV, 'ceph-osd-create-sdb')
+    expect(sshMock.mock.calls[1][2]).not.toContain('yes | ')
+  })
+
   it('refuses a tag that could leave the log directory', async () => {
     expect(await runDetached('c1', 'pve1', ARGV, '../x')).toEqual({ started: false, error: 'Invalid log tag' })
     expect(sshMock).not.toHaveBeenCalled()

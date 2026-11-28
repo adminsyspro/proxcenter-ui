@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 
@@ -81,6 +82,14 @@ describe('CephDeployWizard', () => {
     ])
   })
 
+  it('keeps the cluster name once the cluster has Ceph and leaves the candidates', async () => {
+    const props = { open: true, onClose: vi.fn(), onInitialized: vi.fn(), onOpenCluster: vi.fn() }
+    const view = renderWithProviders(<CephDeployWizard {...props} candidates={CANDIDATES} />)
+    await screen.findByText('pve3')
+    view.rerender(<CephDeployWizard {...props} candidates={[]} />)
+    expect(screen.getByRole('dialog')).toHaveTextContent('Deploy Ceph on LAB')
+  })
+
   it('installs the packages on the nodes without them', async () => {
     preflight = { nodes: [node('pve1', 'absent'), node('pve2', 'installed'), node('pve3', 'absent')], releases: ['tentacle', 'squid'] }
     const d = open()
@@ -88,10 +97,21 @@ describe('CephDeployWizard', () => {
     fireEvent.click(d.getByRole('button', { name: 'Next' }))
     fireEvent.click(await d.findByRole('button', { name: 'Install' }))
     await waitFor(() => expect(d.getByRole('button', { name: 'Next' })).toBeEnabled())
+    expect(d.queryByRole('button', { name: 'Retry' })).toBeNull()
     expect(posts()).toEqual([
       ['/api/v1/connections/c2/nodes/pve1/ceph/install', { version: 'tentacle', repository: 'no-subscription' }],
       ['/api/v1/connections/c2/nodes/pve3/ceph/install', { version: 'tentacle', repository: 'no-subscription' }],
     ])
+  })
+
+  it('keeps following the install under React StrictMode (effects mounted twice)', async () => {
+    preflight = { nodes: [node('pve1', 'absent'), node('pve2', 'installed'), node('pve3', 'installed')], releases: ['tentacle'] }
+    renderWithProviders(<StrictMode><CephDeployWizard open candidates={CANDIDATES} onClose={vi.fn()} onInitialized={vi.fn()} onOpenCluster={vi.fn()} /></StrictMode>)
+    const d = within(screen.getByRole('dialog'))
+    await d.findByText('pve3')
+    fireEvent.click(d.getByRole('button', { name: 'Next' }))
+    fireEvent.click(await d.findByRole('button', { name: 'Install' }))
+    await waitFor(() => expect(d.getByRole('button', { name: 'Next' })).toBeEnabled())
   })
 
   it('stops on a failed install and says to fix the repositories', async () => {

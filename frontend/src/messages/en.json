@@ -17210,7 +17210,11 @@
         "connection_busy": "Another Kubernetes deployment is running on this Proxmox connection.",
         "not_deployed": "Only a cluster ProxCenter deployed can be upgraded.",
         "unavailable": "The orchestrator is not reachable."
-      }
+      },
+      "upToDate": "Already on the newest release.",
+      "path": "Path to the newest",
+      "pathHelp": "One minor version per upgrade: run one upgrade per step.",
+      "recommended": "{version} (recommended)"
     }
   }
 }

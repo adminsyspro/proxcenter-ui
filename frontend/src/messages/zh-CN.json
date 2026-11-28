@@ -17197,7 +17197,11 @@
         "connection_busy": "此 Proxmox 连接上有另一个 Kubernetes 部署正在进行。",
         "not_deployed": "只有 ProxCenter 部署的集群才能升级。",
         "unavailable": "无法连接编排器。"
-      }
+      },
+      "upToDate": "已是最新版本。",
+      "path": "升级到最新的路径",
+      "pathHelp": "每次升级只能跨一个次版本：每一步执行一次升级。",
+      "recommended": "{version}（推荐）"
     }
   }
 }

@@ -17197,7 +17197,11 @@
         "connection_busy": "이 Proxmox 연결에서 다른 Kubernetes 배포가 진행 중입니다.",
         "not_deployed": "ProxCenter가 배포한 클러스터만 업그레이드할 수 있습니다.",
         "unavailable": "오케스트레이터에 연결할 수 없습니다."
-      }
+      },
+      "upToDate": "이미 최신 릴리스입니다.",
+      "path": "최신까지의 경로",
+      "pathHelp": "업그레이드마다 마이너 버전 하나씩: 단계마다 업그레이드를 한 번 실행하세요.",
+      "recommended": "{version} (권장)"
     }
   }
 }

@@ -16781,7 +16781,11 @@
         "connection_busy": "Auf dieser Proxmox-Verbindung läuft bereits eine andere Kubernetes-Bereitstellung.",
         "not_deployed": "Nur ein von ProxCenter bereitgestellter Cluster kann aktualisiert werden.",
         "unavailable": "Der Orchestrator ist nicht erreichbar."
-      }
+      },
+      "upToDate": "Bereits auf der neuesten Version.",
+      "path": "Weg zur neuesten",
+      "pathHelp": "Eine Minor-Version pro Aktualisierung: eine Aktualisierung pro Schritt starten.",
+      "recommended": "{version} (empfohlen)"
     }
   }
 }

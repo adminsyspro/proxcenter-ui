@@ -17211,7 +17211,11 @@
         "connection_busy": "Un autre déploiement Kubernetes est en cours sur cette connexion Proxmox.",
         "not_deployed": "Seul un cluster déployé par ProxCenter peut être mis à jour.",
         "unavailable": "L'orchestrateur est injoignable."
-      }
+      },
+      "upToDate": "Déjà sur la version la plus récente.",
+      "path": "Chemin vers la plus récente",
+      "pathHelp": "Une version mineure par mise à jour : lancez une mise à jour par étape.",
+      "recommended": "{version} (recommandée)"
     }
   }
 }

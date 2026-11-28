@@ -7,6 +7,8 @@ const getWithCredMock = vi.fn()
 const getRunMock = vi.fn()
 const upgradeMock = vi.fn()
 const auditMock = vi.fn()
+const releasesMock = vi.fn()
+const requireK8sPermissionMock = vi.fn()
 
 vi.mock('@/lib/k8s/requireK8sProvision', () => ({ requireK8sProvision: (...a: any[]) => requireK8sProvisionMock(...a) }))
 vi.mock('@/lib/k8s/strictTenant', () => ({ resolveStrictTenant: (...a: any[]) => resolveStrictTenantMock(...a) }))
@@ -16,6 +18,9 @@ vi.mock('@/lib/k8s/provisionOrchestrator', () => ({
   upgradeCluster: (...a: any[]) => upgradeMock(...a),
 }))
 vi.mock('@/lib/audit', () => ({ audit: (...a: any[]) => auditMock(...a) }))
+vi.mock('@/lib/rbac', () => ({ PERMISSIONS: { K8S_VIEW: 'k8s.view' } }))
+vi.mock('@/lib/k8s/requireK8sPermission', () => ({ requireK8sPermission: (...a: any[]) => requireK8sPermissionMock(...a) }))
+vi.mock('@/lib/k8s/server/releaseTags', async (orig) => ({ ...(await orig<any>()), releasesOf: (...a: any[]) => releasesMock(...a) }))
 
 const params = { id: 'c1' }
 const deployed = { row: { id: 'c1', name: 'dev', source: 'deployed', provisioningRunId: 'run-1', proxmoxConnectionId: 'conn-a', credentialVersion: 1 }, credential: {} }
@@ -33,8 +38,11 @@ beforeEach(() => {
   getRunMock.mockReset().mockResolvedValue(run())
   upgradeMock.mockReset().mockResolvedValue({ ok: true, value: { runId: 'run-1', status: 'scaling' } })
   auditMock.mockReset().mockResolvedValue('a1')
+  requireK8sPermissionMock.mockReset().mockResolvedValue(null)
+  releasesMock.mockReset().mockResolvedValue(['v1.36.6+k3s1', 'v1.36.7+k3s1', 'v1.37.2+k3s1', 'v1.38.1+k3s1'])
 })
 
+const get = async () => callRoute((await import('./route')).GET, { params })
 const post = async (body: any) => callRoute((await import('./route')).POST, { params, body })
 
 describe('POST /api/v1/k8s/clusters/[id]/upgrade', () => {
@@ -98,5 +106,26 @@ describe('POST /api/v1/k8s/clusters/[id]/upgrade', () => {
     getRunMock.mockResolvedValue({ ok: false, error: 'fetch failed' })
     const res = await post({ version: 'v1.37.2+k3s1' })
     expect(res.status).toBe(502)
+  })
+})
+
+describe('GET /api/v1/k8s/clusters/[id]/upgrade', () => {
+  it('lists the releases reachable in one step and the path to the newest', async () => {
+    const res = await get()
+    expect(res.status).toBe(200)
+    expect(await readJson(res)).toEqual({ current: 'v1.36.6+k3s1', candidates: ['v1.37.2+k3s1', 'v1.36.7+k3s1'], path: ['v1.37.2+k3s1', 'v1.38.1+k3s1'] })
+    expect(releasesMock).toHaveBeenCalledWith('k3s')
+  })
+  it('answers no candidates when the releases cannot be read', async () => {
+    releasesMock.mockResolvedValue(null)
+    expect(await readJson(await get())).toEqual({ current: 'v1.36.6+k3s1', candidates: null, path: [] })
+  })
+  it('needs the view permission', async () => {
+    requireK8sPermissionMock.mockResolvedValue(new Response(null, { status: 403 }))
+    expect((await get()).status).toBe(403)
+  })
+  it('passes an orchestrator failure on', async () => {
+    getRunMock.mockResolvedValue({ ok: false, error: 'fetch failed' })
+    expect((await get()).status).toBe(502)
   })
 })

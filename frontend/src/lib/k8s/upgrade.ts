@@ -37,3 +37,30 @@ export function nextMinor(current: string): string | null {
   const cur = parse(current)
   return cur ? `v1.${cur.minor + 1}` : null
 }
+
+function byNewest(a: string, b: string): number {
+  return newerThan(parse(a)!, parse(b)!) ? -1 : 1
+}
+
+/**
+ * The releases current can be upgraded to in one step, newest first: the
+ * newer patches of its minor line and every release of the next one.
+ */
+export function upgradeCandidates(current: string, releases: string[]): string[] {
+  return releases.filter(v => upgradeRefusal(current, v) === null).sort(byNewest)
+}
+
+/**
+ * The steps from current to the newest release when it is more than one minor
+ * version ahead: the newest release of each minor line in turn. Empty when the
+ * newest release is reachable in one step (or there is none).
+ */
+export function upgradePath(current: string, releases: string[]): string[] {
+  const cur = parse(current)
+  if (!cur) return []
+  const valid = releases.filter(v => parse(v)?.flavour === cur.flavour)
+  const newestOfLine = (minor: number) => valid.filter(v => parse(v)!.minor === minor).sort(byNewest)[0]
+  const path: string[] = []
+  for (let minor = cur.minor + 1; newestOfLine(minor); minor++) path.push(newestOfLine(minor))
+  return path.length > 1 ? path : []
+}

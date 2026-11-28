@@ -26,3 +26,22 @@ describe('nextMinor', () => {
     expect(nextMinor('latest')).toBeNull()
   })
 })
+
+const k3sReleases = ['v1.35.9+k3s1', 'v1.36.5+k3s1', 'v1.36.6+k3s1', 'v1.36.7+k3s1', 'v1.37.0+k3s1', 'v1.37.2+k3s1', 'v1.37.1+k3s1', 'v1.38.1+k3s1', 'v1.38.0+k3s1', 'v1.37.2+rke2r1']
+
+describe('upgradeCandidates', () => {
+  it('lists the newer patches and the next minor line, newest first', async () => {
+    const { upgradeCandidates } = await import('./upgrade')
+    expect(upgradeCandidates('v1.36.6+k3s1', k3sReleases)).toEqual(['v1.37.2+k3s1', 'v1.37.1+k3s1', 'v1.37.0+k3s1', 'v1.36.7+k3s1'])
+    expect(upgradeCandidates('v1.38.1+k3s1', k3sReleases)).toEqual([])
+  })
+})
+
+describe('upgradePath', () => {
+  it('names one step per minor line when the newest is further than one', async () => {
+    const { upgradePath } = await import('./upgrade')
+    expect(upgradePath('v1.36.6+k3s1', k3sReleases)).toEqual(['v1.37.2+k3s1', 'v1.38.1+k3s1'])
+    expect(upgradePath('v1.37.0+k3s1', k3sReleases)).toEqual([])
+    expect(upgradePath('latest', k3sReleases)).toEqual([])
+  })
+})

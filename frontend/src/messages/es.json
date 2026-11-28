@@ -17197,7 +17197,11 @@
         "connection_busy": "Otro despliegue de Kubernetes está en curso en esta conexión de Proxmox.",
         "not_deployed": "Solo se puede actualizar un clúster desplegado por ProxCenter.",
         "unavailable": "No se puede contactar con el orquestador."
-      }
+      },
+      "upToDate": "Ya está en la versión más reciente.",
+      "path": "Camino a la más reciente",
+      "pathHelp": "Una versión menor por actualización: lance una actualización por paso.",
+      "recommended": "{version} (recomendada)"
     }
   }
 }

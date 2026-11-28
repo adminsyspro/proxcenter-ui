@@ -53,8 +53,10 @@ export default function CephDeployWizard({ open, candidates, initialId, onClose,
   const task = useCephTask(connId)
 
   const [step, setStep] = useState<StepId>('preflight')
-  const [preflight, setPreflight] = useState<Preflight | null>(null)
-  const [preflightError, setPreflightError] = useState<string | null>(null)
+  // Keyed by connection: the read of another cluster is no answer for this one (no reset inside the effect).
+  const [read, setRead] = useState<{ id: string; preflight: Preflight | null; error: string | null } | null>(null)
+  const preflight = read?.id === connId ? read.preflight : null
+  const preflightError = read?.id === connId ? read.error : null
   const [version, setVersion] = useState<CephRelease>('tentacle')
   const [repository, setRepository] = useState<CephRepository>('no-subscription')
   const [installs, setInstalls] = useState<Record<string, InstallState>>({})
@@ -73,24 +75,21 @@ export default function CephDeployWizard({ open, candidates, initialId, onClose,
   useEffect(() => {
     if (!connId) return
     let live = true
-    setPreflight(null)
-    setPreflightError(null)
-    setStep('preflight')
     fetch(`/api/v1/connections/${enc(connId)}/ceph/preflight`)
       .then(async res => {
         const json = await res.json().catch(() => ({}))
         if (!live) return
-        if (!res.ok) return setPreflightError(json?.error || `HTTP ${res.status}`)
+        if (!res.ok) return setRead({ id: connId, preflight: null, error: json?.error || `HTTP ${res.status}` })
         const p = json?.data as Preflight | undefined
-        if (!p || !Array.isArray(p.nodes) || !Array.isArray(p.releases)) return setPreflightError(t('preflight.unreadable'))
-        setPreflight(p)
+        if (!p || !Array.isArray(p.nodes) || !Array.isArray(p.releases)) return setRead({ id: connId, preflight: null, error: t('preflight.unreadable') })
+        setRead({ id: connId, preflight: p, error: null })
         setVersion(p.releases[0] ?? 'tentacle')
         const absent = p.nodes.filter(n => n.online && n.ceph === 'absent')
         setRepository(absent.length > 0 && absent.every(n => n.repository === 'enterprise') ? 'enterprise' : 'no-subscription')
         const first = p.nodes.find(n => n.online)
         setConfig(c => ({ ...c, node: first?.node ?? '', network: publicNetworkOf(first?.address) }))
       })
-      .catch((e: Error) => { if (live) setPreflightError(e.message) })
+      .catch((e: Error) => { if (live) setRead({ id: connId, preflight: null, error: e.message }) })
     return () => { live = false }
   }, [connId, t])
 
@@ -223,7 +222,7 @@ export default function CephDeployWizard({ open, candidates, initialId, onClose,
             {shown.map(s => <Step key={s}><StepLabel>{t(`steps.${s}`)}</StepLabel></Step>)}
           </Stepper>
           {step === 'preflight' && candidates.length > 1 && (
-            <SelectRow label={t('cluster')} value={connId} options={candidates.map(c => ({ value: c.id, label: c.name }))} onChange={setConnId} />
+            <SelectRow label={t('cluster')} value={connId} options={candidates.map(c => ({ value: c.id, label: c.name }))} onChange={id => { setConnId(id); setStep('preflight'); setInstalls({}) }} />
           )}
           {step === 'preflight' && !preflight && !preflightError && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}><CircularProgress size={16} />{t('preflight.loading')}</Box>

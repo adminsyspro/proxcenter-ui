@@ -3,6 +3,8 @@ import { executeSSH, shellEscape } from '@/lib/ssh/exec'
 import type { SshTarget } from '@/lib/ssh/node-endpoint-core'
 import { asRoot } from '@/lib/ssh/sudo'
 
+import { detachedExit, detachedOutput } from './detachedLog'
+
 /*
    pveceph over SSH, detached (ui#1450). The pveceph CLI runs its worker in
    the foreground and waits for the task to end (PVE's RESTEnvironment
@@ -18,7 +20,6 @@ export type SudoVerdict = 'ok' | 'missing-rule' | 'ssh-disabled' | 'unreachable'
 
 export const DETACHED_LOG_DIR = '$HOME/.cache/proxcenter'
 const TAG_RE = /^[a-z0-9-]{1,64}$/
-const EXIT_RE = /PXC_EXIT:(\d+)/
 
 const argvLine = (argv: string[]) => argv.map(shellEscape).join(' ')
 const logPathOf = (tag: string) => `${DETACHED_LOG_DIR}/${tag}.log`
@@ -62,16 +63,7 @@ export async function readDetachedLog(connId: string, target: SshTarget, tag: st
   return output.trim() === 'PXC_NO_LOG' ? null : output
 }
 
-/** The exit code a finished detached command wrote, null while it runs. */
-export function detachedExit(log: string): number | null {
-  const m = EXIT_RE.exec(log)
-  return m ? Number(m[1]) : null
-}
-
-/** The log without its exit marker, the last `lines` lines. */
-export function detachedOutput(log: string, lines = 20): string {
-  return log.split('\n').filter(l => l.trim() !== '' && !EXIT_RE.test(l)).slice(-lines).join('\n')
-}
+export { detachedExit, detachedOutput }
 
 export interface FollowOptions {
   tag: string

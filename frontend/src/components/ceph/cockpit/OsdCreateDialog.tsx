@@ -33,22 +33,22 @@ export interface OsdCreateDialogProps {
 type DiskRead = { state: 'loading' } | { state: 'ready'; disks: FreeDisk[]; ssh: SshVerdict } | { state: 'error'; error: string }
 
 function useNodeDisks(connId: string, node: string): DiskRead {
-  const [read, setRead] = useState<DiskRead>({ state: 'loading' })
+  // Keyed by node: a read of the previous node is no answer for this one (no reset inside the effect).
+  const [read, setRead] = useState<{ node: string; read: DiskRead } | null>(null)
   useEffect(() => {
     if (!node) return
     let live = true
-    setRead({ state: 'loading' })
     fetch(cephDisksUrl(connId, node))
       .then(async res => {
         const json = await res.json().catch(() => ({}))
         if (!live) return
-        if (res.ok) setRead({ state: 'ready', disks: json?.data?.disks ?? [], ssh: json?.data?.ssh ?? 'unreachable' })
-        else setRead({ state: 'error', error: json?.error || `HTTP ${res.status}` })
+        if (res.ok) setRead({ node, read: { state: 'ready', disks: json?.data?.disks ?? [], ssh: json?.data?.ssh ?? 'unreachable' } })
+        else setRead({ node, read: { state: 'error', error: json?.error || `HTTP ${res.status}` } })
       })
-      .catch((e: Error) => { if (live) setRead({ state: 'error', error: e.message }) })
+      .catch((e: Error) => { if (live) setRead({ node, read: { state: 'error', error: e.message } }) })
     return () => { live = false }
   }, [connId, node])
-  return read
+  return read && read.node === node ? read.read : { state: 'loading' }
 }
 
 export default function OsdCreateDialog({ open, connId, nodes, onClose, onDone }: Readonly<OsdCreateDialogProps>) {
@@ -62,23 +62,22 @@ export default function OsdCreateDialog({ open, connId, nodes, onClose, onDone }
   const classId = useId()
 
   const [node, setNode] = useState(nodes[0] ?? '')
-  const [dev, setDev] = useState('')
+  const [devPick, setDev] = useState('')
   const [advanced, setAdvanced] = useState(false)
-  const [dbDev, setDbDev] = useState('')
+  const [dbPick, setDbDev] = useState('')
   const [dbSize, setDbSize] = useState('')
-  const [walDev, setWalDev] = useState('')
+  const [walPick, setWalDev] = useState('')
   const [walSize, setWalSize] = useState('')
   const [encrypted, setEncrypted] = useState(false)
   const [deviceClass, setDeviceClass] = useState('')
   const read = useNodeDisks(connId, node)
   const disks = read.state === 'ready' ? read.disks : []
 
-  // A disk of the previous node is no choice on this one.
-  useEffect(() => {
-    setDev(read.state === 'ready' ? (read.disks[0]?.devpath ?? '') : '')
-    setDbDev('')
-    setWalDev('')
-  }, [read])
+  // A disk of the previous node is no choice on this one: a pick counts only while the node offers it.
+  const offered = (path: string) => disks.some(d => d.devpath === path)
+  const dev = offered(devPick) ? devPick : (disks[0]?.devpath ?? '')
+  const dbDev = offered(dbPick) && dbPick !== dev ? dbPick : ''
+  const walDev = offered(walPick) && walPick !== dev && walPick !== dbDev ? walPick : ''
 
   const size = (n: number) => {
     const unit = binaryUnit(n)

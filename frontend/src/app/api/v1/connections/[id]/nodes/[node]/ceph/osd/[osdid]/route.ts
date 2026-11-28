@@ -8,10 +8,9 @@ import { getConnectionById, isConnectionNotFoundError } from "@/lib/connections/
 import { checkPermission, PERMISSIONS } from "@/lib/rbac"
 import { denyIaasTenantCeph } from "@/lib/ceph/tenantGuard"
 import { assertNodeName } from "@/lib/ssh/validate"
-import { pickOnlineNode } from "@/lib/ceph/nodeNoout"
+import { findNodeOsds, pickOnlineNode } from "@/lib/ceph/nodeNoout"
 import { runOkToStopApi } from "@/lib/ceph/okToStopApi"
 import { clientOkToStopPayload, OK_TO_STOP_UNAVAILABLE } from "@/lib/ceph/okToStopClient"
-import { findNodeOsds } from "@/lib/ceph/nodeNoout"
 import { cephConnection, checkCephWrite, prepareCephSsh, provisionError, pvecephTag, runPvecephTask } from "@/lib/ceph/provisionRoute"
 import { osdDestroyArgv } from "@/lib/ceph/pvecephCommands"
 

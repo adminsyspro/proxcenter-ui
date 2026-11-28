@@ -1,5 +1,5 @@
 import { CEPH_RELEASES, type CephRelease, type CephRepository } from './pvecephCommands'
-import { detachedExit } from './detachedPveceph'
+import { detachedExit } from './detachedLog'
 
 /*
    What the Ceph deploy wizard reads of each node (ui#1450). The state of Ceph
